@@ -6,7 +6,7 @@
 // This is where the app reaches it, and where the overlay's own state changes at once.
 import type { CapturedImage } from "@bay/chromium";
 import * as Effect from "effect/Effect";
-import { runDesktop } from "../../effect/runtime";
+import { runWindow } from "../../effect/windowRuntime";
 import type { JsonInput } from "../../lib/json";
 import { CaptureService, readyOf, sessionOf, setSession, useCaptures, type Capture } from "./service";
 
@@ -16,7 +16,7 @@ export const useCapture = (tabId: string) => useCaptures((c) => c.sessions[tabId
 
 /** Runs something with the capture service, on the runtime the app shares. */
 const withCapture = <A>(program: (capture: Capture) => Effect.Effect<A>): Promise<A> =>
-  runDesktop(
+  runWindow(
     Effect.gen(function* () {
       const capture = yield* CaptureService;
 

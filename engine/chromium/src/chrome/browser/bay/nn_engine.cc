@@ -2,13 +2,12 @@
 
 #include "chrome/browser/bay/nn_engine.h"
 
-#include <limits.h>
-#include <stdlib.h>
 
 #include <optional>
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "chrome/browser/browser_process.h"
@@ -124,17 +123,16 @@ Profile* ProfileAt(std::string_view dir) {
   if (!manager || dir.empty()) {
     return nullptr;
   }
-  if (Profile* profile = manager->GetProfileByPath(base::FilePath(dir))) {
+  if (Profile* profile = manager->GetProfileByPath(base::FilePath::FromUTF8Unsafe(dir))) {
     return profile;
   }
-  // The app and Chrome may spell the data directory differently (/tmp and
-  // /private/tmp): compare real paths. realpath() is one syscall per profile.
+  // Resolve aliases before comparing profiles. NormalizeFilePath supports both
+  // macOS symlinks and Windows final paths without assuming narrow filesystem strings.
   auto real = [](const base::FilePath& path) {
-    char resolved[PATH_MAX];
-    return realpath(path.value().c_str(), resolved) ? std::string(resolved)
-                                                    : path.value();
+    base::FilePath resolved;
+    return base::NormalizeFilePath(path, &resolved) ? resolved : path;
   };
-  const std::string wanted = real(base::FilePath(dir));
+  const base::FilePath wanted = real(base::FilePath::FromUTF8Unsafe(dir));
   for (Profile* profile : manager->GetLoadedProfiles()) {
     if (real(profile->GetPath()) == wanted) {
       return profile;
@@ -149,7 +147,7 @@ void Emit(std::string_view topic, Profile* profile, base::DictValue payload) {
     return;
   }
   if (profile) {
-    payload.Set("profile", profile->GetOriginalProfile()->GetPath().value());
+    payload.Set("profile", profile->GetOriginalProfile()->GetPath().AsUTF8Unsafe());
   }
   g_sink(g_sink_context, std::string(topic).c_str(), ToJSON(payload).c_str());
 }

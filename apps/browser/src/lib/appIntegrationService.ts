@@ -23,9 +23,11 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { capabilities } from "@bay/platform";
 import type { Operation } from "../effect/errors";
+import { ReadBrowser } from "../effect/windowPorts";
 import { Diagnostics } from "../effect/ports/diagnostics";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
 import { changedIds } from "../store/recordDiff";
 import { activeTabId } from "../store/model";
 
@@ -70,10 +72,11 @@ export class IntegrationEngine extends Context.Service<
   static readonly layer = Layer.succeed(IntegrationEngine)({
     onCommand: (listener) => subscribe(() => onCommand(listener)),
     onNotificationResponse: (listener) => subscribe(() => onNotificationResponse(listener)),
-    onScriptCommand: (listener) => subscribe(() => onScriptCommand(listener)),
-    setWindowActivity: (windowId, url, title) => nativeCall("handoff.activity", windowId, () => setWindowActivity(windowId, url, title)),
-    setScriptState: (state) => nativeCall("script.state", undefined, () => setScriptState(state)),
-    replyToScript: (id, result, error) => nativeCall("script.reply", id, () => replyToScript(id, result, error)),
+    onScriptCommand: (listener) => (capabilities.appleScript ? subscribe(() => onScriptCommand(listener)) : Effect.succeed(() => {})),
+    setWindowActivity: (windowId, url, title) =>
+      capabilities.handoff ? nativeCall("handoff.activity", windowId, () => setWindowActivity(windowId, url, title)) : Effect.void,
+    setScriptState: (state) => (capabilities.appleScript ? nativeCall("script.state", undefined, () => setScriptState(state)) : Effect.void),
+    replyToScript: (id, result, error) => (capabilities.appleScript ? nativeCall("script.reply", id, () => replyToScript(id, result, error)) : Effect.void),
   });
 }
 
@@ -131,6 +134,7 @@ export class AppIntegrationService extends Context.Service<
   static readonly layer = Layer.effect(
     AppIntegrationService,
     Effect.gen(function* () {
+      const browser = yield* ReadBrowser;
       const engine = yield* IntegrationEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
@@ -186,9 +190,9 @@ export class AppIntegrationService extends Context.Service<
 
       const syncHandoff = (): Effect.Effect<void> =>
         Effect.gen(function* () {
-          for (const id of useBrowser.getState().windowOrder) {
+          for (const id of browser.getState().windowOrder) {
             // Earlier native updates may have waited while this window changed or closed.
-            const current = useBrowser.getState();
+            const current = browser.getState();
 
             if (!current.windows[id]) continue;
 
@@ -202,7 +206,7 @@ export class AppIntegrationService extends Context.Service<
             yield* engine.setWindowActivity(id, url, title || null).pipe(Effect.catch(report));
           }
 
-          for (const id of told.keys()) if (!useBrowser.getState().windows[id]) told.delete(id);
+          for (const id of told.keys()) if (!browser.getState().windows[id]) told.delete(id);
         });
 
       // MARK: AppleScript
@@ -214,7 +218,7 @@ export class AppIntegrationService extends Context.Service<
         Effect.gen(function* () {
           if (!scriptState) return;
 
-          const state = scriptState(useBrowser.getState());
+          const state = scriptState(browser.getState());
           const json = JSON.stringify(state);
 
           if (json === lastState) return;
@@ -268,7 +272,7 @@ export class AppIntegrationService extends Context.Service<
           const handoffSoon = coalesce(HANDOFF_DEBOUNCE_MS, syncHandoff);
           const stateSoon = coalesce(SCRIPT_STATE_DEBOUNCE_MS, pushState);
 
-          const stopStore = useBrowser.subscribe((s, prev) => {
+          const stopStore = browser.subscribe((s, prev) => {
             const windows = s.tabs !== prev.tabs || s.tabLists !== prev.tabLists || s.windows !== prev.windows;
 
             if (windows) handoffSoon();

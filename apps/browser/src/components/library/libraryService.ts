@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 // The Library: the Easels and the media this Mac keeps.
 //
 // The library is a document: it is read at the launch, and every change is written back. The write is the
@@ -10,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { newId } from "../../store/model";
+import { requestService } from "../../runtime/serviceClient";
 import { readLibrary as readLibraryDocument, type CaptureSource, type LibraryData, type LibraryMedia } from "./model";
 
 /** The library could not be read or written. */
@@ -70,6 +72,17 @@ export class LibraryService extends Context.Service<
     ) => Effect.Effect<LibraryMedia | null, LibraryFailure>;
   }
 >()("bay/LibraryService") {
+  /** Window capture asks the coordinator to retain media without starting a second document writer. */
+  static readonly remoteLayer = (windowId: string) =>
+    Layer.succeed(LibraryService)({
+      start: Effect.void,
+      saveMedia: (image, name, source) =>
+        Effect.tryPromise({
+          try: () => requestService<LibraryMedia | null>("librarySaveMedia", [windowId, image, name, source ?? null]),
+          catch: (cause) => new LibraryFailure({ operation: "library.saveMedia", message: cause instanceof Error ? cause.message : String(cause), cause }),
+        }),
+    });
+
   static readonly layer = Layer.effect(
     LibraryService,
     Effect.gen(function* () {
@@ -77,25 +90,47 @@ export class LibraryService extends Context.Service<
       const scope = yield* Scope.Scope;
 
       let stop: (() => void) | undefined;
+      let channel: BroadcastChannel | undefined;
+      let applying = false;
 
       yield* Scope.addFinalizer(
         scope,
         Effect.sync(() => {
           stop?.();
           stop = undefined;
+          channel?.close();
+          channel = undefined;
         }),
       );
 
       const start = Effect.sync(() => {
         if (stop) return;
 
+        if (typeof BroadcastChannel !== "undefined") {
+          channel = new BroadcastChannel("bay-library");
+          // Node adds unref to its channel; Chromium's channel has no event-loop reference to release.
+          checked<{ unref?(): void }>(channel).unref?.();
+          channel.onmessage = ({ data }: MessageEvent<LibraryData>) => {
+            try {
+              const parsed = readLibraryDocument(JSON.stringify(data));
+              applying = true;
+              useLibrary.setState(parsed);
+            } catch (error) {
+              console.warn("[library] ignored an invalid document from another window", error);
+            } finally {
+              applying = false;
+            }
+          };
+        }
+
         stop = useLibrary.subscribe((s, prev) => {
-          if (!s.loaded || !prev.loaded) return;
+          if (!s.loaded || !prev.loaded || applying) return;
 
           if ((s.easels === prev.easels && s.media === prev.media && s.removedMediaPaths === prev.removedMediaPaths) || s.error) return;
 
           try {
             engine.write(s);
+            channel?.postMessage({ version: 1, easels: s.easels, media: s.media, removedMediaPaths: s.removedMediaPaths });
           } catch (error) {
             useLibrary.setState({ error: `Couldn't save Library: ${String(error)}` });
           }

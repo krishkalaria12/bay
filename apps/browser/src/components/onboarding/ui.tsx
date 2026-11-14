@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../ui/primitives";
 import { isFirstStep, previousStep, skipStep, STEPS, useOnboarding, type OnboardingStep } from "./state";
@@ -11,6 +12,7 @@ export function onboardingColors(dark: boolean) {
     ? {
         background: "#000000",
         overlay: "rgba(0,0,0,0.6)", // BackgroundOverlay
+        backdropScrim: "rgba(0,0,0,0.35)",
         card: "#161616",
         cardBorder: "rgba(254,255,255,0.3)", // BackgroundBorder
         title: "#FEFFFF",
@@ -44,6 +46,7 @@ export function onboardingColors(dark: boolean) {
     : {
         background: "#FEFFFF",
         overlay: "rgba(254,255,255,0.6)",
+        backdropScrim: "rgba(254,255,255,0.3)",
         card: "#FFFFFF",
         cardBorder: "rgba(0,0,0,0.08)",
         title: "#000000",
@@ -246,6 +249,7 @@ export function SelectTile({
   width = 80,
   height = 70,
   role = "checkbox",
+  fullColor,
   children,
 }: {
   title: string;
@@ -254,6 +258,8 @@ export function SelectTile({
   width?: number;
   height?: number;
   role?: "checkbox" | "radio";
+  // Logos keep their colours when the tile isn't chosen.
+  fullColor?: boolean;
   children: (state: { hovered: boolean }) => ReactNode;
 }) {
   const colors = useOnboardingColors();
@@ -283,7 +289,7 @@ export function SelectTile({
               transform: [{ scale: pressed ? 0.96 : 1 }],
             }}
           >
-            <View style={{ opacity: selected || hovered ? 1 : 0.7 }}>{children({ hovered })}</View>
+            <View style={{ opacity: selected || hovered || fullColor ? 1 : 0.7 }}>{children({ hovered })}</View>
             <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "500", color: selected ? colors.title : colors.subtitle }}>
               {title}
             </Text>

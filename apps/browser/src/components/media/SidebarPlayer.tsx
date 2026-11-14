@@ -1,10 +1,11 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useShallow } from "zustand/react/shallow";
 import { useState, type ComponentProps } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image } from "react-native";
 import { switchToTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useTab } from "../../store/hooks";
 import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { useSidebarTokens } from "../sidebar/tokens";
@@ -106,7 +107,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
         <View style={{ flexDirection: "row", alignItems: "center", height: 24, marginTop: 4, marginLeft: -4 }}>
           <IconButton
             icon={tracks ? "backward.fill" : `gobackward.${SKIP_SECONDS}`}
-            size={tracks ? 10 : 12}
+            size={tracks ? 13 : 15}
             box={24}
             radius={6}
             tooltip={tracks ? "Play Previous Track" : `Skip back ${SKIP_SECONDS} seconds`}
@@ -114,7 +115,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           />
           <IconButton
             icon={playing ? "pause.fill" : "play.fill"}
-            size={13}
+            size={16}
             box={24}
             radius={6}
             tooltip={playing ? "Pause" : "Play"}
@@ -122,7 +123,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           />
           <IconButton
             icon={tracks ? "forward.fill" : `goforward.${SKIP_SECONDS}`}
-            size={tracks ? 10 : 12}
+            size={tracks ? 13 : 15}
             box={24}
             radius={6}
             tooltip={tracks ? "Play Next Track" : `Skip ahead ${SKIP_SECONDS} seconds`}
@@ -150,7 +151,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
         </View>
       </Surface>
       {hovered ? (
-        <View style={{ position: "absolute", top: -6, right: -6, flexDirection: "row", gap: 2 }}>
+        <View style={{ position: "absolute", top: -8, right: -8, flexDirection: "row", gap: 3 }}>
           <CornerButton
             icon={tab.muted ? "speaker.wave.2.fill" : "speaker.slash.fill"}
             tooltip={tab.muted ? "Unmute Site" : "Mute Site"}
@@ -179,16 +180,16 @@ function CornerButton({ icon, tooltip, onPress }: { icon: string; tooltip: strin
       <Pressable onPress={onPress}>
         <Surface
           fill={hex(theme.panel)}
-          cornerRadius={9}
+          cornerRadius={12}
           borderColor={hex(theme.panelBorder)}
           borderWidth={0.5}
           shadowColor="#000000"
           shadowOpacity={theme.panelShadowOpacity * 0.5}
           shadowRadius={3}
           shadowOffset={[0, 1]}
-          style={{ width: 18, height: 18, alignItems: "center", justifyContent: "center" }}
+          style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
         >
-          <Symbol name={icon} size={8} weight="bold" color={hovered ? theme.textPrimary : theme.textSecondary} style={{ width: 12, height: 12 }} />
+          <Symbol name={icon} size={13} weight="bold" color={hovered ? theme.textPrimary : theme.textSecondary} style={{ width: 16, height: 16 }} />
         </Surface>
       </Pressable>
     </View>

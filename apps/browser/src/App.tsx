@@ -1,8 +1,9 @@
+import { capabilities, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { CommandPanel } from "./components/commandBar/CommandBarPanel";
 import { ContentCard } from "./components/window/TabPageCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -16,9 +17,13 @@ import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding/index";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
 import { RenameDialogHost } from "./components/ui/RenameDialog";
+import { AppDialogHost } from "./components/AppDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/window/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/spaces/SpaceSwipe";
+import { CaptionButtons } from "./components/window/CaptionButtons";
+import { useWindowButtonLayout } from "./components/window/windowButtons";
+import { useCaptionRevealed } from "./components/window/captionReveal";
 import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
 import { TOP_CARD_INSET } from "./components/window/constants";
 import { TOP_STRIP_HEIGHT } from "./components/window/constants";
@@ -30,21 +35,26 @@ import { WindowProfile } from "./components/window/WindowProfile";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { LibrarySidebar } from "./components/library/LibrarySidebar";
 import { closeLibrarySidebar, useLibrarySidebar } from "./components/library/sidebarState";
+import { useLibrarySlide } from "./components/library/useLibrarySlide";
 import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
-import { useSidebarWidth } from "./components/sidebar/tokens";
+import { useSidebarWidth, useTabsSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
-import { useBrowser } from "./store/browserStore";
+import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
+
+// The caption bar opening and closing, and the page with it.
+const CAPTION_SLIDE = { duration: 180 };
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
   if (isUtilityWindowId(windowId))
     return (
       <ThemeScope>
         <UtilityWindow id={windowId!} />
+        <AppDialogHost windowId={windowId!} />
       </ThemeScope>
     );
 
@@ -60,7 +70,10 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
 
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>
+        {small ? <LittleBayWindow /> : <BrowserWindow />}
+        <AppDialogHost windowId={id} />
+      </ThemeScope>
     </WindowContext.Provider>
   );
 }
@@ -78,6 +91,34 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
+
+  // The top corners the page reaches: it has no toolbar there to hold caption buttons.
+  const pageCorner = {
+    left: !topTabs && addressInSidebar && (right || !showSidebar),
+    right: !topTabs && addressInSidebar && (!right || !showSidebar),
+  };
+
+  // Where the page would run up under caption buttons, they live in a bar of their own over it, as in Zen: hidden in
+  // the card's top gap until the pointer reaches the window's top, then open, pushing the page down rather than
+  // covering it. Open, it lines up with the sidebar's toolbar row; it always moves the window.
+  const buttons = useWindowButtonLayout();
+
+  const captionBar =
+    capabilities.captionButtons && !fullscreen && ((pageCorner.left && buttons.left.length > 0) || (pageCorner.right && buttons.right.length > 0));
+
+  const captionRevealed = useCaptionRevealed(windowId, captionBar);
+  const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
+  const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
+  const captionBarHeight = captionRevealed ? captionHeight : layout.cardTop;
+  let pageTop: number = layout.cardTop;
+
+  if (showStrip) pageTop = TOP_STRIP_HEIGHT;
+  else if (captionBar) pageTop = captionBarHeight;
+  const pageInset = useSharedValue(pageTop);
+  useEffect(() => {
+    pageInset.set(withTiming(pageTop, CAPTION_SLIDE));
+  }, [pageTop, pageInset]);
+  const pageInsetStyle = useAnimatedStyle(() => ({ paddingTop: pageInset.get() }));
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const windowTint = useWindowTint();
@@ -89,6 +130,8 @@ function BrowserWindow() {
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
   const library = useLibrarySidebar((l) => !!l[windowId]);
+  const tabsWidth = useTabsSidebarWidth(windowId);
+  const librarySlide = useLibrarySlide(windowId, sidebarWidth, right);
   // Hiding the sidebar (or moving tabs to the top) puts the Library away with it.
   useEffect(() => {
     if (!showSidebar) closeLibrarySidebar(windowId);
@@ -104,7 +147,7 @@ function BrowserWindow() {
     "worklet";
 
     // In page full screen the slot sits outside the window at the sidebar's full width.
-    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, sidebarWidth]) };
+    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, librarySlide.slotWidth.get()]) };
   });
 
   const dockedStyle = useAnimatedStyle(() => {
@@ -125,36 +168,52 @@ function BrowserWindow() {
           style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, ...(right ? { left: "100%" } : { right: "100%" }) } : { height: "100%" }, slotStyle]}
         >
           {dock.mounted ? (
-            <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
+            <Animated.View style={[{ height: "100%" }, librarySlide.slotStyle, dockedStyle]}>
               {/* The Library in the sidebar's place; the tabs stay mounted underneath, keeping their scroll and rows. */}
-              <View style={{ flex: 1, display: library ? "none" : "flex" }}>
+              <Animated.View
+                pointerEvents={library ? "none" : "auto"}
+                style={[
+                  { width: tabsWidth, height: "100%", display: librarySlide.covered ? "none" : "flex", ...(right ? { alignSelf: "flex-end" } : null) },
+                  librarySlide.tabsStyle,
+                ]}
+              >
                 <SpaceSwipe>
                   <Sidebar />
                 </SpaceSwipe>
-              </View>
-              {library ? <LibrarySidebar windowId={windowId} /> : null}
+              </Animated.View>
+              {librarySlide.shown ? (
+                <View pointerEvents={library ? "box-none" : "none"} style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
+                  <Animated.View
+                    style={[{ height: "100%", width: librarySlide.shown.width, ...(right ? { alignSelf: "flex-end" } : null) }, librarySlide.libraryStyle]}
+                  >
+                    <LibrarySidebar windowId={windowId} section={librarySlide.shown.section} width={librarySlide.shown.width} />
+                  </Animated.View>
+                </View>
+              ) : null}
             </Animated.View>
           ) : null}
         </Animated.View>
       )}
-      <View
+      <Animated.View
         style={
           fullscreen
             ? { flex: 1 }
-            : {
-                flex: 1,
-                flexDirection: "row",
-                paddingTop: showStrip ? TOP_STRIP_HEIGHT : layout.cardTop,
-                paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
-                // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
-                paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
-                paddingRight: showStrip ? TOP_CARD_INSET : right ? 0 : layout.cardInset,
-              }
+            : [
+                {
+                  flex: 1,
+                  flexDirection: "row",
+                  paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
+                  // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
+                  paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
+                  paddingRight: showStrip ? TOP_CARD_INSET : right ? 0 : layout.cardInset,
+                },
+                pageInsetStyle,
+              ]
         }
       >
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
-      </View>
+      </Animated.View>
       {/* No toolbar or sidebar to move the window by: the gap over the page does. */}
       {addressInSidebar && !sidebarOpen && !fullscreen ? (
         <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.cardTop }} />
@@ -166,6 +225,26 @@ function BrowserWindow() {
       )}
       {!sidebarOpen &&
         (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
+      {captionBar ? (
+        <WindowDragRegion
+          style={{
+            position: "absolute",
+            top: 0,
+            height: captionBarHeight,
+            left: showSidebar && !right ? sidebarWidth : 0,
+            right: showSidebar && right ? sidebarWidth : 0,
+          }}
+        />
+      ) : null}
+      {!fullscreen && (
+        <CaptionButtons
+          windowId={windowId}
+          height={captionHeight}
+          glyphCenter={captionCenter}
+          reveal={captionBar ? captionBarHeight : 0}
+          hidden={captionBar && !captionRevealed}
+        />
+      )}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
@@ -276,7 +355,11 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
 
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {/* Leaving the strip hides the peek after the delay, unless the pointer goes on into it: crossing the strip out of the
+          window is otherwise never seen, as nothing reads the pointer outside it (Wayland has no global pointer). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} />
+      ) : null}
       {/* The rest of the window while it's out: the pointer reaching it hides the peek, as leaving the peek does. Its own
           leave alone missed some exits (onto the page, say), leaving it out. */}
       {live ? (

@@ -1,3 +1,5 @@
+import { browserRead } from "../../store/read";
+import { ReadBrowser } from "../../effect/windowPorts";
 // A page's own work: translating a document, and the check an engine switch makes before it moves one.
 //
 // A translation is a job: the Mac's models are prepared, the page's passages arrive in batches, and the page is
@@ -20,7 +22,7 @@ import * as Scope from "effect/Scope";
 import { create } from "zustand";
 import * as v from "valibot";
 import type { Operation } from "../../effect/errors";
-import { useBrowser } from "../../store/browserStore";
+
 import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
 import { wantsPage } from "../../lib/tabNavigation";
@@ -78,15 +80,15 @@ export function hostOf(url: string): string {
 }
 
 // The sites the user never wants translated belong to a profile: an incognito window follows its default profile's.
-function listOwner(spaceId: string): string {
-  return isIncognitoSpace(spaceId) ? useBrowser.getState().settings.defaultSpaceId : spaceId;
+function listOwner(spaceId: string, settings: { defaultSpaceId: string }): string {
+  return isIncognitoSpace(spaceId) ? settings.defaultSpaceId : spaceId;
 }
 
 /** Whether the user never wants this site translated. */
-export function isNeverTranslated(spaceId: string, url: string): boolean {
+export function isNeverTranslated(spaceId: string, url: string, settings = browserRead.getState().settings): boolean {
   const host = hostOf(url);
 
-  return !!host && (useBrowser.getState().settings.neverTranslateSites[listOwner(spaceId)] ?? []).includes(host);
+  return !!host && (settings.neverTranslateSites[listOwner(spaceId, settings)] ?? []).includes(host);
 }
 
 // MARK: The port
@@ -316,6 +318,7 @@ export class PageWorkService extends Context.Service<
   static readonly layer = Layer.effect(
     PageWorkService,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
       const engine = yield* PageWorkEngine;
       const scope = yield* Scope.Scope;
 
@@ -563,7 +566,7 @@ export class PageWorkService extends Context.Service<
           // The document was replaced: the translation is over.
           if (!sample.active && stateOf(tabId).status === "translated") patch(tabId, { status: "idle", target: null, token: null });
 
-          if (isNeverTranslated(tab.spaceId, tab.url)) {
+          if (isNeverTranslated(tab.spaceId, tab.url, useBrowser.getState().settings)) {
             patch(tabId, { source: null });
 
             return;

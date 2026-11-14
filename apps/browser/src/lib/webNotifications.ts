@@ -5,14 +5,19 @@ import type { WebNotification } from "@bay/chromium";
 import type { NotificationResponse } from "@bay/desktop";
 import * as Effect from "effect/Effect";
 import { runDesktop } from "../effect/runtime";
-import { useBrowser } from "../store/browserStore";
+import { runWindow } from "../effect/windowRuntime";
+import { hasServiceClient } from "../runtime/serviceClient";
+
+const runNotifications = <A, E>(program: Effect.Effect<A, E, NotificationService>) => (hasServiceClient() ? runWindow(program) : runDesktop(program));
+
+import { useBrowserRead as useBrowser } from "../store/read";
 import { focus, switchToTab } from "./actions";
 import { NotificationService, shownNotifications } from "./notificationService";
 import { webviews } from "./webviews";
 
 /** Shows the notification a site asked for, if the app may show it. */
 export function showWebNotification(tabId: string, n: WebNotification): void {
-  void runDesktop(
+  void runNotifications(
     Effect.gen(function* () {
       const notifications = yield* NotificationService;
 
@@ -23,7 +28,7 @@ export function showWebNotification(tabId: string, n: WebNotification): void {
 
 /** Takes down the notifications a page asked for. */
 export function closeWebNotification(engineId: string): void {
-  void runDesktop(
+  void runNotifications(
     Effect.gen(function* () {
       const notifications = yield* NotificationService;
 
@@ -61,7 +66,7 @@ export function handleWebNotificationResponse(response: NotificationResponse): b
 
 /** Whether the app may show notifications, asking the user once if it may not. */
 export async function ensureNotificationPermission(windowId?: string): Promise<boolean> {
-  return runDesktop(
+  return runNotifications(
     Effect.gen(function* () {
       const notifications = yield* NotificationService;
 

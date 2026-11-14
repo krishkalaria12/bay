@@ -25,7 +25,6 @@ export const NEW_TAB_DOCK = DOCKED_BOTTOM + NEW_TAB_PITCH;
 export const FIRST_PAINT_ROWS = 64;
 export const ROWS_PER_FRAME = 32;
 export const CLEAN_UP_UPSELL_MIN = 10;
-export const AUTO_CLEAN_EVERY_MS = 30 * 60 * 1000;
 
 // MARK: Rows (RowMotion.tsx, ActiveHighlight.tsx, TabIcon.tsx)
 
@@ -90,6 +89,10 @@ export const ADDRESS_NAV_WIDTH = 3 * ADDRESS_BUTTON + 2 * ADDRESS_NAV_GAP;
 export const ADDRESS_LIGHTS_Y = 26.75;
 export const ADDRESS_TOGGLE_X = 70.75 + 27;
 export const ADDRESS_EDGE = 7;
+export const ADDRESS_TOGGLE_X_RIGHT = ADDRESS_EDGE + ADDRESS_BUTTON / 2;
+
+/** The narrowest sidebar that fits the toggle at `x`, and the navigation buttons `end` from its right edge. */
+export const addressToggleMinWidth = (x: number, end: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + end;
 
 // MARK: Hover card (hover.ts, HoverCard.tsx)
 

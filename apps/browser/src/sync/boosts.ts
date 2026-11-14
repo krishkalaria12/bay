@@ -2,7 +2,7 @@ import * as v from "valibot";
 import type { Adapter } from "@bay/sync";
 import { normalizeBoost, type Boost } from "../lib/boosts";
 import { isJsonObject } from "../lib/json";
-import { applySyncedBoosts, startBoosts, useBoosts } from "../components/boosts/state";
+import { applySyncedBoosts, ensureBoostsLoaded, useBoosts } from "../components/boosts/state";
 
 // Boosts across Macs: one record a Boost, its look and CSS (and whether it's on). Its JavaScript never leaves this
 // Mac: scripts live beside Boosts (useBoosts' scripts), not in them, so nothing here can carry one. A Boost another
@@ -15,7 +15,7 @@ type BoostRecord = Omit<Boost, "id">;
 export const boostsAdapter: Adapter = {
   prefix: PREFIX,
   extract: () => {
-    startBoosts();
+    ensureBoostsLoaded();
     const s = useBoosts.getState();
 
     // Unreadable here: publish nothing rather than deletions.
@@ -24,7 +24,7 @@ export const boostsAdapter: Adapter = {
     return { values: new Map(Object.values(s.boosts).map(({ id, ...record }) => [`${PREFIX}${id}`, record satisfies BoostRecord])) };
   },
   apply: (visible, changed) => {
-    startBoosts();
+    ensureBoostsLoaded();
 
     if (useBoosts.getState().error) return false;
     const upserts: Boost[] = [];

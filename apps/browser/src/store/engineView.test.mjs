@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { useBrowser } from "./browserStore.ts";
+import { browserRead } from "./read.ts";
 import { useEngineView } from "./engineView.ts";
 import { engineMark } from "./engines.ts";
 
@@ -25,7 +26,7 @@ test("engine badge subscribers skip transient updates and follow all engine inpu
     assert.equal(calls, 1);
     assert.equal(engineMark(useEngineView.getState(), id), "webkit");
     S().hydrate({});
-    assert.strictEqual(useEngineView.getState().tabs, S().tabs);
+    assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
     assert.equal(engineMark(useEngineView.getState(), id), null);
   } finally {
     stop();

@@ -177,7 +177,7 @@ export function sidebarTabOrder(s: QuietBrowserState, windowId: string): string[
 
     if (entry.startsWith("f:")) return folderEntries(s, id).flatMap(rowTabs);
 
-    return entry.startsWith("s:") ? (s.splits[id]?.tabIds ?? []) : [id];
+    return entry.startsWith("s:") ? [...(s.splits[id]?.tabIds ?? [])] : [id];
   };
 
   return [...tiles, ...pinned.flatMap(rowTabs), ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
@@ -418,7 +418,7 @@ function computeKeyboardRows(s: QuietBrowserState, windowId: string, liveState: 
       const group = s.groups[id];
 
       if (!group) return;
-      out.push({ id: entry, kind: "group", tabIds: group.tabIds, parentId, collapsed: group.collapsed });
+      out.push({ id: entry, kind: "group", tabIds: [...group.tabIds], parentId, collapsed: group.collapsed });
       groupEntries(s, id)
         .filter((child) => !group.collapsed || child === `t:${active}` || (child.startsWith("s:") && s.splits[child.slice(2)]?.tabIds.includes(active ?? "")))
         .forEach((child) => append(child, entry));

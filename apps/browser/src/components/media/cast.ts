@@ -2,8 +2,8 @@
 // (service.ts): this is where a window opens and closes its dialog, and reads the routes its profile can cast to.
 import type { CastRoute } from "@bay/chromium";
 import * as Effect from "effect/Effect";
-import { runDesktop } from "../../effect/runtime";
-import { useBrowser } from "../../store/browserStore";
+import { runWindow } from "../../effect/windowRuntime";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { castProfile, MediaService, useCast, type Media } from "./service";
 
 export { castProfile, useCast } from "./service";
@@ -14,7 +14,7 @@ if (__DEV__)
 
 /** Runs something with the media work, on the runtime the app shares. */
 export const withMedia = <A>(program: (media: Media) => Effect.Effect<A>): Promise<A> =>
-  runDesktop(
+  runWindow(
     Effect.gen(function* () {
       const media = yield* MediaService;
 

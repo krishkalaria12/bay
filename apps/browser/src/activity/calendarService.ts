@@ -146,10 +146,15 @@ export class CalendarService extends Context.Service<
   {
     /** Reads the Mac's calendar and shows it. */
     readonly refresh: () => Effect.Effect<void>;
-    /** Asks the Mac for the calendar's access, and shows it. */
-    readonly connect: () => Effect.Effect<boolean>;
+    /**
+     * Asks the Mac for the calendar's access, and shows it. `active` is the asking owner: an owner that went while
+     * the Mac was asking gets the answer, but starts no read.
+     */
+    readonly connect: (active?: () => boolean) => Effect.Effect<boolean>;
     /** Starts the refreshes: at the launch, when the calendar changes, and every few minutes. */
     readonly start: Effect.Effect<void>;
+    /** Stops the watchers and the polling; the next start registers them again. */
+    readonly stop: Effect.Effect<void>;
   }
 >()("bay/CalendarService") {
   static readonly layer = Layer.effect(
@@ -158,6 +163,11 @@ export class CalendarService extends Context.Service<
       const engine = yield* CalendarEngine;
       const scheduler = yield* Scheduler;
       const scope = yield* Scope.Scope;
+      const services = yield* Effect.context<never>();
+
+      // The watchers and the polling of one start. Stopping closes it, and the next start opens another.
+      let workScope = Scope.forkUnsafe(scope);
+      let started = false;
 
       const readEvents = (ids: string[]): Effect.Effect<CalendarEvent[], CalendarFailure> => {
         if (!ids.length) return Effect.succeed(noEvents);
@@ -214,6 +224,32 @@ export class CalendarService extends Context.Service<
 
       // The refresh that is running now, if any: the calendar is read once at a time.
       let inflight: Fiber.Fiber<void> | undefined;
+      // Which read is the current one. A stopped read finishes after the read that replaced it, and must not
+      // clear that one's inflight entry.
+      let generation = 0;
+
+      const reading = (id: number) =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => useCalendar.setState({ loading: true }));
+
+          const exit = yield* Effect.exit(readCalendar());
+
+          // A stop interrupts the read, and a read that was interrupted shows nothing. Only a failure is shown.
+          if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return;
+
+          const failure = Cause.squash(exit.cause);
+          const cause = failure instanceof CalendarFailure ? failure.cause : failure;
+
+          yield* Effect.sync(() => useCalendar.setState({ error: cause instanceof Error ? cause.message : String(cause) }));
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (generation !== id) return;
+              inflight = undefined;
+              useCalendar.setState({ loading: false });
+            }),
+          ),
+        );
 
       const refresh = (): Effect.Effect<void> =>
         Effect.uninterruptibleMask((restore) =>
@@ -221,75 +257,88 @@ export class CalendarService extends Context.Service<
             const running = inflight;
 
             if (running) {
-              yield* restore(Fiber.join(running));
+              // A stop interrupts the read; the caller's ask is answered either way.
+              yield* restore(Effect.exit(Fiber.join(running)));
 
               return;
             }
 
-            const reading = Effect.gen(function* () {
-              yield* Effect.sync(() => useCalendar.setState({ loading: true }));
+            const fiber = yield* Effect.forkIn(restore(reading(++generation)), workScope);
 
-              const exit = yield* Effect.exit(readCalendar());
-
-              if (Exit.isFailure(exit)) {
-                const failure = Cause.squash(exit.cause);
-                const cause = failure instanceof CalendarFailure ? failure.cause : failure;
-
-                yield* Effect.sync(() => useCalendar.setState({ error: cause instanceof Error ? cause.message : String(cause) }));
-              }
-            }).pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  inflight = undefined;
-                  useCalendar.setState({ loading: false });
-                }),
-              ),
-            );
-
-            inflight = yield* Effect.forkIn(restore(reading), scope);
-
-            yield* restore(Fiber.join(inflight));
+            inflight = fiber;
+            yield* restore(Fiber.join(fiber));
           }),
         );
 
-      const connect = (): Effect.Effect<boolean> =>
+      const connect = (active: () => boolean = () => true): Effect.Effect<boolean> =>
         Effect.gen(function* () {
           const granted = yield* engine.requestAccess().pipe(Effect.catch(() => Effect.succeed(false)));
+
+          // The owner that asked is gone: its answer must not start a read that lands on the next owner's state.
+          if (!active()) return granted;
 
           yield* refresh();
 
           return granted;
         });
 
-      const start = Effect.gen(function* () {
-        yield* refresh();
+      const start = Effect.suspend((): Effect.Effect<void> => {
+        if (started) return Effect.void;
+        started = true;
+        const work = workScope;
 
-        const stopListening = engine.changed(() => {
-          void Effect.runFork(refresh());
-        });
+        return Effect.gen(function* () {
+          yield* refresh();
 
-        // Only while connected: connecting refreshes on its own.
-        yield* scheduler.every({
-          every: 5 * 60_000,
-          run: refresh(),
-          needed: () => calendarConnected(),
-          watch: (changed) => useCalendar.subscribe((s, prev) => s.access !== prev.access && changed()),
-        });
+          const following = () => Effect.runForkWith(services)(Effect.forkIn(refresh(), work));
+          const stopListening = engine.changed(following);
 
-        const stopHidden = useLive.subscribe((s, prev) => {
-          if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void Effect.runFork(refresh());
-        });
+          yield* Scope.addFinalizer(work, Effect.sync(stopListening));
 
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.sync(() => {
-            stopListening();
-            stopHidden();
-          }),
+          // Only while connected: connecting refreshes on its own.
+          yield* scheduler.every({
+            scope: work,
+            every: 5 * 60_000,
+            run: refresh(),
+            needed: () => calendarConnected(),
+            watch: (changed) => useCalendar.subscribe((s, prev) => s.access !== prev.access && changed()),
+          });
+
+          const stopHidden = useLive.subscribe((s, prev) => {
+            if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) following();
+          });
+
+          yield* Scope.addFinalizer(work, Effect.sync(stopHidden));
+        }).pipe(
+          Effect.onExit((exit) =>
+            Effect.suspend(() => {
+              if (Exit.isSuccess(exit)) return Effect.void;
+
+              // A start that could not finish leaves nothing behind: its watcher and its slot go with it, and
+              // the next start opens a fresh scope.
+              if (workScope !== work) return Effect.void;
+
+              started = false;
+              workScope = Scope.forkUnsafe(scope);
+
+              return Scope.close(work, Exit.succeed(undefined));
+            }),
+          ),
         );
       });
 
-      return CalendarService.of({ refresh, connect, start });
+      const stop = Effect.suspend((): Effect.Effect<void> => {
+        started = false;
+        generation++;
+        inflight = undefined;
+        useCalendar.setState({ loading: false });
+        const previous = workScope;
+        workScope = Scope.forkUnsafe(scope);
+
+        return Scope.close(previous, Exit.succeed(undefined));
+      });
+
+      return CalendarService.of({ refresh, connect, start, stop });
     }),
   );
 }

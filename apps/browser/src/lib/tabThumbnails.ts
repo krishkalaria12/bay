@@ -1,4 +1,4 @@
-import { useBrowser } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { isIncognitoSpace } from "../store/model";
 import { MAX_TAB_PICTURES } from "./constants";
 import { askPicture, type Picture } from "./enrichmentService";

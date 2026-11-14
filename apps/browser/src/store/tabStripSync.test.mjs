@@ -221,10 +221,13 @@ const Effect = await import("effect/Effect");
 const Layer = await import("effect/Layer");
 const ManagedRuntime = await import("effect/ManagedRuntime");
 const { fakeDiagnostics } = await import("../effect/testing.ts");
+const { AuthorityStore } = await import("../effect/ports/store.ts");
 const { EngineTabsEngine, EngineTabsService } = await import("../lib/engineTabs.ts");
 
 // The engine's strips are read by the service the app's runtime owns: the test builds the same one over the fake.
-const engineTabs = ManagedRuntime.make(EngineTabsService.layer.pipe(Layer.provide(Layer.mergeAll(EngineTabsEngine.layer, fakeDiagnostics().layer))));
+const engineTabs = ManagedRuntime.make(
+  EngineTabsService.layer.pipe(Layer.provide(Layer.mergeAll(EngineTabsEngine.layer, fakeDiagnostics().layer, AuthorityStore.layer(useBrowser)))),
+);
 
 await engineTabs.runPromise(
   Effect.gen(function* () {

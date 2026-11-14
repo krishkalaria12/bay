@@ -1,5 +1,9 @@
 import type { BrowserCommand, MenuEntry } from "@bay/desktop";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { cleanUpTabs, returnToPinnedUrl } from "../../runtime/organizeActions";
+import { closeTabs, updateTabDetails } from "../../runtime/tabActions";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { browserRead } from "../../store/read";
 import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/tabTidying";
 import { runTidyTabs } from "../../lib/tidyTabs";
@@ -8,9 +12,10 @@ import { closeAllTabs, tabsAround } from "./contextMenus";
 import { setSidebarUi } from "./state";
 import { blurSidebar, focusSidebar, renameKeyboardRow, runSidebarKey } from "./keyboard";
 import { switcherStep } from "./spaceSwitcher";
+import { openNewTabPanel } from "../../lib/newTab";
 
 export function runSidebarCommand(command: BrowserCommand, arg: string | null, windowId: string): boolean {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const tabId = activeTabId(s, windowId);
 
   switch (command) {
@@ -28,17 +33,17 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       return true;
     case "newTabInGroup": {
       const group = groupOf(s, tabId);
-      s.openNewTabPanel(windowId, group?.id);
+      reportBrowserCommand(openNewTabPanel(windowId, group?.id));
 
       return true;
     }
 
     case "newGroupWithTabs":
-      newGroupWithSelection(windowId);
+      reportBrowserCommand(newGroupWithSelection(windowId));
 
       return true;
     case "cleanUpTabs":
-      s.cleanUpTabs(windowId);
+      reportBrowserCommand(cleanUpTabs(windowId));
 
       return true;
     case "tidyTabs":
@@ -46,7 +51,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 
       return true;
     case "closeAllTabs":
-      closeAllTabs(windowId);
+      reportBrowserCommand(closeAllTabs(windowId));
 
       return true;
     case "searchTabs":
@@ -64,13 +69,13 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 
       return true;
     case "returnToPinnedUrl":
-      if (tabId) s.returnToPinnedUrl(tabId);
+      if (tabId) reportBrowserCommand(returnToPinnedUrl(tabId));
 
       return true;
     case "keepTab": {
       const tab = tabId ? s.tabs[tabId] : undefined;
 
-      if (tab && !pinnedPage(tab)) s.updateTab(tab.id, { kept: !tab.kept });
+      if (tab && !pinnedPage(tab)) reportBrowserCommand(updateTabDetails(tab.id, { kept: !tab.kept }));
 
       return true;
     }
@@ -78,7 +83,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
     case "closeOtherTabs": {
       const tab = tabId ? s.tabs[tabId] : undefined;
 
-      if (tab) s.closeTabs(tabsAround(windowId, tab).others);
+      if (tab) reportBrowserCommand(closeTabs(tabsAround(windowId, tab).others));
 
       return true;
     }

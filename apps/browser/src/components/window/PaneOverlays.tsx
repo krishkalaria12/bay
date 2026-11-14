@@ -1,17 +1,20 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
+import { View } from "@bay/platform";
 import { toAppUrl, urlForDisplay } from "@bay/core";
 import { setBlockedPageAllowed } from "@bay/chromium";
 import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useLatched } from "../../lib/useLatched";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "../toolbar/buttons";
 import { goBack } from "./historyMenu";
 import { patchPage, usePage } from "./pageState";
-import { useBrowser } from "../../store/browserStore";
 import { useQuietBrowser } from "../../store/hooks";
+import { useBrowserRead } from "../../store/read";
 import { isIncognitoSpace } from "../../store/model";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
@@ -103,7 +106,7 @@ export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: st
       <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
         This tab is showing in another window. Show it here to move it, as it is.
       </Text>
-      <PromptButton title="Show Here" primary onPress={() => useBrowser.getState().activate(tabId, windowId)} />
+      <PromptButton title="Show Here" primary onPress={() => reportBrowserCommand(tabCommands.activate(tabId, windowId))} />
     </View>
   );
 }
@@ -113,7 +116,7 @@ export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: st
 export function BlockedPage({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const url = usePage(tabId, (p) => p.blockedPage);
-  const canGoBack = useBrowser((s) => !!s.live[tabId]?.canGoBack);
+  const canGoBack = useBrowserRead((s) => !!s.live[tabId]?.canGoBack);
   const incognito = useQuietBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
 
   if (!url) return null;
@@ -141,7 +144,7 @@ export function BlockedPage({ tabId }: { tabId: string }) {
           primary
           onPress={() => {
             if (canGoBack) goBack(tabId);
-            else useBrowser.getState().closeTab(tabId);
+            else reportBrowserCommand(tabCommands.closeTab(tabId));
           }}
         />
         <PromptButton title="Visit Anyway" onPress={() => visit(false)} />

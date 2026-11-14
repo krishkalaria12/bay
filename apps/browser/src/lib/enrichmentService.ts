@@ -22,8 +22,10 @@ import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import { ARTWORK_MAX_PIXELS } from "../components/media/constants";
 import type { Operation } from "../effect/errors";
+import { AuthorityStore } from "../effect/ports/store";
+import { ReadBrowser } from "../effect/windowPorts";
 import { Diagnostics } from "../effect/ports/diagnostics";
-import { useBrowser } from "../store/browserStore";
+
 import { FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, PICTURE_SETTLE_MS } from "./constants";
 import { webviews } from "./webviews";
 
@@ -172,159 +174,6 @@ export type ArtworkRequest = {
   readonly onArtwork: (uri: string | null) => void;
 };
 
-// MARK: The work waiting
-
-// The pages waiting for Chrome's answer, by profile and page. Plain on purpose: the icons are asked for from a
-// render path, so a hundred of them cost a hundred map writes and not a hundred fibers.
-// The burst takes these by swapping in empty ones: a map that is emptied in place would empty the work it took.
-let queuedIcons = new Map<string, Map<string, FaviconRequest>>();
-
-// The icons that are fetched, by profile and address. The pages that report the same icon share one fetch.
-let queuedFetches = new Map<string, Set<IconRequest>>();
-const runningFetches = new Map<string, Set<IconRequest>>();
-
-// Work handed to the bounded workers, including requests still waiting for a worker.
-const pendingJobs = new Set<string>();
-
-// The icons waiting for the Mac's answer.
-let queuedThemes = new Map<string, ThemeRequest>();
-
-// The windows waiting for their tab's picture.
-let queuedPictures = new Map<string, PictureRequest>();
-
-// The pages waiting for their artwork, by tab and address.
-let queuedArtworks = new Map<string, ArtworkRequest>();
-
-// The artwork that is on its way, and the one that was forgotten while it was.
-const runningArtworks = new Set<string>();
-const forgottenArtworks = new Set<string>();
-
-// What each profile's icons are at: the number moves when the profile is forgotten, and an answer that was asked
-// for before the move is not the answer the profile has now.
-const generations = new Map<string, number>();
-const pageGenerations = new Map<string, number>();
-
-// The pages whose answer is on its way, and the ones that were forgotten while it was.
-const inFlight = new Set<string>();
-
-// The burst's fiber. It is set when the app's runtime builds the service, and it is what does the waiting.
-let startBurst: (() => void) | undefined;
-
-// Whether the burst is up, and whether work arrived while it was ending.
-let bursting = false;
-let again = false;
-
-/** The key a page's pending work is remembered under. */
-const pageKey = (profile: string, page: string) => `${profile}|${page}`;
-
-/** The key an icon's pending fetch is remembered under. */
-const fetchKey = (profile: string, src: string) => `${profile}|${src}`;
-
-/** The key an artwork's pending work is remembered under. */
-const artworkKey = (tabId: string, url: string) => `${tabId} ${url}`;
-
-// MARK: The door
-
-/** Asks Chrome for the icons of pages that have none yet. The pages of one burst make one lookup. */
-export const askFavicons = (request: FaviconRequest): void => {
-  const pages = queuedIcons.get(request.profile) ?? new Map<string, FaviconRequest>();
-
-  pages.set(request.page, request);
-  queuedIcons.set(request.profile, pages);
-  startBurst?.();
-};
-
-/** Asks for an icon. The pages that report the same icon share one fetch. */
-export const askIcon = (request: IconRequest): void => {
-  const key = fetchKey(request.profile, request.src);
-  const running = runningFetches.get(key);
-
-  if (running) {
-    running.add(request);
-
-    return;
-  }
-
-  const waiting = queuedFetches.get(key) ?? new Set<IconRequest>();
-
-  waiting.add(request);
-  queuedFetches.set(key, waiting);
-  startBurst?.();
-};
-
-/** Asks the Mac what an icon looks like. */
-export const askTheme = (request: ThemeRequest): void => {
-  queuedThemes.set(request.uri, request);
-  startBurst?.();
-};
-
-/** Asks for a tab's picture. The window's last request is the one that counts. */
-export const askPicture = (request: PictureRequest): void => {
-  queuedPictures.set(request.windowId, request);
-  startBurst?.();
-};
-
-/** Asks for a page's artwork. An artwork that is on its way is not asked for again. */
-export const askArtwork = (request: ArtworkRequest): void => {
-  const key = artworkKey(request.tabId, request.url);
-
-  if (runningArtworks.has(key)) return;
-
-  queuedArtworks.set(key, request);
-  startBurst?.();
-};
-
-/** Forgets a profile's icons: the work that was on its way is not the profile's any more. */
-export const forgetProfile = (profile: string): void => {
-  generations.set(profile, (generations.get(profile) ?? 0) + 1);
-  queuedIcons.delete(profile);
-};
-
-/** Forgets a page: an answer that was on its way is not the page's any more. */
-export const forgetPage = (profile: string, page: string): void => {
-  const key = pageKey(profile, page);
-
-  pageGenerations.set(key, (pageGenerations.get(key) ?? 0) + 1);
-  queuedIcons.get(profile)?.delete(page);
-};
-
-/** Forgets a tab: the artwork that was on its way is not the tab's any more. */
-export const forgetTab = (tabId: string): void => {
-  for (const key of queuedArtworks.keys()) if (key.startsWith(`${tabId} `)) queuedArtworks.delete(key);
-
-  for (const key of runningArtworks) if (key.startsWith(`${tabId} `)) forgottenArtworks.add(key);
-};
-
-/** What the service is holding right now. */
-export const held = (): readonly string[] => {
-  const names: string[] = [];
-
-  if (bursting) names.push("burst");
-
-  for (const profile of queuedIcons.keys()) names.push(`icons:${profile}`);
-
-  for (const key of queuedFetches.keys()) names.push(`icon:${key}`);
-
-  for (const uri of queuedThemes.keys()) names.push(`theme:${uri}`);
-
-  for (const windowId of queuedPictures.keys()) names.push(`picture:${windowId}`);
-
-  for (const key of queuedArtworks.keys()) names.push(`artwork:${key}`);
-
-  for (const key of runningArtworks) names.push(`artwork:${key}`);
-
-  for (const key of inFlight) names.push(`icons:${key}`);
-
-  for (const job of pendingJobs) names.push(job);
-
-  return names;
-};
-
-/** Whether something is waiting to be looked up. */
-const waiting = () => queuedIcons.size > 0 || queuedFetches.size > 0 || queuedThemes.size > 0 || queuedPictures.size > 0 || queuedArtworks.size > 0;
-
-// MARK: The service
-
 /** The app's enrichment: the icons, the themes, the pictures and the artwork, and the work behind them. */
 export class EnrichmentService extends Context.Service<
   EnrichmentService,
@@ -349,9 +198,179 @@ export class EnrichmentService extends Context.Service<
     readonly held: () => readonly string[];
   }
 >()("bay/EnrichmentService") {
-  static readonly layer = Layer.effect(
+  static readonly layer = Layer.unwrap(
+    Effect.map(AuthorityStore, ({ store }) => enrichmentForStore(store).layer.pipe(Layer.provide(ReadBrowser.layer(store)))),
+  );
+}
+
+/** A request queue and its workers, owned by one browser instance. */
+export function createEnrichmentRequests(): EnrichmentRequests {
+  // MARK: The work waiting
+
+  // The pages waiting for Chrome's answer, by profile and page. Plain on purpose: the icons are asked for from a
+  // render path, so a hundred of them cost a hundred map writes and not a hundred fibers.
+  // The burst takes these by swapping in empty ones: a map that is emptied in place would empty the work it took.
+  let queuedIcons = new Map<string, Map<string, FaviconRequest>>();
+
+  // The icons that are fetched, by profile and address. The pages that report the same icon share one fetch.
+  let queuedFetches = new Map<string, Set<IconRequest>>();
+  const runningFetches = new Map<string, Set<IconRequest>>();
+
+  // Work handed to the bounded workers, including requests still waiting for a worker.
+  const pendingJobs = new Set<string>();
+
+  // The icons waiting for the Mac's answer.
+  let queuedThemes = new Map<string, ThemeRequest>();
+
+  // The windows waiting for their tab's picture.
+  let queuedPictures = new Map<string, PictureRequest>();
+
+  // The pages waiting for their artwork, by tab and address.
+  let queuedArtworks = new Map<string, ArtworkRequest>();
+
+  // The artwork that is on its way, and the one that was forgotten while it was.
+  const runningArtworks = new Set<string>();
+  const forgottenArtworks = new Set<string>();
+
+  // What each profile's icons are at: the number moves when the profile is forgotten, and an answer that was asked
+  // for before the move is not the answer the profile has now.
+  const generations = new Map<string, number>();
+  const pageGenerations = new Map<string, number>();
+
+  // The pages whose answer is on its way, and the ones that were forgotten while it was.
+  const inFlight = new Set<string>();
+
+  // The burst's fiber. It is set when the app's runtime builds the service, and it is what does the waiting.
+  let startBurst: (() => void) | undefined;
+
+  // Whether the burst is up, and whether work arrived while it was ending.
+  let bursting = false;
+  let again = false;
+
+  /** The key a page's pending work is remembered under. */
+  const pageKey = (profile: string, page: string) => `${profile}|${page}`;
+
+  /** The key an icon's pending fetch is remembered under. */
+  const fetchKey = (profile: string, src: string) => `${profile}|${src}`;
+
+  /** The key an artwork's pending work is remembered under. */
+  const artworkKey = (tabId: string, url: string) => `${tabId} ${url}`;
+
+  // MARK: The door
+
+  /** Asks Chrome for the icons of pages that have none yet. The pages of one burst make one lookup. */
+  const askFavicons = (request: FaviconRequest): void => {
+    const pages = queuedIcons.get(request.profile) ?? new Map<string, FaviconRequest>();
+
+    pages.set(request.page, request);
+    queuedIcons.set(request.profile, pages);
+    startBurst?.();
+  };
+
+  /** Asks for an icon. The pages that report the same icon share one fetch. */
+  const askIcon = (request: IconRequest): void => {
+    const key = fetchKey(request.profile, request.src);
+    const running = runningFetches.get(key);
+
+    if (running) {
+      running.add(request);
+
+      return;
+    }
+
+    const waiting = queuedFetches.get(key) ?? new Set<IconRequest>();
+
+    waiting.add(request);
+    queuedFetches.set(key, waiting);
+    startBurst?.();
+  };
+
+  /** Asks the Mac what an icon looks like. */
+  const askTheme = (request: ThemeRequest): void => {
+    queuedThemes.set(request.uri, request);
+    startBurst?.();
+  };
+
+  /** Asks for a tab's picture. The window's last request is the one that counts. */
+  const askPicture = (request: PictureRequest): void => {
+    queuedPictures.set(request.windowId, request);
+    startBurst?.();
+  };
+
+  /** Asks for a page's artwork. An artwork that is on its way is not asked for again. */
+  const askArtwork = (request: ArtworkRequest): void => {
+    const key = artworkKey(request.tabId, request.url);
+
+    if (runningArtworks.has(key)) return;
+
+    queuedArtworks.set(key, request);
+    startBurst?.();
+  };
+
+  /** Forgets a profile's icons: the work that was on its way is not the profile's any more. */
+  const forgetProfile = (profile: string): void => {
+    generations.set(profile, (generations.get(profile) ?? 0) + 1);
+    queuedIcons.delete(profile);
+  };
+
+  /** Forgets a page: an answer that was on its way is not the page's any more. */
+  const forgetPage = (profile: string, page: string): void => {
+    const key = pageKey(profile, page);
+
+    pageGenerations.set(key, (pageGenerations.get(key) ?? 0) + 1);
+    queuedIcons.get(profile)?.delete(page);
+  };
+
+  /** Forgets a tab: the artwork that was on its way is not the tab's any more. */
+  const forgetTab = (tabId: string): void => {
+    for (const key of queuedArtworks.keys()) if (key.startsWith(`${tabId} `)) queuedArtworks.delete(key);
+
+    for (const key of runningArtworks) if (key.startsWith(`${tabId} `)) forgottenArtworks.add(key);
+  };
+
+  /** What the service is holding right now. */
+  const held = (): readonly string[] => {
+    const names: string[] = [];
+
+    if (bursting) names.push("burst");
+
+    for (const profile of queuedIcons.keys()) names.push(`icons:${profile}`);
+
+    for (const key of queuedFetches.keys()) names.push(`icon:${key}`);
+
+    for (const uri of queuedThemes.keys()) names.push(`theme:${uri}`);
+
+    for (const windowId of queuedPictures.keys()) names.push(`picture:${windowId}`);
+
+    for (const key of queuedArtworks.keys()) names.push(`artwork:${key}`);
+
+    for (const key of runningArtworks) names.push(`artwork:${key}`);
+
+    for (const key of inFlight) names.push(`icons:${key}`);
+
+    for (const job of pendingJobs) names.push(job);
+
+    return names;
+  };
+
+  /** Whether something is waiting to be looked up. */
+  const waiting = () => queuedIcons.size > 0 || queuedFetches.size > 0 || queuedThemes.size > 0 || queuedPictures.size > 0 || queuedArtworks.size > 0;
+
+  // MARK: The service
+
+  const layer = Layer.effect(
     EnrichmentService,
     Effect.gen(function* () {
+      const browser = yield* ReadBrowser;
+
+      /** Whether the window still shows the tab, and the tab is still there. */
+      const shownTab = (windowId: string, tabId: string) => {
+        const s = browser.getState();
+        const window = s.windows[windowId];
+
+        return !!window && !!s.tabs[tabId] && window.activeTabIds[window.spaceId] === tabId;
+      };
+
       const engine = yield* EnrichmentEngine;
       const diagnostics = yield* Diagnostics;
       const clock = yield* Clock.Clock;
@@ -536,7 +555,7 @@ export class EnrichmentService extends Context.Service<
           // The tab was forgotten while the artwork was on its way: it is not the tab's any more.
           if (forgottenArtworks.delete(key)) return;
 
-          if (!useBrowser.getState().tabs[request.tabId]) return;
+          if (!browser.getState().tabs[request.tabId]) return;
 
           request.onArtwork(outcome.value);
         });
@@ -689,15 +708,59 @@ export class EnrichmentService extends Context.Service<
       });
     }),
   );
+
+  return {
+    layer,
+    requestFavicons: askFavicons,
+    requestIcon: askIcon,
+    requestTheme: askTheme,
+    requestPicture: askPicture,
+    requestArtwork: askArtwork,
+    invalidateProfile: forgetProfile,
+    forgetPage,
+    forgetTab,
+    held,
+  };
 }
 
-/** Whether the window still shows the tab, and the tab is still there. */
-const shownTab = (windowId: string, tabId: string) => {
-  const s = useBrowser.getState();
-  const window = s.windows[windowId];
-
-  return !!window && !!s.tabs[tabId] && window.activeTabIds[window.spaceId] === tabId;
+export type EnrichmentRequests = EnrichmentService["Service"] & {
+  readonly layer: Layer.Layer<EnrichmentService, never, ReadBrowser | EnrichmentEngine | Diagnostics>;
 };
+
+const requestsByStore = new WeakMap<import("../store/browserStore").BrowserStore, EnrichmentRequests>();
+
+/** The same store shares its queue with the runtime that drains it. */
+export function enrichmentForStore(store: import("../store/browserStore").BrowserStore): EnrichmentRequests {
+  const previous = requestsByStore.get(store);
+
+  if (previous) return previous;
+  const created = createEnrichmentRequests();
+  requestsByStore.set(store, created);
+
+  return created;
+}
+
+/** The legacy document's queue is shared by its icon, thumbnail and artwork callers. */
+export const defaultEnrichmentRequests = createEnrichmentRequests();
+
+export function bindDefaultEnrichment(store: import("../store/browserStore").BrowserStore): EnrichmentRequests {
+  const existing = requestsByStore.get(store);
+
+  if (existing) return existing;
+  requestsByStore.set(store, defaultEnrichmentRequests);
+
+  return defaultEnrichmentRequests;
+}
+
+export const askFavicons = defaultEnrichmentRequests.requestFavicons;
+export const askIcon = defaultEnrichmentRequests.requestIcon;
+export const askTheme = defaultEnrichmentRequests.requestTheme;
+export const askPicture = defaultEnrichmentRequests.requestPicture;
+export const askArtwork = defaultEnrichmentRequests.requestArtwork;
+export const forgetProfile = defaultEnrichmentRequests.invalidateProfile;
+export const forgetPage = defaultEnrichmentRequests.forgetPage;
+export const forgetTab = defaultEnrichmentRequests.forgetTab;
+export const held = defaultEnrichmentRequests.held;
 
 /** What the enrichment can do. */
 export type Enrichment = EnrichmentService["Service"];

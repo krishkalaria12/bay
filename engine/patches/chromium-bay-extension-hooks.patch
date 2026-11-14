@@ -1,0 +1,57 @@
+diff --git a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+--- a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
++++ b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+@@ -63,6 +63,12 @@
+ #include "chrome/common/url_constants.h"
+ #endif
+ 
++// Bay: NNCore (engine/nncore) shows the post-install UI for the windows it hosts.
++bool (*g_bay_extension_installed)(
++    Profile* profile,
++    scoped_refptr<const extensions::Extension> extension,
++    const SkBitmap* icon) = nullptr;
++
+ using content::BrowserThread;
+ using content::WebContents;
+ using extensions::Extension;
+@@ -130,6 +136,12 @@
+     return;
+   }
+ 
++  // Bay: NNCore
++  if (g_bay_extension_installed &&
++      g_bay_extension_installed(profile(), extension, icon)) {
++    return;
++  }
++
+   // Extensions aren't enabled by default in incognito so we confirm
+   // the install in a normal window.
+   Profile* current_profile = profile()->GetOriginalProfile();
+diff --git a/chrome/browser/download/download_crx_util.cc b/chrome/browser/download/download_crx_util.cc
+--- a/chrome/browser/download/download_crx_util.cc
++++ b/chrome/browser/download/download_crx_util.cc
+@@ -40,6 +40,10 @@
+ 
+ namespace download_crx_util {
+ 
++// Bay: NNCore (engine/nncore) shows the install prompt itself, without a tab.
++bool g_bay_prompts_without_tab = false;
++
++
+ namespace {
+ 
+ bool g_allow_offstore_install_for_testing = false;
+@@ -64,6 +68,13 @@
+   content::WebContents* web_contents =
+       content::DownloadItemUtils::GetWebContents(
+           const_cast<DownloadItem*>(&download_item));
++  // Bay: NNCore
++  if (!web_contents && g_bay_prompts_without_tab) {
++    return std::make_unique<ExtensionInstallPrompt>(
++        profile, gfx::NativeWindow(),
++        std::make_unique<extensions::InstallPromptData>(
++            extensions::InstallPromptData::UNSET_PROMPT_TYPE));
++  }
+   if (!web_contents) {
+     BrowserWindowInterface* browser =
+         extensions::browser_window_util::GetLastActiveBrowserWithProfile(

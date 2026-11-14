@@ -1,3 +1,5 @@
+import { ReadBrowser } from "../../effect/windowPorts";
+import { createSpace } from "../../runtime/spaceActions";
 // The import workflow: what the app imports from another browser, and what it takes to do it.
 //
 // The React hook is the UI's half: it holds the steps, the choices and the progress. This is the other half: the
@@ -16,6 +18,7 @@ import type {
   SpaceSuggestion,
 } from "@bay/import";
 import { confirm } from "@bay/desktop";
+import { capabilities } from "@bay/platform";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Predicate from "effect/Predicate";
@@ -26,7 +29,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { useBrowser } from "../../store/browserStore";
+
 import type { SpaceColor } from "../../store/types";
 import {
   applyArcProfile,
@@ -35,6 +38,7 @@ import {
   emptyCounts,
   importBookmarks,
   importExtensions,
+  importWarningNotes,
   profileColorFor,
   type ExtensionFailure,
   type ImportCounts,
@@ -90,7 +94,7 @@ export class ImportEngine extends Context.Service<
   {
     readonly listBrowsers: () => Effect.Effect<BrowserSource[], ImportFailure | ImportUnavailable>;
     readonly unlockBrowser: (browserId: string) => Effect.Effect<void, ImportFailure | ImportUnavailable>;
-    readonly isBrowserUnlocked: (browserId: string) => boolean;
+    readonly isBrowserUnlocked: (browserId: string) => Effect.Effect<boolean, ImportFailure | ImportUnavailable>;
     readonly forgetUnlockedKeys: () => void;
     readonly importData: (job: ImportJob) => Effect.Effect<ImportResult, ImportFailure | ImportUnavailable>;
     /** Reads the native kinds again for another destination: writing a vault token consumes it. */
@@ -100,7 +104,7 @@ export class ImportEngine extends Context.Service<
     readonly importSafariDirect: (signal: AbortSignal) => Effect.Effect<SafariExport, ImportFailure | ImportUnavailable>;
     readonly importBookmarksHTML: (path: string) => Effect.Effect<BookmarkNode, ImportFailure | ImportUnavailable>;
     readonly chooseImportFile: (kind: "safariExport" | "bookmarksHTML" | "passwordsCSV") => Effect.Effect<string | null, ImportFailure | ImportUnavailable>;
-    readonly safariHasFullDiskAccess: () => boolean;
+    readonly safariHasFullDiskAccess: () => Effect.Effect<boolean, ImportFailure | ImportUnavailable>;
     readonly diaAutomationStatus: () => Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable>;
     readonly requestDiaAutomation: () => Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable>;
     readonly openDia: () => Effect.Effect<void, ImportFailure | ImportUnavailable>;
@@ -127,7 +131,7 @@ export class ImportEngine extends Context.Service<
       return ImportEngine.of({
         listBrowsers: () => guarded("import.browsers", (api) => api.listBrowsers()),
         unlockBrowser: (browserId) => guarded("import.unlock", (api) => api.unlockBrowser(browserId)),
-        isBrowserUnlocked: (browserId) => !!native?.isBrowserUnlocked(browserId),
+        isBrowserUnlocked: (browserId) => guarded("import.unlocked", (api) => api.isBrowserUnlocked(browserId)),
         forgetUnlockedKeys: () => native?.forgetUnlockedKeys(),
         importData: (job) => guarded("import.data", (api) => api.importData(job.browserId, job.profileId, job.kinds, jobOptions(job))),
         importNative: (job) => native!.importData(job.browserId, job.profileId, job.kinds, jobOptions(job)),
@@ -136,7 +140,7 @@ export class ImportEngine extends Context.Service<
         importSafariDirect: (signal) => guarded("import.safariDirect", (api) => api.importSafariDirect({ signal })),
         importBookmarksHTML: (path) => guarded("import.bookmarksHTML", (api) => api.importBookmarksHTML(path)),
         chooseImportFile: (kind) => guarded("import.chooseFile", (api) => api.chooseImportFile(kind)),
-        safariHasFullDiskAccess: () => !!native?.safariHasFullDiskAccess(),
+        safariHasFullDiskAccess: () => guarded("import.safariAccess", (api) => api.safariHasFullDiskAccess()),
         diaAutomationStatus: () => guarded("import.diaStatus", (api) => api.diaAutomationStatus()),
         requestDiaAutomation: () => guarded("import.diaRequest", (api) => api.requestDiaAutomation()),
         openDia: () => guarded("import.diaOpen", (api) => api.openDia()),
@@ -176,12 +180,12 @@ export type SafariRequest = {
 
 /** What the app asks of the import workflow. */
 export type Workflow = {
-  /** The browsers this Mac can import from. */
+  /** The browsers this computer can import from. */
   readonly listBrowsers: () => Effect.Effect<BrowserSource[], ImportFailure | ImportUnavailable>;
   /** Asks macOS for the browser's keychain item, and waits for the user. */
   readonly unlock: (browserId: string) => Effect.Effect<void, ImportFailure | ImportUnavailable>;
-  /** Whether the browser's keychain item is already open. */
-  readonly unlocked: (browserId: string) => Effect.Effect<boolean>;
+  /** Whether the browser's keychain item is already open. Fails when it couldn't be checked. */
+  readonly unlocked: (browserId: string) => Effect.Effect<boolean, ImportFailure | ImportUnavailable>;
   /** Imports the chosen data, in the order the app keeps it. */
   readonly import: (request: ImportRequest) => Effect.Effect<ImportOutcome, ImportFailure | ImportUnavailable>;
   /** Reads Dia's open and pinned web pages. */
@@ -194,7 +198,7 @@ export type Workflow = {
   readonly openDia: () => Effect.Effect<void, ImportFailure | ImportUnavailable>;
   /** Waits for Dia to be running, asking again every little while, and says what it found. Stops when the flow closes. */
   readonly waitForDia: (signal: AbortSignal) => Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable>;
-  /** Whether this Mac may read Safari's data. */
+  /** Whether this Mac may read Safari's data: no, when it couldn't be checked. */
   readonly safariAccess: () => Effect.Effect<boolean>;
   /** Imports Safari's data, from the export file or from Safari itself. */
   readonly importSafari: (request: SafariRequest) => Effect.Effect<ImportOutcome, ImportFailure | ImportUnavailable>;
@@ -214,6 +218,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
   static readonly layer = Layer.effect(
     ImportWorkflow,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
       const engine = yield* ImportEngine;
       const clock = yield* Clock.Clock;
 
@@ -251,7 +256,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
 
           // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
           // SAFETY: SpaceColor | undefined, icon assertion matches the runtime value validated at this call site.
-          return yield* Effect.succeed(s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji }));
+          return yield* Effect.promise(() => createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji }));
         });
 
       const importData = (request: ImportRequest): Effect.Effect<ImportOutcome, ImportFailure | ImportUnavailable> =>
@@ -282,9 +287,23 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
             const left: string[] = [];
 
             // Firefox keeps no keychain key: without a primary password its logins open as they are.
-            if (request.source.family === "firefox" && requested.includes("passwords") && !engine.isBrowserUnlocked(request.source.id)) {
-              yield* Effect.exit(engine.unlockBrowser(request.source.id));
+            if (request.source.family === "firefox" && requested.includes("passwords")) {
+              const unlocked = yield* engine.isBrowserUnlocked(request.source.id).pipe(Effect.orElseSucceed(() => false));
+
+              if (!unlocked) yield* Effect.exit(engine.unlockBrowser(request.source.id));
             }
+
+            // A write that fails partway ends the import: what landed stays, and every kind not yet done says it failed.
+            // The run is never left showing its progress for good.
+            let broken = false;
+
+            const stopped = (operation: string, cause: unknown): Effect.Effect<void, ImportFailure> =>
+              Effect.gen(function* () {
+                if (codeOf(cause) === "cancelled") return yield* Effect.fail(new ImportFailure({ code: "cancelled", operation, cause }));
+
+                console.error("The import failed", cause);
+                broken = true;
+              });
 
             for (const profile of selected) {
               const imported = yield* Effect.exit(
@@ -314,9 +333,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
 
               for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
 
-              for (const w of result.warnings) {
-                if (["undecryptable", "skipped", "locked"].includes(w.code) && !result.failed.includes(w.kind!)) left.push(`${w.message}.`);
-              }
+              left.push(...importWarningNotes(result));
 
               const refused = (k: ImportKind) => {
                 const names = failed.get(k) ?? [];
@@ -361,7 +378,9 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 );
 
                 if (Exit.isFailure(applied)) {
-                  return yield* Effect.fail(new ImportFailure({ code: "unreadable", operation: "import.apply", cause: Cause.squash(applied.cause) }));
+                  yield* stopped("import.apply", Cause.squash(applied.cause));
+
+                  break;
                 }
 
                 add(applied.value);
@@ -384,10 +403,12 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 extensionDestinations = [dest];
                 usedDestinations.add(dest);
 
-                const applied = yield* Effect.exit(Effect.promise(() => applyResult(dest, result, request.source.name, refused)));
+                const applied = yield* Effect.exit(Effect.promise(() => applyResult(dest, result, request.source.name, refused, (note) => left.push(note))));
 
                 if (Exit.isFailure(applied)) {
-                  return yield* Effect.fail(new ImportFailure({ code: "unreadable", operation: "import.apply", cause: Cause.squash(applied.cause) }));
+                  yield* stopped("import.apply", Cause.squash(applied.cause));
+
+                  break;
                 }
 
                 add(applied.value);
@@ -399,7 +420,9 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 const written = yield* Effect.exit(Effect.promise(() => importExtensions(extensionDestinations, result, request.signal)));
 
                 if (Exit.isFailure(written)) {
-                  return yield* Effect.fail(new ImportFailure({ code: "unreadable", operation: "import.extensions", cause: Cause.squash(written.cause) }));
+                  yield* stopped("import.extensions", Cause.squash(written.cause));
+
+                  break;
                 }
 
                 total.extensions += written.value.imported;
@@ -410,6 +433,14 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 if (written.value.failed.length) refused("extensions");
               }
             }
+
+            if (broken)
+              for (const kind of order)
+                if (!failed.has(kind))
+                  failed.set(
+                    kind,
+                    selected.map((p) => p.name),
+                  );
 
             return {
               counts: total,
@@ -476,22 +507,24 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
       const importHtml = (path: string, target: string): Effect.Effect<ImportCounts, ImportFailure | ImportUnavailable> =>
         Effect.gen(function* () {
           const root = yield* engine.importBookmarksHTML(path);
-          const count = importBookmarks(target, root, "HTML File");
+          const count = yield* Effect.promise(() => importBookmarks(target, root, "HTML File"));
 
           return { ...emptyCounts(), bookmarks: count };
         });
 
       return ImportWorkflow.of({
-        listBrowsers: () => engine.listBrowsers(),
+        // Dia's tabs come over AppleScript, which only macOS has.
+        listBrowsers: () =>
+          engine.listBrowsers().pipe(Effect.map((list) => list.filter((browser) => browser.family !== "automation" || capabilities.appleScript))),
         unlock: (browserId) => engine.unlockBrowser(browserId),
-        unlocked: (browserId) => Effect.sync(() => engine.isBrowserUnlocked(browserId)),
+        unlocked: (browserId) => engine.isBrowserUnlocked(browserId),
         import: importData,
         readDiaTabs,
         waitForDia,
         diaStatus: () => engine.diaAutomationStatus(),
         requestDia: () => engine.requestDiaAutomation(),
         openDia,
-        safariAccess: () => Effect.sync(() => engine.safariHasFullDiskAccess()),
+        safariAccess: () => engine.safariHasFullDiskAccess().pipe(Effect.orElseSucceed(() => false)),
         importSafari,
         importHtml,
         chooseFile: (kind) => engine.chooseImportFile(kind),

@@ -27,8 +27,8 @@ import { create } from "zustand";
 import type { Operation } from "../../effect/errors";
 import { Diagnostics } from "../../effect/ports/diagnostics";
 import { pruneProfileFavicons } from "../../lib/favicons";
-import { useBrowser } from "../../store/browserStore";
-import { engineProfile, isIncognitoSpace } from "../../store/model";
+import { AuthorityStore } from "../../effect/ports/store";
+import { engineProfileFor, isIncognitoSpace } from "../../store/model";
 import { importModule } from "../import/module";
 import { PASSWORDS_UNLOCK_MS } from "./constants";
 
@@ -71,8 +71,8 @@ export class SettingsEngine extends Context.Service<
     readonly readCsv: (path: string) => Effect.Effect<ImportedCredential[], SettingsFailure>;
     /** Exports the profile's passwords, asking for Touch ID first. */
     readonly exportPasswords: (profile: string) => Effect.Effect<{ status: PasswordExportStatus; path?: string }, SettingsFailure>;
-    /** Clears the engine's data for a profile. */
-    readonly clearEngineData: (profile: string, types: BrowsingDataType[], since?: number) => Effect.Effect<void, SettingsFailure>;
+    /** Clears the engine profile belonging to this space. */
+    readonly clearEngineData: (spaceId: string, types: BrowsingDataType[], since?: number) => Effect.Effect<void, SettingsFailure>;
     /** Clears the app's own history for a profile, and the icons only it kept. */
     readonly clearAppHistory: (spaceId: string, since?: number) => Effect.Effect<void>;
     /** Records the next shortcut the user types: nothing when they cancelled, or it was stopped. */
@@ -81,26 +81,34 @@ export class SettingsEngine extends Context.Service<
     readonly stopRecording: () => Effect.Effect<void>;
   }
 >()("bay/SettingsEngine") {
-  static readonly layer = Layer.succeed(SettingsEngine)({
-    unlockPasswords: (profile) => nativeCall("passwords.unlock", () => unlockPasswords(profile)),
-    listPasswords: (profile) => nativeCall("passwords.list", () => listPasswords(profile)),
-    neverSaveOrigins: (profile) => nativeCall("passwords.never", () => getNeverSavePasswordOrigins(profile)),
-    savePassword: (profile, origin, username, password) => nativeCall("passwords.save", () => savePassword(profile, origin, username, password)),
-    chooseCsv: () => nativeCall("passwords.choose", () => importModule()?.chooseImportFile("passwordsCSV")),
-    readCsv: (path) => nativeCall("passwords.read", async () => (await importModule()?.importPasswordsCSV(path)) ?? []),
-    exportPasswords: (profile) => nativeCall("passwords.export", () => exportPasswords(profile)),
-    clearEngineData: (profile, types, since) => nativeCall("data.clear", () => clearBrowsingData(profile, types, since)),
-    clearAppHistory: (spaceId, since) =>
-      Effect.sync(() => {
-        useBrowser.getState().clearHistory(spaceId, since);
-        pruneProfileFavicons(spaceId);
-      }),
-    recordShortcut: () => nativeCall("shortcut.record", () => recordShortcut()),
-    stopRecording: () =>
-      Effect.sync(() => {
-        void cancelShortcutRecording().catch(() => {});
-      }),
-  });
+  static readonly layer = Layer.effect(
+    SettingsEngine,
+    Effect.gen(function* () {
+      const useBrowser = yield* AuthorityStore;
+
+      return SettingsEngine.of({
+        unlockPasswords: (profile) => nativeCall("passwords.unlock", () => unlockPasswords(profile)),
+        listPasswords: (profile) => nativeCall("passwords.list", () => listPasswords(profile)),
+        neverSaveOrigins: (profile) => nativeCall("passwords.never", () => getNeverSavePasswordOrigins(profile)),
+        savePassword: (profile, origin, username, password) => nativeCall("passwords.save", () => savePassword(profile, origin, username, password)),
+        chooseCsv: () => nativeCall("passwords.choose", () => importModule()?.chooseImportFile("passwordsCSV")),
+        readCsv: (path) => nativeCall("passwords.read", async () => (await importModule()?.importPasswordsCSV(path)) ?? []),
+        exportPasswords: (profile) => nativeCall("passwords.export", () => exportPasswords(profile)),
+        clearEngineData: (spaceId, types, since) =>
+          nativeCall("data.clear", () => clearBrowsingData(engineProfileFor(spaceId, useBrowser.getState().spaces), types, since)),
+        clearAppHistory: (spaceId, since) =>
+          Effect.sync(() => {
+            useBrowser.getState().clearHistory(spaceId, since);
+            pruneProfileFavicons(spaceId);
+          }),
+        recordShortcut: () => nativeCall("shortcut.record", () => recordShortcut()),
+        stopRecording: () =>
+          Effect.sync(() => {
+            void cancelShortcutRecording().catch(() => {});
+          }),
+      });
+    }),
+  );
 }
 
 function nativeCall<A>(name: string, run: () => A | Promise<A>): Effect.Effect<A, SettingsFailure> {
@@ -143,6 +151,55 @@ function originOf(url: string) {
   return m ? m[1]! : url;
 }
 
+/** Shortcut recording belongs to the document that receives the keys. */
+export function makeShortcutRecorder(
+  engine: Pick<SettingsEngine["Service"], "recordShortcut" | "stopRecording">,
+  report: (failure: SettingsFailure) => Effect.Effect<void>,
+) {
+  return Effect.gen(function* () {
+    const scope = yield* Scope.Scope;
+    // The recording that is running, and who asked for it.
+    let recording: { readonly owner: string; readonly token: number } | null = null;
+    let tokens = 0;
+
+    const stopRecording = (owner: string): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (recording?.owner !== owner) return;
+
+        recording = null;
+
+        yield* engine.stopRecording();
+      });
+
+    const record = (owner: string): Effect.Effect<RecordedShortcut | null> =>
+      Effect.gen(function* () {
+        // Another pane's recording stops: there is one keyboard to record.
+        if (recording) yield* stopRecording(recording.owner);
+
+        const token = ++tokens;
+
+        recording = { owner, token };
+
+        const combo = yield* engine.recordShortcut().pipe(Effect.catch((failure) => report(failure).pipe(Effect.as(null))));
+
+        // The recording was stopped, or replaced, while it waited: its answer is nobody's.
+        if (recording?.token !== token) return null;
+
+        recording = null;
+
+        return combo;
+      });
+
+    // A recording the app's scope ends stops with it.
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.suspend(() => (recording ? stopRecording(recording.owner) : Effect.void)),
+    );
+
+    return { record, stopRecording };
+  });
+}
+
 // MARK: The service
 
 export class SettingsWorkflows extends Context.Service<
@@ -171,7 +228,6 @@ export class SettingsWorkflows extends Context.Service<
     Effect.gen(function* () {
       const engine = yield* SettingsEngine;
       const diagnostics = yield* Diagnostics;
-      const scope = yield* Scope.Scope;
 
       // The words are ours: an engine's answer about passwords is never what goes into a report.
       const report = (failure: SettingsFailure): Effect.Effect<void> =>
@@ -278,7 +334,7 @@ export class SettingsWorkflows extends Context.Service<
           if (!types.length || isIncognitoSpace(spaceId)) return { history: request.history, engine: "none" } as const;
 
           // Never again on its own: clearing is destructive, and what it did clear stays cleared.
-          const cleared = yield* engine.clearEngineData(engineProfile(spaceId), types, request.since).pipe(
+          const cleared = yield* engine.clearEngineData(spaceId, types, request.since).pipe(
             Effect.as(true),
             Effect.catch((failure) => report(failure).pipe(Effect.as(false))),
           );
@@ -286,45 +342,7 @@ export class SettingsWorkflows extends Context.Service<
           return { history: request.history, engine: cleared ? "cleared" : "failed" } as const;
         });
 
-      // MARK: Recording a shortcut
-
-      // The recording that is running, and who asked for it.
-      let recording: { readonly owner: string; readonly token: number } | null = null;
-      let tokens = 0;
-
-      const stopRecording = (owner: string): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          if (recording?.owner !== owner) return;
-
-          recording = null;
-
-          yield* engine.stopRecording();
-        });
-
-      const record = (owner: string): Effect.Effect<RecordedShortcut | null> =>
-        Effect.gen(function* () {
-          // Another pane's recording stops: there is one keyboard to record.
-          if (recording) yield* stopRecording(recording.owner);
-
-          const token = ++tokens;
-
-          recording = { owner, token };
-
-          const combo = yield* engine.recordShortcut().pipe(Effect.catch((failure) => report(failure).pipe(Effect.as(null))));
-
-          // The recording was stopped, or replaced, while it waited: its answer is nobody's.
-          if (recording?.token !== token) return null;
-
-          recording = null;
-
-          return combo;
-        });
-
-      // A recording the app's scope ends stops with it.
-      yield* Scope.addFinalizer(
-        scope,
-        Effect.suspend(() => (recording ? stopRecording(recording.owner) : Effect.void)),
-      );
+      const { record, stopRecording } = yield* makeShortcutRecorder(engine, report);
 
       return SettingsWorkflows.of({ isUnlocked, unlock, passwords, importCsv, exportCsv, clearData, record, stopRecording });
     }),

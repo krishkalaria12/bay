@@ -1,16 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/desktop";
-import { Pressable, View } from "react-native";
 import { useEffect } from "react";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { deleteSpace, switchSpace } from "../../lib/actions";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "./pager";
 import { useHover } from "../ui/primitives";
 import { openSettings } from "../settings/windows";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useTabsSidebarWidth } from "../sidebar/tokens";
 import { newPinnedFolderWith, openIconPicker } from "../sidebar/actions";
 import { openNewMenu } from "../sidebar/NewMenu";
 import { NEW_MENU_ID, NEW_MENU_MS } from "../sidebar/constants";
@@ -33,12 +33,14 @@ import {
   SPACE_SELECTED_OPACITY,
   SPACE_SIDE,
 } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSpace } from "../../runtime/spaceActions";
 
 // Each icon selects a space with its own browsing profile. Dots replace icons once they no longer fit.
 
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.spaceOrder));
-  const width = useSidebarWidth(windowId);
+  const width = useTabsSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
   const fits = ids.length * SPACE_CELL + (ids.length - 1) * SPACE_GAP <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
   const { reorder, dragging } = useSpaceReorder(SPACE_CELL + SPACE_GAP);
@@ -153,7 +155,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   else if (choice === "look") openThemeEditor(windowId, id);
   else if (choice === "newFolder") {
     here();
-    newPinnedFolderWith(windowId);
+    reportBrowserCommand(newPinnedFolderWith(windowId));
   } else if (choice.startsWith("live:")) {
     here();
     runNewLiveFolder(windowId, choice);
@@ -174,5 +176,5 @@ export async function renameSpace(windowId: string, id: string) {
     icon: <SpaceGlyph spaceId={id} size={26} />,
   });
 
-  if (name) useBrowser.getState().updateSpace(id, { name });
+  if (name) await updateSpace(id, { name });
 }

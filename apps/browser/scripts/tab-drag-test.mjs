@@ -14,7 +14,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateSync } from "node:zlib";
-import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
+import { desktopHost, launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const args = process.argv.slice(2);
 const appArg = args.find((a) => !a.startsWith("--"));
@@ -109,7 +109,7 @@ let app = null;
 const HELPERS = `
 const C = globalThis.expo.modules.BayCEF;
 const st = () => nn.store.getState();
-const win = (id) => C.chromeWindows().then((ws) => { const f = st().windows[id].frame; const w = ws.filter((w) => w.hasRoot).find((w) => { const r = w.frame.match(/[-\\d.]+/g).map(Number); return Math.abs(r[0] - f[0]) < 2 && Math.abs(r[2] - f[2]) < 2; }); return w && w.window; });
+const win = (id) => C.chromeWindows().then((ws) => { const own = ws.find((w) => w.appWindow === id); if (own) return own.window; const f = st().windows[id].frame; const w = ws.filter((w) => w.hasRoot).find((w) => { const r = w.frame.match(/[-\\d.]+/g).map(Number); return Math.abs(r[0] - f[0]) < 2 && Math.abs(r[2] - f[2]) < 2; }); return w && w.window; });
 const act = (id, a) => win(id).then((n) => C.devWindow(n, a));
 const items = (id) => win(id).then((n) => { const xs = []; for (let x = 70; x < st().windows[id].frame[2] - 100; x += 1) xs.push(x);
   return Promise.all(xs.map((x) => C.devWindow(n, "hit:" + x + ",21"))).then((hits) => { const runs = []; let cur = null;
@@ -197,6 +197,9 @@ function contrast(png, [x0, y0, x1, y1]) {
 }
 
 const check = (name, fn) => rep.check(name, fn);
+
+// These read the dragged tab's picture through devDragPreviewState, which only AppKit's panel answers.
+const previewCheck = (name, fn) => (desktopHost ? rep.record(name, { skip: "needs BayShell.devDragPreviewState, macOS only" }) : check(name, fn));
 
 try {
   app = await launch(appPath, { data, port, session: fixture() });
@@ -373,6 +376,9 @@ try {
       });`);
 
     assert.equal(result.drags, 2, "a press at the strip's top and one near its bottom each drag the window");
+
+    // What a double-click does is the desktop's setting, and on Windows the system's own handling of real input.
+    if (desktopHost) return;
     // System Settings › Desktop & Dock › "Double-click a window's title bar to": Fill and Zoom change the frame.
     let action = null;
 
@@ -433,7 +439,7 @@ try {
     ]);
   });
 
-  await check("a tab dragged onto another window's tabs: the strip makes room at the pointer, and it lands there", async () => {
+  await previewCheck("a tab dragged onto another window's tabs: the strip makes room at the pointer, and it lands there", async () => {
     // w6 in front of the others under the pointer.
     await run(
       `nn.store.setState((s) => ({ ui: { ...s.ui, focusOrder: ["w6", "w5", ...s.ui.focusOrder.filter((id) => id !== "w6" && id !== "w5")] } })); return 1;`,
@@ -462,7 +468,7 @@ try {
     assert.deepEqual(await order("w5"), ["a2"]);
   });
 
-  await check("a background tab's card shows its own page: its last picture, else its icon and title", async () => {
+  await previewCheck("a background tab's card shows its own page: its last picture, else its icon and title", async () => {
     // Down onto the page and back into the strip (nothing changes), the card sampled over the page.
     const cardOf = async (id) => {
       const now = await run(`return items("w1");`);
@@ -515,7 +521,7 @@ try {
     assert.equal(splits[0].at(-1), "t3", `split ${JSON.stringify(splits)}`);
   });
 
-  await check("a tab let go over the page away from a target opens in a window of its own, as in Dia", async () => {
+  await previewCheck("a tab let go over the page away from a target opens in a window of its own, as in Dia", async () => {
     const now = await run(`return items("w1");`);
     const id = (await order("w1")).at(-1);
     const windows = await run(`return Object.keys(st().windows).length;`);
@@ -542,7 +548,7 @@ try {
     await run(`return putAway(${JSON.stringify(id)});`);
   });
 
-  await check("a tab dragged out of the window shows its picture there and tears off into a new one", async () => {
+  await previewCheck("a tab dragged out of the window shows its picture there and tears off into a new one", async () => {
     const now = await run(`return items("w1");`);
     const x = Math.round((now[2][0] + now[2][1]) / 2);
     const id = (await order("w1"))[2];

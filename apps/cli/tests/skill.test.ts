@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { compileCode } from "../src/runner.ts";
 
 const skill = readFileSync(join(import.meta.dir, "../src/skill/SKILL.md"), "utf8");
-const blocks = (language: string) => [...skill.matchAll(new RegExp("```" + language + "\\n([\\s\\S]*?)```", "g"))].map((match) => match[1]!);
+
+// A Windows checkout may have CRLF line ends, which these patterns don't expect.
+const blocks = (language: string) =>
+  [...skill.replaceAll("\r\n", "\n").matchAll(new RegExp("```" + language + "\\n([\\s\\S]*?)```", "g"))].map((match) => match[1]!);
+
 const commands = blocks("sh").flatMap((block) => [...block.matchAll(/^bay exec (?:--json )?'(.*)'$/gm)].map((match) => match[1]!));
 
 it("finds the skill's recipes", () => {

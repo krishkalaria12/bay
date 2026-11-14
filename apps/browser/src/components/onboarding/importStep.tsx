@@ -1,9 +1,10 @@
+import { listInstalledBrowsers, type BrowserSource } from "@bay/import";
+import { isMac, Pressable, View } from "@bay/platform";
 import { lookup } from "@bay/core";
-import type { BrowserSource } from "@bay/import";
 import { WindowBackdrop } from "@bay/shaders";
 import { fileIcon, hapticTick, Surface, Symbol } from "@bay/desktop";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Image, PanResponder, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { ActivityIndicator, Image, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
 import Animated, {
   Easing,
   Extrapolation,
@@ -17,7 +18,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { APP_ICON } from "../../lib/assets";
 import { APP_NAME } from "../../lib/constants";
 import { reduceMotion } from "../../lib/reduceMotion";
@@ -28,6 +29,7 @@ import { KINDS } from "../import/constants";
 import { useImportFlow, type ImportFlow, type Status } from "../import/useImportFlow";
 import { useHover } from "../ui/primitives";
 import { openImport } from "../settings/windows";
+import { showToast } from "../split/splitActions";
 import {
   BAY_GLOW,
   BAY_SKY,
@@ -41,7 +43,7 @@ import {
   HANDOFF_TOOTH,
 } from "./constants";
 import { bundledBrowserIcon, detectBrowsers } from "./browsers";
-import { nextStep, skipStep } from "./state";
+import { continueImportInBackground, nextStep, skipStep, useOnboarding } from "./state";
 import { Reveal, StepProgress } from "./ui";
 
 // "Where are you coming from?" as a handoff: the card tears in two, the browser you're leaving on the left in its
@@ -154,9 +156,95 @@ function canDrop(flow: ImportFlow) {
   return flow.isArc && flow.allSpaces.length ? flow.spaces.length > 0 : flow.sourceProfiles.length > 0;
 }
 
-export function ImportStep() {
+const ImportFlowContext = createContext<ImportFlow | null>(null);
+
+// Holds the import for the whole of onboarding, so it can carry on behind the other steps and past the last of them.
+export function ImportFlowHost({ windowId, children }: { windowId: string; children: ReactNode }) {
   const flow = useImportFlow();
-  const [found] = useState<Leaving[]>(detectBrowsers);
+  const background = useOnboarding((s) => s.importInBackground === windowId);
+  const onboarding = useOnboarding((s) => s.windowId === windowId);
+  const moving = flow.step === "progress";
+  const finishedAfterCard = useRef(false);
+  useEffect(() => {
+    if (!background || onboarding) return;
+
+    if (moving) {
+      finishedAfterCard.current = true;
+
+      return;
+    }
+
+    if (finishedAfterCard.current) {
+      const summary = importedSummary(flow.counts);
+      showToast(windowId, flow.failures.length ? "Some of your things didn't move in" : "Moved in", summary.length ? `${listed(summary)} came along.` : "");
+    }
+
+    useOnboarding.setState({ importInBackground: null });
+  }, [background, onboarding, moving]);
+
+  return <ImportFlowContext.Provider value={flow}>{children}</ImportFlowContext.Provider>;
+}
+
+// Below the card while the import runs behind the other steps, then what it brought.
+export function BackgroundImportStatus({ bottom }: { bottom: number }) {
+  const flow = useContext(ImportFlowContext);
+  const background = useOnboarding((s) => s.importInBackground !== null);
+  const step = useOnboarding((s) => s.step);
+
+  if (!flow || !background || step === "import" || step === "intro") return null;
+  const name = flow.source ? shortName(flow.source.name) : "your browser";
+  const moving = flow.step === "progress";
+  const summary = importedSummary(flow.counts);
+  let text = `Moved in from ${name}.`;
+
+  if (moving) text = `Moving in from ${name}…`;
+  else if (flow.failures.length) text = `Some of your things from ${name} didn't make it.`;
+  else if (summary.length) text = `${listed(summary)} came along.`;
+
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom, alignItems: "center" }}>
+      <Reveal key={moving ? "moving" : "done"}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            height: 28,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            backgroundColor: "rgba(20,20,24,0.72)",
+          }}
+        >
+          {moving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" style={{ transform: [{ scale: 0.6 }], width: 14, height: 14 }} />
+          ) : (
+            <Symbol name={flow.failures.length ? "exclamationmark.triangle.fill" : "checkmark"} size={11} color="#FFFFFF" style={{ width: 14, height: 14 }} />
+          )}
+          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "500", color: "#FFFFFF", maxWidth: 560 }}>
+            {text}
+          </Text>
+        </View>
+      </Reveal>
+    </View>
+  );
+}
+
+export function ImportStep() {
+  const flow = useContext(ImportFlowContext)!;
+  const [found, setFound] = useState<Leaving[]>(() => (isMac ? detectBrowsers() : []));
+  useEffect(() => {
+    if (isMac) return;
+    let active = true;
+    void listInstalledBrowsers()
+      .then((browsers) => {
+        if (active) setFound(browsers);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
   const [icons, setIcons] = useState<Record<string, string>>({});
   const [chosenId, setChosenId] = useState<string | null>(null);
   // Dropped before the scan was done: the id of the browser that waits for it.
@@ -803,12 +891,19 @@ function BayContent({
       return flow.unlocking ? (
         <Headline
           title="One quick check"
-          subtitle={`macOS asks for your Mac password to open ${name}'s saved passwords and sign-ins. Click Always Allow, and they stay on this Mac.`}
+          subtitle={
+            isMac
+              ? `macOS asks for your Mac password to open ${name}'s saved passwords and sign-ins. Click Always Allow, and they stay on this Mac.`
+              : `Your system may ask for your password to open ${name}'s saved passwords and sign-ins.`
+          }
         />
       ) : (
         <>
-          <Headline title="Moving in…" subtitle={`Bringing your things over from ${name}.`} />
+          <Headline title="Moving in…" subtitle={`Bringing your things over from ${name}. You needn't wait for it.`} />
           <KindPills status={flow.status} />
+          <Actions>
+            <PillButton title="Keep Setting Up" filled onPress={continueImportInBackground} />
+          </Actions>
         </>
       );
     case "welcome":

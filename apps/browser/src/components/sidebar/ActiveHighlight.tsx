@@ -1,7 +1,7 @@
 import { Surface } from "@bay/desktop";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { useSwitchSlide } from "../spaces/switchMotion";

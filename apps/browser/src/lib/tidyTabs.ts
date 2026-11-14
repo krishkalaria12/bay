@@ -3,10 +3,12 @@ import * as Effect from "effect/Effect";
 import { create } from "zustand";
 import { showToast } from "../components/ui/toasts";
 import { runDesktop } from "../effect/runtime";
-import { useBrowser } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
+import { undoSidebarEdit } from "../runtime/organizeActions";
 import { plural } from "../store/model";
 import { tidyTabCounts } from "../store/tabTidying";
-import { TidyWorkService } from "./tidyWorkService";
+import { TidyWorkService, type TidyOutcome } from "./tidyWorkService";
 
 // Tidy Tabs: the model proposes groups for a space's loose tabs, and the store applies them. Where the model can't
 // answer (no Apple Intelligence, a private window, a refusal) the tabs are grouped by site, so Tidy always does something.
@@ -69,13 +71,15 @@ export async function runTidyTabs(windowId: string): Promise<void> {
   let ours = true;
 
   try {
-    const outcome = await runDesktop(
-      Effect.gen(function* () {
-        const tidy = yield* TidyWorkService;
+    const outcome = hasServiceClient()
+      ? await requestService<TidyOutcome>("tidyTabs", [windowId])
+      : await runDesktop(
+          Effect.gen(function* () {
+            const tidy = yield* TidyWorkService;
 
-        return yield* tidy.run({ windowId });
-      }),
-    );
+            return yield* tidy.run({ windowId });
+          }),
+        );
 
     if (outcome.kind === "busy") {
       ours = false;
@@ -98,7 +102,7 @@ export async function runTidyTabs(windowId: string): Promise<void> {
       icon: "rectangle.stack",
       key: `tidy-tabs:${spaceId}`,
       duration: 6000,
-      action: { title: "Undo", run: () => void useBrowser.getState().undoSidebarEdit(windowId) },
+      action: { title: "Undo", run: () => void undoSidebarEdit(windowId) },
     });
   } finally {
     if (ours) setRunning(spaceId, false);

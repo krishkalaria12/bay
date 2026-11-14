@@ -2,7 +2,7 @@ import * as v from "valibot";
 import type { Adapter } from "@bay/sync";
 import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
 import { isJsonObject, type JsonInput } from "../lib/json";
-import { useBrowser } from "../store/browserStore";
+import { syncStore } from "./store";
 
 type ProfileLinks = Record<string, { syncId: string }>;
 
@@ -19,21 +19,21 @@ function profileIdFor(rule: ExternalLinkRule, links: ProfileLinks): string | und
   if (destination.kind !== "space") return;
 
   // A new sync chain assigns fresh profile IDs to existing local spaces.
-  if (useBrowser.getState().spaces[destination.spaceId]) return links[destination.spaceId]?.syncId;
+  if (syncStore().getState().spaces[destination.spaceId]) return links[destination.spaceId]?.syncId;
 
   // A deleted space that never synced cannot be linked elsewhere. Preserve its unavailable rule.
   return destination.syncProfileId ?? links[destination.spaceId]?.syncId ?? `unlinked-rule:${rule.id}`;
 }
 
 function localSpace(syncId: string, links: ProfileLinks): string {
-  const spaces = useBrowser.getState().spaces;
+  const spaces = syncStore().getState().spaces;
 
   return Object.entries(links).find(([id, link]) => link.syncId === syncId && spaces[id])?.[0] ?? missingSpace(syncId);
 }
 
 // Profile links can arrive after the rules, without any new rule record to apply.
 export function resolveLinkRuleSpaces(links: ProfileLinks): void {
-  const store = useBrowser.getState();
+  const store = syncStore().getState();
   let changed = false;
 
   const rules = store.settings.externalLinkRules.map((rule) => {
@@ -61,7 +61,7 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
     extract: () => {
       const rules: SyncedRule[] = [];
 
-      for (const rule of useBrowser.getState().settings.externalLinkRules) {
+      for (const rule of syncStore().getState().settings.externalLinkRules) {
         const { destination } = rule;
 
         if (destination.kind !== "space") {
@@ -83,7 +83,12 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
       if (!changed.has(KEY)) return;
 
       // Keep unpublished edits until their profile links let syncScope publish them before retrying apply.
-      if (useBrowser.getState().settings.externalLinkRules.some((rule) => rule.destination.kind === "space" && !profileIdFor(rule, links()))) return false;
+      if (
+        syncStore()
+          .getState()
+          .settings.externalLinkRules.some((rule) => rule.destination.kind === "space" && !profileIdFor(rule, links()))
+      )
+        return false;
       // SAFETY: visible values under `linkRules:ordered` are `{ rules }` records written by linkRulesAdapter extract.
       const record = visible.get(KEY) as { rules?: JsonInput } | undefined;
 
@@ -111,7 +116,7 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
 
       // Ignore a malformed list as a whole, so corruption cannot silently remove a rule.
       if (normalized.length !== rules.length) return;
-      useBrowser.getState().updateSettings({ externalLinkRules: normalized });
+      syncStore().getState().updateSettings({ externalLinkRules: normalized });
     },
   };
 }

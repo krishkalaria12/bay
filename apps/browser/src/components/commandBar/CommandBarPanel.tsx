@@ -1,16 +1,21 @@
+import { isMac, Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
-import { useWindowId, useWindowUi } from "../../store/hooks";
+import { browserRead, useBrowserRead } from "../../store/read";
+import { dispatchBrowserCommand } from "../../runtime/commands";
+import { DEFAULT_WINDOW_UI } from "../../store/windowUi";
+import { showToast } from "../split/splitActions";
+import { useWindowId } from "../../store/hooks";
 import { activeTabId } from "../../store/model";
 import { SWITCH_EASING } from "../spaces/switchMotion";
 import { PAGE_SWITCH_MS } from "../window/constants";
 import { useUrlAnchors } from "../window/layout";
 import { Omnibox } from "./CommandBar";
 import { PaletteSurface } from "./CommandBarSurface";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { webviews } from "../../lib/webviews";
 import {
   DROPDOWN_MIN_WIDTH,
@@ -25,29 +30,42 @@ import {
 
 type NavigationInsets = { left?: number; right?: number; top?: number };
 
-export function CommandPanel({
-  windowWidth,
-  windowHeight = 800,
-  navigationInsets,
-}: {
-  windowWidth: number;
-  windowHeight?: number;
-  navigationInsets?: NavigationInsets;
-}) {
+type PanelProps = { windowWidth: number; windowHeight?: number; navigationInsets?: NavigationInsets };
+
+/** Search failing closes itself and says so, leaving the window around it working. */
+export function CommandPanel(props: PanelProps) {
+  const windowId = useWindowId();
+  const open = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel.open);
+
+  const onError = () => {
+    showToast(windowId, "Search ran into a problem", "Please try again.", { icon: "magnifyingglass" });
+    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch((error) => console.error("Couldn't close search", error));
+  };
+
+  return (
+    <ErrorBoundary resetKey={open} onError={onError}>
+      <PanelContents {...props} />
+    </ErrorBoundary>
+  );
+}
+
+function PanelContents({ windowWidth, windowHeight = 800, navigationInsets }: PanelProps) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const { panel } = useWindowUi();
+  const panel = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel);
   // The active tab's id, and only while the panel is open: a closed panel doesn't re-render on tab switches.
-  const activeId = useBrowser((s) => (panel.open ? activeTabId(s, windowId) : undefined));
+  const activeId = useBrowserRead((s) => (panel.open ? activeTabId(s, windowId) : undefined));
   const anchor = useUrlAnchors((s) => (panel.open ? s[windowId] : undefined));
-  const small = useBrowser((s) => s.windows[windowId]?.kind === "small");
+  const small = useBrowserRead((s) => s.windows[windowId]?.kind === "small");
   const session = panel.open && activeId && !small ? { key: panel.sessionId ?? activeId, tabId: activeId, initialText: panel.initialText } : null;
   // The palette last open: closed, it fades out as it faded in, so leaving a New Tab page it goes with the page's
   // crossfade rather than at once, which left the bare page on screen for a frame or two.
   const [last, setLast] = useState(session);
 
   if (session && session.key !== last?.key) setLast(session);
-  const shown = session ?? last;
+  // Native pages crossfade with the closing palette. Web pages can attach
+  // before that animation finishes, so remove their palette on submission.
+  const shown = session ?? (isMac ? last : null);
 
   if (shown) {
     return (
@@ -68,7 +86,13 @@ export function CommandPanel({
   if (!panel.open || !activeId || !anchor) return null;
 
   const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - PANEL_WINDOW_MARGIN : fallback);
-  const onCancel = () => useBrowser.getState().closePanel(windowId);
+
+  const onCancel = () => {
+    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch((error) => {
+      console.error("Couldn't close search", error);
+      showToast(windowId, "Couldn't close search", "Please try again.");
+    });
+  };
 
   if (anchor.sidebar) {
     const width = Math.min(Math.max(DROPDOWN_MIN_WIDTH, anchor.width + DROPDOWN_PAST_FIELD), room(anchor.left, DROPDOWN_MIN_WIDTH));
@@ -159,11 +183,20 @@ function CenteredPalette({
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: closing ? appear.get() : 1 }), [closing]);
 
-  const dismiss = () => {
-    useBrowser.getState().closePanel(windowId);
-    const active = activeTabId(useBrowser.getState(), windowId);
+  const dismiss = async () => {
+    try {
+      await dispatchBrowserCommand({ method: "dismissCommandPanel", windowId });
+      const active = activeTabId(browserRead.getState(), windowId);
 
-    if (active) void webviews.get(active)?.focus();
+      if (active) {
+        const view = webviews.get(active);
+
+        if (view) await view.focus();
+      }
+    } catch (error) {
+      console.error("Couldn't close search", error);
+      showToast(windowId, "Couldn't close search", "Please try again.");
+    }
   };
 
   if (windowWidth < 1 || windowHeight < 1) return null;

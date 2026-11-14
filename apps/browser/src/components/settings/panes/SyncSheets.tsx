@@ -1,13 +1,15 @@
+import { TextInput, View, isMac } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
+import { enterRecoveryPhrase, folderInfo, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { RECOVERY_WORDS } from "../constants";
+import { platformWords } from "../../../lib/platformWords";
 
 function Title({ children }: { children: string }) {
   const theme = useTheme();
@@ -41,6 +43,8 @@ function RecoveryKitSheet() {
   const theme = useTheme();
   const colors = useFormColors();
   const [preview, setPreview] = useState<string | null>(null);
+  const [sessionOnly, setSessionOnly] = useState(false);
+  useEffect(() => void folderInfo().then((info) => setSessionOnly(info?.keyStorage === "session")), []);
   const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => void SyncNative?.recoveryKitPreview(168).then(setPreview), []);
 
@@ -68,6 +72,9 @@ function RecoveryKitSheet() {
       <View style={{ flexDirection: "row", gap: 18 }}>
         <View style={{ flex: 1 }}>
           <Title>Save Your Recovery Kit</Title>
+          {sessionOnly ? (
+            <Body>Secret Service is unavailable. You’ll need these words every time you start Bay. The key stays in memory for this session.</Body>
+          ) : null}
           <Body>Your Recovery Kit contains all you need to recover your data should you lose access to this device.</Body>
           <View
             style={{
@@ -108,7 +115,11 @@ export function showPhraseEntry(folder: FolderInfo | null, onChooseFolder?: () =
   showSettingsSheet(<PhraseSheet folder={folder} onChooseFolder={onChooseFolder} />);
 }
 
-const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string | null => {
+// The sync engine may refuse the phrase for its own reasons: it is paused while the app quits, and it may not open
+// the data it saved. The pane knows them all.
+type PhraseOutcome = Awaited<ReturnType<typeof enterRecoveryPhrase>> | { error: "quitting" | "savedData" };
+
+const phraseError = (r: PhraseOutcome): string | null => {
   if ("ok" in r) return null;
 
   switch (r.error) {
@@ -123,9 +134,13 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
     case "noData":
       return "There’s no synced data in this folder yet. Choose the folder your other devices sync to, or wait for it to finish downloading.";
     case "keychain":
-      return "Couldn’t save the sync key in your Keychain.";
+      return `Couldn’t save the sync key in ${platformWords.secretStore}.`;
     case "unavailable":
       return "Sync isn’t available in this build.";
+    case "quitting":
+      return "Sync is paused while Bay is quitting. Cancel quit to try again.";
+    case "savedData":
+      return "Couldn't open the saved sync data. Your existing files have been preserved.";
   }
 };
 
@@ -225,15 +240,17 @@ function ConnectDeviceSheet() {
     <Sheet width={480} onClose={closeSettingsSheet}>
       <Title>Connect Another Device</Title>
       <Body>
-        On your other Mac, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery
-        phrase.
+        On {platformWords.yourOtherComputer}, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24
+        words of your recovery phrase.
       </Body>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 16 }}>
         <View style={{ width: 132, height: 132, borderRadius: 8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
           {qr ? <Image source={{ uri: qr }} style={{ width: 120, height: 120 }} /> : null}
         </View>
         <Text style={{ flex: 1, fontSize: 12, lineHeight: 16, color: theme.textSecondary }}>
-          Or scan this code with your iPhone’s camera to copy the words, then paste them on your other Mac with Universal Clipboard.
+          {isMac
+            ? "Or scan this code with your iPhone’s camera to copy the words, then paste them on your other Mac with Universal Clipboard."
+            : "Or scan this code with your phone to copy the words."}
         </Text>
       </View>
       {words ? (
@@ -272,7 +289,7 @@ function StopSheet() {
       <Title>Stop Syncing This Device?</Title>
       <Body>
         Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your Recovery
-        Kit. Everything on this Mac stays as it is.
+        Kit. Everything on {platformWords.thisComputer} stays as it is.
       </Body>
       <Buttons left={<Button title="Save Recovery Kit" onPress={() => showSettingsSheet(<RecoveryKitSheet />)} />}>
         <Button title="Cancel" onPress={closeSettingsSheet} />
@@ -297,7 +314,7 @@ function DeleteDataSheet() {
       <Title>Delete Sync Data?</Title>
       <Body>
         Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync again,
-        you’ll need to set up each device from scratch. Your data on each Mac stays.
+        you’ll need to set up each device from scratch. Your data on {platformWords.eachComputer} stays.
       </Body>
       <View style={{ marginTop: 12 }}>
         <Checkbox value={understood} onChange={setUnderstood} label="I understand this cannot be undone" />

@@ -1,10 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include "build/build_config.h"
+#include "chrome/browser/bay/nn_engine.h"
 
 #include <memory>
 #include <optional>
@@ -17,6 +14,7 @@
 #include "base/base64url.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -25,7 +23,6 @@
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/posix/eintr_wrapper.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,6 +57,12 @@
 #include "net/log/net_log_source.h"
 #include "net/socket/tcp_server_socket.h"
 #include "ui/base/base_window.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#include "base/win/access_token.h"
+#include "base/win/security_descriptor.h"
+#endif
 
 namespace bay {
 namespace {
@@ -106,63 +109,77 @@ base::FilePath ControlFilePath() {
   if (!base::PathService::Get(chrome::DIR_USER_DATA, &dir)) {
     return base::FilePath();
   }
-  return dir.Append(kControlFileName);
-}
-
-std::string ErrnoText() {
-  return base::ToLowerASCII(strerror(errno));
+  return dir.AppendASCII(kControlFileName);
 }
 
 std::string WriteControlFile(const base::FilePath& path,
                              const std::string& contents,
                              uint64_t generation) {
-  if (path.empty()) {
+  if (path.empty())
     return "Bay has no data folder.";
-  }
-  const base::FilePath temp = path.DirName().Append(
-      "." + path.BaseName().value() + "." +
-      base::HexEncode(base::RandBytesAsVector(8)));
-  const int fd = HANDLE_EINTR(
-      open(temp.value().c_str(),
-           O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
-  if (fd < 0) {
-    return base::StrCat({"Couldn't write ", path.value(), ": ", ErrnoText()});
-  }
-  bool written = base::WriteFileDescriptor(fd, contents) && fsync(fd) == 0;
-  std::string error = written ? std::string() : ErrnoText();
-  if (IGNORE_EINTR(close(fd)) != 0 && written) {
-    written = false;
-    error = ErrnoText();
-  }
+  const base::FilePath temp = path.DirName().AppendASCII(
+      ".BayControl." + base::HexEncode(base::RandBytesAsVector(8)));
+#if BUILDFLAG(IS_WIN)
+  auto token = base::win::AccessToken::FromCurrentProcess();
+  auto descriptor = base::win::SecurityDescriptor::CreateWithEmptyDacl();
+  descriptor.set_dacl_protected(true);
+  if (!token || !descriptor.SetDaclEntry(
+                    *token, base::win::SecurityAccessMode::kGrant,
+                    GENERIC_ALL, 0))
+    return "Couldn't protect the terminal control file.";
+  descriptor.set_owner(token->User());
+  auto absolute = descriptor.ToAbsolute();
+  SECURITY_ATTRIBUTES security = {sizeof(SECURITY_ATTRIBUTES), &absolute, FALSE};
+  // Supply the private DACL when creating the file. A handle opened only with
+  // GENERIC_WRITE cannot later change a DACL through SetSecurityInfo.
+  base::File file(CreateFileW(temp.value().c_str(), GENERIC_WRITE,
+                              FILE_SHARE_READ, &security, CREATE_NEW,
+                              FILE_ATTRIBUTE_NORMAL, nullptr));
+  const bool protected_file = file.IsValid();
+#else
+  base::File file(temp, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+  const bool protected_file = file.IsValid() &&
+                              base::SetPosixFilePermissions(temp, 0600);
+#endif
+  const bool written = protected_file &&
+      file.WriteAtCurrentPosAndCheck(base::as_byte_span(contents)) && file.Flush();
+  file.Close();
   if (!written) {
-    unlink(temp.value().c_str());
-    return base::StrCat({"Couldn't write ", path.value(), ": ", error});
+    base::DeleteFile(temp);
+    return "Couldn't protect and write the terminal control file.";
   }
-  {
-    base::AutoLock hold(PublishLock());
-    if (g_live_generation != generation) {
-      unlink(temp.value().c_str());
-      return "The control server stopped.";
-    }
-    if (rename(temp.value().c_str(), path.value().c_str()) != 0) {
-      error = ErrnoText();
-      unlink(temp.value().c_str());
-      return base::StrCat({"Couldn't write ", path.value(), ": ", error});
-    }
+  base::AutoLock hold(PublishLock());
+  if (g_live_generation != generation) {
+    base::DeleteFile(temp);
+    return "The control server stopped.";
   }
-  return std::string();
+#if BUILDFLAG(IS_WIN)
+  // ReplaceFileW deliberately carries the old destination's DACL onto the new
+  // file. MoveFileExW keeps our protected DACL, even if an old control file had
+  // inherited broader permissions.
+  const bool published = MoveFileExW(temp.value().c_str(), path.value().c_str(),
+                                    MOVEFILE_REPLACE_EXISTING |
+                                        MOVEFILE_WRITE_THROUGH);
+#else
+  const bool published = base::ReplaceFile(temp, path, nullptr);
+#endif
+  if (!published) {
+    base::DeleteFile(temp);
+    return "Couldn't publish the terminal control file.";
+  }
+  return {};
 }
 
 void DeleteControlFile(const base::FilePath& path) {
-  if (!path.empty() && unlink(path.value().c_str()) != 0 && errno != ENOENT &&
-      errno != EISDIR && errno != EPERM) {
-    PLOG(ERROR) << "[bay] can't delete " << path;
-  }
+  if (!path.empty() && !base::DeleteFile(path))
+    LOG(WARNING) << "[bay] can't delete " << path;
 }
 
 bool ServerStartedBySwitch() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kRemoteDebuggingPort);
+      ::switches::kRemoteDebuggingPort) ||
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             ::switches::kRemoteDebuggingPipe);
 }
 
 class ControlServer {
@@ -265,7 +282,7 @@ class ControlServer {
     }
     status.Set("connections", static_cast<int>(connections_));
     status.Set("generation", static_cast<int>(generation_));
-    status.Set("file", file_path_.value());
+    status.Set("file", file_path_.AsUTF8Unsafe());
     if (!error_.empty()) {
       status.Set("reason", error_);
     }

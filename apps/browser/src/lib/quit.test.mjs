@@ -11,7 +11,7 @@ const { beginQuit, cancelQuit, isQuitting } = await import("./quit.ts");
 const S = () => useBrowser.getState();
 const change = () => S().updateSettings({ showFullUrl: !S().settings.showFullUrl });
 
-test("the quit saves the session, answers the native side, and freezes the saving", () => {
+test("the quit saves the session, answers the native side, and freezes the saving", async () => {
   stub.docs.clear();
   stub.writes.length = 0;
   stub.terminated.length = 0;
@@ -20,7 +20,7 @@ test("the quit saves the session, answers the native side, and freezes the savin
 
   try {
     change();
-    beginQuit();
+    await beginQuit();
 
     assert.ok(stub.docs.get("session.json"), "the session is saved before the app answers");
     assert.deepEqual(stub.terminated, [true], "the native side is told the app is ready to go");
@@ -36,7 +36,7 @@ test("the quit saves the session, answers the native side, and freezes the savin
   }
 });
 
-test("a quit called off goes on with what changed meanwhile", () => {
+test("a quit called off goes on with what changed meanwhile", async () => {
   stub.docs.clear();
   stub.writes.length = 0;
   stub.terminated.length = 0;
@@ -45,7 +45,7 @@ test("a quit called off goes on with what changed meanwhile", () => {
 
   try {
     change();
-    beginQuit();
+    await beginQuit();
 
     const saved = stub.docs.get("session.json");
 
@@ -57,4 +57,42 @@ test("a quit called off goes on with what changed meanwhile", () => {
   } finally {
     stop();
   }
+});
+
+test("native termination waits for the persistence acknowledgement", async (t) => {
+  stub.terminated.length = 0;
+  const written = Promise.withResolvers();
+  t.after(() => cancelQuit({ resume() {} }));
+  const pending = beginQuit({ flush: () => written.promise });
+
+  await new Promise(setImmediate);
+  assert.deepEqual(stub.terminated, []);
+  written.resolve();
+  await pending;
+  assert.deepEqual(stub.terminated, [true]);
+});
+
+test("a cancelled quit ignores an earlier acknowledgement", async () => {
+  stub.terminated.length = 0;
+  const written = Promise.withResolvers();
+  const pending = beginQuit({ flush: () => written.promise });
+
+  await new Promise(setImmediate);
+  cancelQuit({ resume() {} });
+  written.resolve();
+  await pending;
+  assert.deepEqual(stub.terminated, []);
+  assert.equal(isQuitting(), false);
+});
+
+test("a failed save keeps the app open unless quitting anyway is confirmed", async (t) => {
+  stub.terminated.length = 0;
+  t.after(() => cancelQuit({ resume() {} }));
+  const asked = t.mock.method(stub.shellDialogAnswers, "confirm", async () => ({ confirmed: false, suppressed: false }));
+  const error = new Error("disk full");
+
+  await beginQuit({ flush: () => Promise.reject(error) });
+  assert.deepEqual(stub.terminated, [false]);
+  assert.equal(asked.mock.callCount(), 1);
+  assert.match(asked.mock.calls[0].arguments[0].message, /disk full/);
 });

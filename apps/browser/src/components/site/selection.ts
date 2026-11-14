@@ -2,9 +2,10 @@ import { setSearchEngineName } from "@bay/chromium";
 import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type SelectionContext } from "@bay/core";
 import { copyQuoteCard, copyText, shareQuoteCard, type QuoteCard } from "@bay/desktop";
 import { create } from "zustand";
+import { capabilities } from "@bay/platform";
 import { webviews } from "../../lib/webviews";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { spaceThemeKey, themeFor } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
 import { defaultSearchEngine } from "../../store/settings";
 import { showToast } from "../split/splitActions";
 import { openModeFor } from "../bookmarks/actions";
@@ -35,7 +36,7 @@ export function startSelectionTools() {
   return useBrowser.subscribe((s, prev) => s.settings !== prev.settings && sync());
 }
 
-export type ClickModifiers = { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
+export type ClickModifiers = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
 
 // A new tab next to the page, or where the keys held say (Chrome's): ⌘ behind, ⇧⌘ in front, ⇧ a new window.
 export function searchSelection(tabId: string, text: string, modifiers: ClickModifiers = {}) {
@@ -133,14 +134,16 @@ export async function shareSelectionQuote(tabId: string) {
     showToast(tab.windowId, "Copied Quote", "Paste the card or its link into another app.", {
       icon: "quote.bubble.fill",
       key: "share-quote",
-      action: {
-        title: "Share…",
-        run: () => {
-          void shareQuoteCard(card, tab.windowId)
-            .then((shared) => !shared && failed("The share menu couldn't be opened. You can still paste the quote."))
-            .catch(() => failed("The share menu couldn't be opened. You can still paste the quote."));
-        },
-      },
+      action: capabilities.shareSheet
+        ? {
+            title: "Share…",
+            run: () => {
+              void shareQuoteCard(card, tab.windowId)
+                .then((shared) => !shared && failed("The share menu couldn't be opened. You can still paste the quote."))
+                .catch(() => failed("The share menu couldn't be opened. You can still paste the quote."));
+            },
+          }
+        : undefined,
     });
   } catch {
     failed("The card couldn't be created. Select the text and try again.");

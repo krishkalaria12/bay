@@ -5,6 +5,7 @@
 import type { WebNotification } from "@bay/chromium";
 import {
   confirm,
+  hasNotificationPermissionQuery,
   notificationPermission,
   openNotificationSettings,
   postNotification,
@@ -12,13 +13,16 @@ import {
   requestNotificationPermission,
   type NotificationOptions,
 } from "@bay/desktop";
+import { capabilities } from "@bay/platform";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import { useBrowser } from "../store/browserStore";
+import { ReadBrowser } from "../effect/windowPorts";
+
+import { platformWords } from "./platformWords";
 import { webviews } from "./webviews";
 import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";
 import { Diagnostics } from "../effect/ports/diagnostics";
@@ -120,6 +124,7 @@ export class NotificationService extends Context.Service<
   static readonly layer = Layer.effect(
     NotificationService,
     Effect.gen(function* () {
+      const browser = yield* ReadBrowser;
       const engine = yield* NotificationEngine;
       const diagnostics = yield* Diagnostics;
 
@@ -137,6 +142,10 @@ export class NotificationService extends Context.Service<
 
       const ensurePermission = (windowId?: string): Effect.Effect<boolean> =>
         Effect.gen(function* () {
+          // Linux has no desktop-wide permission query: delivery is tried through the native service when the host
+          // supports notifications at all.
+          if (!hasNotificationPermissionQuery()) return capabilities.notifications;
+
           const denied: PermissionStatus = "denied";
           const status = yield* engine.permission().pipe(Effect.catch(() => Effect.succeed(denied)));
 
@@ -154,8 +163,8 @@ export class NotificationService extends Context.Service<
           const answer = yield* engine
             .ask({
               title: "Bay Needs Notifications Permission",
-              message: "You need to open System Settings to give Bay permission to show you Notifications.",
-              confirmTitle: "Open System Settings",
+              message: `You need to open ${platformWords.systemSettings} to give Bay permission to show you Notifications.`,
+              confirmTitle: `Open ${platformWords.systemSettings}`,
               cancelTitle: "Not Now",
               windowId,
             })
@@ -170,7 +179,7 @@ export class NotificationService extends Context.Service<
 
       const show = (tabId: string, n: WebNotification): Effect.Effect<void> =>
         Effect.gen(function* () {
-          const s = useBrowser.getState();
+          const s = browser.getState();
           const tab = s.tabs[tabId];
           const window = tab ? s.windows[tab.windowId] : undefined;
 

@@ -1,44 +1,52 @@
+import * as windowCommands from "../../runtime/windowActions";
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/desktop";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
 import type { Tab } from "../../store/types";
 import { useHistoryAvailability } from "../window/historyMenu";
 import { toolbarPalette, type ToolbarPalette } from "../toolbar/colors";
 import { ToolbarButton } from "../toolbar/buttons";
-import { addressBarInSidebar, setUrlAnchor, useSidebarSymbol } from "../window/layout";
+import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../window/layout";
 import { SIDEBAR_FIELD } from "../window/constants";
+import { LIGHTS_WIDTH, useWindowButtonLayout } from "../window/windowButtons";
+import { sidebarButtonRoom } from "../window/geometry";
 import { GlassFill, useLiquidGlass } from "../ui/glass";
 import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../ui/primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../toolbar/Toolbar";
-import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X } from "./constants";
-
-const toggleMinWidth = (x: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + ADDRESS_EDGE;
+import { addressToggleMinWidth, ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { openCommandPanel } from "../../runtime/windowUiActions";
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const palette = toolbarPalette(useTheme(), null);
   const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
+  const right = useSidebarOnRight();
+  const room = sidebarButtonRoom(useWindowButtonLayout(), right);
+  const toggleX = !right && LIGHTS_WIDTH ? ADDRESS_TOGGLE_X : ADDRESS_TOGGLE_X_RIGHT + room.left;
+  const end = ADDRESS_EDGE + room.right;
   const sidebarSymbol = useSidebarSymbol();
 
   return (
     <>
-      {width >= toggleMinWidth(ADDRESS_TOGGLE_X) ? (
+      {width >= addressToggleMinWidth(toggleX, end) ? (
         <ToolbarButton
-          style={{ position: "absolute", top, left: ADDRESS_TOGGLE_X - ADDRESS_BUTTON / 2 }}
+          style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
           palette={palette}
           icon={sidebarSymbol}
-          onPress={() => useBrowser.getState().toggleSidebar(windowId)}
-          tooltip="Auto-Hide Tabs (⌘S)"
+          onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
+          tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
-      <View style={{ position: "absolute", top, right: ADDRESS_EDGE, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
+      <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
         {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
       </View>
     </>
@@ -97,7 +105,7 @@ function EmptyField({ windowId }: { windowId: string }) {
   const { hovered, hoverProps } = useHover();
 
   const open = () => {
-    useBrowser.getState().openPanel(windowId, "");
+    reportBrowserCommand(openCommandPanel(windowId, ""));
   };
 
   return (

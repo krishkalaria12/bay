@@ -51,6 +51,10 @@ export type LibraryMedia = {
 
 export type LibraryData = { version: 1; easels: Record<string, EaselDocument>; media: Record<string, LibraryMedia>; removedMediaPaths: string[] };
 
+/** An absolute path on this computer: macOS and Linux, or Windows'. */
+export const localPath = (value: unknown): value is string => v.is(v.string(), value) && /^(\/|[a-z]:[\\/]|\\\\)/i.test(value);
+export const fileNameOf = (path: string) => path.split(/[\\/]/).pop() ?? "";
+
 const CaptureSourceSchema = v.object({
   url: v.string(),
   title: v.string(),
@@ -110,7 +114,7 @@ export function validItem<T>(value: T): value is T & EaselItem {
 
   if (item.url !== undefined && !webLink(item.url)) return false;
 
-  if (item.path !== undefined && !item.path.startsWith("/")) return false;
+  if (item.path !== undefined && !localPath(item.path)) return false;
 
   if (item.source !== undefined && !validCaptureSource(item.source)) return false;
 
@@ -172,7 +176,7 @@ export function readLibrary(json: string | null): LibraryData {
   if (!parsed.success) throw new Error("Unsupported Library data");
   const doc = parsed.output;
 
-  empty.removedMediaPaths = (doc.removedMediaPaths ?? []).filter((p) => p.startsWith("/"));
+  empty.removedMediaPaths = (doc.removedMediaPaths ?? []).filter((p) => localPath(p));
 
   for (const [id, easel] of Object.entries(doc.easels)) {
     const parsedEasel = parseEasel(easel);
@@ -186,7 +190,7 @@ export function readLibrary(json: string | null): LibraryData {
     if (!parsedMedia.success) continue;
     const m = parsedMedia.output;
 
-    if (m.id !== id || !m.path.startsWith("/")) continue;
+    if (m.id !== id || !localPath(m.path)) continue;
 
     if (![m.width, m.height, m.createdAt].every(Number.isFinite) || m.width <= 0 || m.height <= 0) continue;
 

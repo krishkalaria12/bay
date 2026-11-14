@@ -1,8 +1,9 @@
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { displayUrl, suggestionKey, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol } from "@bay/desktop";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming } from "@bay/platform/motion";
 import { shallow } from "zustand/shallow";
 import { useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
@@ -146,7 +147,8 @@ export function PaletteContent({
     <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
       <View
         ref={tourAnchorRef(windowId, "commandBar")}
-        style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 18, gap: 12 }}
+        // Its icon and text on the rows' columns below.
+        style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 8 }}
       >
         {leadingIcon ?? <Symbol name="magnifyingglass" size={16} color={theme.textSecondary} style={{ width: 20, height: 20 }} />}
         {field}

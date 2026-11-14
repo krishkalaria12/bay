@@ -1,9 +1,12 @@
+import { navigate } from "../../runtime/tabActions";
+import { openPeek } from "../../runtime/splitActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { create } from "zustand";
 import { copyText } from "@bay/desktop";
 import * as Effect from "effect/Effect";
 
-import { runDesktop } from "../../effect/runtime";
-import { useBrowser } from "../../store/browserStore";
+import { runWindow } from "../../effect/windowRuntime";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { showToast } from "../split/splitActions";
 import { PreviewService } from "./previewService";
 
@@ -17,7 +20,7 @@ export function setLinkPreview(tabId: string, data: LinkPreviewData | null) {
 
 /** What the page at the link says about itself. */
 export function fetchLinkSummary(url: string): Promise<string> {
-  return runDesktop(
+  return runWindow(
     Effect.gen(function* () {
       const preview = yield* PreviewService;
 
@@ -31,7 +34,7 @@ export function openLinkPreview(tabId: string, url: string) {
 
   if (!tab) return;
   setLinkPreview(tabId, null);
-  useBrowser.getState().navigate(tabId, url, { userInitiated: true });
+  reportBrowserCommand(navigate(tabId, url, { userInitiated: true }));
 }
 
 export function peekLinkPreview(tabId: string, url: string) {
@@ -39,7 +42,7 @@ export function peekLinkPreview(tabId: string, url: string) {
 
   if (!store.tabs[tabId]) return;
   setLinkPreview(tabId, null);
-  store.openPeek(tabId, url);
+  reportBrowserCommand(openPeek(tabId, url));
 }
 
 export function copyLinkPreview(tabId: string, url: string) {

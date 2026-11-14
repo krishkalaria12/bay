@@ -1,9 +1,15 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import type { DeepReadonly } from "../../runtime/projection";
+import { updateSettings } from "../../runtime/settingsActions";
+import { updateSpace } from "../../runtime/spaceActions";
+import { toggleTabLayout } from "../../runtime/splitActions";
+import { Pressable, View, shortcutForCommand, capabilities, isMac, shortcutLabel } from "@bay/platform";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { interpolateColor } from "react-native-reanimated";
+import { Image, StyleSheet, Text } from "react-native";
+import { interpolateColor } from "@bay/platform/motion";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { Favicon, useHover } from "../ui/primitives";
@@ -12,6 +18,7 @@ import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";
 import { CheckMark, CheckRow, Reveal, SecondaryButton, SectionLabel, SelectTile, StepActions, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
+import { PreviewTrafficLights } from "../window/PreviewTrafficLights";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -59,12 +66,18 @@ export const QUARTER_TILE = (COLUMN - TILE_GAP * 3) / 4;
 // MARK: Personalization
 
 const APPEARANCES: { value: Settings["appearance"]; title: string; picked: string }[] = [
-  { value: "auto", title: "Auto", picked: "Light and dark follow your Mac" },
+  { value: "auto", title: "Auto", picked: `Light and dark follow ${isMac ? "your Mac" : "your system"}` },
   { value: "light", title: "Light", picked: "Always light" },
   { value: "dark", title: "Dark", picked: "Always dark" },
 ];
 
-type Look = { spaceId?: string; color?: SpaceColor; theme: SpaceTheme | null; tabLayout: Settings["tabLayout"]; appearance: Settings["appearance"] };
+type Look = {
+  spaceId?: string;
+  color?: SpaceColor;
+  theme: DeepReadonly<SpaceTheme> | null;
+  tabLayout: Settings["tabLayout"];
+  appearance: Settings["appearance"];
+};
 
 function lookOf(windowId: string): Look {
   const s = useBrowser.getState();
@@ -83,12 +96,13 @@ function lookOf(windowId: string): Look {
 // The pickers change the window as you choose, so Skip puts the look back as the step found it.
 function restoreLook(windowId: string, look: Look) {
   const b = useBrowser.getState();
+  const theme = look.theme ? { ...look.theme, colors: [...look.theme.colors] } : null;
 
-  if (look.spaceId && look.color) b.updateSpace(look.spaceId, { color: look.color, theme: look.theme });
+  if (look.spaceId && look.color) reportBrowserCommand(updateSpace(look.spaceId, { color: look.color, theme }));
 
-  if (lookOf(windowId).tabLayout !== look.tabLayout) b.toggleTabLayout(windowId);
+  if (lookOf(windowId).tabLayout !== look.tabLayout) reportBrowserCommand(toggleTabLayout(windowId));
 
-  if (b.settings.appearance !== look.appearance) b.updateSettings({ appearance: look.appearance });
+  if (b.settings.appearance !== look.appearance) reportBrowserCommand(updateSettings({ appearance: look.appearance }));
 }
 
 export function PersonalizeStep() {
@@ -98,7 +112,7 @@ export function PersonalizeStep() {
 
   const done = () => {
     const look = lookOf(windowId);
-    const theme = look.theme ? "Twilight" : look.color ? SPACE_COLORS[look.color]?.name : undefined;
+    const theme = look.theme ? "Bay" : look.color ? SPACE_COLORS[look.color]?.name : undefined;
     const appearance = APPEARANCES.find((a) => a.value === look.appearance)?.picked;
     nextStep([
       ...(theme ? [`${theme} theme`] : []),
@@ -129,7 +143,7 @@ export function PersonalizeStep() {
               key={a.value}
               title={a.title}
               selected={appearance === a.value}
-              onPress={() => useBrowser.getState().updateSettings({ appearance: a.value })}
+              onPress={() => reportBrowserCommand(updateSettings({ appearance: a.value }))}
             />
           ))}
         </View>
@@ -216,11 +230,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         : null}
       {layout === "sidebar" ? (
         <View style={{ width: 70, gap: 6, paddingTop: 4 }}>
-          <View style={{ flexDirection: "row", gap: 4, marginBottom: 6 }}>
-            {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-              <View key={c} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c }} />
-            ))}
-          </View>
+          <PreviewTrafficLights size={7} style={{ flexDirection: "row", gap: 4, marginBottom: 6 }} />
           <View style={[line, { width: "90%", height: 16, borderRadius: 5, backgroundColor: theme.card }]} />
           {[0.8, 0.6, 0.7].map((w, i) => (
             <View key={i} style={[line, { width: `${w * 100}%` }]} />
@@ -228,11 +238,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         </View>
       ) : (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 18 }}>
-          <View style={{ flexDirection: "row", gap: 4, marginRight: 6 }}>
-            {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-              <View key={c} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c }} />
-            ))}
-          </View>
+          <PreviewTrafficLights size={7} style={{ flexDirection: "row", gap: 4, marginRight: 6 }} />
           <View style={[line, { width: 56, height: 14, borderRadius: 5, backgroundColor: theme.card }]} />
           {[0, 1].map((i) => (
             <View key={i} style={[line, { width: 44 }]} />
@@ -257,7 +263,7 @@ export function PinnedTabsStep() {
   const toggle = (id: string) => setSelected((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
 
   const pinSelected = () => {
-    if (windowId) pinSites(windowId, selected);
+    if (windowId) reportBrowserCommand(pinSites(windowId, selected));
     nextStep(selected.length ? [`${selected.length} ${selected.length === 1 ? "app" : "apps"} pinned`] : []);
   };
 
@@ -302,11 +308,7 @@ function PinnedPreview({ selected }: { selected: string[] }) {
         gap: 12,
       }}
     >
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-          <View key={c} style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c }} />
-        ))}
-      </View>
+      <PreviewTrafficLights size={9} style={{ flexDirection: "row", gap: 6 }} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {Array.from({ length: slots }, (_, i) => {
           const site = sites[i];
@@ -347,11 +349,11 @@ function PinnedPreview({ selected }: { selected: string[] }) {
 type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
 
 async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
-  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
+  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser().catch(() => false)) && choice.trial) recordDefaultBrowserTrial();
 
   if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
 
-  if (choice.dock && !system.inDock) await addToDock();
+  if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
 }
 
 export function DefaultBrowserStep() {
@@ -363,11 +365,13 @@ export function DefaultBrowserStep() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), isInDock(), launchAtLoginStatus()]).then(([isDefault, inDock, login]) => {
-      setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
+    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
+      ([isDefault, inDock, login]) => {
+        setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
 
-      if (login === "enabled") setLogin(true);
-    });
+        if (login === "enabled") setLogin(true);
+      },
+    );
   }, []);
 
   const apply = async () => {
@@ -376,7 +380,7 @@ export function DefaultBrowserStep() {
 
     const picked = [
       ...(setDefault && !system.isDefault ? [trial ? "A week as your default browser" : "Bay is your default browser"] : []),
-      ...(dock && !system.inDock ? ["In your Dock"] : []),
+      ...(capabilities.dock && dock && !system.inDock ? ["In your Dock"] : []),
       ...(login ? ["Opens at login"] : []),
     ];
 
@@ -414,7 +418,7 @@ export function DefaultBrowserStep() {
             onChange={setTrial}
           />
         ) : null}
-        {system && !system.inDock ? (
+        {capabilities.dock && system && !system.inDock ? (
           <CheckRow icon="dock.rectangle" title="Add Bay to Dock" subtitle="Quick access to Bay whenever you need it" value={dock} onChange={setDock} />
         ) : null}
         <CheckRow icon="power" title="Open Bay at login" subtitle="Automatically open Bay when you sign in" value={login} onChange={setLogin} />
@@ -455,7 +459,7 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
       <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
         <SystemChip on={isDefault} icon="globe" label="Default browser" />
-        <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />
+        {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
         <SystemChip on={login} icon="power" label="Opens at login" />
       </View>
     </View>
@@ -489,7 +493,7 @@ export function OutroStep() {
         {[
           ["⌘T", "Open a new tab"],
           ["⌘L", "Go anywhere from the command bar"],
-          ["⌘S", "Hide the sidebar for more room"],
+          [shortcutForCommand("toggleSidebar", "⌘S"), "Hide the sidebar for more room"],
         ].map(([keys, label]) => (
           <View key={keys} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <View
@@ -503,7 +507,7 @@ export function OutroStep() {
                 backgroundColor: colors.button,
               }}
             >
-              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{keys}</Text>
+              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{shortcutLabel(keys ?? "")}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.subtitle }}>{label}</Text>
           </View>

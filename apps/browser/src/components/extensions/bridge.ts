@@ -1,11 +1,17 @@
 import { onExtensionInstallPrompt, onExtensionSidePanel, onExtensionTabsRequest, webStoreExtensionId, type TabsRequest } from "@bay/chromium";
-import * as Context from "effect/Context";
+import { getNativeHostInfo } from "@bay/platform/nativeBridge";
 import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
-import { desktopRuntime } from "../../effect/runtime";
+import * as v from "valibot";
+import { runWindow } from "../../effect/windowRuntime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { reportBrowserCommand } from "../../runtime/commands";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import * as tabCommands from "../../runtime/tabActions";
+import { useBrowser as authority } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { changedIds } from "../../store/recordDiff";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../window/pageState";
@@ -31,13 +37,10 @@ import {
  * the runtime's own list of services.
  */
 const run = <A>(work: (extensions: Extensions) => Effect.Effect<A>): void => {
-  void desktopRuntime
-    .context()
-    .then((context) => desktopRuntime.runPromise(work(Context.getUnsafe(ExtensionsService)(context))))
-    .catch((cause: unknown) => console.error("The extensions could not run", cause));
+  void runWindow(Effect.flatMap(ExtensionsService, work)).catch((cause: unknown) => console.error("The extensions could not run", cause));
 };
 
-export function startExtensionsBridge() {
+export function startExtensionsBridge({ sharedWindow = false } = {}) {
   // The service owns the engine's report and the profiles it reads: it listens once, and gives the registration
   // back when the app's scope closes.
   run((extensions) => extensions.start);
@@ -46,13 +49,16 @@ export function startExtensionsBridge() {
 
   startActionStates();
   startSidePanels();
-  startWebStoreIntegration();
+  startWebStoreIntegration(sharedWindow);
 
   if (__DEV__) Object.assign(globalThis, { nnExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
+  // Only the coordinator may adopt a live page (runtime/pageOpen.ts), and extension requests are not offered to it:
+  // in shared mode the URL opens afresh, as it does without a matching profile.
+  const adoptId = pageFactsInCoordinator() ? undefined : request.adoptId;
   const s = useBrowser.getState();
   const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
 
@@ -65,20 +71,22 @@ function openRequestedTab(request: TabsRequest) {
 
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const spaceId = request.adoptId
+  const spaceId = adoptId
     ? windowId && ofProfile(windowId)
       ? s.windows[windowId]!.spaceId
       : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
 
-  if (request.adoptId && spaceId) {
-    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
-    else openWindow({ url: request.url, adoptId: request.adoptId, spaceId });
+  if (adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) authority.getState().newTab(windowId, { url: request.url, adoptId, spaceId, background });
+    // The window is the app's own: it takes the page Chrome made. A user's command never adopts a page, so this does
+    // not go through the command transport.
+    else authority.getState().createWindow({ url: request.url, adoptId, spaceId });
 
     return;
   }
 
-  if (windowId) s.newTab(windowId, { url: request.url, background });
+  if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: request.url, background }));
   else openWindow({ url: request.url });
 }
 
@@ -213,11 +221,14 @@ else store.waiting = (id) => post("result", JSON.stringify(id));
 
 const isStorePage = (url: string | undefined) => !!url && url.startsWith("https://chromewebstore.google.com/");
 
-function startWebStoreIntegration() {
+function startWebStoreIntegration(sharedWindow: boolean) {
   onExtensionInstallPrompt((prompt) => {
     const s = useBrowser.getState();
     const tabId = prompt.browserId ? tabForBrowser(prompt.browserId) : undefined;
-    const windowId = (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
+    // The web host asks one window, the one this document shows: the prompt is its own.
+    const own = sharedWindow ? getNativeHostInfo().constants.BayShell?.windowId : undefined;
+    const ownWindow = v.is(v.string(), own) ? own : undefined;
+    const windowId = ownWindow || (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
 
     if (windowId) showInstallPrompt(windowId, prompt);
     // No window can show the prompt: the engine is told no, and the service remembers it.

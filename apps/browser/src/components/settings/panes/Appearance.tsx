@@ -1,13 +1,18 @@
-import { appIcons, currentAppIcon, setAppearance, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
+import { Pressable, View, capabilities, shortcutForCommand } from "@bay/platform";
+import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../ui/primitives";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";
+import { PreviewTrafficLights } from "../../window/PreviewTrafficLights";
+import { platformWords } from "../../../lib/platformWords";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
   { value: "auto", title: "Automatic", description: "Follow the system appearance setting" },
@@ -16,12 +21,8 @@ const MODES: { value: Settings["appearance"]; title: string; description: string
 ];
 
 export function AppearancePane() {
-  const appearance = useBrowser((s) => s.settings.appearance);
-
-  const choose = (mode: Settings["appearance"]) => {
-    useBrowser.getState().updateSettings({ appearance: mode });
-    void setAppearance(mode);
-  };
+  const appearance = useBrowserRead((s) => s.settings.appearance);
+  const choose = (mode: Settings["appearance"]) => reportBrowserCommand(updateSettings({ appearance: mode }));
 
   return (
     <View>
@@ -43,16 +44,16 @@ export function AppearancePane() {
         ))}
       </View>
       <DensityPicker />
-      <MaterialPicker />
+      {capabilities.vibrancy && <MaterialPicker />}
       <SidebarPositionPicker />
       <AddressBarPicker />
-      <AppIconPicker />
+      {capabilities.dock && <AppIconPicker />}
     </View>
   );
 }
 
 function DensityPicker() {
-  const density = useBrowser((s) => s.settings.density);
+  const density = useBrowserRead((s) => s.settings.density);
   const theme = useTheme();
   const colors = useFormColors();
 
@@ -67,7 +68,7 @@ function DensityPicker() {
         {(["comfortable", "compact"] as const).map((value) => (
           <Pressable
             key={value}
-            onPress={() => useBrowser.getState().updateSettings({ density: value })}
+            onPress={() => reportBrowserCommand(updateSettings({ density: value }))}
             accessibilityRole="radio"
             accessibilityState={{ checked: density === value }}
             style={{
@@ -90,8 +91,8 @@ function DensityPicker() {
 }
 
 function MaterialPicker() {
-  const material = useBrowser((s) => s.settings.windowMaterial);
-  const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
+  const material = useBrowserRead((s) => s.settings.windowMaterial);
+  const choose = (value: Settings["windowMaterial"]) => reportBrowserCommand(updateSettings({ windowMaterial: value }));
 
   return (
     <>
@@ -163,9 +164,9 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
 }
 
 function SidebarPositionPicker() {
-  const position = useBrowser((s) => s.settings.sidebarPosition);
-  const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
-  const choose = (value: Settings["sidebarPosition"]) => useBrowser.getState().updateSettings({ sidebarPosition: value });
+  const position = useBrowserRead((s) => s.settings.sidebarPosition);
+  const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
+  const choose = (value: Settings["sidebarPosition"]) => reportBrowserCommand(updateSettings({ sidebarPosition: value }));
 
   return (
     <>
@@ -188,7 +189,7 @@ function SidebarPositionPicker() {
             setting="showSidebarOnOption"
             settingId={SETTINGS.showSidebarOnOption.id}
             title={SETTINGS.showSidebarOnOption.title}
-            description="With the sidebar hidden (⌘S), it slides out while you hold Option and away when you let go."
+            description={`With the sidebar hidden (${shortcutForCommand("toggleSidebar", "⌘S")}), it slides out while you hold ${platformWords.optionKey} and away when you let go.`}
           />
           <SettingToggle
             setting="hideSingleSpaceHeader"
@@ -235,11 +236,10 @@ function SidebarPositionChoice({
         }}
       >
         {/* The window buttons, top left either way: over the page, and faint (they show on hover), on the right. */}
-        <View style={{ position: "absolute", zIndex: 1, left: right ? 9 : 6, top: right ? 8 : 5, flexDirection: "row", gap: 2.5, opacity: right ? 0.45 : 1 }}>
-          {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-            <View key={c} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: c }} />
-          ))}
-        </View>
+        <PreviewTrafficLights
+          size={5}
+          style={{ position: "absolute", zIndex: 1, left: right ? 9 : 6, top: right ? 8 : 5, flexDirection: "row", gap: 2.5, opacity: right ? 0.45 : 1 }}
+        />
         <View style={{ width: "28%", gap: 3, paddingTop: 8 }}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: i === 0 ? colors.accent : bar }} />
@@ -256,9 +256,9 @@ function SidebarPositionChoice({
 }
 
 function AddressBarPicker() {
-  const addressBar = useBrowser((s) => s.settings.addressBar);
-  const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
-  const choose = (value: Settings["addressBar"]) => useBrowser.getState().updateSettings({ addressBar: value });
+  const addressBar = useBrowserRead((s) => s.settings.addressBar);
+  const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
+  const choose = (value: Settings["addressBar"]) => reportBrowserCommand(updateSettings({ addressBar: value }));
 
   return (
     <>

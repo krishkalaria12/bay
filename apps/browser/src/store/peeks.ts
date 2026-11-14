@@ -1,5 +1,6 @@
 import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
+import type { DeepReadonly } from "../runtime/projection";
 import { matchingLinkRule } from "../lib/externalLinkRules";
 import type { BrowserState, QuietBrowserState } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
@@ -93,7 +94,7 @@ export function opensInPeek(s: QuietBrowserState, fromId: string, url: string): 
 }
 
 /** The window's peek while it's on screen: its opener is the shown tab, or a pane of the shown split. */
-export function shownPeek(s: QuietBrowserState, windowId: string): Peek | undefined {
+export function shownPeek(s: QuietBrowserState, windowId: string): DeepReadonly<Peek> | undefined {
   const peek = s.peeks[windowId];
 
   if (!peek || !s.tabs[peek.tabId]) return undefined;

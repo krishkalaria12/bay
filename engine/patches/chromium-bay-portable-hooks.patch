@@ -1,0 +1,114 @@
+diff --git a/chrome/browser/external_protocol/external_protocol_handler.cc b/chrome/browser/external_protocol/external_protocol_handler.cc
+--- a/chrome/browser/external_protocol/external_protocol_handler.cc
++++ b/chrome/browser/external_protocol/external_protocol_handler.cc
+@@ -56,6 +56,14 @@
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+ #endif
++
++// Bay: NNCore (engine/nncore) shows this dialog itself for the tabs it hosts.
++bool (*g_bay_external_protocol_dialog)(
++    const GURL& url,
++    content::WebContents* web_contents,
++    const std::optional<url::Origin>& initiating_origin,
++    content::WeakDocumentPtr initiator_document,
++    const std::u16string& program_name) = nullptr;
+ 
+ namespace {
+ 
+@@ -139,6 +147,12 @@
+     const std::u16string& program_name,
+     ExternalProtocolHandler::Delegate* delegate) {
+   DCHECK(web_contents);
++  // Bay: NNCore
++  if (!delegate && g_bay_external_protocol_dialog &&
++      g_bay_external_protocol_dialog(url, web_contents, initiating_origin,
++                                           initiator_document, program_name)) {
++    return;
++  }
+   if (delegate) {
+     delegate->RunExternalProtocolDialog(url, web_contents, page_transition,
+                                         has_user_gesture, initiating_origin,
+diff --git a/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc b/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc
+--- a/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc
++++ b/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc
+@@ -225,10 +225,21 @@
+   std::move(callback_).Run(permissions::PermissionAction::DISMISSED);
+ }
+ 
++// Bay: NNCore (engine/nncore) asks its host; it takes `callback` when it does.
++bool (*g_bay_file_system_restore_prompt)(
++    const FileSystemAccessPermissionRequestManager::RequestData& request,
++    base::OnceCallback<void(permissions::PermissionAction)>& callback,
++    content::WebContents* web_contents) = nullptr;
++
+ void ShowFileSystemAccessRestorePermissionDialog(
+     const FileSystemAccessPermissionRequestManager::RequestData& request,
+     base::OnceCallback<void(permissions::PermissionAction)> callback,
+     content::WebContents* web_contents) {
++  // Bay: NNCore
++  if (g_bay_file_system_restore_prompt &&
++      g_bay_file_system_restore_prompt(request, callback, web_contents)) {
++    return;
++  }
+   FileSystemAccessRestorePermissionBubbleView::CreateAndShow(
+       request, std::move(callback), web_contents);
+ }
+diff --git a/extensions/browser/api/declarative_net_request/rules_monitor_service.cc b/extensions/browser/api/declarative_net_request/rules_monitor_service.cc
+--- a/extensions/browser/api/declarative_net_request/rules_monitor_service.cc
++++ b/extensions/browser/api/declarative_net_request/rules_monitor_service.cc
+@@ -57,6 +57,13 @@
+ #include "extensions/common/permissions/api_permission.h"
+ #include "tools/json_schema_compiler/util.h"
+ 
++// Bay: NNCore (engine/nncore) holds a profile's navigations until a content blocker's
++// rulesets are in force.
++void (*g_bay_dnr_rulesets_in_force)(
++    content::BrowserContext* browser_context,
++    const extensions::ExtensionId& extension_id,
++    bool all_loaded) = nullptr;
++
+ namespace extensions {
+ namespace declarative_net_request {
+ 
+@@ -599,8 +606,13 @@
+         continue;
+       }
+ 
+-      if (!helper.GetStaticRulesetChecksum(extension->id(), source.id(),
+-                                           expected_ruleset_checksum)) {
++      const bool indexed = helper.GetStaticRulesetChecksum(
++          extension->id(), source.id(), expected_ruleset_checksum);
++      // Bay: NNCore. A component extension was never installed, so
++      // nothing indexed its rulesets: index them now, as for a ruleset
++      // enabled after install (no expected checksum), and keep the checksum.
++      if (!indexed &&
++          !Manifest::IsComponentLocation(extension->location())) {
+         // This might happen on prefs corruption.
+         LogLoadRulesetResult(LoadRulesetResult::kErrorChecksumNotFound);
+         ruleset_failed_to_load = true;
+@@ -608,7 +620,9 @@
+       }
+ 
+       RulesetInfo static_ruleset(std::move(source));
+-      static_ruleset.set_expected_checksum(expected_ruleset_checksum);
++      if (indexed) {
++        static_ruleset.set_expected_checksum(expected_ruleset_checksum);
++      }
+       load_data.rulesets.push_back(std::move(static_ruleset));
+     }
+ 
+@@ -1102,6 +1116,13 @@
+       .SetReadyToExecuteApiCalls();
+   update_dynamic_or_session_rules_queue_map_[load_data.extension_id]
+       .SetReadyToExecuteApiCalls();
++
++  // Bay: NNCore
++  if (g_bay_dnr_rulesets_in_force) {
++    g_bay_dnr_rulesets_in_force(
++        context_, load_data.extension_id,
++        !notify_ruleset_failed_to_load && !global_rule_limit_exceeded);
++  }
+ }
+ 
+ void RulesMonitorService::OnNewStaticRulesetsLoaded(

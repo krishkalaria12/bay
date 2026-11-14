@@ -1,11 +1,15 @@
 import { Cef, type EngineBoost } from "./native";
 import { WebKit, isWebKitDownload, isWebKitPermission, webKitListener } from "./webkit";
 import { engineCall, onEngineEvent } from "./engineInfo";
+import { isMac } from "@bay/platform";
 
 export type { EngineBoost, EngineBoostStyle } from "./native";
 
-/** This JS runtime replaced an earlier one in the same process (a development reload), rather than starting the app. */
-export const isJsReload = () => Cef.isJsReload();
+/**
+ * This JS runtime replaced an earlier one in the same process (a development reload), rather than starting the app.
+ * Only macOS has one runtime to replace, and the desktop bridge's call would answer with an always-true Promise.
+ */
+export const isJsReload = () => isMac && Cef.isJsReload();
 
 export type DownloadState = "downloading" | "finished" | "failed" | "cancelled";
 
@@ -71,7 +75,7 @@ export type EngineInfo = {
   chromiumVersion: string;
   liveBrowsers: number;
   popupWindows: number;
-  chromeWindows: number;
+  chromeWindows?: number;
 };
 
 export type EngineComponent = {
@@ -145,24 +149,33 @@ export type ChromeWindowState = {
   profile: string;
   window: number;
   frame: string;
-  alpha: number;
+  /** Desktop-host geometry and state; AppKit-only fields below are optional. */
+  appWindow?: string;
+  bounds?: [number, number, number, number];
+  globalCoordinates?: boolean;
+  minimized?: boolean;
+  maximized?: boolean;
+  fullScreen?: boolean;
+  pageFullScreen?: boolean;
+  alpha?: number;
   key: boolean;
-  canBecomeKey: boolean;
+  canBecomeKey?: boolean;
   visible: boolean;
-  parentWindow: number;
-  chromeWindows: number;
-  anchorBrowserId: number;
+  parentWindow?: number;
+  chromeWindows?: number;
+  anchorBrowserId?: number;
   anyTabBrowserId: number;
   ready: boolean;
   active: boolean;
-  pageInsets: [number, number, number, number];
+  pageInsets?: [number, number, number, number];
   hosting: boolean;
-  group: string;
+  group?: string;
   hasRoot: boolean;
-  translucent: boolean;
+  translucent?: boolean;
 };
 
 export const chromeWindows = () => Cef.chromeWindows();
+export const devWindowNumber = (browserId: number) => Cef.devWindowNumber(browserId);
 export const devWindowAction = (windowNumber: number, action: string) => Cef.devWindow(windowNumber, action);
 
 // Whichever engine the tab's page is in keeps it for the tab's next view.
@@ -195,7 +208,8 @@ export type SystemState = {
 export const systemState = () => Cef.systemState();
 export const onSystemState = (listener: (state: SystemState) => void) => Cef.addListener("onSystemState", listener);
 
-export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker(enabled);
+// These settings control the screen-share picker and the page menu's search item.
+export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker?.(enabled) ?? Promise.resolve();
 
 // Chrome's automatic Picture in Picture (a call's own document PiP on a tab switch) follows the app's setting. (Builds
 // before it have no such function: Chrome's default, its prompt, stays.)
@@ -204,7 +218,7 @@ export const setAutoPictureInPicture = (enabled: boolean) => Cef.setAutoPictureI
 // Boosts (Arc's site tweaks), every one that's on: the engine puts their sheets into the pages of their site at document
 // start and runs their script in its own isolated world (NNCoreEngine setBoosts:). Builds before it ignore them.
 export const setBoosts = (boosts: EngineBoost[]) => Cef.setBoosts?.(boosts) ?? Promise.resolve();
-export const setSearchEngineName = (name: string) => Cef.setSearchEngineName(name);
+export const setSearchEngineName = (name: string) => Cef.setSearchEngineName?.(name) ?? Promise.resolve();
 export const getDisplayMediaSources = () => Cef.displayMediaSources();
 
 // Downloads and permission prompts from both engines, in one list; a WebKit one's id says so (webkit.ts). On the
@@ -248,7 +262,36 @@ function subscribePermissionDismissed(listener: (p: { id: string }) => void) {
 
 const webKitDownload = (action: "cancel" | "pause" | "resume", id: string) => WebKit?.downloadCommand(action, id) ?? Promise.resolve();
 
-export const onDownload = subscribeDownload;
+export function onDownload(listener: (d: Download) => void) {
+  // A host that has the list gives it after subscribing, so nothing reported before is lost. An event can overtake
+  // the list's reply: the event is newer, so the list's copy of that download is dropped.
+  let reported: Set<string> | null = new Set<string>();
+
+  const subscription = subscribeDownload((d) => {
+    reported?.add(d.id);
+    listener(d);
+  });
+
+  let removed = false;
+  const listed = Cef.listDownloads?.();
+
+  if (!listed) reported = null;
+  void listed?.then(
+    (downloads) => {
+      if (!removed) for (const d of downloads) if (!reported?.has(d.id)) listener(d);
+      reported = null;
+    },
+    () => (reported = null),
+  );
+
+  return {
+    remove: () => {
+      removed = true;
+      subscription.remove();
+    },
+  };
+}
+
 export const cancelDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("cancel", id) : Cef.cancelDownload(id));
 export const pauseDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("pause", id) : Cef.pauseDownload(id));
 export const resumeDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("resume", id) : Cef.resumeDownload(id));

@@ -1,14 +1,15 @@
 import { onAppEvent, onWindowEvent, postNotification, removeNotifications } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../store/browserStore";
+import { browserRead } from "../store/read";
+import { reportBrowserCommand } from "../runtime/commands";
+import { sendService } from "../runtime/serviceClient";
 import { useCalendar } from "./calendar";
 import { joinMeeting } from "./meetingGroups";
 import { ALERT_LEADS, dueAlerts, joinableMeeting, joinLink, joinTitle, relativeTime, type CalendarEvent } from "./meetings";
 import { JOINABLE_BEFORE_MS } from "../components/activity/constants";
-import { openWindow } from "../lib/actions";
-import * as Effect from "effect/Effect";
-import { runDesktop } from "../effect/runtime";
-import { Scheduler } from "../effect/ports/scheduler";
+import { createWindow } from "../runtime/windowActions";
+import { useBrowser, type BrowserStore } from "../store/browserStore";
+import { everySlowly } from "../lib/throttledTimers";
 import { dismissAlert, live } from "./activityStore";
 
 export const useMeetingAlert = create<{ event: CalendarEvent | null }>()(() => ({ event: null }));
@@ -43,10 +44,11 @@ function check() {
 }
 
 export function joinEvent(event: CalendarEvent, openAll = false, windowId = frontWindow()) {
+  if (windowId && sendService("alertJoin", [windowId, event.occurrence, openAll])) return;
   const link = joinLink(event);
 
   if (!link || !windowId) return;
-  joinMeeting(windowId, event, link.url, openAll);
+  reportBrowserCommand(joinMeeting(windowId, event, link.url, openAll));
   dismiss(event);
 }
 
@@ -58,12 +60,16 @@ export function joinMeetingNow(): boolean {
   const event = meetingToJoin();
 
   if (!event) return false;
-  joinEvent(event, false, frontWindow() ?? openWindow());
+  const windowId = frontWindow();
+
+  if (windowId) joinEvent(event, false, windowId);
+  else reportBrowserCommand(createWindow().then((id) => joinEvent(event, false, id)));
 
   return true;
 }
 
 export function dismiss(event: CalendarEvent) {
+  if (sendService("alertDismiss", [event.occurrence])) return;
   dismissAlert(event.occurrence);
   void removeNotifications([`meeting:${event.occurrence}`]);
 
@@ -72,7 +78,7 @@ export function dismiss(event: CalendarEvent) {
 }
 
 const frontWindow = () => {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = s.ui.focusedWindowId;
   // A main window: a call doesn't open in a private window or Little Bay.
   const main = (w: string) => !s.windows[w]!.incognito && s.windows[w]!.kind !== "small";
@@ -80,35 +86,69 @@ const frontWindow = () => {
   return id && s.windows[id] && main(id) ? id : s.windowOrder.find(main);
 };
 
-let started = false;
+const running = new WeakMap<BrowserStore, () => void>();
 
-export function startMeetingAlerts() {
-  if (started) return;
-  started = true;
-  onAppEvent((e) => {
-    if (e.type === "resignActive") appActive = false;
-  });
-  onWindowEvent((e) => {
-    if (e.type === "focus") appActive = true;
-  });
-  useCalendar.subscribe((s, prev) => s.events !== prev.events && check());
-  // Only while there are events to alert for, or an alert to take down.
-  void runDesktop(
-    Effect.gen(function* () {
-      const scheduler = yield* Scheduler;
+export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => void {
+  const existing = running.get(browser);
 
-      yield* scheduler.every({
+  if (existing) return existing;
+  let stopped = false;
+  const cleanups: (() => void)[] = [];
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    running.delete(browser);
+
+    for (const cleanup of cleanups.reverse()) {
+      try {
+        cleanup();
+      } catch (error) {
+        console.warn("Couldn't stop meeting alert watcher", error);
+      }
+    }
+  };
+
+  running.set(browser, stop);
+
+  try {
+    const appEvents = onAppEvent((e) => {
+      if (e.type === "resignActive") appActive = false;
+    });
+
+    cleanups.push(() => appEvents.remove());
+
+    const windowEvents = onWindowEvent((e) => {
+      if (e.type === "focus") appActive = true;
+    });
+
+    cleanups.push(() => windowEvents.remove());
+    cleanups.push(useCalendar.subscribe((s, prev) => s.events !== prev.events && check()));
+    // The check for a meeting that just came due, on the app's shared grid, and stops with this watcher.
+    cleanups.push(
+      everySlowly({
         every: 10_000,
-        run: Effect.sync(check),
+        run: check,
         needed: () => useCalendar.getState().events.length > 0 || !!useMeetingAlert.getState().event,
         watch: (changed) => {
           const calendar = useCalendar.subscribe(changed);
           const alert = useMeetingAlert.subscribe(changed);
 
-          return () => (calendar(), alert());
+          return () => {
+            try {
+              calendar();
+            } finally {
+              alert();
+            }
+          };
         },
-      });
-    }),
-  );
-  check();
+      }),
+    );
+    check();
+  } catch (error) {
+    stop();
+    throw error;
+  }
+
+  return stop;
 }

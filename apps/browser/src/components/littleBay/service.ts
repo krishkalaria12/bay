@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../../effect/ports/store";
 // Little Bay's lifetime: the windows left alone are put away, and the shortcut and menu bar button that open one from
 // any app are registered.
 //
@@ -15,11 +16,11 @@ import * as Semaphore from "effect/Semaphore";
 import type { Operation } from "../../effect/errors";
 import { Diagnostics } from "../../effect/ports/diagnostics";
 import { Scheduler } from "../../effect/ports/scheduler";
-import { useBrowser } from "../../store/browserStore";
+
 import type { LittleBayShortcut } from "../../store/settings";
-import { sameShortcut, useLittleBayAccess } from "./access";
+import { hotKeyCode, sameShortcut, useLittleBayAccess } from "./access";
 import { PUT_AWAY_SWEEP_MS } from "./constants";
-import { noteAppEvent, noteWindowEvent, putAwayIdleLittleBays, putAwayNeeded } from "./putAway";
+import { createLittleBayPutAway } from "./putAway";
 
 // MARK: The port
 
@@ -58,7 +59,7 @@ export class LittleBayEngine extends Context.Service<
       }),
     setHotKey: (shortcut) =>
       Effect.tryPromise({
-        try: () => setLittleBayHotKey(shortcut?.keyCode ?? null, shortcut?.modifiers ?? []),
+        try: () => setLittleBayHotKey(shortcut ? hotKeyCode(shortcut) : null, shortcut?.modifiers ?? []),
         catch: (cause) => new LittleBayFailure({ operation: { name: "littleBay.hotKey" }, cause }),
       }),
     setMenuBarItem: (on) =>
@@ -81,12 +82,14 @@ export class LittleBayService extends Context.Service<
   static readonly layer = Layer.effect(
     LittleBayService,
     Effect.gen(function* () {
+      const useBrowser = yield* AuthorityStore;
       const engine = yield* LittleBayEngine;
       const scheduler = yield* Scheduler;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
 
       const store = () => useBrowser.getState();
+      const { noteAppEvent, noteWindowEvent, putAwayIdleLittleBays, putAwayNeeded } = createLittleBayPutAway(store);
 
       // MARK: The shortcut and the button
 

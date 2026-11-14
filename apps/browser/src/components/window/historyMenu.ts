@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { goBackAcrossEngines } from "../../lib/pageEngines";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { changedIds } from "../../store/recordDiff";
 import { useTabLive } from "../../store/hooks";
 import type { TabLive } from "../../store/types";
@@ -10,21 +11,24 @@ import { pageOf, patchPage, usePage } from "./pageState";
 
 const store = () => useBrowser.getState();
 
+// The page Back left for a New Tab page, kept for Forward (store/tabs.ts keeps it in the tab, so every window sees it).
+const keptPage = (tabId: string) => store().tabs[tabId]?.newTabHistory;
+
 export function canGoBack(tabId: string, live: Pick<TabLive, "canGoBack">): boolean {
   const page = pageOf(tabId);
 
-  return !page.newTabShown && (live.canGoBack || page.backToNewTab || !!page.engineBack);
+  return !keptPage(tabId) && (live.canGoBack || page.backToNewTab || !!page.engineBack);
 }
 
 export function canGoForward(tabId: string, live: Pick<TabLive, "canGoForward">): boolean {
-  return !!pageOf(tabId).newTabShown || live.canGoForward;
+  return !!keptPage(tabId) || live.canGoForward;
 }
 
 // Subscribes to the two flags only, so a page's progress and audio reports don't re-render the buttons' owner.
 export function useHistoryAvailability(tabId: string) {
   const back = useTabLive(tabId, (l) => l.canGoBack);
   const forward = useTabLive(tabId, (l) => l.canGoForward);
-  const shown = usePage(tabId, (p) => !!p.newTabShown);
+  const shown = useBrowser((s) => !!s.tabs[tabId]?.newTabHistory);
   const backToNewTab = usePage(tabId, (p) => p.backToNewTab || !!p.engineBack);
 
   return { back: !shown && (back || backToNewTab), forward: shown || forward };
@@ -33,7 +37,7 @@ export function useHistoryAvailability(tabId: string) {
 export function goBack(tabId: string) {
   const live = store().live[tabId];
 
-  if (pageOf(tabId).newTabShown) return;
+  if (keptPage(tabId)) return;
 
   if (live?.canGoBack) return void webviews.get(tabId)?.goBack();
 
@@ -43,7 +47,7 @@ export function goBack(tabId: string) {
 }
 
 export function goForward(tabId: string) {
-  if (pageOf(tabId).newTabShown) return hideNewTab(tabId);
+  if (keptPage(tabId)) return hideNewTab(tabId);
   void webviews.get(tabId)?.goForward();
 }
 
@@ -51,24 +55,20 @@ function showNewTab(tabId: string, keep?: { url: string; title: string }) {
   const tab = store().tabs[tabId];
 
   if (!tab?.url) return;
-  patchPage(tabId, { newTabShown: { url: keep?.url ?? tab.url, title: keep?.title ?? tab.title, favicon: tab.favicon }, status: "" });
-  const internal = internalPageOf(tabDestination(tab)) !== null;
-  store().updateTab(tabId, { url: "", title: "", favicon: null, ...(internal ? { navigation: null } : undefined) });
+  patchPage(tabId, { status: "" });
+  reportBrowserCommand(dispatchBrowserCommand({ method: "showNewTab", tabId, ...(keep ? { first: keep } : undefined) }));
 }
 
 export function goBackToNewTab(tabId: string, offset: number, first: { url: string; title: string }) {
-  if (!pageOf(tabId).backToNewTab || pageOf(tabId).newTabShown) return;
+  if (!pageOf(tabId).backToNewTab || keptPage(tabId)) return;
 
   if (offset) void webviews.get(tabId)?.goToOffset(offset);
   showNewTab(tabId, offset ? first : undefined);
 }
 
 function hideNewTab(tabId: string) {
-  const kept = pageOf(tabId).newTabShown;
-
-  if (!kept) return;
-  patchPage(tabId, { newTabShown: null });
-  store().updateTab(tabId, { url: kept.url, title: kept.title, favicon: kept.favicon });
+  if (!keptPage(tabId)) return;
+  reportBrowserCommand(dispatchBrowserCommand({ method: "hideNewTab", tabId }));
 }
 
 useBrowser.subscribe((s, prev) => {
@@ -104,8 +104,9 @@ export async function historyItems(tabId: string, direction: -1 | 1, max = 15): 
   const page = pageOf(tabId);
   const list = (await webviews.get(tabId)?.navigationEntries()) ?? [];
   const current = list.findIndex((e) => e.current);
+  const kept = keptPage(tabId);
 
-  if (page.newTabShown) {
+  if (kept) {
     if (direction < 0) return [];
     const items: HistoryItem[] = [];
 
@@ -114,7 +115,7 @@ export async function historyItems(tabId: string, direction: -1 | 1, max = 15): 
       items.push({ key: String(i), title: e.title || e.url, url: e.url, offset: i - current });
     }
 
-    if (!items.length) items.push({ key: "kept", title: page.newTabShown.title || page.newTabShown.url, url: page.newTabShown.url, offset: 0 });
+    if (!items.length) items.push({ key: "kept", title: kept.title || kept.url, url: kept.url, offset: 0 });
 
     return items;
   }
@@ -134,8 +135,6 @@ export async function historyItems(tabId: string, direction: -1 | 1, max = 15): 
 }
 
 export async function goToHistoryItem(tabId: string, item: HistoryItem) {
-  const page = pageOf(tabId);
-
   if (item.offset === "newTab") {
     const list = (await webviews.get(tabId)?.navigationEntries()) ?? [];
     const current = list.findIndex((e) => e.current);
@@ -145,7 +144,7 @@ export async function goToHistoryItem(tabId: string, item: HistoryItem) {
     return goBackToNewTab(tabId, -current, list[0]);
   }
 
-  if (page.newTabShown) {
+  if (keptPage(tabId)) {
     hideNewTab(tabId);
 
     if (item.offset) void webviews.get(tabId)?.goToOffset(item.offset);

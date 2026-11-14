@@ -1,9 +1,10 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { bookmarkAncestors, folderChildren } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useHover } from "../ui/primitives";
 import { useFormColors } from "../settings/controls";
 

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { askArtwork, forgetTab } from "../../lib/enrichmentService";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { ARTWORK_CACHE_ENTRIES } from "./constants";
 
 // Keep artwork in memory only; incognito images must not reach disk or another context.

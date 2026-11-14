@@ -2,9 +2,11 @@ import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
-import { useBrowser, type QuietBrowserState } from "./browserStore";
+import { useBrowserRead as useBrowser } from "./read";
+import type { QuietBrowserState } from "./browserStore";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
+import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./windowUi";
 import { findStore, quietStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./derivedStores";
@@ -18,7 +20,7 @@ export function useWindowId(): string {
   return useContext(WindowContext) ?? focusedWindowId();
 }
 
-export function useWindowField<T>(select: (w: BrowserWindow) => T, fallback: T): T {
+export function useWindowField<T>(select: (w: DeepReadonly<BrowserWindow>) => T, fallback: T): T {
   const id = useWindowId();
   const view = useMemo(() => windowStore(id), [id]);
 
@@ -38,13 +40,13 @@ export const useIsIncognito = () => useWindowField((w) => w.incognito, false);
 export const useSidebarOpen = () => useWindowField((w) => w.sidebarOpen, true);
 export const useWindowSpaceId = () => useWindowField((w) => w.spaceId, "");
 
-export function useWindowSpace(): Space {
+export function useWindowSpace(): DeepReadonly<Space> {
   const spaceId = useWindowSpaceId();
 
   return useQuietBrowser((s) => spaceFor(s, spaceId));
 }
 
-export const useSpaces = (): Space[] => useQuietBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
+export const useSpaces = (): DeepReadonly<Space>[] => useQuietBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
 
 export function useActiveTabId(): string | undefined {
   const id = useWindowId();
@@ -52,7 +54,7 @@ export function useActiveTabId(): string | undefined {
   return useQuietBrowser((s) => activeTabId(s, id));
 }
 
-export function useActiveTab(): Tab | undefined {
+export function useActiveTab(): DeepReadonly<Tab> | undefined {
   const id = useWindowId();
 
   return useQuietBrowser((s) => {
@@ -81,17 +83,17 @@ export function useSpaceFolded(spaceId: string): boolean {
   return folded && !headerHidden;
 }
 
-export function useTab(tabId: string | undefined): Tab | undefined;
-export function useTab<T>(tabId: string | undefined, select: (tab: Tab | undefined) => T): T;
-export function useTab<T>(tabId: string | undefined, select?: (tab: Tab | undefined) => T) {
+export function useTab(tabId: string | undefined): DeepReadonly<Tab> | undefined;
+export function useTab<T>(tabId: string | undefined, select: (tab: DeepReadonly<Tab> | undefined) => T): T;
+export function useTab<T>(tabId: string | undefined, select?: (tab: DeepReadonly<Tab> | undefined) => T) {
   const view = useMemo(() => tabStore(tabId ?? ""), [tabId]);
 
   return useStore(view, (tab) => (select ? select(tab) : tab));
 }
 
-export function useTabLive(tabId: string | undefined): TabLive;
-export function useTabLive<T>(tabId: string | undefined, select: (live: TabLive) => T): T;
-export function useTabLive<T>(tabId: string | undefined, select?: (live: TabLive) => T) {
+export function useTabLive(tabId: string | undefined): DeepReadonly<TabLive>;
+export function useTabLive<T>(tabId: string | undefined, select: (live: DeepReadonly<TabLive>) => T): T;
+export function useTabLive<T>(tabId: string | undefined, select?: (live: DeepReadonly<TabLive>) => T) {
   const view = useMemo(() => tabLiveStore(tabId ?? ""), [tabId]);
 
   return useStore(view, (value) => {
@@ -101,7 +103,7 @@ export function useTabLive<T>(tabId: string | undefined, select?: (live: TabLive
   });
 }
 
-export function useFind(tabId: string | undefined): FindState {
+export function useFind(tabId: string | undefined): DeepReadonly<FindState> {
   const view = useMemo(() => findStore(tabId ?? ""), [tabId]);
 
   return useStore(view, (find) => find ?? CLOSED_FIND);
@@ -114,10 +116,10 @@ export function useWindowUi() {
   return useStore(view, (ui) => ui ?? DEFAULT_WINDOW_UI);
 }
 
-/** `useBrowser` for a selector that reads nothing of `live`: it doesn't run on a page's progress (store/derivedStores.ts). */
+/** Select durable state without running on page progress. */
 export const useQuietBrowser = <T>(select: (s: QuietBrowserState) => T): T => useStore(quietStore, select);
 
-export const useSettings = <T>(select: (settings: Settings) => T): T => useStore(settingsStore, select);
+export const useSettings = <T>(select: (settings: DeepReadonly<Settings>) => T): T => useStore(settingsStore, select);
 
 export function useIsBookmarked(url: string): boolean {
   const id = useWindowId();

@@ -1,11 +1,13 @@
+import { updateSettings } from "../../runtime/settingsActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 // The app's view of a page's translation: what language it is in, and what the user asked for.
 //
 // The work is in pageWorkService.ts: the Mac's models, the page's passages, and the checks an engine switch makes
 // before it moves a page. This is where the app reaches it, and where the state the app shows lives.
 import { translation } from "@bay/desktop";
 import * as Effect from "effect/Effect";
-import { runDesktop } from "../../effect/runtime";
-import { useBrowser } from "../../store/browserStore";
+import { runWindow } from "../../effect/windowRuntime";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace } from "../../store/model";
 import { hideKeyedToast, showToast } from "../split/splitActions";
 import { PageWorkService, baseLanguage, forgetSource, hostOf, translateStateOf, type PageWork } from "./pageWorkService";
@@ -35,7 +37,7 @@ export const languageName = (language: string) => translation?.languageName(lang
 
 /** Runs something with the page work, on the runtime the app shares. */
 const withWork = <A>(program: (work: PageWork) => Effect.Effect<A>): Promise<A> =>
-  runDesktop(
+  runWindow(
     Effect.gen(function* () {
       const work = yield* PageWorkService;
 
@@ -107,9 +109,9 @@ export function setNeverTranslate(tabId: string, never: boolean) {
   const host = tab ? hostOf(tab.url) : "";
 
   if (!tab || !host || isIncognitoSpace(tab.spaceId)) return;
-  const all = s.settings.neverTranslateSites;
+  const all = Object.fromEntries(Object.entries(s.settings.neverTranslateSites).map(([id, sites]) => [id, [...sites]]));
   const list = (all[tab.spaceId] ?? []).filter((h) => h !== host);
-  s.updateSettings({ neverTranslateSites: { ...all, [tab.spaceId]: never ? [...list, host] : list } });
+  reportBrowserCommand(updateSettings({ neverTranslateSites: { ...all, [tab.spaceId]: never ? [...list, host] : list } }));
 
   if (!never) return void detect(tabId);
 

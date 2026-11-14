@@ -1,3 +1,5 @@
+import { ReadBrowser } from "../../effect/windowPorts.ts";
+import { AuthorityStore } from "../../effect/ports/store.ts";
 // The extensions (components/extensions/service.ts): the engine's report, the snapshot it gives, the commands the
 // app sends it, and the search engines it reconciles.
 import assert from "node:assert/strict";
@@ -11,7 +13,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { useExtensions } = await import("./store.ts");
-const { ExtensionsEngine, ExtensionsService, ExtensionFailure } = await import("./service.ts");
+const { ExtensionsEngine, ExtensionsService, ExtensionsSearchEngines, ExtensionFailure } = await import("./service.ts");
 const { fakeDiagnostics } = await import("../../effect/testing.ts");
 
 // The extension the engine has installed.
@@ -167,7 +169,16 @@ const withExtensions = async (use) => {
   const diagnostics = fakeDiagnostics();
 
   const runtime = ManagedRuntime.make(
-    Layer.mergeAll(ExtensionsService.layer.pipe(Layer.provide(fakeEngine(lab)), Layer.provide(diagnostics.layer)), TestClock.layer()),
+    Layer.mergeAll(
+      ExtensionsService.layer.pipe(
+        Layer.provide(ExtensionsSearchEngines.layer),
+        Layer.provide(ReadBrowser.layer(useBrowser)),
+        Layer.provide(AuthorityStore.layer(useBrowser)),
+        Layer.provide(fakeEngine(lab)),
+        Layer.provide(diagnostics.layer),
+      ),
+      TestClock.layer(),
+    ),
   );
 
   useExtensions.setState({ lists: {} });

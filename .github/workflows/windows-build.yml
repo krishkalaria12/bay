@@ -1,0 +1,240 @@
+name: Windows build from source
+# Compiles the pinned engine on free GitHub runners and packages an unsigned
+# installer for testing. A job ends after six hours, so each stage compiles for
+# a while, saves the build tree as an artifact, and the next stage resumes from
+# it. New runs resume from the newest saved tree too, so a compile fix costs what
+# it touches rather than a full build.
+#
+# Start a run: git tag windows-build-N && git push origin windows-build-N
+on:
+  workflow_dispatch:
+  push:
+    tags: ["windows-build-*"]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: windows-build
+  cancel-in-progress: true
+env:
+  # Raise the number to start from a clean tree, as a changed patch needs.
+  STATE_ARTIFACT: windows-engine-state-2
+  ENGINE_ARTIFACT: windows-engine
+defaults:
+  run:
+    shell: pwsh
+jobs:
+  engine:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 355
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        stage: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Find saved state
+        id: state
+        run: |
+          "JOB_STARTED=$((Get-Date).ToString('o'))" >> $env:GITHUB_ENV
+          $repo = $env:GITHUB_REPOSITORY
+          $built = gh api "repos/$repo/actions/runs/$env:GITHUB_RUN_ID/artifacts?name=$env:ENGINE_ARTIFACT" --jq .total_count
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ([int]$built -gt 0) { "DONE=true" >> $env:GITHUB_ENV; exit 0 }
+          # Only this repository's own runs can seed a build, never a fork's pull request.
+          $newest = '[.artifacts[] | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)] | sort_by(.created_at) | last | .workflow_run.id // empty'
+          $run = gh api "repos/$repo/actions/artifacts?name=$env:STATE_ARTIFACT&per_page=100" --jq $newest
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "run=$run" >> $env:GITHUB_OUTPUT
+          $drive = Get-PSDrive -PSProvider FileSystem | Where-Object Name -in 'C', 'D' | Sort-Object Free -Descending | Select-Object -First 1
+          "ENGINE_ROOT=$($drive.Name):\be" >> $env:GITHUB_ENV
+          "STATE_DIR=$($drive.Name):\be-state" >> $env:GITHUB_ENV
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{ n = 'FreeGB'; e = { [int]($_.Free / 1GB) } }, @{ n = 'UsedGB'; e = { [int]($_.Used / 1GB) } }
+      - name: Configure Windows and Git
+        if: env.DONE != 'true'
+        run: |
+          # Patches and the engine's source digest need the repository's exact bytes.
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+          Set-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem LongPathsEnabled 1
+      - uses: actions/checkout@v4
+        if: env.DONE != 'true'
+      - uses: actions/setup-python@v5
+        if: env.DONE != 'true'
+        with:
+          python-version: "3.12"
+      - name: Reuse an engine built from these sources
+        id: reuse
+        if: env.DONE != 'true'
+        run: |
+          # The engine's id hashes every source it is built from, so an earlier run's engine with
+          # this id is this engine: republish it instead of restoring and compiling the tree. A
+          # change outside those sources (the app, the installer) then goes straight to packaging,
+          # and the installer job checks the id again.
+          $pin = python scripts/windows/engine.py pin
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $id = ($pin | Out-String | ConvertFrom-Json).id
+          $repo = $env:GITHUB_REPOSITORY
+          $recent = '[.artifacts[] | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)] | sort_by(.created_at) | reverse | .[:3] | .[].workflow_run.id'
+          $runs = gh api "repos/$repo/actions/artifacts?name=$env:ENGINE_ARTIFACT&per_page=100" --jq $recent
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($run in $runs) {
+            Remove-Item dist/engine -Recurse -Force -ErrorAction SilentlyContinue
+            gh run download $run -R $repo -n $env:ENGINE_ARTIFACT -D dist/engine
+            if (!$LASTEXITCODE -and (Test-Path "dist/engine/$id.zip")) {
+              "Reusing $id from run $run"
+              "DONE=true" >> $env:GITHUB_ENV
+              "reused=true" >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+          }
+          Remove-Item dist/engine -Recurse -Force -ErrorAction SilentlyContinue
+          "No recent run built $id; compiling it"
+          exit 0
+      - name: Install Rust for the native content blocker
+        if: env.DONE != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          # llvm-ar, llvm-nm and llvm-objcopy, which Chromium's Windows toolchain lacks (scripts/engine.py llvm_tools).
+          components: llvm-tools
+      - name: Verify state archive support
+        if: env.DONE != 'true'
+        run: python -m unittest scripts/windows/test_engine_state.py -v
+      - name: Install Windows SDK 10.0.28000
+        if: env.DONE != 'true'
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'winsdksetup.exe'
+          Invoke-WebRequest 'https://download.microsoft.com/download/38ab8f6d-3676-4860-ae84-3361308b9d7f/KIT_BUNDLE_WINDOWSSDK_MEDIACREATION/winsdksetup.exe' -OutFile $installer
+          $features = '/features OptionId.DesktopCPPx64 OptionId.DesktopCPPx86 OptionId.DesktopCPPArm64 OptionId.WindowsDesktopDebuggers OptionId.UWPCPP OptionId.SigningTools /q /norestart /ceip off'
+          $process = Start-Process $installer -ArgumentList $features -PassThru -Wait
+          if ($process.ExitCode) { throw "Windows SDK setup failed with code $($process.ExitCode)" }
+          if (-not (Test-Path 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0')) { throw 'Windows SDK 10.0.28000.0 is missing after setup' }
+      - name: Download saved state
+        if: env.DONE != 'true' && steps.state.outputs.run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}
+          run-id: ${{ steps.state.outputs.run }}
+          github-token: ${{ github.token }}
+      - name: Restore saved state
+        if: env.DONE != 'true' && steps.state.outputs.run != ''
+        run: |
+          python scripts/windows/engine-state.py restore --root $env:ENGINE_ROOT --archive "$env:STATE_DIR\state.tar.gz"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Remove-Item $env:STATE_DIR -Recurse -Force
+      - name: Download sources
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/windows/engine.py download --root $env:ENGINE_ROOT
+      - name: Patch sources
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/windows/engine.py prepare --root $env:ENGINE_ROOT
+      - name: Check saved state survives on the real tree
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/windows/engine-state.py check --root $env:ENGINE_ROOT --archive "$env:STATE_DIR\check\state.tar.gz"
+      - name: Compile
+        id: compile
+        if: env.DONE != 'true'
+        run: |
+          # Leave a little over two hours of the job to save the tree.
+          $minutes = [Math]::Max(10, [int](230 - ((Get-Date) - [datetime]$env:JOB_STARTED).TotalMinutes))
+          python scripts/windows/engine.py build --root $env:ENGINE_ROOT --jobs 4 --ci-minutes $minutes 2>&1 | Tee-Object compile.log
+          $code = $LASTEXITCODE
+          "code=$code" >> $env:GITHUB_OUTPUT
+          # 124 is a deliberate pause: save the tree and let the next stage resume.
+          # Every other failure stops this job and cancels the remaining stages,
+          # after the tree is saved so the run with the fix resumes from here.
+          if ($code -notin @(0, 124)) { exit $code }
+          exit 0
+      - name: Archive engine
+        # A later stage skips Compile, and a skipped step's null output equals '0' in a
+        # condition, so check DONE too.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
+        run: python scripts/windows/engine.py archive --root $env:ENGINE_ROOT --output dist/engine
+      - name: Upload engine
+        if: steps.reuse.outputs.reused == 'true' || (env.DONE != 'true' && steps.compile.outputs.code == '0')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ENGINE_ARTIFACT }}
+          path: dist/engine/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Run Bay's unit tests
+        # On the stage that finished the engine, before the tree is saved so what this builds carries over, in the
+        # time left: compressing and uploading the tree takes about 35 minutes of the hour this keeps for it. Not
+        # required to pass yet: these ran on Windows for the first time here.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
+        continue-on-error: true
+        run: |
+          $minutes = [int](290 - ((Get-Date) - [datetime]$env:JOB_STARTED).TotalMinutes)
+          if ($minutes -lt 10) { "No time left in this stage for Bay's unit tests"; exit 0 }
+          python scripts/windows/unit-tests.py --root $env:ENGINE_ROOT --minutes $minutes
+      - name: Compress state
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
+        run: |
+          New-Item $env:STATE_DIR -ItemType Directory -Force | Out-Null
+          python scripts/windows/engine-state.py create --root $env:ENGINE_ROOT --archive "$env:STATE_DIR\state.tar.gz"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-Item "$env:STATE_DIR\state.tar.gz" | Format-Table Name, @{ n = 'SizeGB'; e = { [int]($_.Length / 1GB) } }
+          exit 0
+      - name: Upload state
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}\state.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 7
+  installer:
+    needs: engine
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 120
+    steps:
+      - name: Configure Git
+        run: |
+          # The engine's source digest needs the repository's exact bytes.
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ENGINE_ARTIFACT }}
+          path: dist/engine
+      - name: Verify engine
+        run: |
+          $checksum = Get-Item dist/engine/*.zip.sha256
+          $archive = $checksum.FullName -replace '\.sha256$', ''
+          python scripts/windows/fetch-engine.py --archive $archive --sha256 (Get-Content $checksum).Split(' ')[0] --destination dist/windows-engine
+      - name: Build app
+        run: python scripts/windows/build-app.py --engine dist/windows-engine --output dist/windows-app
+      - name: Check Bay opens a window
+        continue-on-error: true
+        run: pwsh -File scripts/windows/smoke.ps1 -AppPath dist/windows-app/Bay.exe
+      - name: Install packaging tools
+        run: choco install innosetup --no-progress -y
+      - name: Package
+        run: '& scripts/windows/package.ps1 -Version "0.1.0.$env:GITHUB_RUN_NUMBER" -Channel beta -Unsigned'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bay-windows-installer
+          path: dist/windows/*-setup.exe
+          if-no-files-found: error
+          compression-level: 0

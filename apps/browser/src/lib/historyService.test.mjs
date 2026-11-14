@@ -6,7 +6,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
 const stub = await import("../test-native-stub.mjs");
-const { useBrowser } = await import("../store/browserStore.ts");
+const { useBrowser, createBrowserStore } = await import("../store/browserStore.ts");
+const { AuthorityStore } = await import("../effect/ports/store.ts");
 const { fakeDiagnostics } = await import("../effect/testing.ts");
 const { History, HistoryEngine, HistoryError } = await import("./historyService.ts");
 const { engineProfile } = await import("../store/model.ts");
@@ -34,6 +35,8 @@ const fakeEngine = () => {
     adds: [],
     // A read waits for this, when it is set.
     gate: null,
+    // The old file's move waits for this, when it is set.
+    addGate: null,
     // The failure the read or the add meets, when there is one.
     failure: null,
   };
@@ -58,14 +61,25 @@ const fakeEngine = () => {
           catch: (cause) => new HistoryError({ operation: { name: "history.query", resource: profile }, cause }),
         });
       }),
-    add: (profile, pages) =>
-      Effect.sync(() => {
+    add: (profile, pages) => {
+      const added = Effect.sync(() => {
         if (fake.failure) throw fake.failure;
 
         fake.adds.push({ profile, pages });
 
         return pages.length;
-      }),
+      });
+
+      // An add waits for this, when it is set.
+      const gate = fake.addGate;
+
+      return gate
+        ? Effect.andThen(
+            Effect.promise(() => gate),
+            added,
+          )
+        : added;
+    },
   });
 
   return {
@@ -87,10 +101,10 @@ const fakeEngine = () => {
   };
 };
 
-const setup = () => {
+const setup = (browser = useBrowser) => {
   const engine = fakeEngine();
   const diagnostics = fakeDiagnostics();
-  const layer = History.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, diagnostics.layer)));
+  const layer = History.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, diagnostics.layer, AuthorityStore.layer(browser))));
   const runtime = ManagedRuntime.make(layer);
 
   return { engine: engine.fake, hold: engine.hold, diagnostics, runtime };
@@ -290,4 +304,69 @@ test("a move that fails keeps the file, for the next launch", async () => {
   assert.ok(stub.docs.has("history.json"), "the file is kept");
 
   await runtime.dispose();
+});
+
+test("history runtimes update only their own authority store", async (t) => {
+  stub.docs.clear();
+  const first = createBrowserStore();
+  const second = createBrowserStore();
+  const a = setup(first);
+  const b = setup(second);
+  t.after(() => Promise.all([a.runtime.dispose(), b.runtime.dispose()]));
+  const legacy = useBrowser.getState();
+  a.engine.profiles.set("", [{ url: "https://first.example/", title: "First", visits: 1, visitTimes: [100] }]);
+  b.engine.profiles.set("", [{ url: "https://second.example/", title: "Second", visits: 1, visitTimes: [200] }]);
+
+  await Promise.all([read(a.runtime, ""), read(b.runtime, "")]);
+  assert.equal(first.getState().history.default[0].url, "https://first.example/");
+  assert.equal(second.getState().history.default[0].url, "https://second.example/");
+  assert.equal(useBrowser.getState(), legacy);
+});
+
+test("a stop while the old file moves in ends that start: nothing is read or shown after it", async () => {
+  stub.docs.clear();
+  const browser = createBrowserStore();
+  const { engine, runtime } = setup(browser);
+
+  browser.getState().hydrate({});
+  const visit = Date.now() - 1_000;
+
+  stub.docs.set(
+    "history.json",
+    JSON.stringify({
+      version: 2,
+      history: { default: [{ url: "https://old.com/", title: "Old", favicon: null, visits: 1, lastVisit: visit, visitTimes: [visit] }] },
+    }),
+  );
+
+  let release = () => {};
+
+  engine.addGate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  try {
+    const starting = start(runtime);
+
+    await tick();
+    assert.deepEqual(engine.queries, [], "the views wait for the old file");
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const history = yield* History;
+
+        yield* history.stop;
+      }),
+    );
+
+    release();
+    await starting;
+    await tick();
+
+    assert.deepEqual(engine.queries, [], "the stopped start reads nothing");
+    assert.deepEqual(browser.getState().historyReady, {}, "the stopped start marks nothing ready");
+  } finally {
+    stub.docs.delete("history.json");
+    await runtime.dispose();
+  }
 });

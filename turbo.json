@@ -22,7 +22,8 @@
       "persistent": true
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": ["INCLUDE", "LIB", "LIBPATH"]
     }
   }
 }

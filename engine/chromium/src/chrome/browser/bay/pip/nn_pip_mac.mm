@@ -1,6 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 
-#include "chrome/browser/bay/pip/nn_pip_mac.h"
+#include "chrome/browser/bay/pip/nn_pip_platform.h"
 
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>

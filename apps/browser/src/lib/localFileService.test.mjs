@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../effect/ports/store.ts";
 // The local files (lib/localFileService.ts): what this Mac may read of a Space's files, and what it opens.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -45,7 +46,7 @@ const fakeEngine = () => {
 
 const withService = async (use) => {
   const engine = fakeEngine();
-  const runtime = ManagedRuntime.make(LocalFileService.layer.pipe(Layer.provide(engine.layer)));
+  const runtime = ManagedRuntime.make(LocalFileService.layer.pipe(Layer.provide(AuthorityStore.layer(useBrowser)), Layer.provide(engine.layer)));
 
   try {
     await use({ lab: engine.lab, runtime });
@@ -108,5 +109,34 @@ test("a path this Mac may not read keeps its own outcome", async () => {
 
     assert.equal(access.status, "inaccessible");
     assert.equal(Object.values(S().tabs).filter((tab) => tab.url?.startsWith("file://")).length, 0);
+  });
+});
+
+test("closing a file's row closes the window's peek of it and the tabs that show it", async () => {
+  await withService(async ({ runtime }) => {
+    S().hydrate({});
+
+    const window = S().createWindow({ url: "https://example.com/" });
+    const [pin] = S().pinLocalFiles(window, [{ path: "/Users/me/Documents", name: "Documents", kind: "folder" }]);
+    const url = "file:///Users/me/Documents/notes.md";
+
+    await open(runtime, window, pin);
+
+    const opener = Object.values(S().tabs).find((tab) => tab.url === "https://example.com/");
+    const peek = S().openPeek(opener.id, url);
+
+    assert.ok(peek && S().peeks[window], "the file is peeked over the window's page");
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const files = yield* LocalFileService;
+
+        yield* files.close(window, pin, "notes.md");
+      }),
+    );
+
+    assert.equal(S().peeks[window], undefined, "the peek closed as a peek");
+    assert.equal(Object.values(S().tabs).filter((tab) => tab.url === url).length, 0, "no page shows the file");
+    assert.ok(S().tabs[opener.id], "the page the peek was over stays");
   });
 });

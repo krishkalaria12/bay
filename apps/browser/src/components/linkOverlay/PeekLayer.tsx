@@ -1,16 +1,19 @@
+import * as splitCommands from "../../runtime/splitActions";
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
-import { focus } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Peek } from "../../store/peeks";
 import { useHover } from "../ui/primitives";
 import type { Rect } from "../window/geometry";
 import { PEEK_ARC, PEEK_BUTTON, PEEK_CARD_GAP, PEEK_CLOSE_MS, PEEK_FROM_SCALE, PEEK_INSET_MIN, PEEK_INSET_SHARE, PEEK_SPRING } from "../window/constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closePeek, keepPeek, splitPeek } from "../../runtime/splitActions";
 import { dismissPeek, takePeekDismissal } from "./peekDismiss";
 
 // Arc's Peek, over the page it was opened from (store/peeks.ts): the page dims away, the link's page sits on it in a
@@ -35,7 +38,7 @@ export function startPeeks() {
     for (const [windowId, peek] of Object.entries(s.peeks)) {
       const from = s.tabs[peek.fromId];
 
-      if (!s.windows[windowId] || !from || from.windowId !== windowId) useBrowser.getState().closePeek(windowId);
+      if (!s.windows[windowId] || !from || from.windowId !== windowId) reportBrowserCommand(splitCommands.closePeek(windowId));
     }
   });
 }
@@ -55,7 +58,7 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
     shown.set(0);
     shown.set(withSpring(1, PEEK_SPRING));
     let leaving = false;
-    const closeNow = () => useBrowser.getState().closePeek(windowId);
+    const closeNow = () => reportBrowserCommand(closePeek(windowId));
 
     return takePeekDismissal(windowId, () => {
       if (leaving) return;
@@ -133,13 +136,9 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
           icon="arrow.up.left.and.arrow.down.right"
           label="Open as Tab"
           tooltip="Open as Tab (⌘O)"
-          onPress={() => {
-            const target = useBrowser.getState().keepPeek(windowId);
-
-            if (target) focus(target);
-          }}
+          onPress={() => reportBrowserCommand(keepPeek(windowId))}
         />
-        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => useBrowser.getState().splitPeek(windowId)} />
+        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => reportBrowserCommand(splitPeek(windowId))} />
       </Animated.View>
     </View>
   );

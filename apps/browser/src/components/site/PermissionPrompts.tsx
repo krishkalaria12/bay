@@ -1,3 +1,4 @@
+import { Pressable, View } from "@bay/platform";
 import {
   getSiteSettings,
   resolveExternalApp,
@@ -9,10 +10,10 @@ import {
 } from "@bay/chromium";
 import { Symbol } from "@bay/desktop";
 import { useState, type ReactNode } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { useHover } from "../ui/primitives";
 import { Popover, PopoverRow, PopoverSeparator, PromptButton } from "../toolbar/buttons";

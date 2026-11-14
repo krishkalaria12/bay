@@ -1,21 +1,36 @@
-import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/desktop";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { ContextMenuArea, libraryImageUri, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Text } from "react-native";
+import { useFileExists } from "../useFileExists";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace } from "../../store/model";
 import { downloadsIn } from "../../store/windowUi";
 import { downloadMenu, FileIcon } from "../downloads/DownloadRow";
 import { showToast } from "../split/splitActions";
 import { IconButton, useHover } from "../ui/primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleDownloads } from "../../runtime/windowUiActions";
+import { updateSettings } from "../../runtime/settingsActions";
+import { libraryAvailable } from "./availability";
 import { openLibrary, openLibraryPage, toggleLibrary } from "./actions";
 import { startLibrary, useLibrary } from "./state";
 
 type RecentTypes = { media: boolean; downloads: boolean };
 
 export function LibraryButton({ windowId }: { windowId: string }) {
+  if (!libraryAvailable())
+    return (
+      <IconButton icon="arrow.down.circle" size={15} box={28} radius={7} tooltip="Downloads" onPress={() => reportBrowserCommand(toggleDownloads(windowId))} />
+    );
+
+  return <AvailableLibraryButton windowId={windowId} />;
+}
+
+function AvailableLibraryButton({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const privateWindow = useBrowser((s) => !s.windows[windowId] || s.windows[windowId].incognito || isIncognitoSpace(s.windows[windowId].spaceId));
   const downloads = useBrowser(useShallow((s) => downloadsIn(s, windowId)));
@@ -93,7 +108,7 @@ export function LibraryButton({ windowId }: { windowId: string }) {
 
     if (choice === "libraryPage") openLibraryPage(windowId);
 
-    if (choice === "in:sidebar" || choice === "in:page") useBrowser.getState().updateSettings({ libraryIn: choice === "in:page" ? "page" : "sidebar" });
+    if (choice === "in:sidebar" || choice === "in:page") reportBrowserCommand(updateSettings({ libraryIn: choice === "in:page" ? "page" : "sidebar" }));
   }
 
   return (
@@ -244,7 +259,7 @@ function RecentHeading({ title, onPress }: { title: string; onPress: () => void 
 function RecentFile({ name, path, icon, onPress }: { name: string; path: string; icon: ReactNode; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  const exists = fileExists(path);
+  const exists = useFileExists(path) === true;
 
   return (
     <MouseArea path={exists ? path : null}>
@@ -270,15 +285,11 @@ function RecentFile({ name, path, icon, onPress }: { name: string; path: string;
 function RecentImage({ path }: { path: string }) {
   const theme = useTheme();
   const [broken, setBroken] = useState(false);
+  const exists = useFileExists(path);
 
-  if (broken || !fileExists(path)) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
+  if (broken || exists !== true) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
 
   return (
-    <Image
-      source={{ uri: `file://${path.split("/").map(encodeURIComponent).join("/")}` }}
-      onError={() => setBroken(true)}
-      resizeMode="cover"
-      style={{ width: 30, height: 30, borderRadius: 4 }}
-    />
+    <Image source={{ uri: libraryImageUri(path) }} onError={() => setBroken(true)} resizeMode="cover" style={{ width: 30, height: 30, borderRadius: 4 }} />
   );
 }

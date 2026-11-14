@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../../effect/windowPorts.ts";
 // The media work (components/media/service.ts): the share picker's screens, the cast dialogs and the task manager's
 // poll, against a fake engine and the test clock.
 import assert from "node:assert/strict";
@@ -78,7 +79,10 @@ const withMedia = async (use) => {
   const diagnostics = fakeDiagnostics();
 
   const runtime = ManagedRuntime.make(
-    Layer.mergeAll(MediaService.layer.pipe(Layer.provide(Layer.mergeAll(fakeEngine(lab), diagnostics.layer))), TestClock.layer()),
+    Layer.mergeAll(
+      MediaService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(fakeEngine(lab), diagnostics.layer))),
+      TestClock.layer(),
+    ),
   );
 
   useBrowser.setState({

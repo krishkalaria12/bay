@@ -1,19 +1,23 @@
+import { checked } from "../../lib/checked";
 import * as v from "valibot";
 import { LibraryButton } from "../library/LibraryButton";
-import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion, TidySquiggle } from "@bay/desktop";
+import { ScrollView, Pressable, View } from "@bay/platform";
+import { ContextMenuArea, FadeLabel, MouseArea, Symbol, TidySquiggle, WindowDragRegion } from "@bay/desktop";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { cycleSpace } from "../../lib/actions";
 import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { everySlowly } from "../../lib/throttledTimers";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId, useQuietBrowser } from "../../store/hooks";
 import { activeTabId, listIds, spaceFolded, spaceHeaderHidden, windowListKey } from "../../store/model";
 import { cleanUpCandidates, hasClearableTabs } from "../../store/tabTidying";
 import { openNewTabInSplit } from "../split/splitActions";
+import { LIGHTS_WIDTH, useWindowButtonLayout } from "../window/windowButtons";
+import { sidebarButtonRoom } from "../window/geometry";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "../window/layout";
 import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS } from "../window/constants";
 import { SidebarPlayer, useSidebarPlayerTab } from "../media/SidebarPlayer";
@@ -47,7 +51,7 @@ import { SidebarKeyboardScope, useSidebarKeyboard } from "./keyboardFocus";
 import { measureRow } from "./state";
 import { SplitRowItem, TabRowItem } from "./TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./RowMotion";
-import { useSidebarMetrics, useSidebarTokens, useSidebarWidth } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens, useTabsSidebarWidth } from "./tokens";
 import {
   CLEAN_UP_UPSELL_MIN,
   DOCKED_BOTTOM,
@@ -62,6 +66,10 @@ import {
   SPACE_TITLE_GAP,
   ROWS_PER_FRAME,
 } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { cleanUpTabs } from "../../runtime/organizeActions";
+import { updateSettings } from "../../runtime/settingsActions";
+import { openNewTabPanel } from "../../lib/newTab";
 
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
@@ -74,7 +82,7 @@ export function Sidebar() {
   const newTabPitch = metrics.rowHeight + NEW_TAB_GAP;
   const newTabDock = DOCKED_BOTTOM + newTabPitch;
   const windowId = useWindowId();
-  const width = useSidebarWidth(windowId);
+  const width = useTabsSidebarWidth(windowId);
   const current = useWindowSpaceId();
   const { pages, paging } = usePagerPages(windowId);
   // The list's height matters only through `docked`: the latest is kept in a ref, and the state takes it only when the
@@ -100,8 +108,11 @@ export function Sidebar() {
   const field = useSidebarFieldShown();
   const header = field ? SIDEBAR_FIELD.top + metrics.addressHeight : layout.sidebarHeader;
   const glowRoom = field ? 0 : GLOW_ROOM;
-  // On the window's right the header has no window buttons to clear: the profile starts at the inset.
-  const profileX = useSidebarOnRight() ? layout.sidebarInset + 4 : PROFILE_INDICATOR_X;
+  // The header clears only the window buttons at its outer edge.
+  const right = useSidebarOnRight();
+  const buttonRoom = sidebarButtonRoom(useWindowButtonLayout(), right);
+  const profileX = !right && LIGHTS_WIDTH ? PROFILE_INDICATOR_X : buttonRoom.left + layout.sidebarInset + 4;
+  const headerEnd = buttonRoom.right || 7;
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();
@@ -216,7 +227,7 @@ export function Sidebar() {
                     flexDirection: "row",
                     alignItems: "flex-start",
                     paddingLeft: profileX,
-                    paddingRight: 7,
+                    paddingRight: headerEnd,
                     paddingTop: 27 - 17,
                   }}
                 >
@@ -447,7 +458,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           {current ? <CleanUpUpsell windowId={windowId} /> : null}
                         </View>
                         <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
-                          <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
+                          <View style={{ flex: 1 }} onDoubleClick={() => reportBrowserCommand(openNewTabPanel(windowId))} />
                         </ContextMenuArea>
                       </Animated.ScrollView>
                     </Animated.View>
@@ -745,11 +756,9 @@ function NewTabRow({ windowId }: { windowId: string }) {
       <Pressable
         style={{ flex: 1 }}
         onPress={(e) => {
-          // SAFETY: the press event's nativeEvent carries `altKey` when Alt is held, as in RN press events.
-          const altKey = (e.nativeEvent as { altKey?: boolean }).altKey;
-
-          if (altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().openNewTabPanel(windowId);
+          // SAFETY: the checks above established this shape.
+          if (checked<{ altKey?: boolean }>(e.nativeEvent).altKey) openNewTabInSplit(windowId);
+          else reportBrowserCommand(openNewTabPanel(windowId));
         }}
       >
         {({ pressed }) => (
@@ -831,15 +840,14 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
           title="Clean Up Once"
           primary
           onPress={() => {
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(cleanUpTabs(windowId));
             dismiss();
           }}
         />
         <UpsellButton
           title="Clean Up Daily"
           onPress={() => {
-            useBrowser.getState().updateSettings({ cleanUpInactiveTabsAfterHours: 24 });
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: 24 }).then(() => cleanUpTabs(windowId)));
           }}
         />
         <UpsellButton title="Not Now" onPress={dismiss} />

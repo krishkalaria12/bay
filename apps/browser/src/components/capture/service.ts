@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../../effect/windowPorts";
 // Capture, as a job: the selection is put into the page, the picture is taken, and what the user does with it —
 // copy, save, Library, an Easel, Portrait — runs to its end or not at all.
 //
@@ -18,11 +19,15 @@ import type { Operation } from "../../effect/errors";
 import { Diagnostics } from "../../effect/ports/diagnostics";
 import { isJsonObject, type JsonInput } from "../../lib/json";
 import { themeFor, themeKey } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+
 import { engineProfile } from "../../store/model";
-import type { Tab } from "../../store/types";
+import type { BrowserProjection } from "../../runtime/projection";
+
+type CaptureTab = BrowserProjection["tabs"][string];
+
 import { LibraryService } from "../library/libraryService";
-import { webLink, type CaptureSource, type LibraryMedia } from "../library/model";
+import { fileNameOf, webLink, type CaptureSource, type LibraryMedia } from "../library/model";
+import { platformWords } from "../../lib/platformWords";
 import { isInternalTab } from "../pages/internalPages";
 import { showToast } from "../ui/toasts";
 import { captureScript } from "./captureScript";
@@ -152,6 +157,7 @@ export class CaptureService extends Context.Service<
   static readonly layer = Layer.effect(
     CaptureService,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
       const engine = yield* CaptureEngine;
       const library = yield* LibraryService;
       const diagnostics = yield* Diagnostics;
@@ -170,7 +176,7 @@ export class CaptureService extends Context.Service<
       const orNull = <A>(effect: Effect.Effect<A, CaptureFailure>): Effect.Effect<A | null> =>
         effect.pipe(Effect.catch((failure) => report(failure).pipe(Effect.as(null))));
 
-      const tabOf = (tabId: string): Tab | undefined => useBrowser.getState().tabs[tabId];
+      const tabOf = (tabId: string): CaptureTab | undefined => useBrowser.getState().tabs[tabId];
 
       const windowOf = (tabId: string) => tabOf(tabId)?.windowId ?? null;
 
@@ -254,7 +260,7 @@ export class CaptureService extends Context.Service<
         });
 
       // A tab that can be captured: not one of the app's own pages, which aren't web pages.
-      const capturable = (tabId: string): Tab | null => {
+      const capturable = (tabId: string): CaptureTab | null => {
         const tab = tabOf(tabId);
 
         if (!tab?.url || !engine.hasPage(tabId)) return null;
@@ -390,12 +396,12 @@ export class CaptureService extends Context.Service<
       const savedToast = (windowId: string, path: string | null, title: string) => {
         if (!path) return showToast(windowId, "Couldn’t Save the Capture", "Bay couldn’t write to Downloads.", ICON);
 
-        const file = path.split("/").pop() ?? path;
+        const file = fileNameOf(path) || path;
 
         showToast(windowId, title, `In Downloads as ${file}`, {
           icon: "arrow.down.circle",
           key: "capture",
-          action: { title: "Show in Finder", run: () => engine.reveal(path) },
+          action: { title: platformWords.revealTitle, run: () => engine.reveal(path) },
         });
       };
 
@@ -415,7 +421,7 @@ export class CaptureService extends Context.Service<
         });
 
       // The page the picture came from, for the Library: a web page only, and the part of it that was taken.
-      const sourceOf = (url: string, tab: Tab, area: CaptureArea | null): CaptureSource | undefined =>
+      const sourceOf = (url: string, tab: CaptureTab, area: CaptureArea | null): CaptureSource | undefined =>
         webLink(url)
           ? {
               url,
@@ -511,7 +517,7 @@ export class CaptureService extends Context.Service<
           const s = useBrowser.getState();
           const theme = themeFor(themeKey(s, tab.windowId, tab.spaceId));
           const own = s.spaces[tab.spaceId]?.theme?.colors ?? [];
-          const framed = yield* orNull(engine.portrait(shot.path, own.length ? own : [theme.accent, theme.windowTint[1]], theme.dark));
+          const framed = yield* orNull(engine.portrait(shot.path, own.length ? [...own] : [theme.accent, theme.windowTint[1]], theme.dark));
 
           if (!framed) return failed();
 

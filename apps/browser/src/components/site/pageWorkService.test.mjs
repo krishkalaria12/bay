@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../../effect/windowPorts.ts";
 // The page work (components/site/pageWorkService.ts): a document's translation, and the checks around it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -105,7 +106,9 @@ const withWork = async (use) => {
     unsaved: false,
   };
 
-  const runtime = ManagedRuntime.make(Layer.mergeAll(PageWorkService.layer.pipe(Layer.provide(fakeEngine(lab))), TestClock.layer()));
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(PageWorkService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(fakeEngine(lab))), TestClock.layer()),
+  );
 
   useBrowser.setState({
     tabs: {

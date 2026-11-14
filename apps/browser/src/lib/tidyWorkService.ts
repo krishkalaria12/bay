@@ -16,7 +16,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { live } from "../activity/activityStore";
 import type { Operation } from "../effect/errors";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
+import type { BrowserState } from "../store/browserStore";
 import { groupLabel, hostOfTab, siteTidyPlan, tidyCandidates, type TabTidyPlan } from "../store/tabTidying";
 
 // A quick answer doesn't flash: the wave runs at least this long.
@@ -126,6 +127,7 @@ export class TidyWorkService extends Context.Service<
   static readonly layer = Layer.effect(
     TidyWorkService,
     Effect.gen(function* () {
+      const browser = yield* AuthorityStore;
       const engine = yield* TidyEngine;
       const clock = yield* Clock.Clock;
 
@@ -176,7 +178,7 @@ export class TidyWorkService extends Context.Service<
             }
           }
 
-          const s = useBrowser.getState();
+          const s = browser.getState();
 
           // The window is gone: nothing is applied to a window that isn't there.
           if (!s.windows[windowId]) return yield* Effect.succeed({ kind: "gone" } as const);
@@ -190,7 +192,7 @@ export class TidyWorkService extends Context.Service<
           const modelPlan = same ? plan : null;
           const grouped = modelPlan !== null && (modelPlan.newGroups.length > 0 || modelPlan.joins.length > 0) ? modelPlan : null;
           const count = s.tidyTabs(windowId, grouped ?? siteTidyPlan(s, now));
-          const after = useBrowser.getState();
+          const after = browser.getState();
           const loose = tidyCandidates(after, windowId, spaceId);
 
           if (!count) return yield* Effect.succeed({ kind: "nothing", loose } as const);
@@ -210,7 +212,7 @@ export class TidyWorkService extends Context.Service<
       const run = (request: TidyRequest): Effect.Effect<TidyOutcome> =>
         Effect.gen(function* () {
           const { windowId, minimumRunMs = MINIMUM_RUN_MS } = request;
-          const before = useBrowser.getState();
+          const before = browser.getState();
           const w = before.windows[windowId];
 
           // The window is gone: there is nothing to tidy.

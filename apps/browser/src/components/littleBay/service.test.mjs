@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../../effect/ports/store.ts";
 // Little Bay's lifetime (components/littleBay/service.ts): the sweep that puts idle windows away, and the shortcut
 // that opens one from any app, against a fake Mac and a scheduler the test fires by hand.
 import assert from "node:assert/strict";
@@ -44,7 +45,12 @@ const withLittleBay = async (use) => {
     setMenuBarItem: (on) => Effect.sync(() => void lab.menuBar.push(on)),
   });
 
-  const runtime = ManagedRuntime.make(LittleBayService.layer.pipe(Layer.provide(Layer.mergeAll(engine, scheduler.layer, fakeDiagnostics().layer))));
+  const runtime = ManagedRuntime.make(
+    LittleBayService.layer.pipe(
+      Layer.provide(AuthorityStore.layer(useBrowser)),
+      Layer.provide(Layer.mergeAll(engine, scheduler.layer, fakeDiagnostics().layer)),
+    ),
+  );
 
   S().hydrate({});
   useLittleBayAccess.setState({ status: "off" });

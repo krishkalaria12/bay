@@ -12,6 +12,8 @@ import { Diagnostics } from "./diagnostics";
 
 /** A job on the grid: what to do, how often, and what makes it worth doing. */
 export type ScheduledWork = Omit<SlowJob, "run"> & {
+  /** A restartable service can release this registration before the app scope closes. */
+  readonly scope?: Scope.Scope;
   /** The work to do when the slot comes round. Its dependencies are already provided. */
   readonly run: Effect.Effect<void, Error>;
 };
@@ -40,7 +42,7 @@ export class Scheduler extends Context.Service<
         );
 
         // The job runs in the app's scope, so closing the app stops it.
-        void Effect.runPromiseExit(Effect.forkIn(work, scope));
+        void Effect.runPromiseExit(Effect.forkIn(work, job.scope ?? scope));
       };
 
       return Scheduler.of({
@@ -53,7 +55,7 @@ export class Scheduler extends Context.Service<
               run: () => runJob(job),
             });
 
-            return Scope.addFinalizer(scope, Effect.sync(stop));
+            return Scope.addFinalizer(job.scope ?? scope, Effect.sync(stop));
           }),
       });
     }),

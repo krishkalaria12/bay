@@ -15,9 +15,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import type { Operation } from "../effect/errors";
+import { ReadBrowser } from "../effect/windowPorts";
 import { Diagnostics } from "../effect/ports/diagnostics";
 import { Scheduler } from "../effect/ports/scheduler";
-import { useBrowser } from "../store/browserStore";
+
 import { LIFECYCLE_SWEEP_MS } from "./constants";
 import {
   installLifecycleDevHandle,
@@ -87,6 +88,7 @@ export class PageLifecycleService extends Context.Service<
   static readonly layer = Layer.effect(
     PageLifecycleService,
     Effect.gen(function* () {
+      const browser = yield* ReadBrowser;
       const engine = yield* LifecycleEngine;
       const scheduler = yield* Scheduler;
       const diagnostics = yield* Diagnostics;
@@ -103,12 +105,12 @@ export class PageLifecycleService extends Context.Service<
       // each one checks the Mac again before it does.
       const reloadRecent = (sys: SystemState): Effect.Effect<void> =>
         Effect.gen(function* () {
-          const ids = recentTabsToReload(sys);
+          const ids = recentTabsToReload(sys, browser.getState());
 
           for (const id of ids) {
             yield* Effect.sleep(Duration.millis(RELOAD_SPACING_MS));
 
-            wakeRecentTab(id, sys);
+            wakeRecentTab(id, sys, browser.getState);
           }
         });
 
@@ -128,9 +130,9 @@ export class PageLifecycleService extends Context.Service<
           if (e.type === "resignActive" || e.type === "screenLocked") setAppActive(false);
         });
 
-        trackShown();
+        trackShown(browser.getState());
 
-        const stopTracking = useBrowser.subscribe((s, prev) => {
+        const stopTracking = browser.subscribe((s, prev) => {
           if (s.windows !== prev.windows || s.splits !== prev.splits) trackShown(s);
         });
 
@@ -150,7 +152,7 @@ export class PageLifecycleService extends Context.Service<
         yield* scheduler.every({
           every: LIFECYCLE_SWEEP_MS,
           run: Effect.gen(function* () {
-            trackShown();
+            trackShown(browser.getState());
 
             yield* engine.sweep();
           }),

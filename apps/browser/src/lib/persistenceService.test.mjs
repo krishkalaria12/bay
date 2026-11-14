@@ -152,3 +152,24 @@ test("the live folders are saved with the session: one write a burst, again afte
     stop();
   }
 });
+
+test("a rejected final save can retry its frozen snapshot before persistence resumes", async (t) => {
+  const { createBrowserStore } = await import("../store/browserStore.ts");
+  const { createPersistence } = await import("./persist.ts");
+  const browser = createBrowserStore();
+  const windowId = browser.getState().createWindow();
+  const owner = createPersistence({ store: browser, restoreSession: false });
+  t.after(() => {
+    stub.heldSaves.error = null;
+    owner.dispose();
+  });
+  stub.heldSaves.error = new Error("disk unavailable");
+  await assert.rejects(owner.flush({ final: true }), /disk unavailable/);
+  browser.getState().closeWindow(windowId);
+  stub.heldSaves.error = null;
+
+  await owner.flush({ final: true });
+  assert.equal(JSON.parse(stub.docs.get("session.json")).windows[0].id, windowId);
+  owner.resume();
+  assert.equal(JSON.parse(stub.docs.get("session.json")).windows.length, 0);
+});

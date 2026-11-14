@@ -1,5 +1,5 @@
 import type { MenuItem } from "@bay/desktop";
-import { useBrowser } from "../store/browserStore";
+import { newTab } from "../runtime/tabActions";
 import { useSync, type RemoteTabs } from "./engine";
 
 export function syncedDevicesMenuItem(spaceId: string): MenuItem | null {
@@ -40,7 +40,7 @@ export function openSyncedTab(choice: string, windowId: string, spaceId: string)
   const device = useSync.getState().remoteTabs[spaceId]?.find((d) => d.deviceId === match[1]);
   const tab = device?.tabs[Number(match[2])];
 
-  if (tab) useBrowser.getState().newTab(windowId, { url: tab.url });
+  if (tab) void newTab(windowId, { url: tab.url });
 
   return true;
 }

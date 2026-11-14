@@ -1,7 +1,19 @@
+import { checked } from "../lib/checked";
+import { reportBrowserCommand } from "../runtime/commands";
 import { withSidebarUndoWindow } from "../store/sidebarUndo";
-import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/desktop";
+import { joinMeetingNow } from "../activity/meetingAlerts";
+import {
+  closeWindow as closeNativeWindow,
+  copyText,
+  openExternalURL,
+  pickFiles,
+  prompt,
+  setAppearance,
+  sharePage,
+  type BrowserCommand,
+  type CommandEvent,
+} from "@bay/desktop";
 import { markdownLink } from "@bay/core";
-import { useBrowser } from "../store/browserStore";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
@@ -32,14 +44,23 @@ import { shownPeek } from "../store/peeks";
 import { rowPinned } from "../store/splits";
 import { isSmall, mainWindowFor } from "../store/littleBay";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
-import { joinMeetingNow } from "../activity/meetingAlerts";
+import { closeGroup, pinRows, undoSidebarEdit } from "../runtime/organizeActions";
+import { updateSettings } from "../runtime/settingsActions";
+import { focusPane, keepPeek, removeTabFromSplit, reopenPeekOrClosed, toggleTabLayout } from "../runtime/splitActions";
+import { activate, cycle, duplicateTab, moveTab, navigate, newTab, togglePin } from "../runtime/tabActions";
+import { mergeAllWindows, reopenClosed, reopenClosedWindow, restoreClosed, toggleSidebar } from "../runtime/windowActions";
+import { browserRead } from "../store/read";
+import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
+import { dismissCommandPanel, openCommandPanel, setFind, toggleDownloads } from "../runtime/windowUiActions";
+import { showAppMenu } from "./appMenu";
+import { menuState } from "./shellBridge";
 
 export function runCommand(event: CommandEvent) {
   return withSidebarUndoWindow(event.windowId ?? undefined, () => dispatchCommand(event));
 }
 
 function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
 
   if (isUtilityWindowId(requested)) {
     if (command === "closeTab") return void closeNativeWindow(requested!);
@@ -54,38 +75,46 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
 
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
+  // menuState only reads, and the projection is the same data, read-only.
+  if (command === "showAppMenu")
+    // SAFETY: the checks above established this shape.
+    return void showAppMenu(menuState(checked<Parameters<typeof menuState>[0]>(s)), s.settings.shortcuts, (next, nextArg) =>
+      // SAFETY: the checks above established this shape.
+      runCommand({ command: next as BrowserCommand, arg: nextArg, windowId: requested }),
+    );
+
   switch (command) {
     case "undoPinnedFolderMove": {
       const id = resolveWindowId(s, requested);
 
-      return id ? s.undoSidebarEdit(id) : false;
+      return id ? reportBrowserCommand(undoSidebarEdit(id)) : undefined;
     }
 
     case "newWindow":
-      return void openWindow({ spaceId: arg ?? undefined });
+      return reportBrowserCommand(openWindow({ spaceId: arg ?? undefined }));
     case "newIncognitoWindow":
-      return void openWindow({ incognito: true });
+      return reportBrowserCommand(openWindow({ incognito: true }));
     case "newLittleBay":
-      return void openLittleBay();
+      return reportBrowserCommand(openLittleBay());
     case "joinMeeting":
       return void joinMeetingNow();
     case "toggleOpenLinksInLittleBay":
-      return s.updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay });
+      return reportBrowserCommand(updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay }));
     case "reopenClosedWindow":
-      return s.reopenClosedWindow();
+      return reportBrowserCommand(reopenClosedWindow());
     case "setAppearance":
       if (arg === "auto" || arg === "light" || arg === "dark") {
-        s.updateSettings({ appearance: arg });
+        reportBrowserCommand(updateSettings({ appearance: arg }));
         void setAppearance(arg);
       }
 
       return;
     case "toggleFullUrl":
-      return s.updateSettings({ showFullUrl: !s.settings.showFullUrl });
+      return reportBrowserCommand(updateSettings({ showFullUrl: !s.settings.showFullUrl }));
     case "toggleAddressBar":
-      return s.updateSettings({ addressBar: s.settings.addressBar === "sidebar" ? "toolbar" : "sidebar" });
+      return reportBrowserCommand(updateSettings({ addressBar: s.settings.addressBar === "sidebar" ? "toolbar" : "sidebar" }));
     case "toggleSidebarPosition":
-      return s.updateSettings({ sidebarPosition: s.settings.sidebarPosition === "right" ? "left" : "right" });
+      return reportBrowserCommand(updateSettings({ sidebarPosition: s.settings.sidebarPosition === "right" ? "left" : "right" }));
     case "openSettings":
       return openSettings();
     case "keyboardShortcuts":
@@ -97,7 +126,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "manageExtensions":
       return openManageExtensions();
     case "setBookmarksBar":
-      if (arg === "always" || arg === "newTab" || arg === "never") s.updateSettings({ bookmarksBar: arg });
+      if (arg === "always" || arg === "newTab" || arg === "never") reportBrowserCommand(updateSettings({ bookmarksBar: arg }));
 
       return;
     case "toggleBookmarksBar": {
@@ -106,7 +135,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       const active = target ? activeTabId(s, target) : undefined;
       const shown = mode === "always" || (mode === "newTab" && !(active && s.tabs[active]?.url));
 
-      return s.updateSettings({ bookmarksBar: shown ? "never" : "always" });
+      return reportBrowserCommand(updateSettings({ bookmarksBar: shown ? "never" : "always" }));
     }
   }
 
@@ -121,13 +150,11 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
 
   if (!windowId) {
     if (command === "newTab") {
-      const created = openWindow();
-      useBrowser.getState().openPanel(created);
+      reportBrowserCommand(openWindow(undefined, true));
     }
 
     if (command === "reopenClosedTab" || command === "restoreClosed") {
-      if (arg) s.restoreClosed(arg);
-      else s.reopenClosed();
+      reportBrowserCommand(arg ? restoreClosed(arg) : reopenClosed());
     }
 
     return;
@@ -147,17 +174,13 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return openNewTabPanel(windowId);
     case "reopenClosedTab":
       // A peek closed last comes back over its tab, as Arc's (store/peeks.ts).
-      if (s.reopenPeek(windowId)) return;
-
-      return s.reopenClosed(windowId);
+      return reportBrowserCommand(reopenPeekOrClosed(windowId));
     case "restoreClosed":
-      return arg ? s.restoreClosed(arg, windowId) : undefined;
+      return arg ? reportBrowserCommand(restoreClosed(arg, windowId)) : undefined;
     case "focusCommandBar":
-      if (page) return s.openPanel(windowId, page.url);
-
-      return s.openPanel(windowId, "");
+      return reportBrowserCommand(openCommandPanel(windowId, page?.url ?? ""));
     case "closeTab":
-      if (ui?.panel.open) return s.closePanel(windowId);
+      if (ui?.panel.open) return reportBrowserCommand(dismissCommandPanel(windowId));
 
       if (tabId && find?.open) return closeFind(tabId);
 
@@ -200,22 +223,24 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "copyUrlAsMarkdown":
       return page ? copyText(markdownLink(page.customTitle || page.title, page.url)) : undefined;
     case "findInPage":
-      return page ? s.setFind(page.id, { open: true, replace: false, focusRequest: Date.now() }) : undefined;
+      return page ? reportBrowserCommand(setFind(page.id, { open: true, replace: false, focusRequest: Date.now() })) : undefined;
     case "findAndReplace":
-      return page ? s.setFind(page.id, { open: true, replace: true, focusRequest: Date.now() }) : undefined;
+      return page ? reportBrowserCommand(setFind(page.id, { open: true, replace: true, focusRequest: Date.now() })) : undefined;
     case "jumpToSelection":
       return page ? void jumpToSelection(page.id) : undefined;
     case "useSelectionForFind":
       if (!page || !web) return;
 
-      return void web.evaluate<string>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
-        if (query) useBrowser.getState().setFind(page.id, { open: true, query, focusRequest: Date.now() });
-      });
+      return reportBrowserCommand(
+        web.evaluate<string>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
+          if (query) return setFind(page.id, { open: true, query, focusRequest: Date.now() });
+        }),
+      );
     case "findNext":
     case "findPrevious":
       if (!page) return;
 
-      if (!find?.query) return s.setFind(page.id, { open: true });
+      if (!find?.query) return reportBrowserCommand(setFind(page.id, { open: true }));
 
       return void web?.find(find.query, command === "findNext", true);
     case "reload":
@@ -223,17 +248,17 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "forceReload":
       return void web?.forceReload();
     case "toggleTabLayout":
-      return s.toggleTabLayout(windowId);
+      return reportBrowserCommand(toggleTabLayout(windowId));
     case "openSplitPane":
-      return void openSplitPane(windowId);
+      return reportBrowserCommand(openSplitPane(windowId));
     case "focusNextPane":
-      return s.focusPane(windowId, 1);
+      return reportBrowserCommand(focusPane(windowId, 1));
     case "focusPreviousPane":
-      return s.focusPane(windowId, -1);
+      return reportBrowserCommand(focusPane(windowId, -1));
     case "removeFromSplit":
-      return tab ? s.removeTabFromSplit(tab.id) : undefined;
+      return tab ? reportBrowserCommand(removeTabFromSplit(tab.id)) : undefined;
     case "toggleSidebar":
-      return s.toggleSidebar(windowId);
+      return reportBrowserCommand(toggleSidebar(windowId));
     case "zoomIn":
       return page ? void web?.zoomStep(1) : undefined;
     case "zoomOut":
@@ -253,50 +278,50 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "viewSource":
       if (!page || !web || !/^(https?|file):/.test(page.url)) return;
 
-      return void s.newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, spaceId: page.spaceId });
+      return reportBrowserCommand(newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, spaceId: page.spaceId }));
     case "back":
       return tabId ? goBack(tabId) : undefined;
     case "forward":
       return tabId ? goForward(tabId) : undefined;
     case "nextTab":
-      return s.cycle(windowId, 1);
+      return reportBrowserCommand(cycle(windowId, 1));
     case "previousTab":
-      return s.cycle(windowId, -1);
+      return reportBrowserCommand(cycle(windowId, -1));
     case "selectTab":
     case "selectLastTab": {
       const rows = numberedTabs(s, windowId);
       const id = command === "selectLastTab" ? rows.at(-1) : rows[Number(arg) - 1];
 
-      return id ? s.activate(id, windowId) : undefined;
+      return id ? reportBrowserCommand(activate(id, windowId)) : undefined;
     }
 
     case "togglePin":
-      return tab ? s.togglePin(tab.id) : undefined;
+      return tab ? reportBrowserCommand(togglePin(tab.id)) : undefined;
     case "togglePinRow":
-      return tab ? s.pinRows([tab.id], !rowPinned(s, tab.id)) : undefined;
+      return tab ? reportBrowserCommand(pinRows([tab.id], !rowPinned(s, tab.id))) : undefined;
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
       const section = viewTabIds(s, windowId, tab.spaceId).filter((id) => !!s.tabs[id]?.pinned === tab.pinned);
       const at = section.indexOf(tab.id) + (command === "moveTabDown" ? 1 : -1);
 
-      return at >= 0 && at < section.length ? s.moveTab(tab.id, at) : undefined;
+      return at >= 0 && at < section.length ? reportBrowserCommand(moveTab(tab.id, at)) : undefined;
     }
 
     case "closeTabGroup": {
       const group = groupOf(s, tabId);
 
-      return group ? s.closeGroup(group.id) : undefined;
+      return group ? reportBrowserCommand(closeGroup(group.id)) : undefined;
     }
 
     case "openSpaceMenu":
       return s.windows[windowId]?.incognito ? undefined : void openSpaceMenu(windowId);
     case "duplicateTab":
-      return tab ? void s.duplicateTab(tab.id) : undefined;
+      return tab ? reportBrowserCommand(duplicateTab(tab.id)) : undefined;
     case "moveTabToSpace":
       return tab && arg ? void moveTabToSpace(tab.id, arg) : undefined;
     case "moveTabToWindow":
-      return tab && arg ? moveTabToWindow(tab.id, arg) : undefined;
+      return tab && arg ? reportBrowserCommand(moveTabToWindow(tab.id, arg)) : undefined;
     case "bookmarkPage":
       return page ? bookmarkActivePage(windowId) : undefined;
     case "addBookmarkToFolder":
@@ -304,7 +329,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "openBookmark": {
       const node = arg ? s.bookmarks.nodes[arg] : undefined;
 
-      return node?.kind === "url" && tab ? s.navigate(tab.id, node.url) : undefined;
+      return node?.kind === "url" && tab ? reportBrowserCommand(navigate(tab.id, node.url)) : undefined;
     }
 
     case "toggleMute":
@@ -314,7 +339,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "openLibrary":
       return openLibrary(windowId, arg ?? undefined);
     case "downloads":
-      return s.setDownloadsOpen(windowId, !ui?.downloadsOpen);
+      return reportBrowserCommand(toggleDownloads(windowId));
     case "cast":
       return void toggleCastPicker(windowId);
     case "showHistory":
@@ -330,13 +355,15 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "bookmarkAllTabs":
       return bookmarkAllTabs(windowId);
     case "mergeAllWindows":
-      return s.mergeAllWindows(windowId);
+      return reportBrowserCommand(mergeAllWindows(windowId));
     case "switchSpace":
       return arg ? switchSpace(windowId, arg, true) : undefined;
     case "nextSpace":
       return cycleSpace(windowId, 1);
     case "previousSpace":
       return cycleSpace(windowId, -1);
+    case "focusWindow":
+      return arg ? focus(arg) : undefined;
     case "openExtension":
       return arg ? openExtensionFromMenu(windowId, arg) : undefined;
     case "addExtension":
@@ -403,24 +430,24 @@ const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
 ]);
 
 function runLittleBayCommand(command: string, windowId: string): boolean {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
 
   switch (command) {
     case "closeTab":
       // A blank Little Bay (⌘⌥N, nothing typed yet) closes with its field open.
-      if (s.windowUi[windowId]?.panel.open && tab?.url) s.closePanel(windowId);
+      if (s.windowUi[windowId]?.panel.open && tab?.url) reportBrowserCommand(dismissCommandPanel(windowId));
       else if (tabId && s.find[tabId]?.open) closeFind(tabId);
       else closeLittleBay(windowId);
 
       return true;
     case "focusCommandBar":
-      s.openPanel(windowId, tab?.url ?? "");
+      reportBrowserCommand(openCommandPanel(windowId, tab?.url ?? ""));
 
       return true;
     case "openFile":
-      openInMainWindow(windowId);
+      reportBrowserCommand(openInMainWindow(windowId));
 
       return true;
   }
@@ -430,9 +457,7 @@ function runLittleBayCommand(command: string, windowId: string): boolean {
 
 // A link's peek on screen (store/peeks.ts): ⌘W closes it and ⌘O keeps it as a tab, as Arc's; Little Bay's keys.
 function runPeekCommand(command: string, windowId: string): boolean {
-  const s = useBrowser.getState();
-
-  if (!shownPeek(s, windowId)) return false;
+  if (!shownPeek(browserRead.getState(), windowId)) return false;
 
   switch (command) {
     case "closeTab":
@@ -440,9 +465,7 @@ function runPeekCommand(command: string, windowId: string): boolean {
 
       return true;
     case "openFile":
-      const target = s.keepPeek(windowId);
-
-      if (target) focus(target);
+      reportBrowserCommand(keepPeek(windowId));
 
       return true;
   }
@@ -451,13 +474,13 @@ function runPeekCommand(command: string, windowId: string): boolean {
 }
 
 function closeFind(tabId: string) {
-  useBrowser.getState().setFind(tabId, { open: false, count: null, active: 0 });
+  reportBrowserCommand(setFind(tabId, { open: false, count: null, active: 0 }));
   void webviews.get(tabId)?.stopFinding(false);
   void webviews.get(tabId)?.focus();
 }
 
 async function addBookmarkToFolder(windowId: string, folder: string) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
 
@@ -469,23 +492,22 @@ async function addBookmarkToFolder(windowId: string, folder: string) {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
 
     if (!title) return;
-    parentId = useBrowser.getState().addBookmarkFolder({ spaceId, title });
+    parentId = await addBookmarkFolder({ spaceId, title });
   }
 
-  useBrowser.getState().addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
+  await addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
 }
 
 async function openFiles(windowId: string | null) {
   const urls = await pickFiles();
 
   if (!urls.length) return;
-  const s = useBrowser.getState();
-  const target = resolveWindowId(s, windowId);
+  const target = resolveWindowId(browserRead.getState(), windowId);
 
-  if (!target) return void openWindow({ url: urls[0] });
+  if (!target) return void (await openWindow({ url: urls[0] }));
   let last: string | undefined;
 
-  for (const url of urls) last = useBrowser.getState().newTab(target, { url });
+  for (const url of urls) last = await newTab(target, { url });
 
-  if (last) useBrowser.getState().activate(last, target);
+  if (last) await activate(last, target);
 }

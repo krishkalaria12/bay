@@ -1,11 +1,16 @@
+import { checked } from "../../lib/checked";
+import * as tabCommands from "../../runtime/tabActions";
+import { ScrollView } from "@bay/platform";
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/desktop";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { PanResponder, Platform, StyleSheet, Text } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme, useWindowTint } from "../../lib/theme";
-import { layout } from "../../lib/constants";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { PageSpaceContext, useIsActiveTab, usePageSpaceId, useSettings, useTab, useTabLive, useWindowId, useWindowSpaceId } from "../../store/hooks";
 import { SpaceIndicator, useSpaceIndicatorWidth } from "../spaces/SpaceIndicator";
 import { HoverSlot } from "../ui/HoverSlot";
@@ -31,7 +36,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import {
   dragGeometry,
   dragRange,
@@ -84,6 +89,12 @@ import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./tabStripRe
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabStripDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "../toolbar/colors";
 import { listOfTab } from "../../store/model";
+import { useWindowButtonLayout, windowButtonRoom } from "../window/windowButtons";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
+import { browserRead } from "../../store/read";
+import { openNewTabPanel } from "../../lib/newTab";
+import { toggleDownloads } from "../../runtime/windowUiActions";
 
 // The drop-down strip (full screen, auto-hidden tabs) has no card to attach the selected tab to.
 const FloatingStrip = createContext(false);
@@ -97,6 +108,12 @@ type Entry = { kind: "dock"; ids: string[] } | GroupEntry | Member;
 // `width`: the window's (the peek's, floating), from its parent, so a strip mounting again lays its tabs out right on its
 // first frame. `hidden`: page full screen keeps the strip mounted out of view, and gives the traffic lights back.
 // `swipe`: the strip pages profiles; a hidden peek's doesn't, or switching profiles would wait on its pager.
+// raiseView on the Chrome-hosted desktop, which has no native view tags: the element, and `levels` of its ancestors,
+// over their siblings, as a later sibling would otherwise draw over the dragged tab.
+function raiseElement(element: HTMLElement | null, levels: number, raised: boolean) {
+  for (let level = 0; element && level <= levels; level++, element = element.parentElement) element.style.zIndex = raised ? "1" : "";
+}
+
 export function TopTabStrip({
   width,
   floating = false,
@@ -113,8 +130,11 @@ export function TopTabStrip({
   const { pages } = usePagerPages(windowId);
   const spaceChip = useSpaceIndicatorWidth(STRIP_PROFILE_ROOM);
   const controls = (spaceChip ? spaceChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
-  const left = floating ? 8 : layout.trafficLightsWidth + STRIP_LIGHTS_GAP;
-  const right = Math.max(84, controls + 8 + 6);
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const left = floating ? 8 : room.left + STRIP_LIGHTS_GAP;
+  // The floating strip's popup provides its own clearance from the window buttons.
+  const caption = floating ? 0 : room.right;
+  const right = Math.max(84, controls + 8 + 6) + caption;
   const pageWidth = Math.max(0, width - left - right);
   const flare = floating ? 0 : STRIP_FLARE;
 
@@ -131,14 +151,16 @@ export function TopTabStrip({
         <WindowDragRegion style={StyleSheet.absoluteFill} />
         {/* The clip starts a flare's width early so the first tab's flare isn't cut, and ends at the profile chip and
             download button, so tabs scrolled past the end never show under them. */}
-        <View style={{ position: "absolute", left: left - flare, right: Math.max(right - flare, controls + 8), top: 0, bottom: 0, overflow: "hidden" }}>
+        <View
+          style={{ position: "absolute", left: left - flare, right: Math.max(right - flare, controls + 8 + caption), top: 0, bottom: 0, overflow: "hidden" }}
+        >
           {pages.map((page) => (
             <StripPage key={page.id} spaceId={page.id} slot={page.slot} pageWidth={pageWidth} current={page.id === current} resting={!!page.resting} />
           ))}
         </View>
         <View
           mouseDownCanMoveWindow={false}
-          style={{ position: "absolute", right: 8, top: STRIP_MID - 17, flexDirection: "row", alignItems: "center", gap: STRIP_CONTROLS_GAP }}
+          style={{ position: "absolute", right: 8 + caption, top: STRIP_MID - 17, flexDirection: "row", alignItems: "center", gap: STRIP_CONTROLS_GAP }}
         >
           <SpaceIndicator room={STRIP_PROFILE_ROOM} />
           <IconButton
@@ -146,11 +168,8 @@ export function TopTabStrip({
             size={16}
             box={STRIP_DOWNLOADS_BOX}
             radius={10}
-            tooltip="Downloads (⇧⌘J)"
-            onPress={() => {
-              const s = useBrowser.getState();
-              s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-            }}
+            tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
+            onPress={() => reportBrowserCommand(toggleDownloads(windowId))}
           />
         </View>
         {swipe && <SpaceSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
@@ -512,7 +531,13 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
   let raised: number | null = null;
 
   const raise = (on: boolean) => {
-    const tag = on ? findNodeHandle(view) : raised;
+    // SAFETY: the checks above established this shape.
+    if (Platform.OS === "web") {
+      // SAFETY: the checks above established this shape.
+      return raiseElement(checked<HTMLElement | null>(view), current().groupId ? 1 : 0, on);
+    }
+
+    const tag = on ? nodeTag(view) : raised;
     raiseView(tag, current().groupId ? 1 : 0, on);
     raised = on ? tag : null;
   };
@@ -689,7 +714,7 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
     const index = moveIndex(section, tab.id, geometry.slots, from, to);
 
     if (index === null) return false;
-    s.moveTab(tab.id, index);
+    reportBrowserCommand(tabCommands.moveTab(tab.id, index));
 
     return true;
   }
@@ -710,7 +735,7 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
     beforeId = last < 0 ? null : (w.tabIds.slice(last + 1).find((id) => !ids.includes(id)) ?? null);
   }
 
-  s.placeTabs(ids, { pinned, beforeId, groupId });
+  reportBrowserCommand(placeTabs(ids, { pinned, beforeId, groupId }));
 
   return true;
 }
@@ -773,7 +798,7 @@ function DraggableChip({
         (_, i) => dock.left + i * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) + STRIP_PINNED_CELL / 2 < left + STRIP_PINNED_CELL / 2,
       ).length;
 
-      useBrowser.getState().placeTabs(ids, { pinned: true, beforeId: dock.ids[index] ?? null });
+      reportBrowserCommand(placeTabs(ids, { pinned: true, beforeId: dock.ids[index] ?? null }));
 
       return true;
     },
@@ -1079,7 +1104,7 @@ function PinnedCell({ tabId, geometry, from }: { tabId: string; geometry: DragGe
 
       if (left + STRIP_PINNED_CELL / 2 < -STRIP_DOCK_GAP / 2) return false;
       const k = top.slots.filter((slot, i) => top.lefts[i]! + slot.width / 2 < left + STRIP_PINNED_CELL).length;
-      useBrowser.getState().placeTabs(ids, { pinned: false, beforeId: top.slots[k]?.tabIds[0] ?? null });
+      reportBrowserCommand(placeTabs(ids, { pinned: false, beforeId: top.slots[k]?.tabIds[0] ?? null }));
 
       return true;
     },
@@ -1212,7 +1237,7 @@ function StripGroup({
     style: dragStyle,
   } = useStripDrag({
     tabId: null,
-    ids: () => useBrowser.getState().groups[entry.id]?.tabIds ?? [],
+    ids: () => [...(useBrowser.getState().groups[entry.id]?.tabIds ?? [])],
     pinned: false,
     groupId: null,
     geometry,
@@ -1226,8 +1251,8 @@ function StripGroup({
 
       if (to === from) return true;
       const others = geometry.slots.filter((_, i) => i !== from);
-      const s = useBrowser.getState();
-      s.moveGroup(entry.id, { pinned: !!s.groups[entry.id]?.pinned, beforeId: others[to]?.tabIds[0] ?? null });
+      const pinned = !!browserRead.getState().groups[entry.id]?.pinned;
+      reportBrowserCommand(moveGroup(entry.id, { pinned, beforeId: others[to]?.tabIds[0] ?? null }));
 
       return true;
     },
@@ -1241,7 +1266,7 @@ function StripGroup({
     const s = useBrowser.getState();
     const target = tuckTarget(s, windowId, spaceId, entry.id);
 
-    if (target) s.activate(target, windowId);
+    if (target) reportBrowserCommand(tabCommands.activate(target, windowId));
   };
 
   return (
@@ -1303,7 +1328,7 @@ function StripGroup({
           box={24}
           radius={6}
           style={{ marginLeft: 1 }}
-          onPress={() => useBrowser.getState().closeGroup(entry.id)}
+          onPress={() => reportBrowserCommand(closeGroup(entry.id))}
           tooltip="Close Group"
         />
       </Animated.View>
@@ -1317,7 +1342,7 @@ function StripGroup({
       >
         <ContextMenuArea onContextMenu={() => void openGroupMenu(windowId, entry.id)}>
           <Pressable
-            onPress={() => useBrowser.getState().updateGroup(entry.id, { collapsed: expanded })}
+            onPress={() => reportBrowserCommand(updateGroup(entry.id, { collapsed: expanded }))}
             style={{ height: STRIP_ITEM_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 8.5, paddingRight: 7 }}
           >
             {group.icon ? (
@@ -1458,7 +1483,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
         {!first && <View style={{ width: StyleSheet.hairlineWidth, height: 16, marginHorizontal: 6, backgroundColor: ink?.divider ?? theme.textTertiary }} />}
         <Pressable
-          onPress={() => useBrowser.getState().activate(tab.id, windowId)}
+          onPress={() => reportBrowserCommand(tabCommands.activate(tab.id, windowId))}
           style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
           tooltip={tab.title || tab.url}
         >
@@ -1491,7 +1516,7 @@ function NewTabButton({ windowId }: { windowId: string }) {
       <Pressable
         onPress={(e) => {
           if (modifiersOf(e).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().openNewTabPanel(windowId);
+          else reportBrowserCommand(openNewTabPanel(windowId));
         }}
       >
         {({ pressed }) => (
@@ -1513,7 +1538,11 @@ function NewTabButton({ windowId }: { windowId: string }) {
   );
 }
 
+const PEEK_INSET = 6;
+
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const peekWidth = Math.max(0, windowWidth - 2 * PEEK_INSET);
   const theme = useTheme();
   const windowTint = useWindowTint();
   const { slide, live, show, hide } = usePeek(enabled);
@@ -1527,7 +1556,10 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
 
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: layout.trafficLightsWidth, right: 0, top: 0, height: 6 }} /> : null}
+      {/* Leaving the strip hides the peek unless the pointer goes on into it, as at the sidebar's edge (App.tsx). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", left: room.left, right: room.right, top: 0, height: 6 }} />
+      ) : null}
       {/* The window under it while it's out: the pointer reaching it hides the peek, as leaving the peek does. */}
       {live ? (
         <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
@@ -1539,8 +1571,8 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         style={[
           {
             position: "absolute",
-            left: 6,
-            width: windowWidth - 12,
+            left: PEEK_INSET,
+            width: peekWidth,
             // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
             top: live ? 4 : -10_000,
             height: STRIP_PEEK_HEIGHT,
@@ -1561,7 +1593,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         >
           <View style={{ position: "absolute", left: 0, right: 0, top: STRIP_PEEK_PAD - STRIP_ITEM_TOP, height: TOP_STRIP_HEIGHT }}>
             {/* The border insets the strip. */}
-            <TopTabStrip floating swipe={live} width={windowWidth - 12 - STRIP_PEEK_BORDER * 2} />
+            <TopTabStrip floating swipe={live} width={Math.max(0, peekWidth - STRIP_PEEK_BORDER * 2)} />
           </View>
         </Surface>
       </Animated.View>

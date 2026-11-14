@@ -1,8 +1,11 @@
+import { Pressable, View, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { browserRead } from "../../store/read";
+import { dispatchBrowserCommand } from "../../runtime/commands";
+import { showToast } from "../split/splitActions";
 import { useWindowId } from "../../store/hooks";
 import { activeTabId } from "../../store/model";
 import { NewTabExtras } from "../newTab/NewTabExtras";
@@ -15,7 +18,7 @@ import { useHover } from "../ui/primitives";
 const launchTabs = new Set<string>();
 
 export function quietLaunchTabs() {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
 
   for (const windowId of s.windowOrder) {
     const id = activeTabId(s, windowId);
@@ -30,38 +33,48 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   const windowId = useWindowId();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { hovered, hoverProps } = useHover();
-  const open = () => useBrowser.getState().openPanel(windowId, "");
+
+  const open = (sourceTabId?: string) => {
+    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : undefined) }).catch((error) => {
+      console.error("Couldn't open search", error);
+      showToast(windowId, "Couldn't open search", "Please try again.");
+    });
+  };
 
   useEffect(() => {
     if (!focused || launchTabs.has(tabId)) return;
-    const state = useBrowser.getState();
+    const state = browserRead.getState();
 
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
-    state.openPanel(windowId, "");
+    open(tabId);
   }, [tabId, windowId, focused]);
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 20 }}>
-        <Symbol name="plus" size={34} weight="light" color={theme.textTertiary} style={{ width: 48, height: 48 }} />
-        <View ref={tourAnchorRef(windowId, "commandBar", true)} {...hoverProps}>
-          <Pressable
-            onPress={open}
-            accessibilityRole="button"
-            accessibilityLabel="Open search"
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 9,
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
-            })}
-          >
-            <Symbol name="magnifyingglass" size={14} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
-            <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Open search</Text>
-            <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>⌘L</Text>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View {...hoverProps}>
+          <Pressable onPress={() => open()} accessibilityRole="button" accessibilityLabel="Open search" style={{ alignItems: "center", gap: 20 }}>
+            {({ pressed }) => (
+              <>
+                <Symbol name="plus" size={34} weight="light" color={hovered ? theme.textSecondary : theme.textTertiary} style={{ width: 48, height: 48 }} />
+                <View
+                  ref={tourAnchorRef(windowId, "commandBar", true)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 9,
+                    borderRadius: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
+                  }}
+                >
+                  <Symbol name="magnifyingglass" size={14} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
+                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Open search</Text>
+                  <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>{shortcutLabel("⌘L")}</Text>
+                </View>
+              </>
+            )}
           </Pressable>
         </View>
       </View>

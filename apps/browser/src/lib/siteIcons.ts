@@ -10,7 +10,8 @@ import type { ImageRequireSource } from "react-native";
 // figma: static.figma.com/app/icon/2/favicon.svg · github: github.githubassets.com/favicons/favicon.svg (dark: its
 // white favicon-dark) · linear: linear.app/static/favicon.svg · outlook: the Outlook PWA manifest's
 // Outlook.128x128x32.png · youtube: youtube.com/s/desktop/…/favicon_144x144.png · spotify: the web player
-// manifest's Spotify_256.png.
+// manifest's Spotify_256.png · search engines: svgl.app's google, duckduckgo, bing, brave and perplexity; kagi,
+// startpage and ecosia are their sites' apple-touch icons.
 type Icon = ImageRequireSource | readonly [light: ImageRequireSource, dark: ImageRequireSource];
 
 const GITHUB: Icon = [require("../../assets/site-icons/github.png"), require("../../assets/site-icons/github-dark.png")];
@@ -36,6 +37,14 @@ const ICONS = {
   "outlook.live.com": OUTLOOK,
   "youtube.com": require("../../assets/site-icons/youtube.png"),
   "open.spotify.com": require("../../assets/site-icons/spotify.png"),
+  "google.com": require("../../assets/site-icons/google.png"),
+  "duckduckgo.com": require("../../assets/site-icons/duckduckgo.png"),
+  "bing.com": require("../../assets/site-icons/bing.png"),
+  "kagi.com": require("../../assets/site-icons/kagi.png"),
+  "ecosia.org": require("../../assets/site-icons/ecosia.png"),
+  "search.brave.com": require("../../assets/site-icons/brave.png"),
+  "perplexity.ai": [require("../../assets/site-icons/perplexity.png"), require("../../assets/site-icons/perplexity-dark.png")],
+  "startpage.com": require("../../assets/site-icons/startpage.png"),
 } satisfies Record<string, Icon>;
 
 const PAGE = /^https?:\/\/(?:www\.)?([^/?#:@]+)(?::\d+)?(?:\/([^/?#]*))?/i;

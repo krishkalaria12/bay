@@ -1,3 +1,5 @@
+import type { BrowserProjection } from "../../runtime/projection";
+import { ReadBrowser } from "../../effect/windowPorts";
 // The media work that belongs to a window: the screens a share can offer, the cast dialog a tab opened, and the
 // engine's tasks the task manager lists.
 //
@@ -33,7 +35,7 @@ import { create } from "zustand";
 import type { Operation } from "../../effect/errors";
 import { Diagnostics } from "../../effect/ports/diagnostics";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+
 import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";
 import { browserIdOf } from "../extensions/store";
 import { TASK_POLL_MS } from "../taskManager/constants";
@@ -54,7 +56,7 @@ type CastStore = {
 export const useCast = create<CastStore>()(() => ({ dialogs: {}, routes: {} }));
 
 /** The profile a window's cast routes belong to: a private window has a profile of its own. */
-export function castProfile(s: BrowserState, windowId: string): string {
+export function castProfile(s: BrowserProjection, windowId: string): string {
   const w = s.windows[windowId];
 
   return !w ? "" : w.incognito ? incognitoSpaceId(windowId) : engineProfile(w.spaceId);
@@ -169,6 +171,7 @@ export class MediaService extends Context.Service<
   static readonly layer = Layer.effect(
     MediaService,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
       const engine = yield* MediaEngine;
       const diagnostics = yield* Diagnostics;
       const appScope = yield* Scope.Scope;
@@ -228,6 +231,13 @@ export class MediaService extends Context.Service<
 
       const requestDisplayMedia = (tabId: string, request: DisplayMediaRequest): Effect.Effect<void> =>
         Effect.gen(function* () {
+          // The page took its request back: the picker closes, and nothing is answered.
+          if (request.cancelled) {
+            if (take(tabId, request.id)) yield* stopSources(tabId, request.id);
+
+            return;
+          }
+
           const pending = pendingOf(tabId);
           const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
 
@@ -354,7 +364,7 @@ export class MediaService extends Context.Service<
       // The profiles whose routes the engine watches: a profile is watched once, however many windows show it.
       const watched = new Set<string>();
 
-      const watchProfiles = (s: BrowserState): void => {
+      const watchProfiles = (s: BrowserProjection): void => {
         for (const id of s.windowOrder) {
           const profile = castProfile(s, id);
 

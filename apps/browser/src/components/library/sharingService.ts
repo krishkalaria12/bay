@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 // The shared Easels: the pages the app publishes to its website, and the keys that own them.
 //
 // A publication is a job: the Easel is leased while it is published, the record is written before anything is
@@ -11,6 +12,8 @@ import {
   keychainGet,
   keychainSet,
   readEaselShareRecords,
+  readCurrentEaselShareRecords,
+  requestEaselShare,
   saveDocument,
 } from "@bay/desktop";
 import { create } from "zustand";
@@ -28,6 +31,54 @@ import { Http, HttpError } from "../../effect/ports/http";
 
 const ORIGIN = "https://bay.krishkalaria.in";
 const FILE = "easel-shares.json";
+const LOCK = "bay-easel-sharing";
+const RECORDS_ERROR = "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages.";
+
+// A WebUI document shares durable ownership with other documents at the same origin.
+const acquireSharingLock = (): Effect.Effect<(() => void) | null, SharingFailure> =>
+  Effect.tryPromise({
+    try: (signal) => {
+      const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+
+      if (!locks) return Promise.resolve(null);
+
+      return new Promise<() => void>((accepted, rejected) => {
+        let unlock: (() => void) | undefined;
+
+        const held = new Promise<void>((resolve) => {
+          unlock = resolve;
+        });
+
+        let cancelled = false;
+
+        const release = () => {
+          signal.removeEventListener("abort", abort);
+          unlock?.();
+        };
+
+        const abort = () => {
+          cancelled = true;
+          release();
+          rejected(new Error("Sharing lock was cancelled"));
+        };
+
+        signal.addEventListener("abort", abort, { once: true });
+
+        if (signal.aborted) abort();
+        void locks
+          .request(LOCK, async () => {
+            if (cancelled) return;
+            accepted(release);
+            await held;
+          })
+          .catch((cause) => {
+            release();
+            rejected(cause);
+          });
+      });
+    },
+    catch: (cause) => new SharingFailure({ operation: "sharing.lock", message: message(cause), cause }),
+  });
 
 const account = (id: string) => `easel-share:${id}`;
 
@@ -59,6 +110,9 @@ export class SharingEngine extends Context.Service<
     readonly writeKey: (id: string, key: string) => Effect.Effect<boolean, SharingFailure>;
     readonly deleteKey: (id: string) => Effect.Effect<void, SharingFailure>;
     readonly readRecords: () => string | null;
+    readonly readCurrentRecords: () => Effect.Effect<string | null, SharingFailure>;
+    readonly acquireLock: () => Effect.Effect<(() => void) | null, SharingFailure>;
+    readonly requestNative: (id: string, key: string, method: "PUT" | "DELETE", body?: string) => Effect.Effect<{ status: number } | null, SharingFailure>;
     readonly saveRecords: (json: string) => Effect.Effect<void, SharingFailure>;
   }
 >()("bay/SharingEngine") {
@@ -85,6 +139,17 @@ export class SharingEngine extends Context.Service<
         catch: (cause) => new SharingFailure({ operation: "sharing.key", message: message(cause), cause }),
       }),
     readRecords: () => readEaselShareRecords(),
+    readCurrentRecords: () =>
+      Effect.tryPromise({
+        try: () => readCurrentEaselShareRecords(),
+        catch: (cause) => new SharingFailure({ operation: "sharing.records", message: RECORDS_ERROR, cause }),
+      }),
+    acquireLock: acquireSharingLock,
+    requestNative: (id, key, method, body) =>
+      Effect.tryPromise({
+        try: () => Promise.resolve(requestEaselShare(id, key, method, body)),
+        catch: (cause) => new SharingFailure({ operation: "sharing.request", message: message(cause), cause }),
+      }),
     saveRecords: (json) =>
       Effect.tryPromise({
         try: () => saveDocument(FILE, json),
@@ -110,6 +175,60 @@ export class SharingService extends Context.Service<
       const engine = yield* SharingEngine;
       const http = yield* Http;
       const scope = yield* Scope.Scope;
+      let channel: BroadcastChannel | undefined;
+
+      const parseRecords = (text: string | null): Record<string, Publication> => {
+        const data = text === null ? { version: 1, records: {} } : JSON.parse(text);
+
+        if (data?.version !== 1 || !data.records || !v.is(v.object({}), data.records) || Array.isArray(data.records)) throw new Error(RECORDS_ERROR);
+        const records = v.parse(v.record(v.string(), v.object({ id: v.string(), publishedAt: v.nullable(v.number()), revision: v.number() })), data.records);
+
+        for (const value of Object.values(records)) {
+          if (
+            !value ||
+            !/^[a-f0-9]{32}$/.test(value.id) ||
+            !Number.isSafeInteger(value.revision) ||
+            value.revision < 1 ||
+            (value.publishedAt !== null && !Number.isFinite(value.publishedAt))
+          )
+            throw new Error(RECORDS_ERROR);
+        }
+
+        return records;
+      };
+
+      const freshRecords = (): Effect.Effect<void, SharingFailure> =>
+        Effect.gen(function* () {
+          const text = yield* engine.readCurrentRecords();
+
+          const records = yield* Effect.try({
+            try: () => parseRecords(text),
+            catch: (cause) => new SharingFailure({ operation: "sharing.records", message: RECORDS_ERROR, cause }),
+          });
+
+          useEaselShares.setState({ records, error: null });
+        });
+
+      const syncWindows = () => {
+        if (channel || typeof navigator === "undefined" || !navigator.locks || typeof BroadcastChannel === "undefined") return;
+        channel = new BroadcastChannel(LOCK);
+        // Node adds unref to its channel; Chromium's channel has no event-loop reference to release.
+        checked<{ unref?(): void }>(channel).unref?.();
+        channel.onmessage = () => {
+          void Effect.runPromise(
+            Effect.acquireUseRelease(
+              engine.acquireLock(),
+              () => freshRecords(),
+              (release) => Effect.sync(() => release?.()),
+            ),
+          ).catch(() => useEaselShares.setState({ error: RECORDS_ERROR }));
+        };
+      };
+
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => channel?.close()),
+      );
 
       // The records are written one at a time: a revision must not overtake the one before it.
       const writes = yield* Queue.unbounded<{
@@ -128,6 +247,7 @@ export class SharingService extends Context.Service<
           yield* engine.saveRecords(JSON.stringify({ version: 1, records }));
 
           useEaselShares.setState({ records });
+          channel?.postMessage(null);
         });
 
       // The writer runs here, in the app's scope: the records are written in the order they were asked for.
@@ -164,26 +284,9 @@ export class SharingService extends Context.Service<
         if (useEaselShares.getState().loaded) return;
 
         try {
-          const text = engine.readRecords();
-          const data = text === null ? { version: 1, records: {} } : JSON.parse(text);
-
-          if (data?.version !== 1 || !data.records || !v.is(v.object({}), data.records) || Array.isArray(data.records))
-            throw new Error("Invalid sharing records");
-
-          // SAFETY: Publication[]) { assertion matches the runtime value validated at this call site.
-          for (const value of Object.values(data.records) as Publication[]) {
-            if (
-              !value ||
-              !/^[a-f0-9]{32}$/.test(value.id) ||
-              !Number.isSafeInteger(value.revision) ||
-              value.revision < 1 ||
-              (value.publishedAt !== null && !Number.isFinite(value.publishedAt))
-            ) {
-              throw new Error("Invalid sharing record");
-            }
-          }
-
-          useEaselShares.setState({ loaded: true, records: data.records, error: null });
+          const records = parseRecords(engine.readRecords());
+          useEaselShares.setState({ loaded: true, records, error: null });
+          syncWindows();
         } catch {
           useEaselShares.setState({ loaded: true, error: "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages." });
         }
@@ -214,7 +317,20 @@ export class SharingService extends Context.Service<
 
           useEaselShares.setState({ busy: { ...state.busy, [easelId]: true } });
 
-          return yield* Effect.onExit(run, () =>
+          syncWindows();
+
+          const exclusive = Effect.acquireUseRelease(
+            engine.acquireLock(),
+            (release) =>
+              Effect.gen(function* () {
+                if (release) yield* freshRecords();
+
+                return yield* run;
+              }),
+            (release) => Effect.sync(() => release?.()),
+          );
+
+          return yield* Effect.onExit(exclusive, () =>
             Effect.sync(() => {
               const busy = { ...useEaselShares.getState().busy };
 
@@ -232,8 +348,8 @@ export class SharingService extends Context.Service<
             return yield* Effect.fail(
               new SharingFailure({
                 operation: "sharing.key",
-                message: "The sharing key is unavailable in Keychain. Restore access to it before changing this shared page.",
-                cause: new Error("The sharing key is unavailable in Keychain. Restore access to it before changing this shared page."),
+                message: "The sharing key is unavailable in secure storage. Restore access to it before changing this shared page.",
+                cause: new Error("The sharing key is unavailable in secure storage. Restore access to it before changing this shared page."),
               }),
             );
           }
@@ -243,8 +359,8 @@ export class SharingService extends Context.Service<
 
       const messages = new Map<number, string>([
         [400, "This Easel couldn't be shared. Check its source links or export it as HTML."],
-        [401, "The sharing key wasn't accepted. Restore Keychain access before trying again."],
-        [403, "This Mac couldn't authorize a change to the shared page. Check its sharing key in Keychain."],
+        [401, "The sharing key wasn't accepted. Restore secure storage access before trying again."],
+        [403, "This device couldn't authorize a change to the shared page. Check its sharing key in secure storage."],
         [404, "Web sharing isn't available on Bay's website yet. Export this Easel as HTML instead."],
         [409, "A newer snapshot reached the shared page first. Publish again to share your current Easel."],
         [410, "This link has been stopped. Stop sharing here, then publish a new link."],
@@ -255,6 +371,15 @@ export class SharingService extends Context.Service<
       const request = (publication: Publication, method: "PUT" | "DELETE", body?: string): Effect.Effect<void, SharingFailure> =>
         Effect.gen(function* () {
           const key = yield* managementKey(publication.id);
+
+          const native = yield* engine.requestNative(publication.id, key, method, body).pipe(Effect.timeout(Duration.millis(60_000)));
+
+          if (native) {
+            if (native.status < 200 || native.status >= 300)
+              return yield* Effect.fail(new HttpError({ operation: { name: "sharing.request" }, status: native.status, cause: native.status }));
+
+            return;
+          }
 
           const sent = yield* http
             .send({
@@ -325,8 +450,8 @@ export class SharingService extends Context.Service<
                 return yield* Effect.fail(
                   new SharingFailure({
                     operation: "sharing.publish",
-                    message: "Couldn't save the sharing key in Keychain. Nothing was published.",
-                    cause: new Error("Couldn't save the sharing key in Keychain. Nothing was published."),
+                    message: "Couldn't save the sharing key in secure storage. Nothing was published.",
+                    cause: new Error("Couldn't save the sharing key in secure storage. Nothing was published."),
                   }),
                 );
               }

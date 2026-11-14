@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
 const { useBrowser } = await import("../store/browserStore.ts");
+const { AuthorityStore } = await import("../effect/ports/store.ts");
 const { ActivityService, LiveSources } = await import("./activityService.ts");
 const { fakeScheduler } = await import("../effect/testing.ts");
 const { createFolder, live, removeFolder, useLive } = await import("./activityStore.ts");
@@ -71,7 +72,9 @@ const withService = async (use) => {
   const sources = fakeSources();
   const scheduler = fakeScheduler();
 
-  const runtime = ManagedRuntime.make(ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(sources.layer, scheduler.layer))));
+  const runtime = ManagedRuntime.make(
+    ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(sources.layer, scheduler.layer, AuthorityStore.layer(useBrowser)))),
+  );
 
   try {
     await use({ lab: sources.lab, runtime, scheduler });

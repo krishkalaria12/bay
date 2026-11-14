@@ -15,18 +15,27 @@ import {
 } from "@bay/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState } from "react";
-import { runDesktop } from "../../effect/runtime";
+import { runWindow } from "../../effect/windowRuntime";
 import { bookmarksByUrl } from "../../store/bookmarks";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { bookmarkSpaceId } from "../../store/model";
 import { cleanedTabsFor } from "../../store/tabTidying";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
-import type { Bookmarks, ClosedTab, HistoryEntry } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+
+type Bookmarks = DeepReadonly<import("../../store/types").Bookmarks>;
+
+type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;
+
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
+
 import { currentBarActions } from "./commandBarActions";
 import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
 import { SearchService, type Search } from "./searchService";
+import { suggestionProfile } from "./suggestFetch";
 
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
@@ -58,10 +67,10 @@ function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
 
 type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
 
-const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
+const cleanedCache = new WeakMap<readonly ClosedTab[], Map<string, CleanedRow[]>>();
 
 // The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
-function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
+function spaceCleaned(list: readonly ClosedTab[], spaceId: string): CleanedRow[] {
   let perSpace = cleanedCache.get(list);
 
   if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
@@ -82,9 +91,9 @@ function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
   return rows;
 }
 
-const historyHostCache = new WeakMap<HistoryEntry[], string[]>();
+const historyHostCache = new WeakMap<readonly HistoryEntry[], string[]>();
 
-function historyHosts(history: HistoryEntry[]): string[] {
+function historyHosts(history: readonly HistoryEntry[]): string[] {
   let hosts = historyHostCache.get(history);
 
   if (!hosts) {
@@ -136,7 +145,7 @@ const nextSession = () => `suggestions-${++sessions}`;
 
 /** Runs a piece of the search work on the app's runtime. */
 const withSearch = (work: (search: Search) => Effect.Effect<void>): Promise<void> =>
-  runDesktop(
+  runWindow(
     Effect.gen(function* () {
       const search = yield* SearchService;
 
@@ -236,6 +245,9 @@ export function useSuggestions({
   const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
   const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
   const fromEngine = suggestEngine(scope, engines, engine);
+  // Built-in suggestions carry no profile state or cookies. An extension's engine is asked in the profile that
+  // registered that exact engine record.
+  const nativeProfile = useBrowser((s) => suggestionProfile(fromEngine, s.settings.extensionSearchEngines ?? []));
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
     // A query that is an address, a page's history or a bang is the app's own work: the engine is not asked.
@@ -252,10 +264,12 @@ export function useSuggestions({
         engine: fromEngine,
         query: q,
         policy: suggestionsOn ? "ask" : "off",
+        profile: nativeProfile,
+        client: windowId,
         onResult: (list) => setRemote({ text: query, list }),
       }),
     );
-  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session]);
+  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session, nativeProfile, windowId]);
 
   // The palette closed: the work in flight goes with it, and the session is let go.
   useEffect(() => () => void withSearch((search) => search.close(session)), [session]);

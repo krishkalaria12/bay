@@ -5,6 +5,7 @@ import { TaggedError } from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
@@ -34,6 +35,7 @@ export type SyncWorker = {
   readonly now: Effect.Effect<void, SyncStopped>;
   readonly stop: (deleteData?: boolean) => Effect.Effect<void, SyncFailure>;
   readonly resume: () => void;
+  readonly dispose: () => void;
 };
 
 export class Sync extends Context.Service<
@@ -57,6 +59,8 @@ export class Sync extends Context.Service<
         let mode: "active" | "stopping" | "stopped" | "disposed" = "active";
         let dueAt: number | undefined;
         let initialized = false;
+        let progress: Fiber.Fiber<void> | undefined;
+        let runner: Fiber.Fiber<never> | undefined;
         let stopping: { done: Deferred.Deferred<void, SyncFailure>; deleteData: boolean } | undefined;
 
         const signal = () => void Queue.offerUnsafe(wake, undefined);
@@ -84,7 +88,7 @@ export class Sync extends Context.Service<
         const cycle = Effect.fnUntraced(function* (retiring: boolean, forced: boolean) {
           yield* Effect.scoped(
             Effect.gen(function* () {
-              yield* Effect.forkScoped(Effect.delay(Effect.sync(work.updating), 1000).pipe(Effect.interruptible));
+              progress = yield* Effect.forkScoped(Effect.delay(Effect.sync(work.updating), 1000).pipe(Effect.interruptible));
               yield* work.cycle(retiring, forced);
             }),
           );
@@ -191,23 +195,28 @@ export class Sync extends Context.Service<
 
         const unsubscribe = work.subscribe(schedule);
 
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.sync(() => {
-            mode = "disposed";
-            dueAt = undefined;
-            unsubscribe();
-            cancelWaiters();
-            Queue.shutdownUnsafe(wake);
-          }),
-        );
+        const dispose = () => {
+          if (mode === "disposed") return;
+          mode = "disposed";
 
-        yield* Effect.forkIn(Effect.andThen(initialize, Effect.forever(tick)), scope);
+          if (progress) progress.interruptUnsafe();
+          runner?.interruptUnsafe();
+          progress = undefined;
+          dueAt = undefined;
+          unsubscribe();
+          cancelWaiters();
+          Queue.shutdownUnsafe(wake);
+        };
+
+        yield* Scope.addFinalizer(scope, Effect.sync(dispose));
+
+        runner = yield* Effect.forkIn(Effect.andThen(initialize, Effect.forever(tick)), scope);
 
         return {
           schedule,
           now,
           stop,
+          dispose,
           resume: () => {
             if (mode === "disposed" || mode === "stopping") return;
             // Only called once setup or recovery has installed a usable sync state.

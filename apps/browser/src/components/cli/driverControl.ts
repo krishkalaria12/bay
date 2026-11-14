@@ -4,19 +4,62 @@
 import type { CliControlStatus } from "@bay/chromium";
 import * as Effect from "effect/Effect";
 import { runDesktop } from "../../effect/runtime";
-import { AutomationService, shownCliTab, useCli } from "./automationService";
+import { browserRead } from "../../store/read";
+import { usePages } from "../window/pageState";
+import { AutomationService, shownCliTab, tellCliActiveTab, useCli } from "./automationService";
 
 export { shownCliTab, useCli };
 
-/** Starts the terminal control: the server is asked for, and the active tab is kept. */
-export function startCliControl() {
-  void runDesktop(
+/**
+ * Starts the terminal control: the server is asked for, and the active tab is kept.
+ *
+ * A document that has no pages of its own (the coordinator on Linux and Windows) says so with `activeTab: false`:
+ * the window that shows the page names the tab the commands act on.
+ */
+export function startCliControl({ activeTab = true } = {}): Promise<void> {
+  return runDesktop(
     Effect.gen(function* () {
       const automation = yield* AutomationService;
 
-      yield* automation.startCli;
+      yield* automation.startCli({ activeTab });
     }),
   );
+}
+
+/**
+ * A window document on Linux and Windows: it holds its own pages, so the focused one says which tab is shown.
+ *
+ * The server's state comes from the coordinator, which owns it; the window only names the tab.
+ */
+export function startCliActiveTab(windowId: string) {
+  let sent: number | null | undefined;
+
+  const owns = () => browserRead.getState().ui.focusedWindowId === windowId;
+
+  const push = () => {
+    const server = useCli.getState().server;
+
+    if (!owns() || (server?.state !== "on" && server?.state !== "starting")) {
+      sent = undefined;
+
+      return;
+    }
+
+    const active = shownCliTab(browserRead.getState());
+
+    if (active === sent) return;
+
+    sent = active;
+    void tellCliActiveTab(active).catch(() => {
+      // The native side did not take it: the next push tries again.
+      sent = undefined;
+    });
+  };
+
+  useCli.subscribe(push);
+  browserRead.subscribe(push);
+  usePages.subscribe(push);
+  push();
 }
 
 /** Installs the command line tool, and says how it went. */

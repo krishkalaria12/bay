@@ -1,12 +1,13 @@
 import type { EngineTask } from "@bay/chromium";
 import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { Image, StyleSheet, Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { APP_NAME } from "../../lib/constants";
 import { APP_ICON } from "../../lib/assets";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Tab } from "../../store/types";
 import { usePages } from "../window/pageState";
 import { Favicon, useHover } from "../ui/primitives";

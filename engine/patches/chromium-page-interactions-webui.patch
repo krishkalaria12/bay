@@ -1,0 +1,38 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -838,6 +838,7 @@
+ 
+ namespace bay {
+ void AddScriptsPagesThrottle(content::NavigationThrottleRegistry& registry);
++void AddPageInteractionThrottles(content::NavigationThrottleRegistry& registry);
+ }
+ 
+ namespace {
+@@ -5533,6 +5534,7 @@
+     content::NavigationThrottleRegistry& registry) {
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+   bay::AddScriptsPagesThrottle(registry);
++  bay::AddPageInteractionThrottles(registry);
+ #endif
+   CreateAndAddChromeThrottlesForNavigation(registry);
+ }
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -122,6 +122,8 @@
+ 
+ DEFINE_USER_DATA(BrowserWebContentsDelegate);
+ 
++bool (*g_bay_page_target_url)(content::WebContents*, const GURL&) = nullptr;
++
+ namespace {
+ 
+ const extensions::Extension* GetExtensionForOrigin(
+@@ -793,6 +795,8 @@
+ 
+ void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
+                                                  const GURL& url) {
++  if (g_bay_page_target_url && g_bay_page_target_url(source, url))
++    return;
+   std::vector<StatusBubble*> status_bubbles =
+       browser_ui_controller_->GetStatusBubbles();
+   for (StatusBubble* status_bubble : status_bubbles) {

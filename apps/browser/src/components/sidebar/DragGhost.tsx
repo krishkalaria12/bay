@@ -1,9 +1,10 @@
+import { View } from "@bay/platform";
 import { FadeLabel, Surface } from "@bay/desktop";
-import { Text, View } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { useAnimatedStyle } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { groupLabel } from "../../store/tabTidying";
 import { tabTitle } from "./actions";
 import { useTabDrag } from "../tabStrip/tabStripDrag";

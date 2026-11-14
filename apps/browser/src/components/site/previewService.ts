@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../../effect/windowPorts";
 // The preview: what a hovered link says about the page it points at, and what a tab's own site says about itself.
 //
 // A summary is a job: the page is fetched without the user's cookies, with a timeout, and the answer belongs to
@@ -13,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Operation } from "../../effect/errors";
 import { Http } from "../../effect/ports/http";
-import { useBrowser } from "../../store/browserStore";
+
 import { webviews } from "../../lib/webviews";
 import {
   fetchScript,
@@ -70,7 +71,7 @@ export class PreviewEngine extends Context.Service<
   static readonly layer = Layer.succeed(PreviewEngine)({
     fetch: (tabId, script) =>
       Effect.suspend(() => {
-        const handle = useBrowser.getState().tabs[tabId] ? webviews.get(tabId) : undefined;
+        const handle = webviews.get(tabId);
 
         // The tab has no page: there is nothing to ask.
         if (!handle) return Effect.succeed(null);
@@ -108,6 +109,7 @@ export class PreviewService extends Context.Service<
   static readonly layer = Layer.effect(
     PreviewService,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
       const http = yield* Http;
       const engine = yield* PreviewEngine;
 

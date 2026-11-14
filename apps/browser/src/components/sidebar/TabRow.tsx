@@ -1,11 +1,15 @@
+import { checked } from "../../lib/checked";
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
+import { Pressable, TextInput, View } from "@bay/platform";
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/desktop";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
-import Animated from "react-native-reanimated";
+import { type GestureResponderEvent } from "react-native";
+import Animated from "@bay/platform/motion";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
 import { useIsActiveTab, usePageSpaceId, useSettings, useTab, useWindowId, useQuietBrowser } from "../../store/hooks";
@@ -27,10 +31,10 @@ import { DEVELOPER_YELLOW } from "../developer/constants";
 import { ACTIVE, SELECTED, PLAYING, LOADING, tabRowStore } from "./rowState";
 
 export const clickMods = (e: GestureResponderEvent) => {
-  // SAFETY: { metaKey? assertion matches the runtime value validated at this call site.
-  const n = e.nativeEvent as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+  // SAFETY: the checks above established this shape.
+  const n = checked<{ metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean }>(e.nativeEvent);
 
-  return { metaKey: !!n.metaKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
+  return { metaKey: !!n.metaKey, ctrlKey: !!n.ctrlKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
 };
 
 const selectionOf = (windowId: string) => () => useBrowser.getState().selection[windowId] ?? [];
@@ -59,7 +63,7 @@ export const TabRowItem = memo(function TabRowItem({
 function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
   if (!tab.pinnedRow) return { icon: "xmark", tooltip: "Close Tab (⌘W)", onPress: () => void closeTab(tab.id) };
 
-  if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => useBrowser.getState().removeTab(tab.id) };
+  if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => reportBrowserCommand(tabCommands.removeTab(tab.id)) };
 
   return { icon: "minus", tooltip: "Unload Tab (⌘W)", onPress: () => void closeTab(tab.id) };
 }

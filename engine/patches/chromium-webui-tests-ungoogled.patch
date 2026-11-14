@@ -1,0 +1,64 @@
+diff --git a/chrome/test/data/webui/extensions/BUILD.gn b/chrome/test/data/webui/extensions/BUILD.gn
+index 76386e2..6ef35c3 100644
+--- a/chrome/test/data/webui/extensions/BUILD.gn
++++ b/chrome/test/data/webui/extensions/BUILD.gn
+@@ -45,7 +45,6 @@ build_webui_tests("build") {
+     "runtime_host_permissions_test.ts",
+     "runtime_hosts_dialog_test.ts",
+     "service_unit_test.ts",
+-    "sidebar_test.ts",
+     "site_permissions_by_site_test.ts",
+     "site_permissions_edit_permissions_dialog_test.ts",
+     "site_permissions_edit_url_dialog_test.ts",
+diff --git a/chrome/test/data/webui/history/BUILD.gn b/chrome/test/data/webui/history/BUILD.gn
+index ad81930..d64d34f 100644
+--- a/chrome/test/data/webui/history/BUILD.gn
++++ b/chrome/test/data/webui/history/BUILD.gn
+@@ -23,7 +23,6 @@ build_webui_tests("build") {
+     "history_list_test.ts",
+     "history_metrics_test.ts",
+     "history_overflow_menu_test.ts",
+-    "history_routing_test.ts",
+     "history_routing_with_query_param_test.ts",
+     "history_side_bar_footer_test.ts",
+     "history_supervised_user_test.ts",
+diff --git a/chrome/test/data/webui/settings/BUILD.gn b/chrome/test/data/webui/settings/BUILD.gn
+index bdafff6..b85a08c 100644
+--- a/chrome/test/data/webui/settings/BUILD.gn
++++ b/chrome/test/data/webui/settings/BUILD.gn
+@@ -11,7 +11,6 @@ build_webui_tests("build") {
+   ]
+ 
+   files = [
+-    "about_page_test.ts",
+     "account_page_test.ts",
+     "ai_history_search_subpage_test.ts",
+     "ai_info_card_test.ts",
+@@ -95,7 +94,6 @@ build_webui_tests("build") {
+     "people_page_test.ts",
+     "performance_page_index_test.ts",
+     "performance_page_test.ts",
+-    "personalization_options_test.ts",
+     "pref_service_test.ts",
+     "pref_service_observer_mixin_test.ts",
+     "pref_service_observer_mixin_lit_test.ts",
+diff --git a/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts b/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
+index 613b3dd..125e6f7 100644
+--- a/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
++++ b/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
+@@ -143,6 +143,7 @@ export function createSampleSearchEngine(override?: Partial<SearchEngine>):
+         keyword: 'google.com',
+         name: 'Google',
+         shouldConfirmRemoval: false,
++        suggestionsUrl: '',
+         url: 'https://search.foo.com/search?p=%s',
+         urlLocked: false,
+       },
+@@ -176,6 +177,7 @@ export function createSampleOmniboxExtension(override?: Partial<SearchEngine>):
+         keyword: 'oe',
+         name: 'Omnibox extension',
+         shouldConfirmRemoval: false,
++        suggestionsUrl: '',
+         url: 'chrome-extension://dummyextensionid/?q=%s',
+         urlLocked: false,
+       },

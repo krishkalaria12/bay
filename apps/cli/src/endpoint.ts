@@ -5,11 +5,32 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as v from "valibot";
 import { addSecret } from "./redact.ts";
+import { checkControlFile } from "./controlFileSecurity.ts";
 import { expandHome, isRecord } from "./util.ts";
 
 export const NOT_REACHABLE = 'Bay isn\'t running, or "Let the bay command control Bay" is off in Settings.';
 export const CONTROL_FILE = "BayControl.json";
-export const INSTALLED_DATA_DIR = join(homedir(), "Library", "Application Support", "in.krishkalaria.bay");
+
+/** Where the installed Bay keeps its data: the app's container on macOS, the local app data on Windows, the
+ * XDG config dir on Linux. */
+export function installedDataDir(platform: NodeJS.Platform = process.platform, environment: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  if (platform === "win32") return join(environment.LOCALAPPDATA || join(home, "AppData", "Local"), "Bay", "User Data");
+
+  if (platform === "linux") return join(environment.XDG_CONFIG_HOME || join(home, ".config"), "bay");
+
+  return join(home, "Library", "Application Support", "in.krishkalaria.bay");
+}
+
+export const INSTALLED_DATA_DIR = installedDataDir();
+
+/** Where the browser's own files live under a data root: macOS nests them under Chromium, the others keep them at
+ * the root. */
+export const chromiumRoot = (root: string, platform: NodeJS.Platform = process.platform): string => (platform === "darwin" ? join(root, "Chromium") : root);
+
+/** Where the user's documents live: macOS keeps them in the container, the others in their own folder. */
+export const documentsRoot = (root: string, platform: NodeJS.Platform = process.platform): string =>
+  platform === "darwin" ? root : join(root, "BayDocuments");
+
 const BROWSER_PATH = /^\/devtools\/browser\/[0-9A-Za-z-]{1,128}$/;
 const TOKEN = /^[\x21-\x7e]{16,1024}$/;
 const MAX_CONTROL_FILE = 64 * 1024;
@@ -37,7 +58,7 @@ export const resolveEndpoint = (choice: EndpointChoice = {}): Effect.Effect<Endp
 
     if (envWs) return endpointOf(() => fromWs(envWs, "BAY_CDP_URL"));
 
-    return endpointOf(() => fromControlFile(join(dataRoot(choice.dataDir), "Chromium", CONTROL_FILE)));
+    return endpointOf(() => fromControlFile(join(chromiumRoot(dataRoot(choice.dataDir)), CONTROL_FILE)));
   });
 
 /** The control file's endpoint, as an Effect: Bay isn't reachable when it isn't valid. */
@@ -62,7 +83,7 @@ export function explicitDataRoot(dataDir?: string): string | null {
 }
 
 export function requireControl(root: string): Endpoint {
-  return fromControlFile(join(root, "Chromium", CONTROL_FILE));
+  return fromControlFile(join(chromiumRoot(root), CONTROL_FILE));
 }
 
 function fromWs(url: string, source: string): Endpoint {
@@ -137,12 +158,7 @@ export function fromControlFile(path: string): Endpoint {
     const info = fstatSync(fd);
 
     if (!info.isFile()) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} isn't a regular file)`);
-
-    if (process.getuid && info.uid !== process.getuid()) {
-      throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} belongs to another user)`);
-    }
-
-    if ((info.mode & 0o777) !== 0o600) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} must be mode 0600)`);
+    checkControlFile(path, fd);
 
     if (info.size > MAX_CONTROL_FILE) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} is too big)`);
     raw = readFileSync(fd, { encoding: "utf8" });

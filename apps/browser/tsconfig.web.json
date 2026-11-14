@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleSuffixes": [".web", ""],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["react", "react-dom"],
+    "paths": { "react-native": ["../../node_modules/react-native-macos"] }
+  },
+  "include": ["src", "index.web.ts"]
+}

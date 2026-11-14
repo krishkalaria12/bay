@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../../effect/windowPorts.ts";
 // Capture (components/capture/service.ts): the selection, the picture and what is done with it, against a fake page
 // and a fake Mac.
 import assert from "node:assert/strict";
@@ -69,7 +70,9 @@ const withCapture = async (use) => {
     saveMedia: (picture, name) => Effect.sync(() => (lab.library.push(name), { id: `media-${lab.library.length}`, name })),
   });
 
-  const runtime = ManagedRuntime.make(CaptureService.layer.pipe(Layer.provide(Layer.mergeAll(fakeEngine(lab), library, fakeDiagnostics().layer))));
+  const runtime = ManagedRuntime.make(
+    CaptureService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(fakeEngine(lab), library, fakeDiagnostics().layer))),
+  );
 
   useBrowser.setState({
     tabs: { [TAB]: { id: TAB, spaceId: "default", url: "https://example.com/article", title: "An article", windowId: "w1" } },

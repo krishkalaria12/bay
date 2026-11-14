@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { clearBrowsingData } from "@bay/chromium";
 import { confirm } from "@bay/desktop";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile, isIncognitoSpace, plural } from "../../store/model";
 import { webviews } from "../../lib/webviews";
 import { showToast } from "../ui/toasts";
