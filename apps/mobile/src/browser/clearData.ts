@@ -21,7 +21,7 @@ export class ViewRegistry extends Map<string, Tab> {
   override delete(tabId: string): boolean {
     const deleted = super.delete(tabId);
 
-    if (deleted && this.size === 0) for (const listener of [...this.emptied]) listener();
+    if (deleted && this.size === 0) for (const listener of this.emptied) listener();
 
     return deleted;
   }
