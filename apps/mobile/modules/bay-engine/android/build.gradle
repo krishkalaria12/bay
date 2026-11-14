@@ -16,12 +16,16 @@ def engineProperties = new Properties()
 def enginePropertiesFile = new File(engineDirectory, 'engine.properties')
 if (enginePropertiesFile.isFile()) enginePropertiesFile.withInputStream { engineProperties.load(it) }
 def engineVersion = engineProperties.getProperty('version')
-def useChromium = engineVersion != null
-def engineAar = useChromium ? new File(engineDirectory, "repo/org/bay/engine/bay-engine/${engineVersion}/bay-engine-${engineVersion}.aar") : null
+// -PbayEngineApiStub=true compiles the Chromium flavour against engine/android/api-stub instead of the engine itself:
+// a check that it builds, never an app that runs.
+def useApiStub = findProperty('bayEngineApiStub') == 'true'
+def useChromium = engineVersion != null || useApiStub
+def engineAar = engineVersion != null ? new File(engineDirectory, "repo/org/bay/engine/bay-engine/${engineVersion}/bay-engine-${engineVersion}.aar") : null
+def apiStub = file("${projectDir}/../../../../../engine/android/api-stub/java")
 def engineRClasses = layout.buildDirectory.dir('generated/source/bayEngineR')
 
 repositories {
-  if (useChromium) maven { url new File(engineDirectory, 'repo').toURI() }
+  if (engineVersion != null) maven { url new File(engineDirectory, 'repo').toURI() }
 }
 
 android {
@@ -29,7 +33,11 @@ android {
   sourceSets {
     main {
       java.srcDirs += useChromium ? 'src/chromium/java' : 'src/webview/java'
-      if (useChromium) java.srcDirs += engineRClasses
+      if (useApiStub) {
+        java.srcDirs += apiStub
+      } else if (useChromium) {
+        java.srcDirs += engineRClasses
+      }
     }
   }
 }
@@ -38,7 +46,7 @@ android {
 // The AAR lists the packages (bay-engine/r-packages.txt) and carries every resource (R.txt) under org.bay.engine.R,
 // which Gradle generates for it; this writes each listed package's R as a view of that one.
 def generateEngineRClasses = tasks.register('generateBayEngineRClasses') {
-  enabled = useChromium
+  enabled = engineAar != null
   inputs.file(engineAar ?: enginePropertiesFile)
   outputs.dir(engineRClasses)
   doLast {
@@ -76,7 +84,9 @@ tasks.named('preBuild').configure { dependsOn generateEngineRClasses }
 
 dependencies {
   implementation 'androidx.appcompat:appcompat:1.7.0'
-  if (useChromium) {
+  if (useApiStub) {
+    implementation 'androidx.annotation:annotation:1.9.1'
+  } else if (useChromium) {
     implementation "org.bay.engine:bay-engine:${engineVersion}"
     // Classes the engine's code uses but leaves to the app (bay-engine/app-classes.txt), at the versions the pinned
     // Chromium builds against or newer.
