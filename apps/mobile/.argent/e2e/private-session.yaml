@@ -31,6 +31,11 @@ steps:
       - await: { idle: true, timeout: 15000 }
   - type: { into: { id: find-input }, text: "zzzz" }
   - await: { text: { in: { id: find-count }, contains: "1 of" }, timeout: 10000 }
+  # iOS: the find bar rides on the keyboard, which can still be resizing (its predictions bar) once the count shows; a
+  # tap that lands while it moves is lost.
+  - when: { platform: ios }
+    steps:
+      - await: { idle: true, timeout: 15000 }
   - tap: { id: find-done }
   - await: { hidden: { id: find-bar }, timeout: 10000 }
 
@@ -81,6 +86,11 @@ steps:
       - await: { idle: true, timeout: 15000 }
   - type: { into: { id: find-input }, text: "zzzz" }
   - await: { text: { in: { id: find-count }, contains: "1 of" }, timeout: 10000 }
+  # iOS: the find bar rides on the keyboard, which can still be resizing (its predictions bar) once the count shows; a
+  # tap that lands while it moves is lost.
+  - when: { platform: ios }
+    steps:
+      - await: { idle: true, timeout: 15000 }
   - tap: { id: find-done }
   - await: { hidden: { id: find-bar }, timeout: 10000 }
 
@@ -110,5 +120,10 @@ steps:
   - await: { text: { in: { id: find-count }, contains: "1 of" }, timeout: 10000 }
   - type: { into: { id: find-input }, text: "zzzz" }
   - await: { text: { in: { id: find-count }, contains: "No matches" }, timeout: 10000 }
+  # iOS: the find bar rides on the keyboard, which can still be resizing (its predictions bar) once the count shows; a
+  # tap that lands while it moves is lost.
+  - when: { platform: ios }
+    steps:
+      - await: { idle: true, timeout: 15000 }
   - tap: { id: find-done }
   - await: { hidden: { id: find-bar }, timeout: 10000 }

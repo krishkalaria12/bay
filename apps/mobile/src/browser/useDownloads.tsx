@@ -1,4 +1,4 @@
-import { addDownloadListener, cancelDownload, openDownload } from "@bay/engine";
+import * as Effect from "effect/Effect";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
 import { PermissionsAndroid, Platform, Pressable, View } from "react-native";
@@ -21,10 +21,12 @@ import { Surface } from "@/chrome/Surface";
 import { announce } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
 import { radius, space } from "@/chrome/tokens";
+import { runCommand } from "@/effect/commands";
 import { t as translate, useT } from "@/i18n";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
 import type { DownloadItem } from "@/store/types";
+import { cancelDownload, openDownload, watchDownloads } from "./downloads";
 
 /** A finished download's toast stays this long. */
 const TOAST_MS = 6000;
@@ -38,21 +40,21 @@ function askToNotify(): void {
   void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
 }
 
-/** Records the engines' downloads in the store and shows the latest one as a toast above the bottom bar. */
+/** The engines' downloads as the store records them, and the latest one as a toast above the bottom bar. */
 export function useDownloads(onError: (message: string) => void) {
   const { data, dispatch } = useBrowserStore();
   const [toastId, setToastId] = useState<string | null>(null);
   const toast = data.downloads.find((item) => item.id === toastId) ?? null;
 
-  useEffect(() => {
-    const subscription = addDownloadListener((update) => {
-      if (update.state === "started") askToNotify();
-      dispatch({ type: "download", update, now: Date.now() });
-      setToastId(update.id);
-    });
-
-    return () => subscription.remove();
-  }, [dispatch]);
+  // The app records each update in the store; the screen follows them for its toast.
+  useEffect(
+    () =>
+      watchDownloads((update) => {
+        if (update.state === "started") askToNotify();
+        setToastId(update.id);
+      }),
+    [],
+  );
 
   const settled = toast !== null && toast.state !== "downloading";
   useEffect(() => {
@@ -63,13 +65,21 @@ export function useDownloads(onError: (message: string) => void) {
   }, [settled, toastId]);
 
   function open(item: DownloadItem): void {
-    openDownload(item).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : translate("toast.fileNotOpened")));
+    runCommand(
+      { name: "downloads.open", resource: item.id },
+      // A file nothing can open is told in a toast: it is the answer to the tap, not a failure to report.
+      openDownload(item).pipe(
+        Effect.catchTag("EngineError", (error) =>
+          Effect.sync(() => onError(error.cause instanceof Error ? error.cause.message : translate("toast.fileNotOpened"))),
+        ),
+      ),
+    );
   }
 
   return {
     downloads: data.downloads,
     open,
-    cancel: (item: DownloadItem) => void cancelDownload(item.id).catch(() => {}),
+    cancel: (item: DownloadItem) => runCommand({ name: "downloads.cancel", resource: item.id }, cancelDownload(item)),
     remove: (item: DownloadItem) => dispatch({ type: "remove-download", id: item.id }),
     clear: () => dispatch({ type: "clear-downloads" }),
     toast,

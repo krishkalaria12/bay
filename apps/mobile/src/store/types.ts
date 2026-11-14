@@ -172,9 +172,3 @@ export interface BrowserData {
 export const TAB_UPDATE_FIELDS = ["url", "title", "favicon", "lastVisit", "snapshot"] as const;
 
 export type TabUpdate = Partial<Pick<BrowserTab, (typeof TAB_UPDATE_FIELDS)[number]>>;
-
-export interface BrowserRepository {
-  /** The saved document as JSON, or null before anything is saved. */
-  load(): Promise<JsonValue | null>;
-  save(data: BrowserData): Promise<void>;
-}

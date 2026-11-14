@@ -1,0 +1,1819 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Bay mobile · Effect implementation plan</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --foreground: light-dark(#28242b, #ede7ef);
+        --muted-foreground: light-dark(#665e6c, #bcb1c3);
+        --border: light-dark(#d8d0dc, #4b414f);
+        --card: light-dark(#f3eef4, #2b252f);
+        --secondary: light-dark(#ece5ee, #342c39);
+        --primary: light-dark(#69435f, #e1b4d5);
+        --success: light-dark(#245c48, #9fd4bb);
+        --warning: light-dark(#75521c, #e4c68f);
+        --code-background: light-dark(#eee8f0, #302837);
+        --radius: 9px;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.6;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 0 36px;
+        width: 100%;
+      }
+      h1 {
+        font-size: clamp(27px, 5vw, 40px);
+        line-height: 1.16;
+        letter-spacing: -0.035em;
+        font-weight: 650;
+        margin: 12px 0 16px;
+      }
+      h2 {
+        font-size: 24px;
+        letter-spacing: -0.025em;
+        line-height: 1.28;
+        margin: 42px 0 17px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 18px;
+        letter-spacing: -0.01em;
+        margin: 24px 0 9px;
+      }
+      h4 {
+        font-size: 15px;
+        margin: 20px 0 5px;
+      }
+      p {
+        margin: 9px 0 15px;
+      }
+      p,
+      li {
+        max-width: 90ch;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 73ch;
+      }
+      .meta,
+      .muted {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+      .meta code {
+        font-size: 12px;
+      }
+      a {
+        color: var(--primary);
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      a:focus-visible,
+      summary:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 3px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        margin: 22px 0;
+        font-size: 14px;
+      }
+      code {
+        font: 0.86em var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      pre {
+        font: 12px/1.65 var(--font-mono);
+        overflow: auto;
+        padding: 16px;
+        background: var(--code-background);
+        border-radius: var(--radius);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+        margin: 9px 0 18px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .callout {
+        background: var(--card);
+        padding: 16px;
+        border-radius: var(--radius);
+        margin: 22px 0;
+      }
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+      .note {
+        border-left: 3px solid var(--primary);
+        padding: 0 0 0 16px;
+        margin: 21px 0;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        max-width: 100%;
+        margin: 16px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      thead th {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-weight: 600;
+        background: var(--card);
+      }
+      tbody th {
+        font-weight: 600;
+      }
+      td p {
+        margin: 5px 0 10px;
+      }
+      th:first-child,
+      td:first-child {
+        padding-left: 0;
+      }
+      thead th:first-child {
+        padding-left: 10px;
+      }
+      th:last-child,
+      td:last-child {
+        padding-right: 0;
+      }
+      .decisions th:first-child {
+        width: 25%;
+      }
+      .architecture {
+        display: grid;
+        gap: 0;
+        list-style: none;
+        padding: 0;
+        border-left: 2px solid var(--border);
+        margin: 20px 0 20px 8px;
+      }
+      .architecture li {
+        position: relative;
+        padding: 10px 0 15px 23px;
+        margin: 0;
+      }
+      .architecture li:before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border: 2px solid var(--primary);
+        background: var(--card);
+        border-radius: 50%;
+        position: absolute;
+        left: -5.5px;
+        top: 19px;
+      }
+      .architecture strong {
+        display: block;
+      }
+      .architecture p {
+        margin: 3px 0 0;
+        font-size: 14px;
+      }
+      .source {
+        display: block;
+        font-size: 12px;
+        line-height: 1.6;
+        margin: 6px 0;
+        overflow-wrap: anywhere;
+      }
+      .label {
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--muted-foreground);
+        margin-top: 15px !important;
+      }
+      .tag {
+        font-size: 11px;
+        display: table;
+        color: var(--primary);
+        font-weight: 500;
+        margin: 7px 0 3px;
+      }
+      .row-index {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        display: block;
+        margin-bottom: 4px;
+      }
+      th small {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted-foreground);
+        display: block;
+      }
+      .inventory th:first-child {
+        width: 36%;
+      }
+      .inventory td {
+        padding-top: 15px;
+      }
+      .inventory details {
+        font-size: 13px;
+      }
+      .inventory summary {
+        font-size: 12px;
+        color: var(--primary);
+        cursor: pointer;
+        padding: 2px 0 6px;
+      }
+      .inventory details[open] summary {
+        margin-bottom: 10px;
+      }
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: end;
+        background: var(--card);
+        padding: 16px;
+        border-radius: var(--radius);
+      }
+      .filters label {
+        display: grid;
+        gap: 5px;
+        font-size: 12px;
+        flex: 1 1 190px;
+      }
+      .filters input,
+      .filters select {
+        font-size: 13px;
+        min-width: 0;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 9px 10px;
+        background: var(--code-background);
+      }
+      button {
+        font-size: 12px;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--secondary);
+        border-radius: 5px;
+        padding: 9px 12px;
+      }
+      .filter-status {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        margin: 8px 0;
+      }
+      section {
+        scroll-margin-top: 16px;
+      }
+      .work {
+        margin: 24px 0 30px;
+      }
+      .work h3 {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+      }
+      .work h3 span {
+        font: 12px var(--font-mono);
+        color: var(--primary);
+        flex-shrink: 0;
+      }
+      .dependency {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .package-detail > summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--primary);
+        padding: 4px 0 8px;
+      }
+      .package-detail[open] {
+        margin-top: 12px;
+      }
+      details.deep {
+        border-top: 1px solid var(--border);
+        padding: 15px 0;
+      }
+      details.deep > summary {
+        font-weight: 600;
+        cursor: pointer;
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        padding-top: 18px;
+        margin-top: 36px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .no-match {
+        padding: 16px;
+        border: 1px solid var(--border);
+      }
+      .checklist li {
+        padding-left: 5px;
+      }
+      noscript p {
+        background: var(--card);
+        padding: 12px;
+        border-radius: var(--radius);
+      }
+      @media (max-width: 540px) {
+        h2 {
+          font-size: 22px;
+        }
+        .lead {
+          font-size: 16px;
+        }
+        nav {
+          gap: 7px 14px;
+        }
+        .inventory th:first-child {
+          width: 41%;
+        }
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 12px;
+        }
+        .decisions thead {
+          display: none;
+        }
+        .decisions tr {
+          display: block;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .decisions th:first-child,
+        .decisions td {
+          display: block;
+          width: auto;
+          border: 0;
+          padding: 3px 0;
+        }
+        .filters label {
+          flex-basis: 100%;
+        }
+        .source {
+          font-size: 11px;
+        }
+        .work h3 {
+          font-size: 17px;
+        }
+        .callout {
+          padding: 16px;
+        }
+        .verification {
+          min-width: 600px;
+        }
+        .decisions td {
+          font-size: 13px;
+        }
+      }
+      @media print {
+        html,
+        body {
+          color: #222;
+          color-scheme: light;
+        }
+        button,
+        .filters,
+        .filter-status,
+        nav {
+          display: none !important;
+        }
+        main {
+          max-width: none;
+        }
+        .source,
+        a {
+          color: #333;
+        }
+        details > * {
+          display: revert !important;
+        }
+        details summary {
+          display: none !important;
+        }
+        #no-match {
+          display: none !important;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        tr,
+        .callout {
+          break-inside: avoid;
+        }
+        .table-wrap {
+          overflow: visible;
+        }
+        table {
+          font-size: 10pt;
+        }
+        .inventory th {
+          width: 30%;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">Mobile engineering plan · 13 November 2026 · stacked on PR #21 · source <code>bc78a6edb0f03576475f116669bed7255dfebaa7</code></p>
+        <h1>Effect across Bay mobile</h1>
+        <p class="lead">
+          Move the mobile app’s asynchronous work onto one Effect runtime in a single migration: saving state, the content blocker, page scripts, site icons,
+          snapshots, saved logins, links from other apps and clearing data. Keep the tab model, the render path and the native engine contract as they are.
+        </p>
+        <p>
+          This is the mobile counterpart of <a href="desktop-effect-plan.html">the desktop Effect plan</a>, which left mobile out on purpose. It uses the same
+          runtime shape, command boundary and failure vocabulary, so code reads the same in both apps. The work packages are dependency steps within one
+          migration. It is complete when every row marked <em>Migrate</em> or <em>Scope / adapt</em> is done, the code it replaces is gone, and every gate
+          passes on iOS and Android.
+        </p>
+        <p class="meta">Plan only: no application code or dependency changes in this commit. Every decision below is resolved with the recommended answer.</p>
+      </header>
+      <nav aria-label="Plan sections">
+        <a href="#commitment">Commitment</a><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#inventory">Inventory</a
+        ><a href="#implementation">Implementation</a><a href="#policies">Failure policies</a><a href="#verification">Verification</a
+        ><a href="#done">Completion</a><a href="#evidence">Sources</a>
+      </nav>
+
+      <section id="commitment">
+        <h2>1. What “properly implemented” means</h2>
+        <div class="callout">
+          <p>
+            <strong>One mobile service architecture shaped like desktop’s.</strong> Effect owns background jobs, file and network I/O, page work tied to a
+            document, cancellation, bounded retries and failure reporting. It is not a second store, and it doesn’t reach into Swift, Kotlin or the coming
+            Chromium embedder.
+          </p>
+          <p>A runtime added beside the old timers and Promise chains doesn’t count. Each package removes what it replaces before the next one starts.</p>
+        </div>
+        <ul>
+          <li>
+            Covers startup, browsing-state persistence, language, lifecycle, the content blocker, page scripts and reading tools, snapshots, site icons, saved
+            logins, page requests, the private session, incoming links, the link resolver, downloads, clear data and diagnostics.
+          </li>
+          <li>
+            Gives every timer, listener and background job one owner, one stop condition and one failure policy. UI timers and the navigation hot path stay
+            plain.
+          </li>
+          <li>
+            Preserves every saved file and key (<code>browser.json</code> v2, <code>locale.json</code>, <code>filter-lists/</code>,
+            <code>bay-saved-logins</code>, snapshots, tab states), private-tab rules, native event order, typing responsiveness and cold launch time.
+          </li>
+          <li>
+            Leaves out native engine code, the share and widget extensions, the Android Chromium embedder (PR #21), parked translation, mobile sync, and the
+            desktop and CLI runtimes.
+          </li>
+          <li>Ships on both platforms together: every package passes on iOS and Android before the next one.</li>
+        </ul>
+        <p class="muted">
+          Audit method: all 103 non-string TypeScript modules in <code>apps/mobile/src</code> (about 12,500 lines), the engine’s JavaScript API, 13 Node test
+          files and 17 Argent e2e tests, at <code>bc78a6ed</code> (PR #21’s head). Asynchronous code was found by searching for timers, Promise chains,
+          <code>fetch</code>, abort controllers and native listeners, then read by hand. This audit doesn’t replace running the app.
+        </p>
+      </section>
+
+      <section id="decisions">
+        <h2>2. Decisions resolved</h2>
+        <p>Nothing is left open. These are the recommended answers, adopted. A failing gate means fixing the code, not shrinking the scope.</p>
+        <div class="table-wrap">
+          <table class="decisions">
+            <thead>
+              <tr>
+                <th>Decision</th>
+                <th>Recommended answer adopted</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Version</th>
+                <td>
+                  Pin <code>effect@4.1.3</code> exactly, the version desktop and the CLI pin. npm’s <code>latest</code> is 4.1.4 (checked 13 November 2026); the
+                  move to 4.1.4 is one later commit for all three apps, so the repo never runs two Effect versions. Import from module paths
+                  (<code>effect/Effect</code>, <code>effect/Layer</code>) as desktop does. <a href="https://www.npmjs.com/package/effect">Package</a>.
+                </td>
+              </tr>
+              <tr>
+                <th>Workspace and resolution</th>
+                <td>
+                  Mobile stays its own pnpm workspace: <code>pnpm add effect@4.1.3 --save-exact</code> from <code>apps/mobile</code>, changing only its
+                  <code>package.json</code> and <code>pnpm-lock.yaml</code>. Metro lists <code>apps/mobile/node_modules</code> before the repo’s, so the mobile
+                  copy wins; package 01 checks the bundle contains exactly one <code>effect</code> path.
+                </td>
+              </tr>
+              <tr>
+                <th>Code location</th>
+                <td>
+                  <code>apps/mobile/src/effect/</code> with desktop’s names: <code>runtime.ts</code>, <code>commands.ts</code>, <code>errors.ts</code>,
+                  <code>ports/</code>, <code>testing.ts</code>, plus <code>react.ts</code>. Services live beside their features. No shared package: desktop’s
+                  ports bind react-native-macos modules and its aligned scheduler, so what is shared is the shape and vocabulary, not files. Revisit only if a
+                  third app needs the same ports.
+                </td>
+              </tr>
+              <tr>
+                <th>Runtime ownership</th>
+                <td>
+                  One module-owned <code>ManagedRuntime</code> per JavaScript instance, built on first use, never per hook, render or tab. A re-evaluated
+                  <code>runtime.ts</code> (Fast Refresh, reload) disposes the previous runtime it finds under a <code>globalThis</code> key before building, so
+                  development never runs two sets of listeners. Leaving the foreground never disposes it.
+                </td>
+              </tr>
+              <tr>
+                <th>React and Zustand</th>
+                <td>
+                  Keep <code>useBrowserStore</code>, the pure reducer and <code>useBlockerStatus</code>. Services reach the store through a narrow
+                  <code>BrowserState</code> port (read, subscribe, dispatch), wired to Zustand in the app and to the plain reducer in tests. No Effect
+                  <code>Ref</code> mirror of the store. No <code>@effect/atom-react</code>: its atoms live in <code>effect/unstable/reactivity</code>, which may
+                  break in minor releases, and they would be a second state system.
+                </td>
+              </tr>
+              <tr>
+                <th>Hook-owned work</th>
+                <td>
+                  Two hooks in <code>src/effect/react.ts</code>: <code>useCommand()</code> runs programs tied to the component and interrupts them on unmount;
+                  <code>useScopedWork(key)</code> runs programs in a scope that closes when the key changes (a document, a tab, a query). They replace
+                  generation counters, <code>mounted</code> refs and <code>cancelled</code> flags. No hook per service.
+                </td>
+              </tr>
+              <tr>
+                <th>Engine contract</th>
+                <td>
+                  <code>@bay/engine</code> stays Promise-based and Effect-free: it is the native contract PR #21’s Chromium work changes underneath.
+                  <code>src/effect/ports/engine.ts</code> adapts it in the app, so a phase 7 API change touches the port only.
+                </td>
+              </tr>
+              <tr>
+                <th>Shared packages</th>
+                <td>
+                  <code>@bay/core</code> stays Effect-free. Its suggest fetcher keeps its own debounce, cache and cancel; mobile doesn’t stack another on top
+                  (the desktop rule).
+                </td>
+              </tr>
+              <tr>
+                <th>Validation</th>
+                <td>
+                  Keep Valibot for <code>browser.json</code>, logins, the locale file and page messages. Decode failures become a typed
+                  <code>DecodeError</code> at the port. No move to Effect Schema.
+                </td>
+              </tr>
+              <tr>
+                <th>Platform packages</th>
+                <td>
+                  No <code>@effect/platform-*</code> adapters in Hermes. Thin ports over expo-file-system, <code>fetch</code> and <code>expo/fetch</code>,
+                  expo-secure-store, <code>AppState</code> and <code>Linking</code>, written only where a service needs them.
+                </td>
+              </tr>
+              <tr>
+                <th>Native cancellation</th>
+                <td>
+                  Interruption ends the wait, not the native work. A page script can’t be stopped, so interruption drops its result and the 10 s native timeout
+                  stays. Downloads to file and secure-store writes run uninterruptibly with their cleanup in finalizers; a lock is held until they settle.
+                  <code>fetch</code> gets the fiber’s abort signal.
+                </td>
+              </tr>
+              <tr>
+                <th>Durability on background</th>
+                <td>
+                  Keep the temp-file + move write and the 400 ms delay. Leaving the foreground starts the flush synchronously in the
+                  <code>AppState</code> callback, as today, never behind runtime readiness or a queue. The OS may suspend Bay before it finishes; nothing
+                  promises otherwise. File formats don’t change.
+                </td>
+              </tr>
+              <tr>
+                <th>Tests</th>
+                <td>
+                  Keep <code>node --test tests/*.test.ts</code>. Services are tested in Node against fake ports and <code>TestClock</code> from
+                  <code>src/effect/testing.ts</code>; modules importing Expo or React Native stay out of Node tests. No Vitest or <code>@effect/vitest</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>Bundle and startup</th>
+                <td>
+                  Measure, don’t budget bytes (desktop dropped its bytecode budget). Record the Hermes bundle of <code>expo export</code> for both platforms and
+                  cold launch to splash hide (Release builds, median of five, both devices) before and after. Gate: cold launch no slower than the larger of 5%
+                  or 40 ms. Don’t lean on Expo’s experimental tree shaking.
+                </td>
+              </tr>
+              <tr>
+                <th>Delivery</th>
+                <td>
+                  One migration on <code>refactor/mobile-effect</code>, stacked on PR #21 and rebased onto <code>main</code> when it merges. Dependency-ordered
+                  commits, each type-checked, linted and tested; e2e runs per batch on both devices as <code>apps/mobile/AGENTS.md</code> describes. No feature
+                  flag and no old and new orchestration side by side. Formats are unchanged, so reverting the app code reopens existing data.
+                </td>
+              </tr>
+              <tr>
+                <th>Order against phase 7</th>
+                <td>
+                  Neither waits for the other. Packages 01–03 touch only JavaScript; the engine port (package 04) is the single seam with the Chromium work.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>3. Runtime and service boundaries</h2>
+        <ol class="architecture">
+          <li>
+            <strong>Synchronous start stays first</strong>
+            <p>
+              <code>installCrashReports()</code> runs before the first screen, the store starts with in-memory data, fonts and the splash behave as today.
+              Nothing that draws the first frame waits on Effect.
+            </p>
+          </li>
+          <li>
+            <strong>One runtime and a handful of ports</strong>
+            <p>
+              <code>Files</code>, <code>Http</code>, <code>SecureStore</code>, <code>Engine</code> (page scripts, data, downloads, private session),
+              <code>Lifecycle</code>, <code>Links</code>, <code>BrowserState</code> and <code>Diagnostics</code>. A port is written when a service needs it, not
+              for every native function.
+            </p>
+          </li>
+          <li>
+            <strong>Services own the work</strong>
+            <p>
+              <code>Persistence</code>, <code>LocaleService</code>, <code>BlockerService</code>, <code>Snapshots</code>, <code>Favicons</code>,
+              <code>Logins</code>, <code>PrivateSession</code>, <code>IncomingLinks</code>, <code>LinkResolver</code> and <code>ClearData</code>. They depend on
+              ports and pure functions, never on React components.
+            </p>
+          </li>
+          <li>
+            <strong>Commands and hooks are the edge</strong>
+            <p>
+              UI handlers and native callbacks run programs through <code>runCommand</code>, <code>useCommand</code> or <code>useScopedWork</code>. Services
+              compose other programs directly and never call the runtime themselves.
+            </p>
+          </li>
+          <li>
+            <strong>State lands in the store at chosen points</strong>
+            <p>Results are dispatched into Zustand after their scope is still open, which replaces identity and generation checks. Rendering is unchanged.</p>
+          </li>
+        </ol>
+        <h3>Files</h3>
+        <pre>
+apps/mobile/src/
+  effect/
+    runtime.ts      app layer, the one runtime, startAppServices, test disposal
+    commands.ts     runCommand / runCommandResult, Exit handling
+    react.ts        useCommand, useScopedWork
+    errors.ts       Operation, NativeUnavailable, Cancelled
+    ports/          files.ts  http.ts  secureStore.ts  engine.ts
+                    lifecycle.ts  links.ts  browserState.ts  diagnostics.ts
+    testing.ts      fake ports, test clock, held-resource count
+  store/persistence.ts        Persistence
+  i18n/service.ts             LocaleService
+  privacy/blocker.ts          BlockerService (contentBlocking.ts keeps the hook and status store)
+  browser/pageScripts.ts      quiet runner over the Engine port
+  browser/snapshots.ts        Snapshots
+  browser/favicons.ts         Favicons (same file, new body)
+  browser/credentials.ts      Logins (same file, new body)
+  browser/privateSession.ts   PrivateSession
+  browser/incoming.ts         IncomingLinks
+  browser/linkResolver.ts     LinkResolver
+  browser/clearData.ts        ClearData
+tests/
+  persistence.test.ts  blocker.test.ts  scopedWork.test.ts  logins-service.test.ts
+  privateSession.test.ts  incoming.test.ts  linkResolver.test.ts  clearData.test.ts  runtime.test.ts</pre>
+        <h3>Lifetimes</h3>
+        <ul>
+          <li>
+            <strong>App scope:</strong> <code>AppState</code>, <code>Linking</code>, share and download listeners; store subscriptions for saving, pruning, icon
+            cleanup and the private session; the blocker. Never closed by backgrounding.
+          </li>
+          <li><strong>Tab scope:</strong> a pending snapshot, a saved-login lookup for a page request. Closes when the tab closes or loads a new page.</li>
+          <li>
+            <strong>Document scope:</strong> Reader, the picker and inspector, Markdown copy, auto-Reader, find. Keyed by tab, address and load count, as the
+            reading tools are today.
+          </li>
+          <li><strong>Sheet scope:</strong> resolving a link’s destination, loading saved logins in Settings. Closing the sheet aborts the work.</li>
+          <li>
+            <strong>One writer per resource:</strong> <code>browser.json</code>, <code>locale.json</code>, <code>lists.json</code>, the logins document, the
+            blocker’s apply, and the private-session call. Bursts coalesce; nothing is queued without a bound.
+          </li>
+          <li>
+            <strong>Leaving the foreground:</strong> <code>left</code>, the save flush and each view’s <code>saveState</code> start synchronously in the
+            callback. Finalizers are idempotent and never wait on the network.
+          </li>
+        </ul>
+      </section>
+
+      <section id="inventory">
+        <h2>4. File-level adoption inventory</h2>
+        <p>
+          Every asynchronous workflow in <code>apps/mobile/src</code> has a row. <em>Keep plain</em> and <em>Outside mobile scope</em> are final decisions.
+          <em>Scope / adapt</em> is required work limited to ownership and failure policy around the existing code.
+        </p>
+        <div class="filters" role="search" aria-label="Filter repository inventory">
+          <label>Find a workflow or file<input id="search" type="search" placeholder="e.g. logins, blocker, snapshot" autocomplete="off" /></label>
+          <label
+            >Disposition<select id="kind">
+              <option value="all">All dispositions</option>
+              <option value="migrate">Migrate workflow</option>
+              <option value="boundary">Scope / adapt boundary</option>
+              <option value="plain">Keep plain</option>
+              <option value="outside">Outside mobile scope</option>
+            </select></label
+          >
+          <button id="expand" type="button" aria-pressed="false">Expand visible evidence</button><button id="reset" type="button">Reset</button>
+        </div>
+        <p id="filter-status" class="filter-status" aria-live="polite"></p>
+        <noscript><p>All inventory rows are visible. Expand each row to read its evidence; search requires JavaScript.</p></noscript>
+        <div class="table-wrap">
+          <table class="inventory" id="inventory-table">
+            <thead>
+              <tr>
+                <th>Workflow and disposition</th>
+                <th>Evidence and implementation contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">01</span>Bootstrap and the app runtime<span class="tag">Migrate workflow</span><small>Work package 01–02</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      The saved language starts loading at module load in the root layout, crash reports install at module load in the home route, and the
+                      browsing state loads from a <code>useEffect</code> in <code>BrowserScreen</code>. Three entry points, no owner.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/app/_layout.tsx"><code>apps/mobile/src/app/_layout.tsx:15</code></a
+                    ><a class="source" href="../apps/mobile/src/app/index.tsx"><code>apps/mobile/src/app/index.tsx:13</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:143</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      One <code>mobileRuntime</code> built from <code>src/effect/runtime.ts</code>. <code>startAppServices()</code> runs from the root layout
+                      and starts persistence, locale, the blocker and the listeners in one supervised program; each start fails on its own.
+                      <code>installCrashReports()</code> stays synchronous and first. Splash hiding still waits on <code>ready</code> from the store.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Cold launch opens on the same tabs and language. A service that fails to start is reported once and the others still start. Disposing the
+                      runtime in a test leaves no listener, timer or fiber.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">02</span>Browsing-state persistence<span class="tag">Migrate workflow</span><small>Work package 02</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A 400 ms <code>setTimeout</code> debounce, a module-level <code>saving</code> Promise chain that serializes temp-file writes, and a save
+                      forced from an <code>AppState</code> listener. Load swallows a parse failure and starts fresh.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:153</code></a
+                    ><a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:161</code></a
+                    ><a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:183</code></a
+                    ><a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:66</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>Persistence</code> service: a coalescing trigger fed by the store subscription, one writer (a one-permit semaphore) that always
+                      writes the newest data, the same temp-file + move through a <code>Files</code> port, and <code>flush</code> for leaving the foreground.
+                      Load becomes a typed program: a missing file, an unreadable file and a decode failure stay distinct in diagnostics but all fall back as
+                      today. <code>browser.json</code> version 2 is unchanged.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      50 dispatches inside the delay write once. A failed write leaves the data dirty and the next change or background flush writes it.
+                      Background flushes at once. Private tabs never reach disk (existing model tests).
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">03</span>Tab model and reducer<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>A pure reducer over one versioned document, with its own parse/repair and 600+ lines of Node tests.</p>
+                    <a class="source" href="../apps/mobile/src/store/model.ts"><code>apps/mobile/src/store/model.ts:172</code></a
+                    ><a class="source" href="../apps/mobile/src/store/model.ts"><code>apps/mobile/src/store/model.ts:791</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged. Services dispatch actions into it; nothing in it imports Effect. Ids and timestamps are still made at the call site.</p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/model.test.ts</code> passes untouched.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">04</span>Snapshot and saved-state pruning<span class="tag">Migrate workflow</span><small>Work package 02</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A second store subscription with a 5 s timer calls <code>pruneSnapshots</code> and <code>pruneTabStates</code>, swallowing failures to
+                      <code>console.warn</code>.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:169</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      Part of <code>Persistence</code>: the same coalescing trigger shape with a 5 s delay, run on the app scope. Both native calls stay as they
+                      are; failures go to <code>Diagnostics</code> as warnings.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Closing and archiving tabs prunes once per quiet period; a private tab's state is never kept.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">05</span>Language load and save<span class="tag">Migrate workflow</span><small>Work package 02</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      <code>loadLocale</code> races a Settings pick through a <code>picked</code> flag; writes queue on a <code>writing</code> Promise chain;
+                      the file module is imported lazily.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/i18n/index.ts"><code>apps/mobile/src/i18n/index.ts:74</code></a
+                    ><a class="source" href="../apps/mobile/src/i18n/index.ts"><code>apps/mobile/src/i18n/index.ts:216</code></a
+                    ><a class="source" href="../apps/mobile/src/i18n/files.ts"><code>apps/mobile/src/i18n/files.ts:9</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>LocaleService</code> owns load and a serialized writer through the <code>Files</code> port. The synchronous <code>t()</code>,
+                      <code>useT()</code> and <code>useSyncExternalStore</code> store stay plain: rendering never waits on Effect. A pick in Settings still wins
+                      over a load that finishes later.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/i18n.test.ts</code> passes. Two quick picks write in order and the last one is on disk.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">06</span>App lifecycle (foreground/background)<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 02</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Four separate <code>AppState</code> listeners: the store (archive-stale, <code>left</code>, flush), <code>BrowserScreen</code> (start
+                      fresh, <code>saveState</code> on each view), the private lock, and the root layout (device language).
+                    </p>
+                    <a class="source" href="../apps/mobile/src/store/browser.ts"><code>apps/mobile/src/store/browser.ts:183</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:202</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:223</code></a
+                    ><a class="source" href="../apps/mobile/src/app/_layout.tsx"><code>apps/mobile/src/app/_layout.tsx:20</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      A <code>Lifecycle</code> port registered once on the app scope. Persistence, locale and the view-state save subscribe to it. Everything
+                      that must happen on background (<code>left</code>, flush, <code>saveState</code>) starts synchronously inside the native callback, never
+                      behind a queue. The private lock stays a React subscription: it is UI state and must flip before the app switcher snapshot.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Order on background is unchanged. One native registration per event; teardown removes it.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">07</span>Content blocker and filter lists<span class="tag">Migrate workflow</span><small>Work package 03</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A hook starts an async IIFE guarded by a <code>cancelled</code> flag; <code>refreshLists</code> runs eight HEAD + download jobs with
+                      <code>Promise.all</code>, writes metadata, and re-applies. Disabling mid-refresh only stops the second apply.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/privacy/contentBlocking.ts"><code>apps/mobile/src/privacy/contentBlocking.ts:62</code></a
+                    ><a class="source" href="../apps/mobile/src/privacy/contentBlocking.ts"><code>apps/mobile/src/privacy/contentBlocking.ts:127</code></a
+                    ><a class="source" href="../apps/mobile/modules/bay-engine/src/index.ts"><code>apps/mobile/modules/bay-engine/src/index.ts:186</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>BlockerService</code> on the app scope follows the <code>blockContent</code> preference: turning it off interrupts a running
+                      refresh; turning it on applies the cache, then refreshes. Each list is an independent job (<code>concurrency: 8</code>, one per host)
+                      whose failure keeps its cached copy; the temp download is removed in a finalizer even when interrupted. HEAD gets a 10 s timeout. Applying
+                      to the engines is serialized. List text still never enters JavaScript. <code>useBlockerStatus</code> stays the Settings store.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      <code>privacy.yaml</code> still reaches “8 lists active” on both devices. One failing list leaves seven. Turning blocking off during a
+                      refresh leaves no <code>.download</code> file and no late apply.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">08</span>Filter-list rules<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Pure staleness, validator and list-shape checks with tests.</p>
+                    <a class="source" href="../apps/mobile/src/privacy/filterLists.ts"><code>apps/mobile/src/privacy/filterLists.ts:1</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged; the service calls them.</p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/filterLists.test.ts</code> passes.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">09</span>Page scripts runner<span class="tag">Scope / adapt boundary</span><small>Work package 04</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      <code>runPageScript</code> wraps <code>tab.evaluate</code> in a Promise with a 10 s timer and JSON parsing. Callers swallow its failures
+                      with <code>.catch(() =&gt; {})</code> in a dozen places.
+                    </p>
+                    <a class="source" href="../apps/mobile/modules/bay-engine/src/index.ts"><code>apps/mobile/modules/bay-engine/src/index.ts:232</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/TabPage.tsx"><code>apps/mobile/src/browser/TabPage.tsx:112</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>PageScripts</code> port in the app: <code>run(view, script)</code> returns an Effect with typed <code>PageScriptTimeout</code>,
+                      <code>PageScriptFailed</code> and <code>DecodeError</code>. The engine export stays for code outside the app. Fire-and-forget callers use
+                      one helper that drops expected failures and reports defects, instead of empty catches.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/pageScripts.test.ts</code> passes. A script that never answers fails after 10 s with a typed error.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">10</span>Reading tools: Reader, picker, inspector, Markdown<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 04</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A <code>context.current</code> generation counter, a <code>task()</code> wrapper that compares versions after each await, and cleanup that
+                      fires two closing scripts on every document change.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/useReadingTools.tsx"><code>apps/mobile/src/browser/useReadingTools.tsx:52</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/useReadingTools.tsx"><code>apps/mobile/src/browser/useReadingTools.tsx:86</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/useReadingTools.tsx"><code>apps/mobile/src/browser/useReadingTools.tsx:98</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/useReadingTools.tsx"><code>apps/mobile/src/browser/useReadingTools.tsx:201</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      A document scope from <code>useScopedWork</code>, keyed by tab id, address and load count (the same key the hook uses today). A new
+                      document interrupts the scope, so a late result can't land; the generation counter and version checks go. Errors keep reaching the toast
+                      through <code>fail</code>; a cancellation shows nothing. The closing scripts stay as scope finalizers.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      <code>reading-tools.yaml</code> and <code>power-tools.yaml</code> pass on both devices. Navigating while Reader opens never shows Reader
+                      on the new page.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row"><span class="row-index">11</span>Find on page<span class="tag">Scope / adapt boundary</span><small>Work package 04</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>A 150 ms debounce timer plus a <code>request</code> counter so only the newest search updates the count.</p>
+                    <a class="source" href="../apps/mobile/src/browser/useFindInPage.ts"><code>apps/mobile/src/browser/useFindInPage.ts:28</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      Each search runs in a scope keyed by page and query; a new keystroke interrupts the old one, which replaces the counter. The 150 ms
+                      debounce stays a timer in the hook (UI input pacing). Return still runs the pending search at once.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Typing fast shows only the count for the final text; a new page clears it.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">12</span>Per-tab page scripts (hide elements, tweaks, colour, media watcher)<span class="tag"
+                    >Scope / adapt boundary</span
+                  ><small>Work package 04</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p><code>TabPage</code> runs scripts on navigation events and swallows every failure.</p>
+                    <a class="source" href="../apps/mobile/src/browser/TabPage.tsx"><code>apps/mobile/src/browser/TabPage.tsx:75</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/navigationEvents.ts"><code>apps/mobile/src/browser/navigationEvents.ts:1</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      Keep the decisions (<code>scriptsFor</code>) and their timing exactly. Only the calls move to the <code>PageScripts</code> port, with
+                      expected failures dropped and defects reported. No fiber per navigation report.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/navigationEvents.test.ts</code> passes; scripts run as often as before.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">13</span>Navigation event handling<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Engines report dozens of navigation events per load, hidden tabs included; <code>onNavigation</code> compares and dispatches
+                      synchronously.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:296</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged. This is the hot path; it stays synchronous React state plus store dispatches.</p>
+                    <p class="label">Required proof</p>
+                    <p>No extra renders per load (React Profiler on one page load, before and after).</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row"><span class="row-index">14</span>Tab snapshots<span class="tag">Migrate workflow</span><small>Work package 04</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>A 700 ms <code>setTimeout</code> after each visit captures a JPEG; nothing cancels it when the tab closes or navigates again.</p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:286</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:332</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>Snapshots</code> service with one pending capture per tab (a new visit replaces it), skipped for private and failed tabs,
+                      interrupted when the tab closes.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>A closed tab gets no snapshot; private tabs leave no file.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row"><span class="row-index">15</span>Site icons<span class="tag">Migrate workflow</span><small>Work package 04</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A module-level <code>pending</code> set dedupes hosts, an async IIFE reads the page's icon and downloads it, and a module-level store
+                      subscription deletes dropped icon files.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/favicons.ts"><code>apps/mobile/src/browser/favicons.ts:15</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/favicons.ts"><code>apps/mobile/src/browser/favicons.ts:40</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>Favicons</code> service: one job per host at a time, the same size limits and cookie-free download through <code>Files</code>, and
+                      the deletion subscription owned by the app scope.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>One download per host however many tabs open it. Clearing history deletes the files.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row">
+                  <span class="row-index">16</span>Mini player and media session<span class="tag">Keep plain</span><small>No work package</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Page media reports in React state, the system session updated from an effect, and a native control listener.</p>
+                    <a class="source" href="../apps/mobile/src/browser/useTabMedia.ts"><code>apps/mobile/src/browser/useTabMedia.ts:39</code></a>
+                    <p class="label">Implementation</p>
+                    <p>State and the listener stay as they are; its page commands go through the <code>PageScripts</code> port like every other script.</p>
+                    <p class="label">Required proof</p>
+                    <p><code>mini-player.yaml</code> and <code>youtube.yaml</code> pass on both devices.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row"><span class="row-index">17</span>Saved logins<span class="tag">Migrate workflow</span><small>Work package 05</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Each save and forget reads the whole secure-store document, edits it and writes it back. Two overlapping writes (an auto-save while
+                      Settings forgets one) can lose one of them.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/credentials.ts"><code>apps/mobile/src/browser/credentials.ts:37</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/logins.ts"><code>apps/mobile/src/browser/logins.ts:26</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>Logins</code> service over a <code>SecureStore</code> port with one permit for every read-modify-write. The format, key and lazy
+                      native require stay; <code>logins.ts</code> stays pure.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Two concurrent saves keep both entries. <code>tests/logins.test.ts</code> passes. Private tabs still never read or write.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">18</span>Page requests and silent sign-in<span class="tag">Scope / adapt boundary</span><small>Work package 05</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      An auth request looks up a saved login and answers, or queues the sheet; nothing checks that the tab or request still exists when the
+                      lookup returns.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:505</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      The lookup runs in the tab's scope and is interrupted when the tab loads again or closes (the engine cancels the request then). The dialog
+                      queue stays React state.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>A sign-in answered after navigation never reaches the new page.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">19</span>Private session lifetime<span class="tag">Scope / adapt boundary</span><small>Work package 05</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      PR #21 adds <code>setPrivateSessionActive</code> from an effect on <code>hasPrivateTabs</code>; two quick changes can reach native out of
+                      order.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:167</code></a
+                    ><a class="source" href="../apps/mobile/modules/bay-engine/src/index.ts"><code>apps/mobile/modules/bay-engine/src/index.ts:212</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>PrivateSession</code> follows the store on the app scope and sends calls in order, latest value wins. Called once at launch as PR
+                      #21 requires.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Open and close a private tab quickly: the session ends once, after the last one.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">20</span>Links and shares from other apps<span class="tag">Scope / adapt boundary</span><small>Work package 05</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A ref holds a link until the tabs load; three sources (initial URL, <code>Linking</code> events, the share listener plus
+                      <code>takeShare</code>) register from a component effect.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:240</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/incomingLink.ts"><code>apps/mobile/src/browser/incomingLink.ts:9</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>IncomingLinks</code> on the app scope registers the three sources once and holds the newest link until the store is ready, then
+                      hands it to the screen. Parsing (<code>incomingLink</code>, <code>shareLink</code>, <code>bayCommand</code>) stays pure.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/incomingLink.test.ts</code> passes. A cold start from a link opens it over the restored tabs, on both platforms.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">21</span>Link destination resolver<span class="tag">Migrate workflow</span><small>Work package 05</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      <code>resolveDestination</code> uses an <code>AbortController</code> with a 10 s timer and walks redirects by hand when ATS blocks a hop.
+                      The menu tracks <code>mounted</code>, but the request keeps running after it closes.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:1169</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:1197</code></a
+                    ><a class="source" href="../apps/mobile/src/panels/LinkMenu.tsx"><code>apps/mobile/src/panels/LinkMenu.tsx:47</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>LinkResolver</code> over the <code>Http</code> port, run in the sheet's scope: closing the menu aborts the request. Same 10 s limit,
+                      same 10-hop walk, same message when unreachable.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>link-menu.yaml</code> passes. Closing the menu mid-resolve aborts the fetch (fake Http sees the abort).</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row"><span class="row-index">22</span>Downloads<span class="tag">Scope / adapt boundary</span><small>Work package 05</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A download listener registered from a hook dispatches each update; the toast timer and the once-per-launch notification permission ask
+                      live beside it.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/useDownloads.tsx"><code>apps/mobile/src/browser/useDownloads.tsx:48</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/useDownloads.tsx"><code>apps/mobile/src/browser/useDownloads.tsx:35</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      The listener moves to the app scope so it doesn't depend on a component; updates still dispatch synchronously. Toast timing and the
+                      permission ask stay plain. Open and cancel run as commands with the existing messages.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>downloads.yaml</code> passes on both devices.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">23</span>Search suggestions<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>The shared <code>@bay/core</code> fetcher owns debounce, cache and cancel.</p>
+                    <a class="source" href="../apps/mobile/src/browser/useSuggestions.ts"><code>apps/mobile/src/browser/useSuggestions.ts:8</code></a
+                    ><a class="source" href="../packages/core/src/suggestFetcher.ts"><code>packages/core/src/suggestFetcher.ts:12</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged, as on desktop: no second debounce on top of it.</p>
+                    <p class="label">Required proof</p>
+                    <p><code>search-and-open.yaml</code> passes.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row"><span class="row-index">24</span>Clear browsing data<span class="tag">Migrate workflow</span><small>Work package 06</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      <code>wipe</code> resets the store, waits a fixed 150 ms for page views to unmount, then calls native <code>clearData</code>. Settings
+                      tracks <code>busy</code> and a <code>mounted</code> ref.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:593</code></a
+                    ><a class="source" href="../apps/mobile/src/panels/SettingsPanel.tsx"><code>apps/mobile/src/panels/SettingsPanel.tsx:193</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      <code>ClearData</code> workflow: interrupt page, tab and document scopes, reset the store, wait until the view registry is empty (capped
+                      at 1 s, replacing the fixed sleep), then clear. The native call is uninterruptible. Settings reads a command result instead of a mounted
+                      ref.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>No page writes data after the wipe. A failure shows the existing message and nothing is retried.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">25</span>Settings panel async reads<span class="tag">Scope / adapt boundary</span><small>Work package 06</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Saved logins reload with <code>.then(setLogins)</code>, device locale detection runs in an effect, and photo picking chains promises.</p>
+                    <a class="source" href="../apps/mobile/src/panels/SettingsPanel.tsx"><code>apps/mobile/src/panels/SettingsPanel.tsx:182</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Reads go through <code>useCommand</code> so a closed sheet drops their results. Logins come from the <code>Logins</code> service.</p>
+                    <p class="label">Required proof</p>
+                    <p><code>settings-*.yaml</code> pass on both devices.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">26</span>Crash reports and diagnostics<span class="tag">Scope / adapt boundary</span><small>Work package 01</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      A global <code>ErrorUtils</code> handler keeps the last ten errors in memory for Settings; elsewhere failures go to
+                      <code>console.warn</code> or nowhere.
+                    </p>
+                    <a class="source" href="../apps/mobile/src/crashReports.ts"><code>apps/mobile/src/crashReports.ts:46</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      The handler stays synchronous and first. A <code>Diagnostics</code> port records defects into the same ring and warns to the console; no
+                      telemetry, no new upload. Cancellation is never recorded.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p><code>tests/crashReports.test.ts</code> passes. A defect in a background service shows once under Report a problem.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">27</span>One-shot native UI<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Share sheet, clipboard, save image, voice search, Face ID, Android notification permission.</p>
+                    <a class="source" href="../apps/mobile/src/browser/BrowserScreen.tsx"><code>apps/mobile/src/browser/BrowserScreen.tsx:459</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/SearchCard.tsx"><code>apps/mobile/src/browser/SearchCard.tsx:110</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged. A user prompt is never retried; existing error toasts stay at the edge.</p>
+                    <p class="label">Required proof</p>
+                    <p>Covered by the e2e suite and the on-phone list (Face ID, AutoFill).</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">28</span>UI timers and animation<span class="tag">Keep plain</span><small>No work package</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Toast dismissal, the start page clock, the welcome snapshot, tab swipe and zoom, press feedback, load progress.</p>
+                    <a class="source" href="../apps/mobile/src/browser/Toast.tsx"><code>apps/mobile/src/browser/Toast.tsx:26</code></a
+                    ><a class="source" href="../apps/mobile/src/browser/StartPage.tsx"><code>apps/mobile/src/browser/StartPage.tsx:178</code></a
+                    ><a class="source" href="../apps/mobile/src/onboarding/Welcome.tsx"><code>apps/mobile/src/onboarding/Welcome.tsx:85</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Unchanged. Timers that only pace pixels belong to the component.</p>
+                    <p class="label">Required proof</p>
+                    <p>Visual e2e (<code>start-page.yaml</code>, <code>wallpaper.yaml</code>, <code>tab-swipe-close.yaml</code>) unchanged.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="outside">
+                <th scope="row">
+                  <span class="row-index">29</span>Native engine, extensions and phase 7<span class="tag">Outside mobile scope</span
+                  ><small>No work package</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Swift and Kotlin engine code, the share and widget extensions, and the Android Chromium embedder planned in PR #21.</p>
+                    <a class="source" href="../apps/mobile/modules/bay-engine"><code>apps/mobile/modules/bay-engine</code></a
+                    ><a class="source" href="../docs/android-chromium-plan.html"><code>docs/android-chromium-plan.html</code></a>
+                    <p class="label">Implementation</p>
+                    <p>Not touched. <code>@bay/engine</code> stays Promise-based; the app's ports adapt it.</p>
+                    <p class="label">Required proof</p>
+                    <p>Native builds of both dev clients are unchanged by this migration.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="outside">
+                <th scope="row">
+                  <span class="row-index">30</span>Translation and sync<span class="tag">Outside mobile scope</span><small>No work package</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Bergamot translation is parked on <code>feat/mobile-translation</code>; mobile sync isn't built.</p>
+
+                    <p class="label">Implementation</p>
+                    <p>
+                      When either lands it joins as a service on this runtime (model download, per-document translation jobs; a sync cycle shaped like desktop's
+                      <code>SyncService</code>). Not part of this migration.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>—</p>
+                  </details>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="no-match" class="no-match" hidden>No workflow matches. Reset the filters to see all rows.</p>
+      </section>
+
+      <section id="implementation">
+        <h2>5. Complete implementation sequence</h2>
+        <p>
+          Packages follow dependencies and risk. Each ends with its tests passing and the replaced code deleted. Following <code>apps/mobile/AGENTS.md</code>,
+          check each change with <code>pnpm typecheck</code> and <code>pnpm test</code>, run the e2e tests a package touches on both devices, and run the whole
+          suite once at the end.
+        </p>
+        <article class="work">
+          <h3><span>01</span>Baseline, dependency and runtime</h3>
+          <p class="dependency">Owner: runtime infrastructure · prerequisite for every package</p>
+          <ul>
+            <li>
+              Record the baseline at the branch point: <code>pnpm typecheck</code>, <code>pnpm test</code>, root <code>lint</code> and <code>slop</code>, the
+              full e2e suite on iOS and Android, the Hermes bundle size of <code>expo export</code> for both platforms, and cold launch on Release builds.
+            </li>
+            <li>Add <code>effect@4.1.3</code> exactly. Confirm Metro resolves a single copy and Hermes compiles the Release bundle on both platforms.</li>
+            <li>
+              Write <code>runtime.ts</code>, <code>commands.ts</code> (<code>runCommand</code>, <code>runCommandResult</code>, Exit-aware: cancelled stays
+              silent, failures report once), <code>errors.ts</code> (<code>NativeUnavailable</code>, <code>Cancelled</code>, shared <code>Operation</code>),
+              <code>react.ts</code> and <code>testing.ts</code> (fake ports, test clock, a count of what services still hold).
+            </li>
+            <li>
+              Write the ports services need first: <code>Files</code>, <code>Http</code>, <code>Lifecycle</code>, <code>BrowserState</code>,
+              <code>Diagnostics</code>. Diagnostics feeds the crash-report ring.
+            </li>
+            <li>
+              A development-only self-check runs once after the runtime builds: a layer, a finalizer, a typed failure and an interrupted sleep. A failure lands
+              under Report a problem, so a Hermes incompatibility shows on device, not only in Node.
+            </li>
+          </ul>
+          <p>
+            <strong>Exit:</strong> Type checks, lint, anti-slop and tests pass; both dev clients start with the self-check clean; Release bundles compile; a
+            test runtime disposes to zero held resources.
+          </p>
+        </article>
+        <article class="work">
+          <h3><span>02</span>Startup, persistence, language and lifecycle</h3>
+          <p class="dependency">Owner: app foundation · depends on 01</p>
+          <ul>
+            <li>
+              Move the store’s save debounce, serialized writer, background flush and the prune timer into <code>Persistence</code>. Delete the module-level
+              timers and the <code>saving</code> chain.
+            </li>
+            <li>
+              Move <code>loadLocale</code> and the locale writer into <code>LocaleService</code>; keep <code>t()</code> and the external store synchronous.
+            </li>
+            <li>
+              Register <code>AppState</code> once through <code>Lifecycle</code>; persistence, locale and view-state saving subscribe. The private lock stays in
+              React.
+            </li>
+            <li>
+              <code>startAppServices()</code> from the root layout replaces the stray <code>void loadLocale()</code> and <code>BrowserScreen</code>’s load
+              effect. Splash and welcome timing are unchanged.
+            </li>
+          </ul>
+          <p>
+            <strong>Exit:</strong> Model, i18n and crash tests pass; new persistence tests pass under the test clock; <code>smoke</code>,
+            <code>tabs-roundtrip</code> and <code>start-page</code> pass on both devices; killing Bay in the background restores its tabs.
+          </p>
+        </article>
+        <article class="work">
+          <h3><span>03</span>Content blocker and filter lists</h3>
+          <p class="dependency">Owner: privacy · depends on 01–02</p>
+          <ul>
+            <li>
+              Build <code>BlockerService</code>: follow the preference, apply the cache, refresh stale lists as independent jobs, re-apply when any changed,
+              serialize applies.
+            </li>
+            <li>Interrupt a refresh when blocking is turned off; clean temporary downloads in finalizers; time out HEAD after 10 s.</li>
+            <li>Keep <code>setBlockingPausedHosts</code> and <code>setTrackingParameters</code> as plain synchronous calls from the store subscription.</li>
+          </ul>
+          <p>
+            <strong>Exit:</strong> Blocker tests (stale, unchanged, one failing list, disable mid-refresh) pass; <code>privacy.yaml</code> reaches “8 lists
+            active” on both devices; typing in search drops no keystrokes during a refresh.
+          </p>
+        </article>
+        <article class="work">
+          <h3><span>04</span>Page work: scripts, reading tools, find, snapshots, icons</h3>
+          <p class="dependency">Owner: page services · depends on 01–02</p>
+          <ul>
+            <li>Add the <code>PageScripts</code> port and move every caller onto it; replace empty catches with the shared quiet runner.</li>
+            <li>
+              Rebuild <code>useReadingTools</code> and <code>useFindInPage</code> on <code>useScopedWork</code>; delete the generation counters and version
+              checks.
+            </li>
+            <li>
+              Move snapshot capture into <code>Snapshots</code> (one pending per tab) and icons into <code>Favicons</code> (one job per host, file cleanup on
+              the app scope).
+            </li>
+            <li>Leave <code>onNavigation</code>, <code>scriptsFor</code> and the media hook’s state exactly as they are.</li>
+          </ul>
+          <p>
+            <strong>Exit:</strong> Document-scope tests prove late results are dropped; <code>reading-tools</code>, <code>power-tools</code>,
+            <code>page-zoom</code>, <code>mini-player</code> and <code>youtube</code> pass on both devices; one page load renders as many times as before.
+          </p>
+        </article>
+        <article class="work">
+          <h3><span>05</span>Logins, page requests, private session, links and downloads</h3>
+          <p class="dependency">Owner: integration · depends on 01–02</p>
+          <ul>
+            <li>Build <code>Logins</code> over a <code>SecureStore</code> port with a single permit; Settings and the sign-in sheet use it.</li>
+            <li>
+              Run the silent sign-in lookup in the tab’s scope; follow <code>hasPrivateTabs</code> with <code>PrivateSession</code> (ordered, latest wins).
+            </li>
+            <li>
+              Register incoming links and shares once in <code>IncomingLinks</code>; move <code>resolveDestination</code> into <code>LinkResolver</code> on the
+              sheet’s scope; move the download listener to the app scope.
+            </li>
+          </ul>
+          <p>
+            <strong>Exit:</strong> Concurrency tests for logins and the private session pass; <code>link-menu</code> and <code>downloads</code> pass on both
+            devices; a cold start from a shared link opens it; the on-phone list covers a real sign-in.
+          </p>
+        </article>
+        <article class="work">
+          <h3><span>06</span>Clear data, Settings, diagnostics and the completion audit</h3>
+          <p class="dependency">Owner: integration and review · depends on every package</p>
+          <ul>
+            <li>
+              Build <code>ClearData</code>: interrupt scoped work, reset, wait for the view registry to empty (1 s cap), clear uninterruptibly. Settings reads
+              command results.
+            </li>
+            <li>
+              Search <code>apps/mobile/src</code> for <code>setTimeout</code>, <code>setInterval</code>, <code>new Promise</code>, <code>.then(</code>,
+              <code>.catch(() =&gt; {})</code>, <code>AbortController</code>, <code>addEventListener</code>, <code>addListener</code>, <code>mounted</code> refs
+              and generation counters. Each result is migrated, UI-local, or a <em>Keep plain</em> row above.
+            </li>
+            <li>
+              Run every gate in section 7, review for lifetime, native settlement, durability and privacy, and record any gap in
+              <code>docs/mobile-plan.html</code>’s known gaps in the same commit.
+            </li>
+          </ul>
+          <p><strong>Exit:</strong> The completion contract in section 8 holds, with evidence in the PR.</p>
+        </article>
+      </section>
+
+      <section id="policies">
+        <h2>6. Failure, retry and cancellation policies</h2>
+        <p>
+          Domain errors keep their current messages. Expected refusals, failures, interruptions and programming defects stay distinguishable. Tolerated failures
+          stay quiet rather than becoming new alerts.
+        </p>
+        <div class="table-wrap">
+          <table class="decisions">
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>Policy to implement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Expected outcomes</th>
+                <td>
+                  A cancelled program, a closed sheet, a replaced document and a dismissed prompt are not errors: no toast, no crash report. Expected failures
+                  keep their current messages (<code>notice.pageChanged</code>, <code>linkMenu.unreachable</code>, <code>settings.clearDataFailed</code>).
+                </td>
+              </tr>
+              <tr>
+                <th>Filter lists</th>
+                <td>
+                  No retry within a run: a failing list keeps its cached copy and is tried again on the next launch or preference change, as today. HEAD times
+                  out after 10 s; downloads have no timeout (7 MB on a slow link is normal) but are interrupted when blocking is turned off.
+                </td>
+              </tr>
+              <tr>
+                <th>Link destination</th>
+                <td>10 s for the whole resolution, no retry, aborted when the menu closes. The hop-by-hop fallback for ATS stays.</td>
+              </tr>
+              <tr>
+                <th>Page scripts</th>
+                <td>Keep the 10 s timeout. No retry: the next navigation event runs the script again where that matters (hidden elements, tweaks).</td>
+              </tr>
+              <tr>
+                <th>Site icons and snapshots</th>
+                <td>Best effort, once per host per launch and once per visit. Failures are dropped quietly; a programming defect is reported.</td>
+              </tr>
+              <tr>
+                <th>Persistence</th>
+                <td>
+                  A failed write is reported once and the data stays dirty; the next change or leaving the foreground writes again. No retry loop and no backoff
+                  timer.
+                </td>
+              </tr>
+              <tr>
+                <th>Logins and clear data</th>
+                <td>Never retried automatically. A failed secure-store write is reported; a failed clear shows the Settings message.</td>
+              </tr>
+              <tr>
+                <th>User prompts</th>
+                <td>Face ID, microphone, notifications and voice search are never retried or re-asked by a service.</td>
+              </tr>
+              <tr>
+                <th>Defects</th>
+                <td>
+                  Any unexpected failure in a background service is reported once through <code>Diagnostics</code> into the crash-report ring; the service keeps
+                  serving the next job.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="verification">
+        <h2>7. Verification that proves the migration</h2>
+        <h3>Node tests (new)</h3>
+        <ul>
+          <li>
+            <strong>Persistence:</strong> a burst writes once; a failed write is retried by the next change; background flushes at once; load falls back on each
+            kind of failure.
+          </li>
+          <li>
+            <strong>Blocker:</strong> stale and unchanged lists; one failing list keeps the rest; turning blocking off mid-refresh leaves no temp file and no
+            apply.
+          </li>
+          <li><strong>Scoped work:</strong> a result arriving after the key changes is dropped; finalizers run once; unmount interrupts.</li>
+          <li><strong>Logins:</strong> two concurrent saves keep both; forget during save keeps order.</li>
+          <li><strong>Private session:</strong> quick toggles reach native in order and end on the last value.</li>
+          <li><strong>Incoming links:</strong> a link before readiness waits; after readiness it opens at once; only the newest is kept.</li>
+          <li><strong>Link resolver:</strong> interruption aborts the fake request; the hop walk stops at ten.</li>
+          <li><strong>Clear data:</strong> scoped work is interrupted before native clear; the native call isn’t interrupted.</li>
+          <li><strong>Runtime:</strong> disposal leaves zero listeners, timers and fibers (counted by the fakes).</li>
+        </ul>
+        <h3>Existing gates</h3>
+        <ul>
+          <li>
+            All 13 existing Node test files pass unchanged; <code>pnpm typecheck</code> passes; root <code>pnpm lint</code> and <code>pnpm slop</code> pass.
+          </li>
+          <li>
+            The full <code>.argent/e2e</code> suite passes on iOS and Android in the final run, including <code>privacy</code> (“8 lists active”),
+            <code>reading-tools</code>, <code>power-tools</code>, <code>link-menu</code>, <code>downloads</code>, <code>mini-player</code> and
+            <code>tabs-roundtrip</code>.
+          </li>
+          <li>Release builds of both platforms compile with Hermes and pass <code>smoke</code>; the self-check reports nothing in development builds.</li>
+        </ul>
+        <h3>Performance</h3>
+        <ul>
+          <li>Hermes bundle size for both platforms recorded before and after, in the PR.</li>
+          <li>Cold launch to splash hide on Release builds: median of five per device, within the larger of 5% or 40 ms of the baseline.</li>
+          <li>React Profiler on one page load: no extra commits. Typing in search during a filter-list refresh drops no keystrokes.</li>
+        </ul>
+        <h3>On the phones</h3>
+        <ul>
+          <li>
+            For the person with the devices: kill Bay in the background and reopen; Face ID private lock; a real HTTP sign-in answered silently; AutoFill.
+          </li>
+        </ul>
+      </section>
+
+      <section id="done">
+        <h2>8. Definition of complete</h2>
+        <ul class="checklist">
+          <li>Every <em>Migrate</em> and <em>Scope / adapt</em> row is implemented and its old orchestration deleted.</li>
+          <li>The completion search in package 06 finds nothing unexplained.</li>
+          <li>
+            One runtime, one owner per resource, no runtime call inside a service, no Effect import in <code>@bay/engine</code> or <code>@bay/core</code>.
+          </li>
+          <li>Saved files open across the change in both directions of a revert.</li>
+          <li>Every gate in section 7 passes on iOS and Android, with numbers and runs attached to the PR.</li>
+          <li>Known gaps, if any, are recorded in <code>docs/mobile-plan.html</code> in the commit that leaves them.</li>
+        </ul>
+      </section>
+
+      <section id="evidence">
+        <h2>9. Sources</h2>
+        <ul>
+          <li>
+            <a href="desktop-effect-plan.html">Desktop Effect plan</a> and its runtime in <code>apps/browser/src/effect/</code>: the shape this plan copies.
+          </li>
+          <li>
+            <a href="android-chromium-plan.html">Android Chromium plan</a> and <a href="https://github.com/krishkalaria12/bay/pull/21">PR #21</a>, which this
+            branch stacks on.
+          </li>
+          <li><a href="mobile-plan.html">Mobile plan</a> for features, phases and known gaps.</li>
+          <li>
+            Effect on npm: <a href="https://www.npmjs.com/package/effect">effect</a> (latest 4.1.4, desktop and CLI pin 4.1.3), checked with
+            <code>npm view effect dist-tags</code> on 13 November 2026.
+          </li>
+          <li>
+            Effect v4 guidance: <a href="https://effect.website/blog/releases/effect/40-beta">v4 release notes</a>,
+            <a href="https://effect.website/blog/tags/effect-v4-beta-recaps/">v4 recaps</a> (smaller core bundle),
+            <a href="https://www.mintlify.com/effect-TS/effect-smol/packages/atom-react">atom-react</a> (unstable reactivity modules).
+          </li>
+          <li>
+            <a href="https://docs.expo.dev/guides/tree-shaking">Expo tree shaking</a>: experimental, production only, the reason this plan doesn’t depend on it.
+          </li>
+        </ul>
+      </section>
+      <footer>
+        Prepared for Bay mobile. Inventory and architecture audit with every decision resolved. Open the file directly to search and expand the evidence.
+      </footer>
+    </main>
+    <script>
+      (() => {
+        const search = document.getElementById("search"),
+          kind = document.getElementById("kind"),
+          rows = [...document.querySelectorAll("#inventory-table tbody tr")],
+          status = document.getElementById("filter-status"),
+          expand = document.getElementById("expand"),
+          reset = document.getElementById("reset"),
+          empty = document.getElementById("no-match");
+        const text = rows.map((row) => row.textContent.toLowerCase());
+        function update() {
+          const q = search.value.trim().toLowerCase();
+          let visible = 0;
+          rows.forEach((row, i) => {
+            row.hidden = !(kind.value === "all" || row.dataset.kind === kind.value) || !text[i].includes(q);
+            if (!row.hidden) visible++;
+          });
+          status.textContent = visible + " of " + rows.length + " workflow families shown";
+          empty.hidden = visible !== 0;
+          syncExpand();
+        }
+        function syncExpand() {
+          const visible = rows.filter((row) => !row.hidden),
+            all = visible.length > 0 && visible.every((row) => row.querySelector("details").open);
+          expand.textContent = all ? "Collapse visible evidence" : "Expand visible evidence";
+          expand.setAttribute("aria-pressed", String(all));
+          expand.disabled = visible.length === 0;
+        }
+        search.addEventListener("input", update);
+        kind.addEventListener("change", update);
+        rows.forEach((row) => row.querySelector("details").addEventListener("toggle", syncExpand));
+        expand.addEventListener("click", () => {
+          const visible = rows.filter((row) => !row.hidden),
+            open = !visible.every((row) => row.querySelector("details").open);
+          visible.forEach((row) => (row.querySelector("details").open = open));
+          syncExpand();
+        });
+        reset.addEventListener("click", () => {
+          search.value = "";
+          kind.value = "all";
+          rows.forEach((row) => (row.querySelector("details").open = false));
+          update();
+          search.focus();
+        });
+        const disclosures = [...document.querySelectorAll("details")];
+        let printState = null;
+        window.addEventListener("beforeprint", () => {
+          printState = { hidden: rows.map((row) => row.hidden), open: disclosures.map((detail) => detail.open) };
+          rows.forEach((row) => {
+            row.hidden = false;
+          });
+          disclosures.forEach((detail) => (detail.open = true));
+        });
+        window.addEventListener("afterprint", () => {
+          if (printState) {
+            rows.forEach((row, i) => {
+              row.hidden = printState.hidden[i];
+            });
+            disclosures.forEach((detail, i) => (detail.open = printState.open[i]));
+            printState = null;
+            syncExpand();
+          }
+        });
+        update();
+      })();
+    </script>
+  </body>
+</html>

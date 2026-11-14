@@ -2,12 +2,16 @@ import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { useThemeColor } from "heroui-native";
-import { useEffect, useRef, useState, type JSX } from "react";
+import * as Effect from "effect/Effect";
+import { useEffect, useState, type JSX } from "react";
 import { Image, View } from "react-native";
 import { engineInfo } from "@bay/engine";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
+import type { ClearData } from "@/browser/clearData";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
+import type { EngineError } from "@/effect/ports/engine";
+import { useCommand, useScopedWork } from "@/effect/react";
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
@@ -54,7 +58,8 @@ export interface SettingsPanelProps {
   onWallpaperChange: (id: WallpaperId, photo?: string) => void;
   preferences: SimplePreferences;
   onPreferencesChange: (update: Partial<SimplePreferences>) => void;
-  onClearData: () => Promise<void>;
+  /** Clears browsing data and starts the browser afresh. The sheet runs it and shows how it ended. */
+  clearData: Effect.Effect<void, EngineError, ClearData>;
   /** Opens the import sheet for tabs exported from another browser. */
   onImport: () => void;
   downloadCount: number;
@@ -112,13 +117,15 @@ function Note({ children }: { children: string }): JSX.Element {
 
 /** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
 function useDeviceLocale(): Locale {
-  const [device, setDevice] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+  // The formatting locale answers at once; the device's own languages follow. A picker that closed first drops them.
+  const [formatting] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+  const { run, result } = useCommand<Locale, never>();
 
   useEffect(() => {
-    void detectLocale().then(setDevice);
-  }, []);
+    run(Effect.promise(detectLocale));
+  }, [run]);
 
-  return device;
+  return result?._tag === "Done" ? result.value : formatting;
 }
 
 /** System first (it follows the phone), then each language in its own name. Choosing one changes the app at once. */
@@ -162,52 +169,47 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const savedLocale = useSavedLocale();
   const [page, setPage] = useState<Page>("main");
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Saved logins (B20), reloaded each time the sheet opens on the privacy page.
-  const [logins, setLogins] = useState<SavedLogin[] | null>(null);
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
+  // Clearing browsing data is the sheet's own command: it is busy while the wipe runs, and its answer either closes
+  // the sheet or says the wipe failed. Nothing tries it again.
+  const wipe = useCommand();
+  const busy = wipe.running;
+  const [failed, setFailed] = useState(false);
+  // Saved logins (B20), reloaded each time the sheet opens on the privacy page. Leaving the page drops the read.
+  const loginsOpen = props.visible && page === "privacy";
+  const { run: runLogins, result: loginsResult } = useScopedWork<readonly SavedLogin[]>(loginsOpen ? "logins" : "closed");
+  const logins = loginsResult?._tag === "Done" ? loginsResult.value : null;
   useEffect(() => {
     if (!props.visible) return;
     setPage("main");
     setConfirming(false);
-    setError(null);
+    setFailed(false);
   }, [props.visible]);
 
   useEffect(() => {
-    if (!props.visible || page !== "privacy") return;
+    if (loginsOpen) runLogins(savedLogins);
+  }, [loginsOpen, runLogins]);
 
-    void savedLogins().then(setLogins, () => setLogins([]));
-  }, [props.visible, page]);
-
-  async function forgetSaved(login: SavedLogin): Promise<void> {
-    await forgetLogin(login.origin, login.username).catch(() => {});
-    void savedLogins().then(setLogins, () => undefined);
+  function forgetSaved(login: SavedLogin): void {
+    runLogins(forgetLogin(login.origin, login.username));
   }
 
-  async function clearData(): Promise<void> {
+  function clearData(): void {
     if (busy) return;
-    setBusy(true);
-    setError(null);
-
-    try {
-      await props.onClearData();
-
-      if (!mounted.current) return;
-      setConfirming(false);
-      // The empty start page behind the sheet shows the result.
-      props.onClose();
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : t("settings.clearDataFailed"));
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
+    setFailed(false);
+    wipe.run(
+      props.clearData.pipe(
+        Effect.matchEffect({
+          onSuccess: () =>
+            Effect.sync(() => {
+              setConfirming(false);
+              // The empty start page behind the sheet shows the result.
+              props.onClose();
+            }),
+          // A wipe that failed says so under the button; the reset already happened, so it isn't run again.
+          onFailure: () => Effect.sync(() => setFailed(true)),
+        }),
+      ),
+    );
   }
 
   const { preferences: prefs, onPreferencesChange: change } = props;
@@ -303,7 +305,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                     detail={login.origin}
                     value={t("settings.passwords.delete")}
                     destructive
-                    onPress={() => void forgetSaved(login)}
+                    onPress={() => forgetSaved(login)}
                   />
                 ))}
               </Group>
@@ -541,9 +543,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 detail={t("settings.clearAllData.detail")}
                 destructive
                 disabled={busy}
-                onPress={() => {
-                  void clearData();
-                }}
+                onPress={clearData}
               />
             ) : (
               <ActionRow
@@ -554,7 +554,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 disabled={busy}
                 onPress={() => {
                   setConfirming(true);
-                  setError(null);
+                  setFailed(false);
                 }}
               />
             )}
@@ -581,9 +581,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               {t("settings.clearingWebsiteData")}
             </Text>
           ) : null}
-          {error ? (
+          {failed ? (
             <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-4">
-              {error}
+              {t("settings.clearDataFailed")}
             </Text>
           ) : null}
           <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
@@ -670,24 +670,23 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
   );
 }
 
-/** Copies a gallery photo into the app's documents and replaces the old one. */
-async function pickPhoto(previous: string | null): Promise<string | null> {
-  // The system photo picker needs no storage permission.
-  const result = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-  const asset = result.canceled ? undefined : result.assets[0];
+/** Copies a gallery photo into the app's documents and replaces the old one. Null when the picker was cancelled. */
+const pickPhoto = (previous: string | null) =>
+  Effect.gen(function* () {
+    // The system photo picker needs no storage permission.
+    const result = yield* Effect.tryPromise(() => launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 }));
+    const asset = result.canceled ? undefined : result.assets[0];
 
-  if (!asset) return null;
-  const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
-  new File(asset.uri).copy(file);
+    if (!asset) return null;
+    const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
 
-  if (previous) {
-    try {
-      new File(previous).delete();
-    } catch {}
-  }
+    yield* Effect.try(() => new File(asset.uri).copy(file));
 
-  return file.uri;
-}
+    // The old photo is only taking up space now: one that can't be deleted stays behind, and the new one still shows.
+    if (previous) yield* Effect.try(() => new File(previous).delete()).pipe(Effect.ignore);
+
+    return file.uri;
+  });
 
 /** Three columns of start page previews, then the user's photo. */
 function WallpaperPicker({
@@ -700,6 +699,8 @@ function WallpaperPicker({
   onChange: (id: WallpaperId, photo?: string) => void;
 }): JSX.Element {
   const [error, setError] = useState(false);
+  // Picking belongs to this page of the sheet: leaving it drops a photo still on its way.
+  const { run: runPick } = useCommand<void, never>();
   const foreground = useThemeColor("foreground");
   const t = useT();
   const tiles: WallpaperId[] = [...WALLPAPERS, "photo"];
@@ -724,9 +725,17 @@ function WallpaperPicker({
 
                 // Tapping the chosen photo again picks a new one.
                 if (photo && !selected) return onChange("photo");
-                pickPhoto(photo).then(
-                  (uri) => uri && onChange("photo", uri),
-                  () => setError(true),
+                // A photo that can't be picked or copied says so under the tiles; it isn't a crash worth reporting.
+                runPick(
+                  pickPhoto(photo).pipe(
+                    Effect.matchEffect({
+                      onSuccess: (uri) =>
+                        Effect.sync(() => {
+                          if (uri) onChange("photo", uri);
+                        }),
+                      onFailure: () => Effect.sync(() => setError(true)),
+                    }),
+                  ),
                 );
               }}
               className="items-center gap-2"

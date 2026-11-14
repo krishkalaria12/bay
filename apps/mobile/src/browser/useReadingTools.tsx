@@ -1,5 +1,8 @@
 import { hostOf } from "@bay/core/src/input.ts";
-import { runPageScript, type Tab } from "@bay/engine";
+import type { Tab } from "@bay/engine";
+import { TaggedError } from "effect/Data";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, useColorScheme, View } from "react-native";
@@ -11,8 +14,11 @@ import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
 import { radius, space } from "@/chrome/tokens";
+import type { Engine } from "@/effect/ports/engine";
+import { useScopedWork } from "@/effect/react";
 import { useT } from "@/i18n";
 import { Toast } from "./Toast";
+import { pageScriptFailure, quietly, run, type PageScriptError } from "./pageScripts";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
 import { MARKDOWN_SCRIPT } from "@/pagescripts/markdown";
 import { PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT, type PickedElement } from "@/pagescripts/picker";
@@ -34,6 +40,45 @@ const pickedMessageSchema = v.object({
   height: v.optional(v.unknown()),
 });
 
+/** A reading tool that couldn't do its work, with the failure the user reads about. */
+class ToolFailed extends TaggedError("ToolFailed")<{
+  readonly reason: Error;
+}> {}
+
+/** Why a reading tool's work stopped short. */
+type ToolError = PageScriptError | ToolFailed;
+
+/** What a reading tool's work needs: the page engine, and the document scope it runs in. */
+type ToolWork<A> = Effect.Effect<A, ToolError, Engine | Scope.Scope>;
+
+/** The failure the toast shows for a tool's error. */
+const failureOf = (error: ToolError): Error => (error._tag === "ToolFailed" ? error.reason : pageScriptFailure(error));
+
+/** Puts text on the clipboard. */
+const copyText = (text: string) =>
+  Effect.tryPromise({
+    try: () => Clipboard.setStringAsync(text),
+    catch: (cause) => new ToolFailed({ reason: cause instanceof Error ? cause : new Error(String(cause)) }),
+  });
+
+// Each page view gets a name for the document key, so a view that replaced another starts a new document.
+const viewNames = new WeakMap<Tab, number>();
+let viewCount = 0;
+
+function viewName(view: Tab | undefined): number {
+  if (!view) return 0;
+
+  let name = viewNames.get(view);
+
+  if (name === undefined) {
+    viewCount += 1;
+    name = viewCount;
+    viewNames.set(view, name);
+  }
+
+  return name;
+}
+
 export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoading: boolean, blocked: boolean, fail: (cause: unknown) => void) {
   const { data, dispatch } = useBrowserStore();
   const t = useT();
@@ -49,29 +94,29 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   const host = hostOf(active.url);
   const rules = siteRules(active.private ? privateRules[active.id] : data.preferences.hiddenElements, host);
   const reader = readerTab === active.id;
-  const context = useRef(0);
   // Count load starts only: a load finishing keeps the same document, so a tool opened while it loaded stays open.
   const [loads, setLoads] = useState(0);
   useEffect(() => {
     if (isLoading) setLoads((count) => count + 1);
   }, [isLoading]);
-  // A new document or tab ends a tool session. Ignore late results from the previous document.
+  // The document the tools work on. A new document or tab ends a tool session: its work is interrupted, so a late
+  // result never lands on the next page, and the tools it opened in the page are closed as its scope ends.
+  const documentKey = `${active.id}\n${active.url}\n${loads}\n${blocked}\n${viewName(view)}`;
+  const work = useScopedWork(documentKey);
   useEffect(() => {
-    context.current++;
     setReaderTab(null);
     setSettingsOpen(false);
     setPicking(false);
     setPicked(null);
     setInspected(null);
     setNotice("");
-
-    return () => {
-      if (view) {
-        void runPageScript(view, STOP_PICKER_SCRIPT).catch(() => {});
-        void runPageScript(view, CLOSE_READER_SCRIPT).catch(() => {});
-      }
-    };
-  }, [active.id, active.url, loads, view, blocked]);
+  }, [documentKey]);
+  // A defect was reported where failures go; the user still hears that the tool didn't work.
+  const outcome = work.result;
+  useEffect(() => {
+    if (outcome?._tag === "Failed") fail(outcome.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcome]);
   useEffect(() => {
     const ids = new Set(data.tabs.filter((tab) => tab.private).map((tab) => tab.id));
     setPrivateRules((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => ids.has(id))));
@@ -83,60 +128,66 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     return () => clearTimeout(timer);
   }, [notice]);
 
-  async function script<T>(source: string): Promise<T> {
-    if (blocked) throw new Error(t("notice.unlockFirst"));
+  function script<A>(source: string): Effect.Effect<A, ToolError, Engine> {
+    if (blocked) return Effect.fail(new ToolFailed({ reason: new Error(t("notice.unlockFirst")) }));
 
-    if (!view) throw new Error(t("notice.pageNotReady"));
-    const version = context.current;
-    const result = await runPageScript<T>(view, source);
+    if (!view) return Effect.fail(new ToolFailed({ reason: new Error(t("notice.pageNotReady")) }));
 
-    if (context.current !== version) throw new Error(t("notice.pageChanged"));
-
-    return result;
+    return run<A>(view, source);
   }
 
-  function task(action: () => Promise<void>): void {
-    const version = context.current;
-    void action().catch((cause) => {
-      if (context.current === version) fail(cause);
-    });
+  /** Leaves a tool's closing script to run when this document's scope ends, whatever ends it. */
+  function closeWhenLeaving(source: string): Effect.Effect<void, never, Engine | Scope.Scope> {
+    return view ? Effect.addFinalizer(() => quietly(run(view, source))) : Effect.void;
   }
 
-  async function endPicking(): Promise<void> {
-    await script(STOP_PICKER_SCRIPT);
-    setPicking(false);
-    setPicked(null);
-    setInspected(null);
+  /** Runs a tool's work in this document. Its failure reaches the toast; a document that changed says nothing. */
+  function task(program: ToolWork<void>): void {
+    work.run(program.pipe(Effect.catch((error) => Effect.sync(() => fail(failureOf(error))))));
   }
 
-  function startPicking(mode: "hide" | "inspect"): void {
-    task(async () => {
-      if (reader) await script(CLOSE_READER_SCRIPT);
-      setReaderTab(null);
-      const version = context.current;
-      await script(START_PICKER_SCRIPT);
-
-      if (context.current !== version) return;
-      setPickMode(mode);
-      setPicking(true);
+  function endPicking(): ToolWork<void> {
+    return Effect.gen(function* () {
+      yield* script(STOP_PICKER_SCRIPT);
+      setPicking(false);
       setPicked(null);
       setInspected(null);
     });
   }
 
+  function startPicking(mode: "hide" | "inspect"): void {
+    task(
+      Effect.gen(function* () {
+        if (reader) yield* script(CLOSE_READER_SCRIPT);
+        setReaderTab(null);
+        // Left before the picker starts, so a picker the page started as the document went is still stopped.
+        yield* closeWhenLeaving(STOP_PICKER_SCRIPT);
+        yield* script(START_PICKER_SCRIPT);
+        setPickMode(mode);
+        setPicking(true);
+        setPicked(null);
+        setInspected(null);
+      }),
+    );
+  }
+
   /** Opens the details of the picked element. */
   function inspect(): void {
-    task(async () => {
-      const element = await script<InspectedElement | null>(INSPECT_SCRIPT);
+    task(
+      Effect.gen(function* () {
+        const element = yield* script<InspectedElement | null>(INSPECT_SCRIPT);
 
-      if (element) setInspected(element);
-    });
+        if (element) setInspected(element);
+      }),
+    );
   }
 
   function parent(): void {
-    task(async () => {
-      if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice(t("notice.noParent"));
-    });
+    task(
+      Effect.gen(function* () {
+        if (!(yield* script<boolean>(PICK_PARENT_SCRIPT))) setNotice(t("notice.noParent"));
+      }),
+    );
   }
 
   function setRules(selectors: string[]): void {
@@ -172,27 +223,37 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   }
 
   /** Turns Reader on for this page; when it already reads, it only opens (or keeps closed) its settings panel. */
-  async function turnReaderOn(openSettings: boolean): Promise<boolean> {
-    if (reader) {
+  function turnReaderOn(openSettings: boolean): ToolWork<boolean> {
+    return Effect.gen(function* () {
+      if (reader) {
+        if (openSettings) setSettingsOpen(true);
+
+        return true;
+      }
+
+      if (picking) yield* endPicking();
+      yield* closeWhenLeaving(CLOSE_READER_SCRIPT);
+
+      const result = yield* script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
+
+      if (!result.ok) return false;
+
+      setReaderTab(active.id);
+
       if (openSettings) setSettingsOpen(true);
 
       return true;
-    }
+    });
+  }
 
-    const version = context.current;
-
-    if (picking) await endPicking();
-    const result = await script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
-
-    if (context.current !== version) return true;
-
-    if (!result.ok) return false;
-
-    setReaderTab(active.id);
-
-    if (openSettings) setSettingsOpen(true);
-
-    return true;
+  function exitReader(): void {
+    task(
+      Effect.gen(function* () {
+        yield* script(CLOSE_READER_SCRIPT);
+        setReaderTab(null);
+        setSettingsOpen(false);
+      }),
+    );
   }
 
   // A site that keeps Reader open (B12): as each page here finishes loading, Reader opens by itself — once per
@@ -206,20 +267,24 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     if (autoReaderUrl.current === active.url) return;
     autoReaderUrl.current = active.url;
 
-    const version = context.current;
-    void (async () => {
-      const result = await runPageScript<{ ok: boolean }>(view, openReaderScript(data.preferences.reader));
+    const tabId = active.id;
+    work.run(
+      quietly(
+        Effect.gen(function* () {
+          yield* closeWhenLeaving(CLOSE_READER_SCRIPT);
 
-      if (context.current === version && result.ok) setReaderTab(active.id);
-    })().catch(() => {});
+          const result = yield* run<{ ok: boolean }>(view, openReaderScript(data.preferences.reader));
+
+          if (result.ok) setReaderTab(tabId);
+        }),
+      ),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.url, reader, isLoading, blocked, view]);
 
   function changeSettings(settings: ReaderSettings): void {
     dispatch({ type: "reader-settings", settings });
-    task(async () => {
-      await script(updateReaderScript(settings));
-    });
+    task(Effect.asVoid(script(updateReaderScript(settings))));
   }
 
   return {
@@ -229,7 +294,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     back(): boolean {
       if (settingsOpen) setSettingsOpen(false);
       else if (inspected) setInspected(null);
-      else if (picking) task(endPicking);
+      else if (picking) task(endPicking());
       else return false;
 
       return true;
@@ -243,22 +308,22 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     /** Brings back everything hidden on the current site. */
     showHidden: () => setRules([]),
     openReader: () =>
-      task(async () => {
-        if (!(await turnReaderOn(true))) setNotice(t("notice.noArticle"));
-      }),
+      task(
+        Effect.gen(function* () {
+          if (!(yield* turnReaderOn(true))) setNotice(t("notice.noArticle"));
+        }),
+      ),
     /** Left from the site's panel (B12): Reader goes off even when this site asked for it. */
-    closeReader: () =>
-      task(async () => {
-        await script(CLOSE_READER_SCRIPT);
-        setReaderTab(null);
-        setSettingsOpen(false);
-      }),
+    closeReader: exitReader,
     copyMarkdown: () =>
-      task(async () => {
-        const result = await script<{ markdown: string }>(MARKDOWN_SCRIPT);
-        await Clipboard.setStringAsync(result.markdown);
-        setNotice(t("notice.markdownCopied"));
-      }),
+      task(
+        Effect.gen(function* () {
+          const result = yield* script<{ markdown: string }>(MARKDOWN_SCRIPT);
+
+          yield* copyText(result.markdown);
+          setNotice(t("notice.markdownCopied"));
+        }),
+      ),
     startPicking: () => startPicking("hide"),
     startInspecting: () => startPicking("inspect"),
     controls: (
@@ -268,13 +333,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
           settings={data.preferences.reader}
           onChange={changeSettings}
           onClose={() => setSettingsOpen(false)}
-          onExit={() =>
-            task(async () => {
-              await script(CLOSE_READER_SCRIPT);
-              setReaderTab(null);
-              setSettingsOpen(false);
-            })
-          }
+          onExit={exitReader}
         />
         <InspectPanel
           element={picking && pickMode === "inspect" ? inspected : null}
@@ -282,18 +341,21 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
           onClose={() => setInspected(null)}
           onParent={parent}
           onCopy={() =>
-            task(async () => {
-              if (!inspected) return;
-              await Clipboard.setStringAsync(inspected.agent);
-              setNotice(t("notice.copiedForAgent"));
-            })
+            task(
+              Effect.gen(function* () {
+                if (!inspected) return;
+
+                yield* copyText(inspected.agent);
+                setNotice(t("notice.copiedForAgent"));
+              }),
+            )
           }
         />
         {picking && pickMode === "inspect" ? (
           <PickerCard testID="inspect-instructions" icon="inspect" picked={picked} hint={t("picker.inspectHint")}>
             {picked ? <ToolButton id="inspect-parent-pick" label={t("picker.parent")} icon="up" onPress={parent} /> : null}
             {picked ? <ToolButton id="inspect-open" label={t("picker.details")} primary onPress={inspect} /> : null}
-            <ToolButton id="inspect-done" label={t("picker.done")} onPress={() => task(endPicking)} />
+            <ToolButton id="inspect-done" label={t("picker.done")} onPress={() => task(endPicking())} />
           </PickerCard>
         ) : null}
         {picking && pickMode === "hide" ? (
@@ -315,7 +377,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
                 <ToolButton id="hide-reset" label={t("picker.resetSite")} disabled={!rules.length} onPress={() => setRules([])} />
               </>
             )}
-            <ToolButton id="hide-done" label={t("picker.done")} onPress={() => task(endPicking)} />
+            <ToolButton id="hide-done" label={t("picker.done")} onPress={() => task(endPicking())} />
           </PickerCard>
         ) : null}
         {notice ? <Toast key={notice} text={notice} testID="reading-notice" /> : null}
