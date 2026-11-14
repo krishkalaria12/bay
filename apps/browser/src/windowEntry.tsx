@@ -1,8 +1,9 @@
-import { WindowContext } from "@bay/platform";
+import { Pressable, View, WindowContext } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { AppRegistry } from "react-native";
+import { AppRegistry, Platform, Text } from "react-native";
 import { WindowRoot } from "./App";
 import { DevErrorBoundary } from "./DevErrorBoundary";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { perfMark } from "./lib/perfProbe";
 
 type WindowApplicationOptions = { onFirstMount?: () => void };
@@ -48,6 +49,26 @@ function RootContents({ windowId, onFirstMount }: { windowId: string; onFirstMou
       <WindowRoot windowId={windowId} />
     </DevErrorBoundary>
   ) : (
-    <WindowRoot windowId={windowId} />
+    <ErrorBoundary fallback={<WindowFailed />}>
+      <WindowRoot windowId={windowId} />
+    </ErrorBoundary>
+  );
+}
+
+// A window whose interface threw says so instead of going blank. The web interface can load itself again.
+function WindowFailed() {
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#1b1b1b" }}>
+      <Text style={{ color: "#ebebeb", fontSize: 14 }}>This window ran into a problem.</Text>
+      {Platform.OS === "web" && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => location.reload()}
+          style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: "#ffffff1f" }}
+        >
+          <Text style={{ color: "#ebebeb", fontSize: 13 }}>Reload Window</Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
