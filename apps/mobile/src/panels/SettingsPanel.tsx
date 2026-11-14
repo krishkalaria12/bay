@@ -5,7 +5,6 @@ import { useThemeColor } from "heroui-native";
 import * as Effect from "effect/Effect";
 import { useEffect, useState, type JSX } from "react";
 import { Image, View } from "react-native";
-import { engineInfo } from "@bay/engine";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import type { ClearData } from "@/browser/clearData";
@@ -584,9 +583,6 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           ) : null}
           <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
             {t("settings.version", { version: Constants.expoConfig?.version ?? "" })}
-          </Text>
-          <Text testID="settings-engine-info" variant="caption" weight="regular" tone="muted" className="mt-1 text-center">
-            {t("settings.engine", { engine: engineInfo.name, version: engineInfo.version }).trim()}
           </Text>
         </>
       );

@@ -149,7 +149,6 @@ const nativeEngine = requireNativeModule<{
   setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
-  engineInfo: EngineInfo;
   openDownload(reference: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
   saveImage(url: string): Promise<void>;
@@ -160,17 +159,6 @@ const nativeEngine = requireNativeModule<{
   takeShare(): Promise<string | null>;
   setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
 }>("BayEngine");
-
-/** The engine that renders pages: the system's WebKit on iOS, Bay's own Chromium on Android. */
-export interface EngineInfo {
-  family: "webkit" | "chromium";
-  /** For people: WebKit or Chromium. */
-  name: string;
-  /** The engine's version, or the iOS version WebKit comes with; empty when the system won't say. */
-  version: string;
-}
-
-export const engineInfo: EngineInfo = nativeEngine.engineInfo;
 
 /**
  * Blocks with filter list files (`file://` URIs, EasyList syntax), or stops blocking with null. The engines read the

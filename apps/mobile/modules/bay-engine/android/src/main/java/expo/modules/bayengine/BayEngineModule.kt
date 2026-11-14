@@ -92,8 +92,6 @@ class BayEngineModule : Module() {
 
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
-    Constant("engineInfo") { BayEngineBackend.engineInfo(appContext.reactContext) }
-
     AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
