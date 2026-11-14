@@ -11,7 +11,7 @@ mod blocker;
 mod body;
 mod ffi;
 mod html;
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "jni"))]
 mod jni_bridge;
 mod modifiers;
 mod preprocess;
