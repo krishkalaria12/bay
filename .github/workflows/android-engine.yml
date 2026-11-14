@@ -1,9 +1,10 @@
 name: Android engine
-# Builds the pinned Chromium for Android (engine/android/lock.json) on GitHub's Linux runners, as phase P0 of
-# docs/android-chromium-plan.html: upstream content_shell_apk for arm64, unpatched, with a capacity report from every
-# stage. A hosted job ends after six hours, so each stage compiles for a while, saves the tree, and the next stage
-# resumes from it. A later run resumes from the newest saved tree for the same pin and GN args, and a run whose engine
-# id matches an earlier artifact republishes it without compiling.
+# Builds Bay for Android on GitHub's Linux runners (docs/android-chromium-plan.html): Bay's Chromium engine
+# (engine/android, pinned by engine/android/lock.json) as bay-engine.aar for arm64, then the app around it as an APK,
+# and publishes both as a prerelease named after the tag. A hosted job ends after six hours, so each engine stage
+# compiles for a while, saves the tree, and the next stage resumes from it. A later run resumes from the newest saved
+# tree for the same pin and GN args, and a run whose engine id matches an earlier artifact republishes it without
+# compiling.
 #
 # Start a run: git tag android-engine-N && git push origin android-engine-N
 on:
@@ -72,3 +73,86 @@ jobs:
             echo "::error::six stages ran out before the engine finished; start another run to resume from the saved tree"
             exit 1
           fi
+
+  # The app around the engine: prebuild, then Gradle's release build. Signed with the release key when the
+  # repository has one (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD);
+  # without it the APK keeps the template's debug signature, which installs from a link but can't update a store build.
+  apk:
+    needs: engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-engine
+          path: dist/android-engine
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      # The app is its own workspace with its own lockfile, and it links @bay/core from the root workspace.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/mobile
+      - name: Install the engine
+        working-directory: apps/mobile
+        run: |
+          node scripts/fetch-android-engine.mjs --from ../../dist/android-engine
+          # The blocker's scriptlet and redirect resources (scripts/adblock does the same locally).
+          mkdir -p modules/bay-engine/android/src/main/assets
+          cp ../../packages/adblock/resources/resources.json modules/bay-engine/android/src/main/assets/bay-adblock-resources.json
+      - name: Prebuild
+        working-directory: apps/mobile
+        run: CI=1 npx expo prebuild --platform android --clean
+      - name: Build
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: Sign
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          built=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          version=$(node -p 'require("./apps/mobile/app.json").expo.version')
+          apk="dist/Bay-$version-android.apk"
+          mkdir -p dist
+          if [[ -z "$KEYSTORE" ]]; then
+            echo "::warning::no release key in the repository secrets: the APK keeps the debug signature"
+            cp "$built" "$apk"
+          else
+            tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+            "$tools/zipalign" -f -p 16 "$built" "$RUNNER_TEMP/aligned.apk"
+            "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD --out "$apk" "$RUNNER_TEMP/aligned.apk"
+            rm "$RUNNER_TEMP/release.jks"
+          fi
+          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --print-certs "$apk"
+          echo "APK=$apk" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bay-android-apk
+          path: ${{ env.APK }}
+          if-no-files-found: error
+          retention-days: 30
+      # A tag publishes the APK, and the engine the app's android-engine.json can pin, as a prerelease.
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          id=$(node -p 'require("./dist/android-engine/engine.json").id')
+          gh release create "$GITHUB_REF_NAME" "$APK" dist/android-engine/bay-engine.aar dist/android-engine/engine.json \
+            --repo "$GITHUB_REPOSITORY" --prerelease --title "Bay for Android ($GITHUB_REF_NAME)" \
+            --notes "Bay for Android with its own Chromium ($id). To build the app against this engine, pin it in apps/mobile/android-engine.json: {\"id\": \"$id\", \"release\": \"https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME\"}"
