@@ -1145,20 +1145,19 @@ mod tests {
             )
         };
         let built =
-            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidChromium, None).unwrap();
         assert!(blocked(&built));
         // A cached engine is used even when the lists have changed, until the version does.
         std::fs::write(&list, "||other.example^\n").unwrap();
         let cached =
-            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidChromium, None).unwrap();
         assert!(blocked(&cached));
         let rebuilt =
-            load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView, None).unwrap();
+            load_cached(&files, &cache, "v2", crate::Platform::AndroidChromium, None).unwrap();
         assert!(!blocked(&rebuilt));
         // Another platform's cache at the same path and version is rebuilt, not reused.
         std::fs::write(&list, "||ads.example^\n").unwrap();
-        let other =
-            load_cached(&files, &cache, "v2", crate::Platform::AndroidChromium, None).unwrap();
+        let other = load_cached(&files, &cache, "v2", crate::Platform::IosWebKit, None).unwrap();
         assert!(blocked(&other));
         std::fs::remove_dir_all(dir).ok();
     }
@@ -1203,7 +1202,7 @@ mod tests {
             &files,
             &dir.join("engine.bin"),
             "v1",
-            crate::Platform::AndroidWebView,
+            crate::Platform::AndroidChromium,
             None,
         )
         .unwrap();

@@ -73,7 +73,6 @@ public class BayEngineModule: Module {
       BayEngineTabStates.prune(keeping: keep)
     }
 
-    Constant("privateBrowsingSupported") { true }
     // Pages render with the system's WebKit, which updates with iOS.
     Constant("engineInfo") { () -> [String: String] in
       let os = ProcessInfo.processInfo.operatingSystemVersion
@@ -119,6 +118,9 @@ public class BayEngineModule: Module {
       }
       Prop("suspended", false) { (view: BayEngineView, suspended: Bool) in
         view.isSuspended = suspended
+      }
+      Prop("desktopMode", false) { (view: BayEngineView, desktop: Bool) in
+        view.desktopMode = desktop
       }
       Prop("stateKey") { (view: BayEngineView, key: String?) in
         view.stateKey = key

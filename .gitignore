@@ -72,3 +72,4 @@ scripts/.notary.env
 
 # Rust build output
 packages/adblock/target/
+__pycache__/

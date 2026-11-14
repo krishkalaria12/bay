@@ -1,0 +1,265 @@
+# Bay's Chromium engine for Android: a content embedder (no //chrome) packaged as bay-engine.aar for the Expo app.
+# See docs/android-chromium-plan.html. scripts/android/engine.py copies this directory to //bay/mobile.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//third_party/jni_zero/jni_zero.gni")
+import("//tools/grit/repack.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//v8/gni/v8.gni")
+
+assert(is_android, "//bay/mobile is Bay's Android engine")
+assert(!is_component_build, "bay-engine.aar ships one self-contained library")
+
+_java_sources = [
+  "java/src/org/bay/engine/BayDownloads.java",
+  "java/src/org/bay/engine/BayEngine.java",
+  "java/src/org/bay/engine/BayEngineApplication.java",
+  "java/src/org/bay/engine/BayProfile.java",
+  "java/src/org/bay/engine/BayTab.java",
+  "java/src/org/bay/engine/BayTabClient.java",
+  "java/src/org/bay/engine/BayTabView.java",
+]
+
+# Java classes whose methods native code calls, or that call native code.
+_jni_sources = [
+  "java/src/org/bay/engine/BayDownloads.java",
+  "java/src/org/bay/engine/BayEngine.java",
+  "java/src/org/bay/engine/BayProfile.java",
+  "java/src/org/bay/engine/BayTab.java",
+]
+
+generate_jni("jni_headers") {
+  sources = _jni_sources
+}
+
+source_set("lib") {
+  sources = [
+    "app/bay_main_delegate.cc",
+    "app/bay_main_delegate.h",
+    "browser/bay_browser_context.cc",
+    "browser/bay_browser_context.h",
+    "browser/bay_browser_main_parts.cc",
+    "browser/bay_browser_main_parts.h",
+    "browser/bay_content_blocker.cc",
+    "browser/bay_content_blocker.h",
+    "browser/bay_content_browser_client.cc",
+    "browser/bay_content_browser_client.h",
+    "browser/bay_download_manager_delegate.cc",
+    "browser/bay_download_manager_delegate.h",
+    "browser/bay_engine_android.cc",
+    "browser/bay_https_upgrade_throttle.cc",
+    "browser/bay_https_upgrade_throttle.h",
+    "browser/bay_permission_manager.cc",
+    "browser/bay_permission_manager.h",
+    "browser/bay_tab.cc",
+    "browser/bay_tab.h",
+    "common/bay_content_client.cc",
+    "common/bay_content_client.h",
+    "common/bay_descriptors.h",
+    "common/bay_isolated_world.h",
+    "renderer/bay_content_renderer_client.cc",
+    "renderer/bay_content_renderer_client.h",
+    "renderer/bay_render_frame_observer.cc",
+    "renderer/bay_render_frame_observer.h",
+  ]
+  deps = [
+    ":jni_headers",
+    "//base",
+    "//bay/filter",
+    "//bay/filter/mojom",
+    "//components/android_autofill/browser:android",
+    "//components/autofill/content/browser",
+    "//components/autofill/content/renderer",
+    "//components/autofill/core/common",
+    "//components/download/public/common:public",
+    "//components/embedder_support",
+    "//components/embedder_support:user_agent",
+    "//components/embedder_support/android:view",
+    "//components/embedder_support/android:web_contents_delegate",
+    "//components/js_injection/browser",
+    "//components/js_injection/common:common_mojom",
+    "//components/js_injection/renderer",
+    "//components/keyed_service/content",
+    "//components/keyed_service/core",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/user_prefs",
+    "//content/public/app",
+    "//content/public/browser",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//net",
+    "//services/network/public/mojom",
+    "//skia",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public/common",
+    "//ui/android",
+    "//ui/base",
+    "//ui/gfx",
+    "//url",
+    "//v8",
+  ]
+  # Bay's content blocker (packages/adblock), built by scripts/android/engine.py with cargo for this ABI. Its C ABI is
+  # bay_adblock.h, copied beside these sources.
+  libs = [ "$root_out_dir/bay_adblock/aarch64-linux-android/release/libbay_adblock.a" ]
+}
+
+shared_library_with_jni("libbay_engine") {
+  sources = [ "app/bay_library_loader.cc" ]
+  deps = [
+    ":jni_headers",
+    ":lib",
+    ":pak",
+    "//base",
+    "//content/public/app",
+  ]
+  configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  configs += [ "//build/config/android:hide_all_but_jni" ]
+  java_targets = [ ":java" ]
+}
+
+android_resources("java_resources") {
+  sources = [ "java/res/values/bay_engine_strings.xml" ]
+}
+
+android_library("java") {
+  resources_package = "org.bay.engine"
+  sources = _java_sources
+  srcjar_deps = [ ":jni_headers" ]
+  deps = [
+    ":java_resources",
+    "//base:base_java",
+    "//base/version_info/android:version_constants_java",
+    "//build/android:build_java",
+    "//components/android_autofill/browser:java",
+    "//components/embedder_support/android:content_view_java",
+    "//components/embedder_support/android:view_java",
+    "//components/embedder_support/android:web_contents_delegate_java",
+    "//components/webauthn/android:java",
+    "//content/public/android:content_java",
+    "//net/android:net_java",
+    "//services/service_manager/public/java:service_manager_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/blink/public/mojom:authenticator_mojo_bindings_java",
+    "//third_party/jni_zero:jni_zero_java",
+    "//ui/android:ui_java",
+    "//url:gurl_java",
+  ]
+}
+
+# GEN_JNI and the registration the native library expects, compiled into the AAR (java_library keeps GEN_JNI).
+java_library("jni_registration_java") {
+  supports_android = true
+  srcjar_deps = [ ":libbay_engine__jni_registration" ]
+  deps = [ "//third_party/jni_zero:jni_zero_java" ]
+}
+
+repack("pak") {
+  output = "$root_out_dir/bay_engine.pak"
+  sources = [
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/content/process_resources.pak",
+    "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/third_party/blink/public/strings/blink_strings_en-US.pak",
+    "$root_gen_dir/third_party/blink/public/strings/permission_element_generated_strings.pak",
+    "$root_gen_dir/third_party/blink/public/strings/permission_element_strings_en-US.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ax_strings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+  deps = [
+    "//content:content_resources",
+    "//content/browser/resources",
+    "//mojo/public/js:resources",
+    "//net:net_resources",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
+    "//third_party/blink/public/strings",
+    "//third_party/blink/public/strings:permission_element_generated_strings",
+    "//third_party/blink/public/strings:permission_element_strings",
+    "//ui/resources",
+    "//ui/strings",
+  ]
+}
+
+jinja_template("manifest") {
+  input = "java/AndroidManifest.xml.jinja2"
+  output = "$target_gen_dir/manifest/AndroidManifest.xml"
+  variables = [ "library_name=bay_engine" ]
+}
+
+# Classes the app supplies from its own Gradle dependencies, so the APK has one copy of each.
+_app_provided_classes = [
+  "androidx/*",
+  "com/google/*",
+  "javax/*",
+  "kotlin/*",
+  "kotlinx/*",
+  "org/jetbrains/*",
+]
+
+dist_aar("aar_base") {
+  output = "$root_out_dir/bay_engine_base.aar"
+  android_manifest = "$target_gen_dir/manifest/AndroidManifest.xml"
+  native_libraries = [ "$root_out_dir/libbay_engine.so" ]
+  jar_excluded_patterns = _app_provided_classes
+  deps = [
+    ":java",
+    ":jni_registration_java",
+    ":libbay_engine",
+    ":manifest",
+  ]
+}
+
+# The data the engine opens from the APK's assets (base::android::OpenApkAsset), named as Chromium's own APKs name it.
+_asset_sources = [
+  "$root_out_dir/bay_engine.pak",
+  "$root_out_dir/icudtl.dat",
+]
+_asset_names = [
+  "bay_engine.pak",
+  "icudtl.dat",
+]
+_asset_deps = [
+  ":pak",
+  "//third_party/icu:icudata",
+]
+if (v8_use_external_startup_data) {
+  if (use_v8_context_snapshot) {
+    _asset_sources += [ "$root_out_dir/$v8_context_snapshot_filename" ]
+    _asset_names += [ v8_context_snapshot_filename ]
+    _asset_deps += [ "//tools/v8_context_snapshot" ]
+  } else {
+    _asset_sources += [ "$root_build_dir/snapshot_blob.bin" ]
+    _asset_names += [ "snapshot_blob_64.bin" ]
+    _asset_deps += [ "//v8:run_mksnapshot_default" ]
+  }
+}
+
+action("aar") {
+  script = "package_aar.py"
+  _output = "$root_out_dir/bay-engine.aar"
+  inputs = [ "$root_out_dir/bay_engine_base.aar" ] + _asset_sources
+  outputs = [ _output ]
+  deps = [ ":aar_base" ] + _asset_deps
+  args = [
+    "--base-aar",
+    rebase_path("$root_out_dir/bay_engine_base.aar", root_build_dir),
+    "--output",
+    rebase_path(_output, root_build_dir),
+    "--excluded-classes=$_app_provided_classes",
+  ]
+  _index = 0
+  foreach(source, _asset_sources) {
+    args += [
+      "--asset",
+      rebase_path(source, root_build_dir) + ":" + _asset_names[_index],
+    ]
+    _index += 1
+  }
+}

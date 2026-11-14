@@ -1,4 +1,13 @@
-const { withAndroidManifest, withEntitlementsPlist, withGradleProperties, withInfoPlist, withXcodeProject } = require("expo/config-plugins");
+const {
+  withAndroidManifest,
+  withAppBuildGradle,
+  withEntitlementsPlist,
+  withGradleProperties,
+  withInfoPlist,
+  withMainApplication,
+  withProjectBuildGradle,
+  withXcodeProject,
+} = require("expo/config-plugins");
 
 // Bay as the default browser (B9) needs Apple's managed `com.apple.developer.web-browser` entitlement, which Apple
 // grants on request; the request isn't in our hands. Builds turned out with BAY_DEFAULT_BROWSER=1 claim it so a
@@ -13,8 +22,8 @@ const defaultBrowser = process.env.BAY_DEFAULT_BROWSER === "1";
 const webPasskeys = defaultBrowser && process.env.BAY_WEB_PASSKEYS === "1";
 
 const gradleProperties = {
-  // The Rust ad blocker (libbay_adblock.so, scripts/adblock) is built for arm64 only, so other ABIs would crash on
-  // the first page load, and each extra ABI adds a copy of every native library. The Apple-Silicon emulator is arm64.
+  // Bay's engine (bay-engine.aar) is built for arm64 only, so other ABIs would have no engine, and each extra ABI adds
+  // a copy of every native library. The Apple-Silicon emulator is arm64.
   reactNativeArchitectures: "arm64-v8a",
   "android.enableShrinkResourcesInReleaseBuilds": "true",
 };
@@ -119,6 +128,8 @@ module.exports = function withBayEngine(config) {
     return mod;
   });
 
+  config = withChromiumEngine(config);
+
   return withXcodeProject(config, (mod) => {
     const bundleId = config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile";
 
@@ -140,6 +151,85 @@ module.exports = function withBayEngine(config) {
     return mod;
   });
 };
+
+// Bay's Chromium on Android (bay-engine.aar, which scripts/fetch-android-engine.mjs installs as a local Maven
+// repository under android/engine): the app resolves the engine from that repository, needs Android 10 as the
+// engine does, keeps the engine's resource packs uncompressed (Chromium maps them straight out of the APK), and starts
+// none of its own code in the engine's renderer and GPU processes, which run the app's Application class too.
+function withChromiumEngine(config) {
+  config = withProjectBuildGradle(config, (mod) => {
+    mod.modResults.contents = chromiumEngineEdits.projectBuildGradle(mod.modResults.contents);
+
+    return mod;
+  });
+  config = withAppBuildGradle(config, (mod) => {
+    mod.modResults.contents = chromiumEngineEdits.appBuildGradle(mod.modResults.contents);
+
+    return mod;
+  });
+
+  return withMainApplication(config, (mod) => {
+    mod.modResults.contents = chromiumEngineEdits.mainApplication(mod.modResults.contents);
+
+    return mod;
+  });
+}
+
+// Each edit leaves a file it has already made alone, so prebuilding twice changes nothing.
+const chromiumEngineEdits = {
+  projectBuildGradle(gradle) {
+    const repository = `maven { url "\${rootDir}/../modules/bay-engine/android/engine/repo" } // bay-engine`;
+
+    if (!gradle.includes("// bay-engine")) {
+      gradle = gradle.replace(/allprojects\s*\{\s*repositories\s*\{/, (match) => `${match}\n    ${repository}`);
+    }
+
+    if (!gradle.includes("ext.minSdkVersion = 29")) {
+      gradle = gradle.replace(
+        /^apply plugin: "expo-root-project"/m,
+        (match) => `// Bay's Chromium engine runs on Android 10 and later.\next.minSdkVersion = 29\n\n${match}`,
+      );
+    }
+
+    return gradle;
+  },
+
+  appBuildGradle(gradle) {
+    if (gradle.includes("noCompress")) return gradle;
+
+    return gradle.replace(/androidResources\s*\{/, (match) => `${match}\n        noCompress += ["pak", "dat", "bin"]`);
+  },
+
+  mainApplication(source) {
+    if (source.includes("BayEngineApplication")) return source;
+
+    source = source.replace(
+      /^import android\.app\.Application$/m,
+      (match) => `${match}\nimport android.content.Context\nimport org.bay.engine.BayEngineApplication`,
+    );
+
+    source = source.replace(
+      /^[ \t]*override fun onConfigurationChanged\(newConfig: Configuration\) \{\n([ \t]*)super\.onConfigurationChanged\(newConfig\)\n/m,
+      (match, body) => `${match}${body}if (!appProcess) return\n`,
+    );
+
+    return source.replace(
+      /^([ \t]*)override fun onCreate\(\) \{\n([ \t]*)super\.onCreate\(\)\n/m,
+      (match, indent, body) =>
+        `${indent}/** False in the engine's own child processes, where none of the app starts. */\n` +
+        `${indent}private var appProcess = true\n\n` +
+        `${indent}override fun attachBaseContext(base: Context) {\n` +
+        `${body}super.attachBaseContext(base)\n` +
+        `${body}appProcess = BayEngineApplication.attachBaseContext(this)\n` +
+        `${indent}}\n\n` +
+        `${match}` +
+        `${body}if (!appProcess) return\n` +
+        `${body}BayEngineApplication.onCreate(this)\n`,
+    );
+  },
+};
+
+module.exports.chromiumEngineEdits = chromiumEngineEdits;
 
 // The share extension (B14) is the only way to appear in a share sheet on iOS, and the search widget (B15) only
 // through a WidgetKit target. Both keep their sources as plain files next to the app (share-extension/ and

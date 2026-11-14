@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Puts NNCore into the Chromium tree: copies src/bay/ to //bay and adds its hooks:
+# Puts NNCore into the Chromium tree: copies src/bay/core/ to //bay/core (the content blocker's filters it builds on,
+# //bay/filter, are engine/shared's) and adds its hooks:
 # a dep of the macOS //chrome:chrome_dll on //bay/core (Chrome's framework then links
 # our layer), ChromeMain making NNCore's main delegate, Browser asking NNCore for the window of a
 # Browser Chrome makes itself, HistoryTabHelper asking NNCore which tabs are history,
@@ -19,7 +20,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 src=${CHROMIUM_SRC:-$HOME/chromium-build/chromium_git/chromium/src}
 
 if [[ "${1:-}" == --check ]]; then
-  diff -r "$here/src/bay" "$src/bay" >/dev/null &&
+  diff -r "$here/src/bay/core" "$src/bay/core" >/dev/null &&
     grep -q 'bay_alive' "$src/chrome/browser/ui/autofill/autofill_popup_controller_impl.cc" &&
     grep -q 'g_bay_opacity_from_default_color' "$src/content/browser/renderer_host/render_widget_host_view_base.cc" &&
     grep -q '"//bay/core"' "$src/chrome/BUILD.gn" &&
@@ -52,9 +53,9 @@ if [[ "${1:-}" == --check ]]; then
   exit
 fi
 
-mkdir -p "$src/bay"
+mkdir -p "$src/bay/core"
 # No -t: a changed file gets a new mtime, so ninja always sees it (a restored older copy too).
-rsync -r --delete --checksum "$here/src/bay/" "$src/bay/"
+rsync -r --delete --checksum "$here/src/bay/core/" "$src/bay/core/"
 
 python3 - "$src/chrome/BUILD.gn" <<'PY'
 import re, sys

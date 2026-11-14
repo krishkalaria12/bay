@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import { privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
+import { saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
@@ -412,7 +412,7 @@ export function BrowserScreen(): JSX.Element {
     setLink(null);
 
     if (command === "new-tab") openTab("");
-    else if (privateBrowsingSupported) openTab("", false, true);
+    else openTab("", false, true);
   }
 
   function openIncomingLink(incomingUrl: string): void {
@@ -990,7 +990,6 @@ export function BrowserScreen(): JSX.Element {
           initialText={searchInNewTab ? "" : active.url}
           engine={engine}
           data={data}
-          privateAvailable={privateBrowsingSupported}
           initialPrivate={searchPrivately || (!searchInNewTab && Boolean(active.private))}
           onOpen={open}
           onDismiss={() => {
@@ -1020,7 +1019,6 @@ export function BrowserScreen(): JSX.Element {
         hiddenCount={reading.selectorsFor(active).length}
         onShowHidden={reading.showHidden}
         onSiteSettings={() => setPanel("site")}
-        privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onTranslate={() => navigate(active.id, translateUrl(active.url))}
@@ -1045,7 +1043,6 @@ export function BrowserScreen(): JSX.Element {
         visible={panel === "tabs"}
         onClose={() => closePanel("tabs")}
         tabCount={spaceTabs.length}
-        privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onArchiveTab={() => archiveTab(active.id)}
@@ -1114,7 +1111,6 @@ export function BrowserScreen(): JSX.Element {
         blockContent={blockContent}
         blockerDetail={blockerDetail(blockerStatus, t)}
         onBlockContentChange={(enabled) => dispatch({ type: "block-content", enabled })}
-        privateAvailable={privateBrowsingSupported}
         lockPrivateTabs={lockPrivateTabs}
         onLockPrivateTabsChange={(enabled) => void setLockPrivateTabs(enabled)}
         wallpaper={data.preferences.wallpaper}

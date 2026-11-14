@@ -28,6 +28,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "bay/core/mojom/nncore.mojom.h"
+#include "bay/filter/mojom/scriptlets.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"

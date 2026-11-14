@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
@@ -6,11 +8,89 @@ plugins {
 group = 'in.krishkalaria.bay.engine'
 version = '0.1.0'
 
-android {
-  namespace 'in.krishkalaria.bay.engine'
+// Bay renders Android pages with its own Chromium: bay-engine.aar, which apps/mobile/scripts/fetch-android-engine.mjs
+// installs as a local Maven repository in engine/ (described by engine/engine.properties). There is no other engine,
+// so a build without it stops here and says how to fetch it.
+//
+// -PbayEngineApiStub=true compiles against engine/android/api-stub instead: a check that the Kotlin builds without
+// the engine, never an app that runs.
+def engineDirectory = file('engine')
+def engineProperties = new Properties()
+def enginePropertiesFile = new File(engineDirectory, 'engine.properties')
+if (enginePropertiesFile.isFile()) enginePropertiesFile.withInputStream { engineProperties.load(it) }
+def engineVersion = engineProperties.getProperty('version')
+def useApiStub = findProperty('bayEngineApiStub') == 'true'
+if (engineVersion == null && !useApiStub) {
+  throw new GradleException("Bay's engine isn't installed. From apps/mobile, run: node scripts/fetch-android-engine.mjs")
+}
+def engineAar = useApiStub ? null : new File(engineDirectory, "repo/org/bay/engine/bay-engine/${engineVersion}/bay-engine-${engineVersion}.aar")
+def apiStub = file("${projectDir}/../../../../../engine/android/api-stub/java")
+def engineRClasses = layout.buildDirectory.dir('generated/source/bayEngineR')
+
+repositories {
+  if (!useApiStub) maven { url new File(engineDirectory, 'repo').toURI() }
 }
 
+android {
+  namespace 'in.krishkalaria.bay.engine'
+  sourceSets {
+    main {
+      java.srcDirs += useApiStub ? apiStub : engineRClasses
+    }
+  }
+}
+
+// Chromium's Java refers to R classes such as org.chromium.ui.R, which Chromium only makes when it builds a whole APK.
+// The AAR lists the packages (bay-engine/r-packages.txt) and carries every resource (R.txt) under org.bay.engine.R,
+// which Gradle generates for it; this writes each listed package's R as a view of that one.
+def generateEngineRClasses = tasks.register('generateBayEngineRClasses') {
+  enabled = engineAar != null
+  if (engineAar != null) inputs.file(engineAar)
+  outputs.dir(engineRClasses)
+  doLast {
+    def output = engineRClasses.get().asFile
+    output.deleteDir()
+    new ZipFile(engineAar).withCloseable { aar ->
+      def readEntry = { name -> aar.getEntry(name) ? aar.getInputStream(aar.getEntry(name)).getText('UTF-8') : '' }
+      def entries = [:].withDefault { [] }
+      readEntry('R.txt').eachLine { line ->
+        def parts = line.trim().split(' ', 4)
+        if (parts.length >= 3) entries[parts[1]] << [array: parts[0] == 'int[]', name: parts[2]]
+      }
+      readEntry('bay-engine/r-packages.txt').eachLine { line ->
+        def pkg = line.trim()
+        if (!pkg || pkg == 'org.bay.engine') return
+        def source = new StringBuilder("package ${pkg};\n\n/** Generated from bay-engine.aar: ${pkg}'s resources, as org.bay.engine.R has them. */\npublic final class R {\n")
+        entries.each { type, fields ->
+          source << "  public static final class ${type} {\n"
+          fields.each { field ->
+            def kind = field.array ? 'int[]' : 'int'
+            source << "    public static ${kind} ${field.name} = org.bay.engine.R.${type}.${field.name};\n"
+          }
+          source << '  }\n'
+        }
+        source << '}\n'
+        def file = new File(output, pkg.replace('.', '/') + '/R.java')
+        file.parentFile.mkdirs()
+        file.text = source.toString()
+      }
+    }
+  }
+}
+
+tasks.named('preBuild').configure { dependsOn generateEngineRClasses }
+
 dependencies {
-  implementation 'androidx.webkit:webkit:1.15.0'
   implementation 'androidx.appcompat:appcompat:1.7.0'
+  implementation 'androidx.annotation:annotation:1.9.1'
+  if (!useApiStub) {
+    implementation "org.bay.engine:bay-engine:${engineVersion}"
+    // Classes the engine's code uses but leaves to the app (bay-engine/app-classes.txt), at the versions the pinned
+    // Chromium builds against or newer.
+    implementation 'androidx.collection:collection:1.4.5'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.fragment:fragment:1.8.5'
+    implementation 'androidx.lifecycle:lifecycle-common:2.8.7'
+    implementation 'androidx.window:window:1.3.0'
+  }
 }

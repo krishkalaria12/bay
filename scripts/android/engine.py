@@ -5,9 +5,8 @@ Android's Chromium builds only on an x86-64 Linux host. This script drives a
 direct Chromium checkout (no CEF) synced with target_os = ["android"], at the
 commit in engine/android/lock.json, and builds the lock's target for arm64.
 
-Phase P0 of docs/android-chromium-plan.html builds upstream content_shell_apk,
-unpatched, to prove the pin, the toolchain and the runner's capacity. Bay's own
-engine (//bay/mobile and its AAR) builds on this tree later.
+It builds Bay's engine, //bay/mobile (engine/android/src, copied into the tree
+before each build), as bay-engine.aar for the app (docs/android-chromium-plan.html).
 
   python scripts/android/engine.py pin
   python scripts/android/engine.py download --root ~/bay-android-engine
@@ -40,7 +39,19 @@ LOCK = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
 STOPPED_EXIT_CODE = 124
 BASE_STAMP = "bay-android-base.json"
 BUILD_STAMP = "bay-android-build.json"
-APK = "apks/ContentShell.apk"
+OVERLAY = REPO / "engine/android/src"
+# Directories the overlay owns in chromium/src: replaced whole on every build.
+OVERLAY_DIRECTORIES = ("bay/mobile",)
+# The code every Bay engine shares (engine/shared, which desktop copies in with engine/shared/apply.sh): the content
+# blocker's request and cookie filters, also replaced whole.
+SHARED = REPO / "engine/shared/src"
+SHARED_DIRECTORIES = ("bay/filter",)
+ADBLOCK = REPO / "packages/adblock"
+RUST_TARGET = "aarch64-linux-android"
+# What a saved build tree depends on. The target and Bay's own sources aren't here: a change to them is an incremental
+# rebuild of the same tree.
+BASE_KEYS = ("chromium", "chromiumRef", "chromiumCommit", "chromiumUrl", "depotToolsCommit", "gclientTargetOs", "abi",
+             "outputDirectory", "gnArgs")
 DEPOT_TOOLS_URL = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 
 
@@ -54,12 +65,35 @@ def digest(*parts: bytes) -> str:
 
 def base_id(lock=LOCK) -> str:
     """What a saved build tree depends on: the source pin, toolchains (from its DEPS) and GN args."""
-    return digest(json.dumps(lock, sort_keys=True).encode())[:16]
+    return digest(json.dumps({key: lock[key] for key in BASE_KEYS}, sort_keys=True).encode())[:16]
+
+
+def tree_digest(directory: pathlib.Path) -> str:
+    value = hashlib.sha256()
+    for path in sorted(directory.rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts:
+            value.update(path.relative_to(directory).as_posix().encode() + b"\0")
+            value.update(bytes.fromhex(sha256(path)))
+    return value.hexdigest()
+
+
+def shared_digest() -> str:
+    """The shared filters and the Rust blocker they run on."""
+    value = hashlib.sha256()
+    value.update(tree_digest(SHARED).encode())
+    for name in ("Cargo.toml", "Cargo.lock"):
+        value.update(bytes.fromhex(sha256(ADBLOCK / name)))
+    value.update(tree_digest(ADBLOCK / "src").encode())
+    value.update(tree_digest(ADBLOCK / "include").encode())
+    value.update(tree_digest(ADBLOCK / "vendor").encode())
+    value.update(bytes.fromhex(sha256(ADBLOCK / "resources/resources.json")))
+    return value.hexdigest()
 
 
 def engine_id(lock=LOCK) -> str:
-    """The artifact: the base plus everything in this repository that shapes it."""
-    return digest(base_id(lock).encode(), DRIVER_PATH.read_bytes())[:16]
+    """The artifact: the base, the target, and everything in this repository that shapes it."""
+    return digest(base_id(lock).encode(), lock["target"].encode(), DRIVER_PATH.read_bytes(),
+                  tree_digest(OVERLAY).encode(), shared_digest().encode())[:16]
 
 
 def describe_pin(lock=LOCK) -> dict:
@@ -112,7 +146,8 @@ def toolchains(src: pathlib.Path) -> dict:
         return sorted(entry.name for entry in path.iterdir()) if path.is_dir() else []
 
     return {
-        "ndk": read_value(src / "third_party/android_toolchain/ndk/source.properties", r"^Pkg\.Revision\s*=\s*(.+)$"),
+        "ndk": (read_value(src / "third_party/android_toolchain/ndk/source.properties", r"^Pkg\.Revision\s*=\s*(.+)$")
+                or read_value(src / "third_party/android_ndk/source.properties", r"^Pkg\.Revision\s*=\s*(.+)$")),
         "sdkPlatforms": listing(sdk / "platforms"),
         "buildTools": listing(sdk / "build-tools"),
         "jdk": read_value(src / "third_party/jdk/current/release", r'^JAVA_VERSION="?([^"\n]+)'),
@@ -171,6 +206,12 @@ def run_until(command, cwd, env, minutes) -> bool:
     if code:
         raise subprocess.CalledProcessError(code, command)
     return True
+
+
+def require_tools(names, env):
+    missing = [name for name in names if not shutil.which(name, path=env.get("PATH"))]
+    if missing:
+        raise RuntimeError(f"missing build tools: {', '.join(missing)}")
 
 
 def require_linux_host():
@@ -267,11 +308,37 @@ def generate(root: pathlib.Path, env):
         raise RuntimeError(f"the pinned tree doesn't declare these GN args: {', '.join(unused)}")
 
 
+def apply_overlay(root: pathlib.Path):
+    """Copies engine/android/src and engine/shared/src into chromium/src, replacing the directories each owns (so a
+    deleted file goes too)."""
+    src = source_dir(root)
+    for layer, directories in ((OVERLAY, OVERLAY_DIRECTORIES), (SHARED, SHARED_DIRECTORIES)):
+        for directory in directories:
+            target = src / directory
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(layer / directory, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    (src / "bay/mobile/adblock").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ADBLOCK / "include/bay_adblock.h", src / "bay/mobile/adblock/bay_adblock.h")
+
+
+def build_adblock(src: pathlib.Path, env: dict):
+    """Bay's Rust content blocker as a static library for the engine's ABI, where //bay/mobile links it.
+
+    Pure Rust: a static library needs no linker."""
+    require_tools(("cargo",), env)
+    run(["cargo", "rustc", "--release", "--lib", "--locked", "--target", RUST_TARGET, "--crate-type", "staticlib",
+         "--manifest-path", ADBLOCK / "Cargo.toml",
+         "--target-dir", src / LOCK["outputDirectory"] / "bay_adblock"], env=env)
+
+
 def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
     require_linux_host()
     verify_base(root)
     env = environment(root)
     (root / BUILD_STAMP).unlink(missing_ok=True)
+    apply_overlay(root)
+    build_adblock(source_dir(root), env)
     generate(root, env)
     command = ["autoninja", "-C", LOCK["outputDirectory"]]
     if jobs:
@@ -286,12 +353,22 @@ def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
     return True
 
 
-def zipalign_16k(src: pathlib.Path, apk: pathlib.Path):
-    """Whether the APK's native libraries are aligned for 16 KB pages, or None without zipalign."""
-    tools = sorted((src / "third_party/android_sdk/public/build-tools").glob("*/zipalign"))
-    if not tools:
-        return None
-    return subprocess.run([tools[-1], "-c", "-P", "16", "4", apk], capture_output=True).returncode == 0
+def elf_alignment(library: pathlib.Path):
+    """The smallest LOAD segment alignment in a 64-bit ELF, or None if it can't be read (16 KB pages need 16384)."""
+    with library.open("rb") as stream:
+        header = stream.read(64)
+        if header[:4] != b"\x7fELF" or header[4] != 2:
+            return None
+        phoff = int.from_bytes(header[0x20:0x28], "little")
+        phentsize = int.from_bytes(header[0x36:0x38], "little")
+        phnum = int.from_bytes(header[0x38:0x3a], "little")
+        alignments = []
+        for index in range(phnum):
+            stream.seek(phoff + index * phentsize)
+            entry = stream.read(phentsize)
+            if int.from_bytes(entry[0:4], "little") == 1:  # PT_LOAD
+                alignments.append(int.from_bytes(entry[48:56], "little"))
+        return min(alignments) if alignments else None
 
 
 def archive(root: pathlib.Path, destination: pathlib.Path):
@@ -301,19 +378,30 @@ def archive(root: pathlib.Path, destination: pathlib.Path):
     if not stamp.is_file() or json.loads(stamp.read_text()) != pin:
         raise RuntimeError("the engine sources changed since the last finished build; run build first")
     src = source_dir(root)
-    apk = src / LOCK["outputDirectory"] / APK
-    if not apk.is_file():
-        raise RuntimeError(f"{apk} is missing")
+    out = src / LOCK["outputDirectory"]
+    aar = out / LOCK["artifact"]
+    library = out / "libbay_engine.so"
+    unstripped = out / "lib.unstripped/libbay_engine.so"
+    for path in (aar, library):
+        if not path.is_file():
+            raise RuntimeError(f"{path} is missing")
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(apk, destination / apk.name)
+    shutil.copy2(aar, destination / aar.name)
+    files = {aar.name: {"sha256": sha256(aar), "bytes": aar.stat().st_size}}
+    # Symbols stay out of the app and beside the engine, matched to its crash reports by build id.
+    if unstripped.is_file():
+        symbols = destination / "libbay_engine.so.unstripped"
+        shutil.copy2(unstripped, symbols)
+        files[symbols.name] = {"sha256": sha256(symbols), "bytes": symbols.stat().st_size}
     manifest = {
         **pin,
         "schema": 1,
+        "engineApi": 1,
         "gnArgs": LOCK["gnArgs"],
         "minSdkVersion": min_sdk_version(src),
         "toolchains": toolchains(src),
-        "files": {apk.name: {"sha256": sha256(apk), "bytes": apk.stat().st_size}},
-        "zipAlign16k": zipalign_16k(src, apk),
+        "files": files,
+        "elfLoadAlignment": elf_alignment(library),
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     (destination / "engine.json").write_text(json.dumps(manifest, indent=2) + "\n")

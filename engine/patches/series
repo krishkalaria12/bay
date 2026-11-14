@@ -68,5 +68,6 @@ chromium mac chromium-devtools-background-target.patch
 
 chromium all chromium-scripts-policy.patch
 
+layer mac,win,linux,android engine/shared
 layer all engine/chromium
 layer all engine/nncore

@@ -11,8 +11,6 @@ mod blocker;
 mod body;
 mod ffi;
 mod html;
-#[cfg(target_os = "android")]
-mod jni_bridge;
 mod modifiers;
 mod preprocess;
 mod removeparam;

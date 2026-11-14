@@ -1,6 +1,6 @@
 # Bay mobile
 
-Bay for iPhone and Android, built and tested together. Expo SDK 58 + Expo Router and HeroUI Native (Uniwind/Tailwind). Pages render with WebKit on iOS and the system WebView on Android, behind one engine API (`@bay/engine`, see `docs/mobile-plan.html`). Native engine code lives in `modules/bay-engine`; rebuild both dev clients after changing it. Every feature ships on both platforms.
+Bay for iPhone and Android, built and tested together. Expo SDK 58 + Expo Router and HeroUI Native (Uniwind/Tailwind). Pages render with WebKit on iOS and Bay's own Chromium on Android (`docs/android-chromium-plan.html`), behind one engine API (`@bay/engine`, see `docs/mobile-plan.html`). Native engine code lives in `modules/bay-engine`; rebuild both dev clients after changing it. An Android build needs the engine installed first (`node scripts/fetch-android-engine.mjs`). Every feature ships on both platforms.
 
 This is a standalone project with its own `pnpm-workspace.yaml` and lockfile. The repo root's workspace excludes it because the desktop app pins react-native-macos 0.81 in a hoisted `node_modules`. Always run `pnpm` from `apps/mobile`.
 
