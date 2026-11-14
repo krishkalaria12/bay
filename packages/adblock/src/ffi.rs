@@ -428,8 +428,8 @@ pub unsafe extern "C" fn bay_blocker_use_resources(
 }
 
 /// The engine cached at `cache` for `version`, or one built from the `count` list files (then cached), with the
-/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 1 Android WebView, 2 iOS,
-/// 3 Android Chromium. Free with `bay_blocker_free`.
+/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 2 iOS, 3 Android
+/// Chromium (1 was the system WebView). Free with `bay_blocker_free`.
 ///
 /// # Safety
 /// `files` must point to `count` valid strings; `cache`, `version` must be valid strings; `resources` may be null.

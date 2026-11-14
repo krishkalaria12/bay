@@ -328,10 +328,10 @@ def apply_overlay(root: pathlib.Path):
 def build_adblock(src: pathlib.Path, env: dict):
     """Bay's Rust content blocker as a static library for the engine's ABI, where //bay/mobile links it.
 
-    Without the JNI bridge (the system-WebView engine's), and pure Rust: a static library needs no linker."""
+    Pure Rust: a static library needs no linker."""
     require_tools(("cargo",), env)
     run(["cargo", "rustc", "--release", "--lib", "--locked", "--target", RUST_TARGET, "--crate-type", "staticlib",
-         "--no-default-features", "--manifest-path", ADBLOCK / "Cargo.toml",
+         "--manifest-path", ADBLOCK / "Cargo.toml",
          "--target-dir", src / LOCK["outputDirectory"] / "bay_adblock"], env=env)
 
 
