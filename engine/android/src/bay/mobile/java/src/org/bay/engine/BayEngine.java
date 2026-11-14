@@ -14,8 +14,13 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.version_info.VersionInfo;
+import org.chromium.blink.mojom.Authenticator;
+import org.chromium.components.webauthn.AuthenticatorFactory;
+import org.chromium.components.webauthn.WebauthnMode;
+import org.chromium.components.webauthn.WebauthnModeProvider;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.DeviceUtils;
+import org.chromium.content_public.browser.InterfaceRegistrar;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.jni_zero.CalledByNative;
@@ -78,6 +83,7 @@ public final class BayEngine {
         // Phones get the mobile user agent and layout; tablets the desktop one, as Chrome does.
         DeviceUtils.updateDeviceSpecificUserAgentSwitch(context);
         LibraryLoader.getInstance().ensureInitialized();
+        registerPasskeys();
         BrowserStartupController.getInstance()
                 .startBrowserProcessesAsync(
                         LibraryProcessType.PROCESS_BROWSER,
@@ -96,6 +102,20 @@ public final class BayEngine {
                                 finish(false);
                             }
                         });
+    }
+
+    /**
+     * Passkeys and security keys (WebAuthn) for every site, as a browser offers them: each frame's requests go to the
+     * person's credential provider through Android's Credential Manager, naming the page's origin (the app's
+     * CREDENTIAL_MANAGER_SET_ORIGIN permission). A provider answers once it lists Bay as a browser it trusts.
+     */
+    private static void registerPasskeys() {
+        WebauthnModeProvider.getInstance().setGlobalWebauthnMode(WebauthnMode.BROWSER);
+        InterfaceRegistrar.Registry.addRenderFrameHostRegistrar(
+                (registry, frame) ->
+                        registry.addInterface(
+                                Authenticator.MANAGER,
+                                new AuthenticatorFactory(frame, /* confirmationFactory= */ null)));
     }
 
     private static void finish(boolean started) {
