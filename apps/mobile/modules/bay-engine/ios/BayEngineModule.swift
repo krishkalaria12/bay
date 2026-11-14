@@ -120,6 +120,9 @@ public class BayEngineModule: Module {
       Prop("suspended", false) { (view: BayEngineView, suspended: Bool) in
         view.isSuspended = suspended
       }
+      Prop("desktopMode", false) { (view: BayEngineView, desktop: Bool) in
+        view.desktopMode = desktop
+      }
       Prop("stateKey") { (view: BayEngineView, key: String?) in
         view.stateKey = key
       }

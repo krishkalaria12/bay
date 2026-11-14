@@ -117,6 +117,7 @@ class BayEngineModule : Module() {
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
       Prop("suspended") { view: BayEngineView, suspended: Boolean -> view.isSuspended = suspended }
+      Prop("desktopMode") { view: BayEngineView, desktop: Boolean -> view.desktopMode = desktop }
       Prop("stateKey") { view: BayEngineView, key: String? -> view.stateKey = key }
       Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
