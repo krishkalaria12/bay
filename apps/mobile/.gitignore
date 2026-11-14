@@ -50,5 +50,7 @@ yarn-error.*
 
 modules/bay-engine/ios/BayAdblock.xcframework/
 modules/bay-engine/android/src/main/jniLibs/
+# Bay's Chromium for Android, fetched by scripts/fetch-android-engine.mjs.
+modules/bay-engine/android/engine/
 modules/bay-engine/android/src/main/assets/bay-adblock-resources.json
 modules/bay-engine/ios/BayAdblockResources/
