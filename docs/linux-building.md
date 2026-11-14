@@ -170,7 +170,9 @@ seven days; raise `STATE_ARTIFACT` when a changed patch needs a clean tree. A ru
 whose engine id matches an earlier run's engine goes straight to packaging.
 
 The `bay-linux-packages` artifact holds the AppImage and `.zsync`, `.deb`,
-`.rpm`, tarball, AUR `PKGBUILD`, NixOS closure and `SHA256SUMS`, all unsigned. Its smoke step
+`.rpm`, tarball, AUR `PKGBUILD`, NixOS closure and `SHA256SUMS`, all unsigned. The AppImage, `.deb`,
+`.rpm`, tarball and NixOS closure are also each their own artifact, named after the file, which downloads
+as that file rather than a zip (`chmod +x` the AppImage after downloading). Its smoke step
 opens the AppImage under Xvfb and is allowed to fail, so read its log. It doesn't
 check the sandbox's AppArmor setup, the GPU or video decoding.
 

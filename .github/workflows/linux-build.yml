@@ -221,6 +221,33 @@ jobs:
           # profile, which an AppImage can't install (packaging/linux/AppRun).
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           xvfb-run -a scripts/linux/smoke.sh dist/linux-release/Bay-*-x86_64.AppImage 60
+      # Each package is its own unzipped download (archive: false takes one file, named after it). Everything,
+      # with the checksums, zsync, PKGBUILD and NixOS README, stays in one zip for publishing.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/Bay-0.1.${{ github.run_number }}-x86_64.AppImage
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/bay_0.1.${{ github.run_number }}_amd64.deb
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/bay-0.1.${{ github.run_number }}-1.x86_64.rpm
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/bay-0.1.${{ github.run_number }}-linux-x64.tar.xz
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/bay-0.1.${{ github.run_number }}-nixos-x64.nar.zst
+          archive: false
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: bay-linux-packages
