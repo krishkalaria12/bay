@@ -184,7 +184,10 @@ async function deviceTag(): Promise<string> {
   if (fromIntl) return fromIntl;
 
   try {
-    const { NativeModules } = await import("react-native");
+    // Required rather than imported: an `import()` copies every export of React Native, and reading the deprecated
+    // ones throws.
+    // SAFETY: Metro resolves "react-native" to the same module its types describe; `require` is untyped, nothing more.
+    const { NativeModules } = require("react-native") as typeof import("react-native");
     const native = v.safeParse(NATIVE_LOCALE, NativeModules);
 
     if (!native.success) return "";

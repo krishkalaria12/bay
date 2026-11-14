@@ -26,9 +26,13 @@ const appStatus = (status: AppStateStatus): AppStatus | null => {
   }
 };
 
-/** React Native's app state, loaded when it is first needed. */
-const appStateModule = Effect.tryPromise({
-  try: () => import("react-native").then((module) => module.AppState),
+/**
+ * React Native's app state, loaded when it is first needed. It is required rather than imported: an `import()` copies
+ * every export of React Native, and reading the deprecated ones (PushNotificationIOS) throws.
+ */
+const appStateModule = Effect.try({
+  // SAFETY: Metro resolves "react-native" to the same module its types describe; `require` is untyped, nothing more.
+  try: () => (require("react-native") as typeof import("react-native")).AppState,
   catch: (cause) => new NativeUnavailable({ operation: { name: "lifecycle.load" }, cause }),
 });
 
