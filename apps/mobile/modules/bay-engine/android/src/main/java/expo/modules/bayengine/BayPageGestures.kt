@@ -28,6 +28,8 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
     val hasPage: Boolean
     val isLoading: Boolean
     val pullToRefreshEnabled: Boolean
+    /** Scrolled all the way up, where a pull down means refresh. */
+    val isAtTop: Boolean
     fun canGoBack(): Boolean
     fun canGoForward(): Boolean
     fun goBack()
@@ -105,7 +107,7 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
         // other hasn't started first.
         if (!pulling && !edgeSwiping && page.pullToRefreshEnabled && !page.isLoading && !refreshing) {
           val distance = event.y - pullStartY
-          if (!page.view.canScrollVertically(-1) && distance > touchSlop * 2 && distance > abs(event.x - pullStartX) * 1.5) {
+          if (page.isAtTop && distance > touchSlop * 2 && distance > abs(event.x - pullStartX) * 1.5) {
             pulling = true
             host.parent?.requestDisallowInterceptTouchEvent(true)
             return true

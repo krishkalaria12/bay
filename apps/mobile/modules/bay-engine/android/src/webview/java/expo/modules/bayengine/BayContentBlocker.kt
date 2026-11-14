@@ -37,7 +37,7 @@ internal object BayContentBlocker {
         if (files.isNullOrEmpty()) return@runCatching 0L
         val paths = files.mapNotNull { Uri.parse(it).path }.toTypedArray()
         val directory = java.io.File(context.cacheDir, "bay-adblock").apply { mkdirs() }
-        val resources = bundledResources(context, directory)?.path ?: ""
+        val resources = BayBlockerResources.file(context, directory)?.path ?: ""
         BayAdblock.nativeLoad(paths, directory.resolve("engine.bin").path, version, resources)
           .also { check(it != 0L) { "The filter lists couldn't be read." } }
       }
@@ -75,24 +75,6 @@ internal object BayContentBlocker {
     val host = pageUrl?.let { Uri.parse(it).host?.lowercase() } ?: return engine
     return if (pausedHosts.none { host == it || host.endsWith(".$it") }) engine else 0L
   }
-
-  /**
-   * The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file, copied (1 MB)
-   * once per install or update of the app, which a stamp of its `lastUpdateTime` records.
-   */
-  private fun bundledResources(context: android.content.Context, directory: java.io.File): java.io.File? = runCatching {
-    val file = directory.resolve("resources.json")
-    val stamp = directory.resolve("resources.stamp")
-    @Suppress("DEPRECATION") // The flags overload is API 33+.
-    val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
-    if (!file.exists() || !stamp.exists() || stamp.readText() != installed) {
-      val draft = directory.resolve("resources.json.tmp")
-      context.assets.open("bay-adblock-resources.json").use { input -> draft.outputStream().use { input.copyTo(it) } }
-      check(draft.renameTo(file)) { "The blocker resources couldn't be saved." }
-      stamp.writeText(installed)
-    }
-    file
-  }.getOrNull()
 
   /** For a blocked subresource, an empty response or a harmless stand-in (`$redirect`); null to let it load. */
   fun intercept(request: WebResourceRequest, pageUrl: String?): WebResourceResponse? {

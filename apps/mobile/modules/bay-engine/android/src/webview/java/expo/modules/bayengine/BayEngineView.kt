@@ -117,6 +117,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     override val hasPage: Boolean get() = !disposed && webView.url != null
     override val isLoading: Boolean get() = loading
     override val pullToRefreshEnabled: Boolean get() = this@BayEngineView.pullToRefreshEnabled
+    override val isAtTop: Boolean get() = !webView.canScrollVertically(-1)
     override fun canGoBack() = webView.canGoBack()
     override fun canGoForward() = webView.canGoForward()
     override fun goBack() = webView.goBack()
