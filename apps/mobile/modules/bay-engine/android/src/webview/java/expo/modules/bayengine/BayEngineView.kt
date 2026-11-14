@@ -1053,7 +1053,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private fun restoreState() {
     if (isPrivate) return
     val key = stateKey ?: return
-    val bundle = BayEngineTabStates.load(context, key) ?: return
+    val bundle = BayEngineTabStates.loadBundle(context, key) ?: return
     val restored = runCatching { webView.restoreState(bundle) }.getOrNull()
     if (restored == null || (restored.size == 0 && webView.url == null)) return
     startedLoading = true
@@ -1068,7 +1068,15 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val key = stateKey ?: return
     val bundle = Bundle()
     webView.saveState(bundle)
-    BayEngineTabStates.save(context, key, bundle)
+    BayEngineTabStates.saveBundle(context, key, bundle)
+  }
+
+  fun goBack() {
+    if (webView.canGoBack()) webView.goBack()
+  }
+
+  fun goForward() {
+    if (webView.canGoForward()) webView.goForward()
   }
 
   fun reload() {
@@ -1461,74 +1469,27 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   }
 }
 
-internal object BayEngineSnapshots {
-  fun directory(context: Context) = File(context.cacheDir, "bay-engine-snapshots")
-  fun clear(context: Context) {
-    val directory = directory(context)
-    if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear the snapshot cache.")
+/** `WebView.saveState` bundles in the WebView engine's own tab-state directory (B6). */
+internal fun BayEngineTabStates.saveBundle(context: Context, key: String, bundle: Bundle) {
+  val parcel = Parcel.obtain()
+  try {
+    parcel.writeBundle(bundle)
+    save(context, key, parcel.marshall())
+  } finally {
+    parcel.recycle()
   }
 }
 
-/**
- * Tab state files (B6): `WebView.saveState` bundles per tab id, so a relaunch or a remounted tab gets its back/forward
- * history back. Private tabs never write one.
- */
-internal object BayEngineTabStates {
-  fun directory(context: Context) = File(context.filesDir, "bay-engine-tab-states")
-
-  /** Tab ids are the key; anything else is refused, so a key can never name a file outside the directory. */
-  private fun isSafeKey(key: String): Boolean =
-    key.isNotEmpty() && key.length <= 120 && Regex("^[A-Za-z0-9._-]+$").matches(key)
-
-  private fun file(context: Context, key: String): File? =
-    if (isSafeKey(key)) File(directory(context), "$key.state") else null
-
-  fun save(context: Context, key: String, bundle: Bundle) {
-    val target = file(context, key) ?: return
-    try {
-      val directory = directory(context)
-      if (!directory.isDirectory && !directory.mkdirs()) return
-      val parcel = Parcel.obtain()
-      try {
-        parcel.writeBundle(bundle)
-        target.writeBytes(parcel.marshall())
-      } finally {
-        parcel.recycle()
-      }
-    } catch (error: Exception) {
-      Log.w("BayEngine", "Couldn't save tab state for $key", error)
-    }
-  }
-
-  fun load(context: Context, key: String): Bundle? {
-    val source = file(context, key) ?: return null
-    if (!source.isFile) return null
-    return try {
-      val bytes = source.readBytes()
-      val parcel = Parcel.obtain()
-      try {
-        parcel.unmarshall(bytes, 0, bytes.size)
-        parcel.setDataPosition(0)
-        parcel.readBundle(BayEngineView::class.java.classLoader)
-      } finally {
-        parcel.recycle()
-      }
-    } catch (error: Exception) {
-      null
-    }
-  }
-
-  /** Deletes states whose tab ids aren't in `keep`. Recent files stay: their tab may not have been told yet. */
-  fun prune(context: Context, keep: List<String>) {
-    val names = keep.filter(::isSafeKey).toHashSet()
-    val cutoff = System.currentTimeMillis() - 30_000
-    directory(context).listFiles()?.forEach { file ->
-      if (file.nameWithoutExtension !in names && file.lastModified() < cutoff) file.delete()
-    }
-  }
-
-  fun clear(context: Context) {
-    val directory = directory(context)
-    if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear saved tab states.")
+internal fun BayEngineTabStates.loadBundle(context: Context, key: String): Bundle? {
+  val bytes = load(context, key) ?: return null
+  val parcel = Parcel.obtain()
+  return try {
+    parcel.unmarshall(bytes, 0, bytes.size)
+    parcel.setDataPosition(0)
+    parcel.readBundle(BayEngineView::class.java.classLoader)
+  } catch (error: Exception) {
+    null
+  } finally {
+    parcel.recycle()
   }
 }
