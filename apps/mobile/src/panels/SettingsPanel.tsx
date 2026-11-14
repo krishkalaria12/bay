@@ -48,7 +48,6 @@ export interface SettingsPanelProps {
   /** Sites where blocking is paused, and resuming one. */
   pausedHosts: readonly string[];
   onResumeBlocking: (host: string) => void;
-  /** Hidden when the engine can't keep private tabs. */
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
   wallpaper: WallpaperId;
