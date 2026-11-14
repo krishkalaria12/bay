@@ -13,17 +13,8 @@ import java.io.File
 import java.util.concurrent.Executors
 import org.bay.engine.BayDownloads as EngineDownloads
 
-/**
- * The engine-specific half of BayEngineModule, for Bay's own Chromium (bay-engine.aar). src/webview has the same
- * object for the system WebView. Main thread, like the engine itself.
- */
+/** The engine's side of BayEngineModule: Bay's own Chromium (bay-engine.aar). Main thread, like the engine itself. */
 internal object BayEngineBackend {
-  /** Which tab-state directory this engine reads and writes (BayEngineTabStates). */
-  const val TAB_STATE_FAMILY = "chromium"
-
-  /** Every Chromium build has private profiles. */
-  const val privateBrowsingSupported = true
-
   private val main = Handler(Looper.getMainLooper())
 
   fun engineInfo(context: Context?): Map<String, String> =

@@ -13,7 +13,6 @@ export interface TabsMenuProps {
   visible: boolean;
   onClose: () => void;
   tabCount: number;
-  privateAvailable: boolean;
   onNewTab: () => void;
   onNewPrivateTab: () => void;
   onArchiveTab: () => void;
@@ -130,9 +129,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
   return (
     <PanelSheet visible={props.visible} onClose={props.onClose} title={t("tabsMenu.title")} testID="tabs-menu" height="45%">
       <ActionRow testID="tabs-menu-new" icon="add" label={t("tabsMenu.newTab")} onPress={() => act(props.onNewTab)} />
-      {props.privateAvailable ? (
-        <ActionRow testID="tabs-menu-private" icon="private" label={t("tabsMenu.newPrivateTab")} onPress={() => act(props.onNewPrivateTab)} />
-      ) : null}
+      <ActionRow testID="tabs-menu-private" icon="private" label={t("tabsMenu.newPrivateTab")} onPress={() => act(props.onNewPrivateTab)} />
       <ActionRow testID="tabs-menu-archive" icon="archive" label={t("tabsMenu.archiveTab")} onPress={() => act(props.onArchiveTab)} />
       {props.tabCount > 1 ? (
         <ActionRow

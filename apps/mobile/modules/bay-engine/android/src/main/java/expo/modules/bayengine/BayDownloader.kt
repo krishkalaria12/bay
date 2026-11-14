@@ -8,10 +8,8 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.annotation.TargetApi
 import android.content.pm.ServiceInfo
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
@@ -27,12 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
- * Page downloads on Android 10 and later, fetched by Bay itself and written into the public Downloads folder through
- * MediaStore, inside a data-sync foreground service with a progress notification. Not DownloadManager: it runs every
- * download as a JobScheduler job, and the system holds those back while the phone is warm (thermal status "moderate",
- * common while charging on mobile data), so a download could sit at "pending" for as long as the phone stayed warm.
+ * Downloads, written into the public Downloads folder through MediaStore inside a data-sync foreground service with a
+ * progress notification. The engine fetches a page's downloads itself and reports them here; a saved image whose page
+ * is gone is fetched here. Not DownloadManager: it runs every download as a JobScheduler job, and the system holds
+ * those back while the phone is warm (thermal status "moderate", common while charging on mobile data), so a download
+ * could sit at "pending" for as long as the phone stayed warm.
  */
-@TargetApi(Build.VERSION_CODES.Q)
 object BayDownloader {
   private class Job(
     val id: String,
@@ -393,7 +391,6 @@ object BayDownloader {
 }
 
 /** Keeps Bay's process running while it downloads, with the progress notification. */
-@TargetApi(Build.VERSION_CODES.Q)
 class BayDownloadService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -414,11 +411,7 @@ class BayDownloadService : Service() {
 
   fun refresh() {
     val notification = BayDownloader.progressNotification(this)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
-    }
+    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
   }
 
   fun finish() {

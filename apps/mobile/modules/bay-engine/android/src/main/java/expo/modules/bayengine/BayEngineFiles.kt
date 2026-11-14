@@ -16,18 +16,15 @@ internal object BayEngineSnapshots {
 }
 
 /**
- * Tab state files (B6): each engine's own saved page state per tab id, so a relaunch or a remounted tab gets its
- * back/forward history back. Private tabs never write one.
- *
- * Each engine keeps its own directory and format (BayEngineBackend.TAB_STATE_FAMILY): the system WebView's bundles stay
- * where they were, and Bay's Chromium never reads them. A tab whose state belongs to the other engine just opens its
- * address. Pruning and clearing cover every engine's directory, so cleared data can't come back after a switch.
+ * Tab state files (B6): each tab's saved page state (BayTab.saveState), by tab id, so a relaunch or a remounted tab
+ * gets its back/forward history back. Private tabs never write one.
  */
 internal object BayEngineTabStates {
-  private val FAMILIES = mapOf("webview" to "bay-engine-tab-states", "chromium" to "bay-engine-tab-states-chromium-v1")
+  private const val DIRECTORY = "bay-engine-tab-states-chromium"
+  /** Where the system WebView's states were kept, in versions before Bay's own engine; Chromium can't read them. */
+  private const val WEBVIEW_DIRECTORY = "bay-engine-tab-states"
 
-  private fun directory(context: Context, family: String = BayEngineBackend.TAB_STATE_FAMILY) =
-    File(context.filesDir, FAMILIES.getValue(family))
+  private fun directory(context: Context) = File(context.filesDir, DIRECTORY)
 
   /** Tab ids are the key; anything else is refused, so a key can never name a file outside the directory. */
   private fun isSafeKey(key: String): Boolean =
@@ -62,19 +59,18 @@ internal object BayEngineTabStates {
 
   /** Deletes states whose tab ids aren't in `keep`. Recent files stay: their tab may not have been told yet. */
   fun prune(context: Context, keep: List<String>) {
+    File(context.filesDir, WEBVIEW_DIRECTORY).deleteRecursively()
     val names = keep.filter(::isSafeKey).toHashSet()
     val cutoff = System.currentTimeMillis() - 30_000
-    for (family in FAMILIES.keys) {
-      directory(context, family).listFiles()?.forEach { file ->
-        val key = file.name.removeSuffix(".tmp").removeSuffix(".state")
-        if (key !in names && file.lastModified() < cutoff) file.delete()
-      }
+    directory(context).listFiles()?.forEach { file ->
+      val key = file.name.removeSuffix(".tmp").removeSuffix(".state")
+      if (key !in names && file.lastModified() < cutoff) file.delete()
     }
   }
 
   fun clear(context: Context) {
-    for (family in FAMILIES.keys) {
-      val directory = directory(context, family)
+    for (name in listOf(DIRECTORY, WEBVIEW_DIRECTORY)) {
+      val directory = File(context.filesDir, name)
       if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear saved tab states.")
     }
   }

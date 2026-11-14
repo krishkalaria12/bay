@@ -2,7 +2,6 @@ import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
 import {
   clearData,
-  privateBrowsingSupported,
   saveImage,
   setPrivateSessionActive,
   addShareListener,
@@ -389,7 +388,7 @@ export function BrowserScreen(): JSX.Element {
     setLink(null);
 
     if (command === "new-tab") openTab("");
-    else if (privateBrowsingSupported) openTab("", false, true);
+    else openTab("", false, true);
   }
 
   function openIncomingLink(): void {
@@ -936,7 +935,6 @@ export function BrowserScreen(): JSX.Element {
           initialText={searchInNewTab ? "" : active.url}
           engine={engine}
           data={data}
-          privateAvailable={privateBrowsingSupported}
           initialPrivate={searchPrivately || (!searchInNewTab && Boolean(active.private))}
           onOpen={open}
           onDismiss={() => {
@@ -966,7 +964,6 @@ export function BrowserScreen(): JSX.Element {
         hiddenCount={reading.selectorsFor(active).length}
         onShowHidden={reading.showHidden}
         onSiteSettings={() => setPanel("site")}
-        privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onTranslate={() => navigate(active.id, translateUrl(active.url))}
@@ -991,7 +988,6 @@ export function BrowserScreen(): JSX.Element {
         visible={panel === "tabs"}
         onClose={() => closePanel("tabs")}
         tabCount={spaceTabs.length}
-        privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onArchiveTab={() => archiveTab(active.id)}
@@ -1060,7 +1056,6 @@ export function BrowserScreen(): JSX.Element {
         blockContent={blockContent}
         blockerDetail={blockerDetail(blockerStatus, t)}
         onBlockContentChange={(enabled) => dispatch({ type: "block-content", enabled })}
-        privateAvailable={privateBrowsingSupported}
         lockPrivateTabs={lockPrivateTabs}
         onLockPrivateTabsChange={(enabled) => void setLockPrivateTabs(enabled)}
         wallpaper={data.preferences.wallpaper}

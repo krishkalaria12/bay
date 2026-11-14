@@ -14,7 +14,6 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.MimeTypeMap
-import android.webkit.ValueCallback
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
@@ -29,9 +28,9 @@ import java.util.UUID
 import kotlin.math.max
 
 /**
- * A page in Bay's own Chromium (org.bay.engine.BayTab): the same props, events and functions as the system WebView's
- * view in src/webview, so JavaScript can't tell which engine it has. Content blocking, cosmetic filtering and
- * scriptlets run inside the engine for every request and frame; page scripts run in an isolated world.
+ * A page in Bay's own Chromium (org.bay.engine.BayTab), with the same props, events and functions as iOS's WebKit
+ * view. Content blocking, cosmetic filtering and scriptlets run inside the engine for every request and frame; page
+ * scripts run in an isolated world.
  */
 @SuppressLint("ViewConstructor")
 class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -358,9 +357,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       current.answerFileChooser(request, "[]")
       return
     }
-    BayFileChooser.setPending(ValueCallback<Array<Uri>> { uris ->
+    BayFileChooser.setPending { uris ->
       if (tab === current) current.answerFileChooser(request, filesJson(uris.orEmpty()))
-    })
+    }
     val types = acceptTypes.split(',').map { it.trim().lowercase() }.mapNotNull { accept ->
       when {
         accept.isEmpty() -> null

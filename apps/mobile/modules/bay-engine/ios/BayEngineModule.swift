@@ -73,7 +73,6 @@ public class BayEngineModule: Module {
       BayEngineTabStates.prune(keeping: keep)
     }
 
-    Constant("privateBrowsingSupported") { true }
     // Pages render with the system's WebKit, which updates with iOS.
     Constant("engineInfo") { () -> [String: String] in
       let os = ProcessInfo.processInfo.operatingSystemVersion

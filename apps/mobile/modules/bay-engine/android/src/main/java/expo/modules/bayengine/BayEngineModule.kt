@@ -40,7 +40,7 @@ class BayEngineModule : Module() {
       else BayDownloads.open(context, id, promise)
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("cancelDownload") { id: String -> appContext.reactContext?.let { BayDownloads.cancel(it, id) } }
+    AsyncFunction("cancelDownload") { id: String -> BayDownloads.cancel(id) }
 
     AsyncFunction("saveImage") { url: String, promise: Promise ->
       val context = appContext.reactContext
@@ -92,8 +92,6 @@ class BayEngineModule : Module() {
 
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
-    Constant("privateBrowsingSupported") { BayEngineBackend.privateBrowsingSupported }
-    // Bay's own Chromium, or the system WebView in a build without it (BayEngineBackend).
     Constant("engineInfo") { BayEngineBackend.engineInfo(appContext.reactContext) }
 
     AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->

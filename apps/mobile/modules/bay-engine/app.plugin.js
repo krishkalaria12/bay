@@ -1,6 +1,3 @@
-const fs = require("node:fs");
-const path = require("node:path");
-
 const {
   withAndroidManifest,
   withAppBuildGradle,
@@ -11,11 +8,6 @@ const {
   withProjectBuildGradle,
   withXcodeProject,
 } = require("expo/config-plugins");
-
-// Bay's own Chromium (bay-engine.aar), once scripts/fetch-android-engine.mjs has installed it as a local Maven
-// repository under android/engine. Without it the app renders with the system WebView (android/build.gradle).
-const engineDirectory = path.join(__dirname, "android", "engine");
-const chromiumEngine = fs.existsSync(path.join(engineDirectory, "engine.properties"));
 
 // Bay as the default browser (B9) needs Apple's managed `com.apple.developer.web-browser` entitlement, which Apple
 // grants on request; the request isn't in our hands. Builds turned out with BAY_DEFAULT_BROWSER=1 claim it so a
@@ -30,8 +22,8 @@ const defaultBrowser = process.env.BAY_DEFAULT_BROWSER === "1";
 const webPasskeys = defaultBrowser && process.env.BAY_WEB_PASSKEYS === "1";
 
 const gradleProperties = {
-  // The Rust ad blocker (libbay_adblock.so, scripts/adblock) is built for arm64 only, so other ABIs would crash on
-  // the first page load, and each extra ABI adds a copy of every native library. The Apple-Silicon emulator is arm64.
+  // Bay's engine (bay-engine.aar) is built for arm64 only, so other ABIs would have no engine, and each extra ABI adds
+  // a copy of every native library. The Apple-Silicon emulator is arm64.
   reactNativeArchitectures: "arm64-v8a",
   "android.enableShrinkResourcesInReleaseBuilds": "true",
 };
@@ -136,7 +128,7 @@ module.exports = function withBayEngine(config) {
     return mod;
   });
 
-  if (chromiumEngine) config = withChromiumEngine(config);
+  config = withChromiumEngine(config);
 
   return withXcodeProject(config, (mod) => {
     const bundleId = config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile";
@@ -160,7 +152,8 @@ module.exports = function withBayEngine(config) {
   });
 };
 
-// Bay's Chromium on Android: the app resolves the engine from its local Maven repository, needs Android 10 as the
+// Bay's Chromium on Android (bay-engine.aar, which scripts/fetch-android-engine.mjs installs as a local Maven
+// repository under android/engine): the app resolves the engine from that repository, needs Android 10 as the
 // engine does, keeps the engine's resource packs uncompressed (Chromium maps them straight out of the APK), and starts
 // none of its own code in the engine's renderer and GPU processes, which run the app's Application class too.
 function withChromiumEngine(config) {

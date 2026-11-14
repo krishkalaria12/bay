@@ -45,7 +45,6 @@ export interface SettingsPanelProps {
   pausedHosts: readonly string[];
   onResumeBlocking: (host: string) => void;
   /** Hidden when the engine can't keep private tabs. */
-  privateAvailable: boolean;
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
   wallpaper: WallpaperId;
@@ -266,15 +265,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               toggle={prefs.skipAmp}
               onPress={() => change({ skipAmp: !prefs.skipAmp })}
             />
-            {props.privateAvailable ? (
-              <ActionRow
-                testID="settings-lock-private"
-                label={t("settings.lockPrivate")}
-                detail={t("settings.lockPrivate.detail")}
-                toggle={props.lockPrivateTabs}
-                onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
-              />
-            ) : null}
+            <ActionRow
+              testID="settings-lock-private"
+              label={t("settings.lockPrivate")}
+              detail={t("settings.lockPrivate.detail")}
+              toggle={props.lockPrivateTabs}
+              onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
+            />
           </Group>
           {props.pausedHosts.length ? (
             <>
