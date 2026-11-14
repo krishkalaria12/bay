@@ -1,8 +1,8 @@
-# Desktop's content-blocking filter, built for Android's engine: the same implementation both hosts run
-# (docs/android-chromium-plan.html, P1). scripts/android/engine.py copies nn_request_filter.*, nn_cookie_filter.* and
-# mojom/ here from engine/nncore/src/bay/core unchanged; only this build file is Android's.
+# Bay's content-blocking filter: the request and cookie filters every engine runs over the shared Rust blocker
+# (packages/adblock), desktop's (//bay/core) and Android's (//bay/mobile) alike. engine/shared/apply.sh copies it
+# into a desktop tree; scripts/android/engine.py into Android's.
 
-source_set("request_filter") {
+source_set("filter") {
   sources = [
     "nn_cookie_filter.cc",
     "nn_cookie_filter.h",
@@ -10,7 +10,7 @@ source_set("request_filter") {
     "nn_request_filter.h",
   ]
   public_deps = [
-    "//bay/core/mojom",
+    "//bay/filter/mojom",
     "//content/public/browser",
     "//services/network/public/cpp",
     "//services/network/public/mojom",

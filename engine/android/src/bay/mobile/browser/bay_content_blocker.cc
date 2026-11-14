@@ -16,7 +16,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 #include "bay/mobile/adblock/bay_adblock.h"
 #include "content/public/browser/global_routing_id.h"
 #include "url/gurl.h"

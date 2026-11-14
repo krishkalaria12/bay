@@ -1,6 +1,6 @@
 // Response-cookie filtering at the network service's trusted header hook.
-#ifndef BAY_CORE_NN_COOKIE_FILTER_H_
-#define BAY_CORE_NN_COOKIE_FILTER_H_
+#ifndef BAY_FILTER_NN_COOKIE_FILTER_H_
+#define BAY_FILTER_NN_COOKIE_FILTER_H_
 
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,4 +27,4 @@ void WrapResponseCookieFilter(
 
 }  // namespace nncore
 
-#endif  // BAY_CORE_NN_COOKIE_FILTER_H_
+#endif  // BAY_FILTER_NN_COOKIE_FILTER_H_

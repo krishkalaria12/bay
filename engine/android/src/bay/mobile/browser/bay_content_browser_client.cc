@@ -9,7 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/posix/global_descriptors.h"
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 #include "bay/mobile/browser/bay_browser_main_parts.h"
 #include "bay/mobile/browser/bay_https_upgrade_throttle.h"
 #include "bay/mobile/browser/bay_tab.h"
@@ -136,8 +136,8 @@ std::vector<base::FilePath> BayContentBrowserClient::GetNetworkContextsParentDir
   return {BayBrowserMainParts::ProfilesDirectory()};
 }
 
-// Bay's content blocker (desktop's filter, //bay/core) sees navigations, subresources, responses and WebSockets of every
-// page, in every profile. It filters nothing until the app sets lists (BayContentBlocker).
+// Bay's content blocker (//bay/filter, the same as desktop's) sees navigations, subresources, responses and
+// WebSockets of every page, in every profile. It filters nothing until the app sets lists (BayContentBlocker).
 void BayContentBrowserClient::CreateThrottlesForNavigation(content::NavigationThrottleRegistry& registry) {
   nncore::MaybeAddRequestFilterThrottle(registry);
   BayHttpsUpgradeThrottle::MaybeAdd(registry);

@@ -41,11 +41,11 @@ BASE_STAMP = "bay-android-base.json"
 BUILD_STAMP = "bay-android-build.json"
 OVERLAY = REPO / "engine/android/src"
 # Directories the overlay owns in chromium/src: replaced whole on every build.
-OVERLAY_DIRECTORIES = ("bay/core", "bay/mobile")
-# Desktop's own sources, compiled unchanged into Android's engine (bay/core): one content-blocking filter for both.
-DESKTOP_CORE = REPO / "engine/nncore/src/bay/core"
-SHARED_DESKTOP_SOURCES = ("nn_cookie_filter.cc", "nn_cookie_filter.h", "nn_request_filter.cc", "nn_request_filter.h",
-                          "mojom/BUILD.gn", "mojom/nncore.mojom")
+OVERLAY_DIRECTORIES = ("bay/mobile",)
+# The code every Bay engine shares (engine/shared, which desktop copies in with engine/shared/apply.sh): the content
+# blocker's request and cookie filters, also replaced whole.
+SHARED = REPO / "engine/shared/src"
+SHARED_DIRECTORIES = ("bay/filter",)
 ADBLOCK = REPO / "packages/adblock"
 RUST_TARGET = "aarch64-linux-android"
 # What a saved build tree depends on. The target and Bay's own sources aren't here: a change to them is an incremental
@@ -77,11 +77,10 @@ def tree_digest(directory: pathlib.Path) -> str:
     return value.hexdigest()
 
 
-def shared_sources_digest() -> str:
+def shared_digest() -> str:
+    """The shared filters and the Rust blocker they run on."""
     value = hashlib.sha256()
-    for name in SHARED_DESKTOP_SOURCES:
-        value.update(name.encode() + b"\0")
-        value.update(bytes.fromhex(sha256(DESKTOP_CORE / name)))
+    value.update(tree_digest(SHARED).encode())
     for name in ("Cargo.toml", "Cargo.lock"):
         value.update(bytes.fromhex(sha256(ADBLOCK / name)))
     value.update(tree_digest(ADBLOCK / "src").encode())
@@ -94,7 +93,7 @@ def shared_sources_digest() -> str:
 def engine_id(lock=LOCK) -> str:
     """The artifact: the base, the target, and everything in this repository that shapes it."""
     return digest(base_id(lock).encode(), lock["target"].encode(), DRIVER_PATH.read_bytes(),
-                  tree_digest(OVERLAY).encode(), shared_sources_digest().encode())[:16]
+                  tree_digest(OVERLAY).encode(), shared_digest().encode())[:16]
 
 
 def describe_pin(lock=LOCK) -> dict:
@@ -310,17 +309,15 @@ def generate(root: pathlib.Path, env):
 
 
 def apply_overlay(root: pathlib.Path):
-    """Copies engine/android/src into chromium/src, replacing the directories it owns (so a deleted file goes too)."""
+    """Copies engine/android/src and engine/shared/src into chromium/src, replacing the directories each owns (so a
+    deleted file goes too)."""
     src = source_dir(root)
-    for directory in OVERLAY_DIRECTORIES:
-        target = src / directory
-        if target.exists():
-            shutil.rmtree(target)
-        shutil.copytree(OVERLAY / directory, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in SHARED_DESKTOP_SOURCES:
-        destination = src / "bay/core" / name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(DESKTOP_CORE / name, destination)
+    for layer, directories in ((OVERLAY, OVERLAY_DIRECTORIES), (SHARED, SHARED_DIRECTORIES)):
+        for directory in directories:
+            target = src / directory
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(layer / directory, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (src / "bay/mobile/adblock").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ADBLOCK / "include/bay_adblock.h", src / "bay/mobile/adblock/bay_adblock.h")
 

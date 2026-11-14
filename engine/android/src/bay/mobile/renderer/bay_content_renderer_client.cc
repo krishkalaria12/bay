@@ -8,7 +8,7 @@
 
 #include "base/no_destructor.h"
 #include "bay/mobile/renderer/bay_render_frame_observer.h"
-#include "bay/core/mojom/nncore.mojom.h"
+#include "bay/filter/mojom/scriptlets.mojom.h"
 #include "components/js_injection/common/interfaces.mojom.h"
 #include "components/js_injection/renderer/js_communication.h"
 #include "content/public/renderer/render_frame.h"

@@ -19,14 +19,14 @@
 // The blocker's scriptlets reach a document synchronously as its main world starts
 // (mojom::NNScriptlets, answered on a background sequence by the host's ScriptletSource).
 
-#ifndef BAY_CORE_NN_REQUEST_FILTER_H_
-#define BAY_CORE_NN_REQUEST_FILTER_H_
+#ifndef BAY_FILTER_NN_REQUEST_FILTER_H_
+#define BAY_FILTER_NN_REQUEST_FILTER_H_
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "content/public/browser/content_browser_client.h"
-#include "bay/core/nn_cookie_filter.h"
+#include "bay/filter/nn_cookie_filter.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
@@ -177,4 +177,4 @@ void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry
 
 }  // namespace nncore
 
-#endif  // BAY_CORE_NN_REQUEST_FILTER_H_
+#endif  // BAY_FILTER_NN_REQUEST_FILTER_H_

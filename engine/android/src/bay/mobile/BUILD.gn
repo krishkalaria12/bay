@@ -1,5 +1,5 @@
 # Bay's Chromium engine for Android: a content embedder (no //chrome) packaged as bay-engine.aar for the Expo app.
-# See docs/android-chromium-plan.html. engine/android/apply.py copies this directory to //bay/mobile.
+# See docs/android-chromium-plan.html. scripts/android/engine.py copies this directory to //bay/mobile.
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
@@ -66,8 +66,8 @@ source_set("lib") {
   deps = [
     ":jni_headers",
     "//base",
-    "//bay/core:request_filter",
-    "//bay/core/mojom",
+    "//bay/filter",
+    "//bay/filter/mojom",
     "//components/android_autofill/browser:android",
     "//components/autofill/content/browser",
     "//components/autofill/content/renderer",

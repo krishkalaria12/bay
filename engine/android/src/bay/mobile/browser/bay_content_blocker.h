@@ -11,9 +11,9 @@
 
 namespace bay {
 
-// Bay's content blocker in the engine: the shared Rust blocker (packages/adblock) behind desktop's request filter
-// (//bay/core, nn_request_filter.h), which sees every request, response and WebSocket of every page in every profile,
-// plus document-start scriptlets and cosmetic CSS. The app picks the filter lists; the engine compiles and caches them.
+// Bay's content blocker in the engine: the shared Rust blocker (packages/adblock) behind the request filter every
+// engine shares (//bay/filter, nn_request_filter.h), which sees every request, response and WebSocket of every page in
+// every profile, plus document-start scriptlets and cosmetic CSS. The app picks the filter lists; the engine compiles and caches them.
 class BayContentBlocker {
  public:
   // Installs the filter callbacks. Once, at browser startup; they filter nothing until lists are set.

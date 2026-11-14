@@ -1,0 +1,9 @@
+# The content blocker's IPC between the browser and its renderers (scriptlets), on every engine.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  cpp_only = true
+  disable_variants = true
+  sources = [ "scriptlets.mojom" ]
+}

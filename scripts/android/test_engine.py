@@ -75,21 +75,24 @@ class IdentityTests(unittest.TestCase):
             for directory in engine.OVERLAY_DIRECTORIES:
                 (overlay / directory).mkdir(parents=True)
                 (overlay / directory / "BUILD.gn").write_text("new")
-            desktop = base / "desktop"
-            for name in engine.SHARED_DESKTOP_SOURCES:
-                (desktop / name).parent.mkdir(parents=True, exist_ok=True)
-                (desktop / name).write_text("desktop " + name)
+            shared = base / "shared"
+            for directory in engine.SHARED_DIRECTORIES:
+                (shared / directory / "mojom").mkdir(parents=True)
+                (shared / directory / "nn_request_filter.cc").write_text("shared filter")
+                (shared / directory / "mojom/scriptlets.mojom").write_text("shared mojom")
             src = base / "root/chromium/src"
             (src / "bay/mobile").mkdir(parents=True)
             (src / "bay/mobile/stale.cc").write_text("old")
             (src / "content").mkdir()
             (src / "content/keep.cc").write_text("chromium")
-            with mock.patch.object(engine, "OVERLAY", overlay), mock.patch.object(engine, "DESKTOP_CORE", desktop):
+            (src / "bay/filter").mkdir(parents=True)
+            (src / "bay/filter/stale.cc").write_text("old")
+            with mock.patch.object(engine, "OVERLAY", overlay), mock.patch.object(engine, "SHARED", shared):
                 engine.apply_overlay(base / "root")
             self.assertEqual((src / "bay/mobile/BUILD.gn").read_text(), "new")
-            self.assertEqual((src / "bay/core/BUILD.gn").read_text(), "new")
-            self.assertEqual((src / "bay/core/nn_request_filter.cc").read_text(), "desktop nn_request_filter.cc")
-            self.assertEqual((src / "bay/core/mojom/nncore.mojom").read_text(), "desktop mojom/nncore.mojom")
+            self.assertEqual((src / "bay/filter/nn_request_filter.cc").read_text(), "shared filter")
+            self.assertEqual((src / "bay/filter/mojom/scriptlets.mojom").read_text(), "shared mojom")
+            self.assertFalse((src / "bay/filter/stale.cc").exists())
             self.assertFalse((src / "bay/mobile/stale.cc").exists())
             self.assertEqual((src / "content/keep.cc").read_text(), "chromium")
 
