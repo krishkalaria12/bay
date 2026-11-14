@@ -247,14 +247,3 @@ internal object BayContentBlocker {
       runCatching { cosmeticCss(pageUrl, classes, ids, siteRules) }.getOrDefault("")
   }
 }
-
-/** Hosts that failed over HTTPS this session, so they load over HTTP without another attempt. */
-internal object BayHttps {
-  val httpOnlyHosts: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
-
-  private val ipv4 = Regex("^(\\d{1,3}\\.){3}\\d{1,3}$")
-
-  fun isLocal(host: String): Boolean =
-    host == "localhost" || host.startsWith("[") || ipv4.matches(host) ||
-      listOf(".local", ".localhost", ".test", ".internal", ".lan", ".home.arpa").any { host.endsWith(it) }
-}

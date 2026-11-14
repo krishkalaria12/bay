@@ -1,17 +1,11 @@
 package expo.modules.bayengine
 
 import android.Manifest
-import android.animation.ValueAnimator
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,16 +15,8 @@ import android.os.Message
 import android.os.Parcel
 import android.os.SystemClock
 import android.util.Log
-import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
-import android.view.ViewGroup
-import android.view.WindowInsets
-import android.view.WindowInsetsController
-import android.view.WindowManager
-import android.view.animation.DecelerateInterpolator
-import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
@@ -49,27 +35,20 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.FrameLayout
-import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.ProfileStore
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebStorageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import expo.modules.interfaces.permissions.Permissions
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -114,39 +93,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private val scrollHandler = Handler(Looper.getMainLooper())
   private var scrollPending = false
   private val emitPendingScroll = Runnable { scrollPending = false; if (!disposed) emitScroll() }
-  private var snapshotFile: File? = null
   private val density = resources.displayMetrics.density
-  private var pullStartX = 0f
-  private var pullStartY = 0f
-  private var pulling = false
-  private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-  private val pullThreshold = 64 * density
-  private val pullPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    // Mid grey reads on light and dark pages alike; the gap behind it is the page's own top colour (TabPage).
-    color = Color.rgb(142, 142, 147)
-    strokeWidth = 2.5f * density
-    style = Paint.Style.STROKE
-    strokeCap = Paint.Cap.ROUND
-  }
-  /** Past the trigger point in the current pull (one haptic tick when it's crossed). */
-  private var pullArmed = false
-  /** Released past the trigger: the page stays down with a spinning arc until the reload has started and finished. */
-  private var refreshing = false
-  private var refreshStartedAt = 0L
-  private var refreshSawLoading = false
-  /** Edge swipe back/forward (A4): where the finger went down, which edge, and whether it is being dragged. */
-  private var edgeStartX = 0f
-  private var edgeStartY = 0f
-  /** -1: left edge, swipe right to go back; 1: right edge, swipe left to go forward; 0: neither. */
-  private var edgeDirection = 0
-  private var edgeSwiping = false
-  /** Past the trigger point in the current edge swipe (one haptic tick when it's crossed). */
-  private var edgeArmed = false
-  /** Video fullscreen (A2): the custom view and its hidden callback, plus the orientation to restore. */
-  private var customView: View? = null
-  private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-  private var originalOrientation: Int? = null
-  private var backCallback: OnBackPressedCallback? = null
   /** Page requests (I3): results held until the shared sheet answers; one per dialog. */
   private val pendingPageRequests = ConcurrentHashMap<String, android.webkit.JsResult>()
   /** HTTP sign-in challenges (B3), held until the shared sheet answers; one per challenge. */
@@ -157,17 +104,25 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private val pendingMediaRequests = ConcurrentHashMap<String, PendingMedia>()
   /** Location requests (B7), held until the shared sheet answers and the system grants it. */
   private val pendingLocationRequests = ConcurrentHashMap<String, PendingLocation>()
-  private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
-    duration = 750
-    repeatCount = ValueAnimator.INFINITE
-    interpolator = LinearInterpolator()
-    addUpdateListener { onSpin() }
-  }
   var pullToRefreshEnabled = true
   /** The page this view shows, read on WebView's network threads to judge subresources. */
   @Volatile private var pageUrl: String? = null
-  /** Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends it straight back keeps HTTP. */
-  private val upgradedHosts = mutableMapOf<String, Long>()
+  private val https = BayHttpsUpgrades()
+  private val snapshots = BaySnapshotWriter(context)
+  private val fullscreen = BayFullscreen(context)
+  /** The page's fullscreen player view (A2) is told through this when it's taken down. */
+  private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+  private val gestures = BayPageGestures(this, object : BayPageGestures.Page {
+    override val view: View get() = webView
+    override val hasPage: Boolean get() = !disposed && webView.url != null
+    override val isLoading: Boolean get() = loading
+    override val pullToRefreshEnabled: Boolean get() = this@BayEngineView.pullToRefreshEnabled
+    override fun canGoBack() = webView.canGoBack()
+    override fun canGoForward() = webView.canGoForward()
+    override fun goBack() = webView.goBack()
+    override fun goForward() = webView.goForward()
+    override fun reload() = this@BayEngineView.reload()
+  })
   private var usesPrivateProfile = false
   /** The private session's profile this view's page uses, or null for a normal page. */
   private var privateProfileName: String? = null
@@ -332,7 +287,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         val isImage = hit.type == WebView.HitTestResult.IMAGE_TYPE
         val handler = Handler(Looper.getMainLooper()) { message ->
           val url = message.data.getString("url") ?: fallback
-          if (!disposed && this === webView && generation == navigationGeneration && url != null && isWebURL(Uri.parse(url))) {
+          if (!disposed && this === webView && generation == navigationGeneration && url != null && isWebUrl(Uri.parse(url))) {
             val title = message.data.getString("title")?.takeIf { it.isNotBlank() } ?: url
             onLinkPress(mapOf("url" to url, "title" to title.take(240), "x" to pointX, "y" to pointY, "image" to isImage))
           }
@@ -352,9 +307,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
           if (request.isForMainFrame) downloadBlobOrData(view, request.url.toString())
           return true
         }
-        if (!isWebURL(request.url)) {
+        if (!isWebUrl(request.url)) {
           // A link to another app asks first (B5); the page stays where it is either way.
-          if (request.isForMainFrame && isExternalURL(request.url)) requestExternal(request.url.toString())
+          if (request.isForMainFrame && isExternalUrl(request.url)) requestExternal(request.url.toString())
           return true
         }
         if (!request.isForMainFrame || request.method != "GET") return false
@@ -614,7 +569,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   fun load(address: String) {
     check(!disposed) { "This page view has been disposed." }
-    require(isWebURL(Uri.parse(address))) { "Only HTTP and HTTPS addresses can be opened." }
+    require(isWebUrl(Uri.parse(address))) { "Only HTTP and HTTPS addresses can be opened." }
     cancelPageRequests()
     recoveryURL = null
     startedLoading = true
@@ -708,16 +663,6 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
   }
 
-  /** Unwraps the activity behind a view's context, or null outside one. */
-  private fun activityFor(ctx: Context): Activity? {
-    var current: Context? = ctx
-    while (current is ContextWrapper) {
-      if (current is Activity) return current
-      current = current.baseContext
-    }
-    return null
-  }
-
   // MARK: Page requests (I3)
 
   private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null, externalUrl: String? = null, permission: String? = null) {
@@ -732,7 +677,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   fun answerPageRequest(id: String, accepted: Boolean, value: String?, username: String?, password: String?) {
     val external = pendingExternalRequests.remove(id)
     if (external != null) {
-      if (accepted) openExternal(external)
+      if (accepted) openExternalUrl(context, external)
       return
     }
     val media = pendingMediaRequests[id]
@@ -742,7 +687,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         runCatching { media.request.deny() }
         return
       }
-      requestSystemPermissions(media.permissions) { granted ->
+      requestSystemPermissions(appContext, media.permissions) { granted ->
         val pending = pendingMediaRequests.remove(id)
         if (pending != null) runCatching { if (granted) pending.request.grant(pending.resources) else pending.request.deny() }
       }
@@ -755,7 +700,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         runCatching { location.callback.invoke(location.origin, false, false) }
         return
       }
-      requestSystemPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), requireAll = false) { granted ->
+      requestSystemPermissions(appContext, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), requireAll = false) { granted ->
         val pending = pendingLocationRequests.remove(id)
         if (pending != null) runCatching { pending.callback.invoke(pending.origin, granted, false) }
       }
@@ -796,120 +741,23 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     for (location in pendingLocation) runCatching { location.callback.invoke(location.origin, false, false) }
   }
 
-  /** Asks the system for runtime permissions (B7); `done` receives whether they were granted (`requireAll` or any). */
-  private fun requestSystemPermissions(permissions: Array<String>, requireAll: Boolean = true, done: (Boolean) -> Unit) {
-    val manager = appContext.permissions
-    if (manager == null) {
-      done(false)
-      return
-    }
-    val granted = {
-      if (requireAll) permissions.all { manager.hasGrantedPermissions(it) }
-      else permissions.any { manager.hasGrantedPermissions(it) }
-    }
-    if (granted()) {
-      done(true)
-      return
-    }
-    Permissions.askForPermissionsWithPermissionsManager(manager, object : Promise {
-      // The aggregate result doesn't distinguish an approximate location from a refusal, so ask the manager again.
-      override fun resolve(value: Any?) {
-        done(granted())
-      }
-
-      override fun reject(code: String?, message: String?, cause: Throwable?) {
-        done(false)
-      }
-    }, *permissions)
-  }
-
   // MARK: Video fullscreen (A2)
 
   private fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
-    if (disposed || customView != null) {
+    if (disposed || !fullscreen.enter(view) { hideFullscreen() }) {
       callback.onCustomViewHidden()
       return
     }
-    val activity = activityFor(context) ?: run {
-      callback.onCustomViewHidden()
-      return
-    }
-    customView = view
     customViewCallback = callback
-    view.keepScreenOn = true
-    val decor = activity.window.decorView as ViewGroup
-    decor.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-    originalOrientation = activity.requestedOrientation
-    // Landscape for the video; the app follows the system orientation (B10), so this turns the whole activity
-    // sideways for the player and restores whatever was current when the player's view hides.
-    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-    hideSystemUI(activity)
-    registerFullscreenBack(activity)
     onFullscreenChange(mapOf("fullscreen" to true))
   }
 
   private fun hideFullscreen() {
-    val view = customView ?: return
-    customView = null
+    fullscreen.exit() ?: return
     val callback = customViewCallback
     customViewCallback = null
-    backCallback?.remove()
-    backCallback = null
-    val activity = activityFor(context)
-    if (activity != null) {
-      (view.parent as? ViewGroup)?.removeView(view)
-      if (originalOrientation != null) {
-        activity.requestedOrientation = originalOrientation!!
-        originalOrientation = null
-      }
-      showSystemUI(activity)
-    }
     callback?.onCustomViewHidden()
     if (!disposed) onFullscreenChange(mapOf("fullscreen" to false))
-  }
-
-  private fun registerFullscreenBack(activity: Activity) {
-    val callback = backCallback
-    if (callback != null) return
-    val appCompat = activity as? AppCompatActivity
-    val back = object : OnBackPressedCallback(true) {
-      override fun handleOnBackPressed() {
-        if (customView != null) {
-          hideFullscreen()
-        } else {
-          isEnabled = false
-          appCompat?.onBackPressedDispatcher?.onBackPressed()
-          isEnabled = true
-        }
-      }
-    }
-    // AppCompatActivity exposes the dispatcher; without it fullscreen still exits via the site's own control.
-    appCompat?.onBackPressedDispatcher?.addCallback(activity, back)
-    backCallback = back
-  }
-
-  private fun hideSystemUI(activity: Activity) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      val controller = activity.window.insetsController
-      controller?.hide(WindowInsets.Type.systemBars())
-      controller?.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-    } else {
-      @Suppress("DEPRECATION")
-      activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
-        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-    }
-  }
-
-  private fun showSystemUI(activity: Activity) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      activity.window.insetsController?.show(WindowInsets.Type.systemBars())
-    } else {
-      @Suppress("DEPRECATION")
-      activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-    }
   }
 
   // MARK: blob: and data: downloads (A3)
@@ -984,30 +832,11 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
-  private fun replacementFor(address: String): String? = BayAdblock.nativeCleanUrl(address) ?: httpsUpgrade(address)
-
-  private fun httpsUpgrade(address: String): String? {
-    val uri = Uri.parse(address)
-    val host = uri.host?.lowercase() ?: return null
-    if (uri.scheme?.lowercase() != "http" || BayHttps.isLocal(host) || host in BayHttps.httpOnlyHosts) return null
-    val upgraded = upgradedHosts[host]
-    if (upgraded != null && SystemClock.uptimeMillis() - upgraded < 5_000) {
-      // The HTTPS page redirected back to HTTP: the site doesn't serve HTTPS properly, so keep HTTP.
-      BayHttps.httpOnlyHosts += host
-      return null
-    }
-    upgradedHosts[host] = SystemClock.uptimeMillis()
-    val authority = if (uri.port == 80) uri.host else uri.encodedAuthority
-    return uri.buildUpon().scheme("https").encodedAuthority(authority).build().toString()
-  }
+  private fun replacementFor(address: String): String? = BayAdblock.nativeCleanUrl(address) ?: https.upgrade(address)
 
   /** After an upgraded HTTPS load fails to connect, loads its HTTP address instead; returns true when it did. */
   private fun fallBackToHttp(address: String): Boolean {
-    val uri = Uri.parse(address)
-    val host = uri.host?.lowercase() ?: return false
-    if (uri.scheme != "https" || host !in upgradedHosts) return false
-    BayHttps.httpOnlyHosts += host
-    val insecure = uri.buildUpon().scheme("http").build().toString()
+    val insecure = https.fallback(address) ?: return false
     pageUrl = insecure
     webView.loadUrl(insecure)
     return true
@@ -1033,7 +862,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   /** Loads once, when the view is created, unless a navigation already started. Invalid addresses are ignored. */
   fun loadInitial(address: String?) {
-    if (startedLoading || disposed || address.isNullOrEmpty() || !isWebURL(Uri.parse(address))) return
+    if (startedLoading || disposed || address.isNullOrEmpty() || !isWebUrl(Uri.parse(address))) return
     // Wait a turn so the other initial props (`private` in particular) apply first.
     post {
       if (startedLoading || disposed) return@post
@@ -1090,13 +919,13 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     emitState()
   }
 
-  /** Draws the page on the main thread, then encodes and writes the JPEG on [snapshotWriter]. A suspended page resolves null: it may not have drawn. */
+  /** Draws the page on the main thread; [BaySnapshotWriter] encodes and writes it. A suspended page resolves null: it may not have drawn. */
   fun snapshot(promise: Promise) {
     if (disposed || isSuspended || webView.width <= 0 || webView.height <= 0 || webView.url == null) {
       promise.resolve(null)
       return
     }
-    val ratio = min(1.0, 640.0 / webView.width)
+    val ratio = min(1.0, BaySnapshotWriter.MAX_WIDTH.toDouble() / webView.width)
     val bitmap = Bitmap.createBitmap(max(1, (webView.width * ratio).toInt()), max(1, (webView.height * ratio).toInt()), Bitmap.Config.ARGB_8888)
     try {
       val canvas = Canvas(bitmap)
@@ -1107,24 +936,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       promise.reject("E_SNAPSHOT", "Couldn't draw the page snapshot.", error)
       return
     }
-    val directory = BayEngineSnapshots.directory(context)
-    snapshotWriter.execute {
-      val file = File(directory, "${UUID.randomUUID()}.jpg")
-      try {
-        check(directory.isDirectory || directory.mkdirs()) { "Couldn't create the snapshot cache." }
-        file.outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 75, it)) throw IOException("Couldn't encode the page snapshot.") }
-        // Only this single thread touches snapshotFile, so swaps can't race.
-        val previous = snapshotFile
-        snapshotFile = file
-        previous?.delete()
-        promise.resolve(Uri.fromFile(file).toString())
-      } catch (error: Exception) {
-        file.delete()
-        promise.reject("E_SNAPSHOT", "Couldn't save the page snapshot.", error)
-      } finally {
-        bitmap.recycle()
-      }
-    }
+    snapshots.write(bitmap, promise)
   }
 
   private fun scheduleScroll() {
@@ -1148,174 +960,14 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     onScroll(mapOf("offsetY" to offset, "deltaY" to delta))
   }
 
-  override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-    if (disposed || webView.url == null) return super.onInterceptTouchEvent(event)
-    // A second finger is a pinch, never a pull or an edge swipe.
-    if (event.pointerCount > 1) {
-      if (edgeSwiping) {
-        edgeSwiping = false
-        edgeArmed = false
-        settleEdge()
-      }
-      return super.onInterceptTouchEvent(event)
-    }
-    when (event.actionMasked) {
-      MotionEvent.ACTION_DOWN -> {
-        pullStartX = event.x
-        pullStartY = event.y
-        pulling = false
-        pullArmed = false
-        edgeStartX = event.x
-        edgeStartY = event.y
-        edgeSwiping = false
-        edgeArmed = false
-        // Edge swipe (A4): the first 24dp at each side, matching iOS's allowsBackForwardNavigationGestures.
-        // A direction is only armed when there's history that way, so a swipe without history stays the page's.
-        val edgeWidth = 24 * density
-        edgeDirection = when {
-          event.x < edgeWidth && webView.canGoBack() -> -1
-          event.x > width - edgeWidth && webView.canGoForward() -> 1
-          else -> 0
-        }
-      }
-      MotionEvent.ACTION_MOVE -> {
-        // Pull to refresh keeps its rules; edge swipe runs alongside it. Both steal the gesture once the
-        // movement is clearly theirs, and both need the other not to have started first.
-        if (!pulling && !edgeSwiping && pullToRefreshEnabled && !loading && !refreshing) {
-          val distance = event.y - pullStartY
-          if (!webView.canScrollVertically(-1) && distance > touchSlop * 2 && distance > abs(event.x - pullStartX) * 1.5) {
-            pulling = true
-            parent?.requestDisallowInterceptTouchEvent(true)
-            return true
-          }
-        }
-        if (!edgeSwiping && !pulling && edgeDirection != 0) {
-          val dx = event.x - edgeStartX
-          val dy = event.y - edgeStartY
-          val towardHistory = if (edgeDirection == -1) dx > 0 else dx < 0
-          if (towardHistory && abs(dx) > touchSlop * 2 && abs(dx) > abs(dy) * 1.5) {
-            edgeSwiping = true
-            parent?.requestDisallowInterceptTouchEvent(true)
-            return true
-          }
-        }
-      }
-      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-        if (pulling || edgeSwiping) return true
-      }
-    }
-    return super.onInterceptTouchEvent(event)
-  }
+  override fun onInterceptTouchEvent(event: MotionEvent): Boolean =
+    gestures.onInterceptTouchEvent(event) ?: super.onInterceptTouchEvent(event)
 
-  override fun onTouchEvent(event: MotionEvent): Boolean {
-    if (edgeSwiping) {
-      when (event.actionMasked) {
-        MotionEvent.ACTION_MOVE -> {
-          val dx = event.x - edgeStartX
-          // The page follows the finger a little, like WebKit's edge preview. Cap it so the edge stays put.
-          val follow = (dx * 0.4f).coerceIn(-56 * density, 56 * density)
-          val distance = if (edgeDirection == -1) dx else -dx
-          webView.translationX = follow
-          webView.translationY = 0f
-          val armed = distance >= pullThreshold
-          if (armed && !edgeArmed) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-          edgeArmed = armed
-          invalidate()
-        }
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-          val dx = event.x - edgeStartX
-          val distance = if (edgeDirection == -1) dx else -dx
-          val navigate = event.actionMasked == MotionEvent.ACTION_UP && distance >= pullThreshold
-          val direction = edgeDirection
-          edgeSwiping = false
-          edgeArmed = false
-          parent?.requestDisallowInterceptTouchEvent(false)
-          if (navigate) {
-            if (direction == -1) webView.goBack() else webView.goForward()
-          }
-          settleEdge()
-        }
-      }
-      return true
-    }
-    if (!pulling) return super.onTouchEvent(event)
-    when (event.actionMasked) {
-      MotionEvent.ACTION_MOVE -> {
-        webView.translationY = ((event.y - pullStartY) * 0.5f).coerceIn(0f, pullThreshold * 1.5f)
-        val armed = webView.translationY >= pullThreshold
-        if (armed && !pullArmed) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-        pullArmed = armed
-        invalidate()
-      }
-      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-        val shouldReload = event.actionMasked == MotionEvent.ACTION_UP && webView.translationY >= pullThreshold
-        pulling = false
-        pullArmed = false
-        parent?.requestDisallowInterceptTouchEvent(false)
-        if (shouldReload) {
-          // Hold the page just below the spinner while it reloads, as iOS does.
-          refreshing = true
-          refreshSawLoading = false
-          refreshStartedAt = SystemClock.uptimeMillis()
-          webView.animate().translationY(pullThreshold).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
-          spinner.start()
-          reload()
-        } else {
-          settlePage()
-        }
-      }
-    }
-    return true
-  }
-
-  private fun settlePage() {
-    webView.animate().translationY(0f).setDuration(240).setInterpolator(DecelerateInterpolator()).withEndAction { invalidate() }.start()
-  }
-
-  private fun settleEdge() {
-    webView.animate().translationX(0f).setDuration(240).setInterpolator(DecelerateInterpolator()).withEndAction { invalidate() }.start()
-  }
-
-  /** Each spinner frame: ends the refresh once the reload has run (shown at least briefly), or gives up on one that never starts. */
-  private fun onSpin() {
-    if (!refreshing) return
-    if (loading) refreshSawLoading = true
-    val shown = SystemClock.uptimeMillis() - refreshStartedAt
-    if ((refreshSawLoading && !loading && shown >= 450) || (!refreshSawLoading && shown >= 4_000) || shown >= 20_000) endRefresh()
-    invalidate()
-  }
-
-  private fun endRefresh() {
-    refreshing = false
-    spinner.cancel()
-    settlePage()
-  }
+  override fun onTouchEvent(event: MotionEvent): Boolean = gestures.onTouchEvent(event) ?: super.onTouchEvent(event)
 
   override fun dispatchDraw(canvas: Canvas) {
     super.dispatchDraw(canvas)
-    val offset = webView.translationY
-    if (offset <= 0f) return
-    val radius = 10 * density
-    val x = width * 0.5f
-    val y = offset * 0.5f
-    val progress = min(1f, offset / pullThreshold)
-    if (refreshing) {
-      pullPaint.alpha = 255
-      canvas.drawArc(x - radius, y - radius, x + radius, y + radius, spinner.animatedValue as Float - 90f, 270f, false, pullPaint)
-    } else {
-      // Fades in and draws itself as the page comes down, turning a little so it feels alive.
-      pullPaint.alpha = (255 * progress).toInt()
-      canvas.drawArc(x - radius, y - radius, x + radius, y + radius, -90f + 120f * progress, 300f * progress, false, pullPaint)
-    }
-  }
-
-  private fun isWebURL(url: Uri): Boolean = url.scheme?.lowercase() in listOf("http", "https") && !url.host.isNullOrEmpty()
-
-  /** A scheme that belongs to another app (B5): tel:, mailto:, maps, an app's own scheme. Web and page data stay here. */
-  private fun isExternalURL(url: Uri): Boolean {
-    val scheme = url.scheme?.lowercase() ?: return false
-    val inPage = setOf("http", "https", "about", "javascript", "data", "blob", "file", "ws", "wss", "chrome", "chrome-extension")
-    return scheme !in inPage && Regex("^[a-z][a-z0-9+.-]*$").matches(scheme)
+    gestures.draw(canvas)
   }
 
   /** Asks whether to hand a link to another app; the page's navigation is cancelled either way. */
@@ -1323,26 +975,6 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val id = UUID.randomUUID().toString()
     pendingExternalRequests[id] = url
     emitPageRequest(id, "external", "", null, webView.url ?: pageUrl, externalUrl = url)
-  }
-
-  private fun openExternal(url: String) {
-    val activity = activityFor(context) ?: return
-    val parsed = if (url.startsWith("intent:", ignoreCase = true)) {
-      try {
-        Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
-      } catch (_: Exception) {
-        null
-      }
-    } else {
-      null
-    }
-    val intent = parsed ?: Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    try {
-      activity.startActivity(intent)
-    } catch (_: Exception) {
-      // No app handles the link; the page stays open.
-    }
   }
 
   /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */
@@ -1360,13 +992,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     cancelPageRequests()
     cancelScripts("The page closed before the script finished.")
     scrollHandler.removeCallbacksAndMessages(null)
-    refreshing = false
-    spinner.cancel()
+    gestures.cancel()
     hideFullscreen()
     BayFileChooser.cancelPending()
-    edgeSwiping = false
-    pulling = false
-    webView.animate().cancel()
     webView.stopLoading()
     webView.setOnLongClickListener(null)
     webView.setOnTouchListener(null)
@@ -1460,8 +1088,6 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         profileHandler.postDelayed(retryProfileDeletion, 1_000L shl minOf(profileDeletionAttempts, 6))
       }
     }
-    /** Encodes and writes snapshots off the main thread, one at a time. */
-    private val snapshotWriter = Executors.newSingleThreadExecutor()
     /** Base64 cap for a blob download crossing the bridge (~50 MB of file bytes). */
     private const val MAX_BLOB_BASE64 = 70_000_000
     val privateBrowsingSupported: Boolean
