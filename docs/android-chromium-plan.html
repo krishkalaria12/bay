@@ -1751,6 +1751,84 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
             </tbody>
           </table>
         </div>
+        <h3>Known gaps</h3>
+        <p>
+          Recorded 14 November 2026, when P2–P5 were written without a runner build in between (the first run after them builds the engine and the APK
+          together). Each row is a difference from the system WebView build Android had before, or work the stages above still owe.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Known gaps" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Gap</th>
+                <th scope="col">Where it stands</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Not compiled yet</th>
+                <td>
+                  Nothing in <code>engine/android/src/bay</code> since P0 has compiled: Android Chromium can't build on a Mac. The Kotlin compiles against
+                  <code>engine/android/api-stub</code>; expect the first run to stop on native compile errors.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Desktop filter copied, not moved (P1)</th>
+                <td>
+                  <code>scripts/android/engine.py</code> copies desktop's request filter, cookie filter and mojom from <code>engine/nncore</code> into
+                  <code>//bay/core</code> at build time. Moving them into a directory both engines own is still to do.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">HTTPS first on links</th>
+                <td>
+                  Addresses the person opens are tried over HTTPS first; links a page follows are not (the WebView build upgraded every main-frame GET). Needs a
+                  navigation throttle in the engine.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">OS Autofill and passkeys</th>
+                <td>
+                  The content embedder has neither Android Autofill nor WebAuthn wired; the WebView build had both. This is the credential gate above, and it
+                  blocks shipping to the store.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Private downloads</th>
+                <td>
+                  A private download still running when the private session ends is cancelled with its profile. Interrupted downloads are reported as failed and
+                  not resumed.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Moving from the WebView build</th>
+                <td>
+                  Cookies, sign-ins and site data from the system WebView don't carry over, and saved tab histories don't either: tabs reopen at their address.
+                  No in-app notice says so yet.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Desktop site layout</th>
+                <td>Desktop mode sends the desktop agent and client hints; it doesn't force a wide viewport the way the WebView build did.</td>
+              </tr>
+              <tr>
+                <th scope="row">Release signing</th>
+                <td>
+                  The repository has no Android release key, so the APK the workflow publishes keeps the debug signature: it installs from a link but can't
+                  update a store build. Add <code>ANDROID_KEYSTORE_BASE64</code>, <code>ANDROID_KEYSTORE_PASSWORD</code>, <code>ANDROID_KEY_ALIAS</code> and
+                  <code>ANDROID_KEY_PASSWORD</code> to sign it.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Device proof</th>
+                <td>
+                  The Chromium page view hasn't run on a device: that needs the first built AAR. The iOS <code>desktopMode</code> prop, wired in the same work,
+                  hasn't been tried on a device either.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <h3>Primary references</h3>
         <ul class="sources">
           <li>
@@ -1782,8 +1860,8 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
         </p>
       </section>
       <footer>
-        This is a documentation plan. The engine source changes, runner workflows, AAR publication and mobile engine swap described here remain implementation
-        work. Existing mobile scope is in <a href="mobile-plan.html">mobile-plan.html</a>; store release procedures are in
+        The engine, its runner workflow, the APK release and the mobile engine swap are written; the known gaps above are what remains before the first build is
+        proven. Existing mobile scope is in <a href="mobile-plan.html">mobile-plan.html</a>; store release procedures are in
         <a href="mobile-releasing.md">mobile-releasing.md</a>.
       </footer>
     </main>

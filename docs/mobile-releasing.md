@@ -4,9 +4,8 @@ Bay for iPhone and Android lives in `apps/mobile` (Expo SDK 58). The desktop app
 covers the Mac build, this file covers the two stores.
 
 The plan behind it is `docs/mobile-plan.html`; item B8 is the release setup and stage 3 is the first public release.
-The Android engine transition is specified in [the Chromium implementation plan](android-chromium-plan.html): Linux GitHub
-Actions builds the engine artifact, EAS assembles the mobile app, and iOS keeps WebKit. That pipeline is planned work;
-the current Android implementation still uses the system WebView.
+Android renders with Bay's own Chromium ([the Chromium implementation plan](android-chromium-plan.html)); iOS keeps WebKit.
+The engine and the Android APK are built on GitHub's Linux runners, not EAS: see [Android builds](#android-builds).
 
 ## What ships
 
@@ -94,3 +93,22 @@ pnpm e2e        # every Argent flow, on the iPhone simulator and the Android emu
 
 `pnpm e2e` needs both dev clients installed (`pnpm native`) and Metro running (`pnpm start`). Both devices must be
 available: the app is one design on two platforms, and Android's own UI breaks on its own.
+
+## Android builds
+
+`.github/workflows/android-engine.yml` builds Bay's engine (`bay-engine.aar`, from `engine/android`) over up to six
+chained stages, then the app around it, and publishes both as a prerelease named after the tag:
+
+```bash
+git tag android-engine-N && git push origin android-engine-N
+```
+
+A run whose engine sources haven't changed since an earlier one reuses that engine and only builds the app. The APK is
+signed with the release key when the repository has `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`; without them it keeps the debug signature, which installs from a link
+but can't update a store build.
+
+To build the app yourself, pin a published engine in `apps/mobile/android-engine.json` (the release notes print the
+line to use) and run `node scripts/fetch-android-engine.mjs` from `apps/mobile`; `pnpm native` does this for you. A
+built engine on disk installs with `--from <directory>`. An Android build stops if no engine is installed.
+
