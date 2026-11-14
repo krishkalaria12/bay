@@ -112,12 +112,17 @@ jobs:
           # The blocker's scriptlet and redirect resources (scripts/adblock does the same locally).
           mkdir -p modules/bay-engine/android/src/main/assets
           cp ../../packages/adblock/resources/resources.json modules/bay-engine/android/src/main/assets/bay-adblock-resources.json
+      # Each run's APK has a higher versionCode than the last, so it installs over an earlier one as an update.
       - name: Prebuild
         working-directory: apps/mobile
-        run: CI=1 npx expo prebuild --platform android --clean
+        run: |
+          CI=1 npx expo prebuild --platform android --clean
+          sed -i -E "s/^( +)versionCode 1$/\1versionCode $GITHUB_RUN_NUMBER/" android/app/build.gradle
+          grep -q "versionCode $GITHUB_RUN_NUMBER$" android/app/build.gradle
+      # Expo's 2 GB Gradle heap is tight for dexing Chromium's Java.
       - name: Build
         working-directory: apps/mobile/android
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: ./gradlew --no-daemon "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g" :app:assembleRelease
       - name: Sign
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -126,7 +131,8 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           built=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-          version=$(node -p 'require("./apps/mobile/app.json").expo.version')
+          # app.json has comments, so the version comes from Expo's reading of it.
+          version=$(cd apps/mobile && npx expo config --type public --json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')
           apk="dist/Bay-$version-android.apk"
           mkdir -p dist
           if [[ -z "$KEYSTORE" ]]; then
