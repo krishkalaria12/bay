@@ -1780,17 +1780,10 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
                 </td>
               </tr>
               <tr>
-                <th scope="row">HTTPS first on links</th>
+                <th scope="row">Passkeys</th>
                 <td>
-                  Addresses the person opens are tried over HTTPS first; links a page follows are not (the WebView build upgraded every main-frame GET). Needs a
-                  navigation throttle in the engine.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">OS Autofill and passkeys</th>
-                <td>
-                  The content embedder has neither Android Autofill nor WebAuthn wired; the WebView build had both. This is the credential gate above, and it
-                  blocks shipping to the store.
+                  Android Autofill is wired as WebView wires it (the engine's <code>AutofillProvider</code> and a per-frame <code>AutofillAgent</code>), but
+                  WebAuthn isn't: sites can't ask for a passkey yet. This is the credential gate above, and it blocks shipping to the store.
                 </td>
               </tr>
               <tr>
@@ -1801,23 +1794,8 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
                 </td>
               </tr>
               <tr>
-                <th scope="row">Moving from the WebView build</th>
-                <td>
-                  Cookies, sign-ins and site data from the system WebView don't carry over, and saved tab histories don't either: tabs reopen at their address.
-                  No in-app notice says so yet.
-                </td>
-              </tr>
-              <tr>
                 <th scope="row">Desktop site layout</th>
                 <td>Desktop mode sends the desktop agent and client hints; it doesn't force a wide viewport the way the WebView build did.</td>
-              </tr>
-              <tr>
-                <th scope="row">Release signing</th>
-                <td>
-                  The repository has no Android release key, so the APK the workflow publishes keeps the debug signature: it installs from a link but can't
-                  update a store build. Add <code>ANDROID_KEYSTORE_BASE64</code>, <code>ANDROID_KEYSTORE_PASSWORD</code>, <code>ANDROID_KEY_ALIAS</code> and
-                  <code>ANDROID_KEY_PASSWORD</code> to sign it.
-                </td>
               </tr>
               <tr>
                 <th scope="row">Device proof</th>

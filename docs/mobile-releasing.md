@@ -104,9 +104,10 @@ git tag android-engine-N && git push origin android-engine-N
 ```
 
 A run whose engine sources haven't changed since an earlier one reuses that engine and only builds the app. The APK is
-signed with the release key when the repository has `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`; without them it keeps the debug signature, which installs from a link
-but can't update a store build.
+signed with Bay's release key from the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. The key itself is kept outside the repository: an APK signed with any
+other key can't update an installed Bay, so it must never be lost or replaced. Without the secrets (a fork), the APK
+keeps the debug signature.
 
 To build the app yourself, pin a published engine in `apps/mobile/android-engine.json` (the release notes print the
 line to use) and run `node scripts/fetch-android-engine.mjs` from `apps/mobile`; `pnpm native` does this for you. A
