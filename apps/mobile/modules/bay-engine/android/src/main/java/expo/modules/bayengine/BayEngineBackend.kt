@@ -17,9 +17,6 @@ import org.bay.engine.BayDownloads as EngineDownloads
 internal object BayEngineBackend {
   private val main = Handler(Looper.getMainLooper())
 
-  fun engineInfo(context: Context?): Map<String, String> =
-    mapOf("family" to "chromium", "name" to "Chromium", "version" to BayEngine.getVersion())
-
   /** Starts the engine once and runs `ready` on the main thread when it's up; `failed` if it can't start. */
   fun whenStarted(context: Context, ready: () -> Unit, failed: () -> Unit = {}) {
     val run = Runnable {
