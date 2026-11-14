@@ -189,6 +189,9 @@ function Surface({
   );
 }
 
+const LIGHT_MATERIAL = "rgba(245,245,245,0.72)";
+const DARK_MATERIAL = "rgba(30,30,30,0.72)";
+
 function Effect({
   cornerRadius,
   tint,
@@ -200,11 +203,16 @@ function Effect({
   glassStyle: _glass,
   ...props
 }: VisualEffectProps & GlassEffectProps) {
+  const blur = { backdropFilter: "blur(24px) saturate(1.35)", WebkitBackdropFilter: "blur(24px) saturate(1.35)" };
+  const fill = tint ?? (dark === undefined ? undefined : dark ? DARK_MATERIAL : LIGHT_MATERIAL);
+
   return (
     <Box
       {...props}
-      css={{ backdropFilter: "blur(24px) saturate(1.35)", WebkitBackdropFilter: "blur(24px) saturate(1.35)" }}
-      style={[{ borderRadius: cornerRadius, backgroundColor: tint ?? (dark ? "rgba(30,30,30,0.72)" : "rgba(245,245,245,0.72)") }, style]}
+      // A macOS material follows the window's appearance; here that is the colour scheme, which the engine sets from the
+      // app's (BayShell.setAppearance).
+      css={fill ? blur : { ...blur, colorScheme: "light dark", backgroundColor: `light-dark(${LIGHT_MATERIAL}, ${DARK_MATERIAL})` }}
+      style={[{ borderRadius: cornerRadius, backgroundColor: fill }, style]}
     >
       {children}
     </Box>

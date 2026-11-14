@@ -1,4 +1,4 @@
-import { isMac, Pressable, View } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
@@ -364,8 +364,7 @@ export function SplitToast({ windowId }: { windowId: string }) {
           shadowOffset={[0, 6]}
           style={{ paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, maxWidth: 420 }}
         >
-          {/* macOS's HUD material is dark; the web stand-in is a light wash that would hide the fill above. */}
-          {isMac && <VisualEffect material="hudWindow" cornerRadius={14} style={StyleSheet.absoluteFill} />}
+          <VisualEffect material="hudWindow" cornerRadius={14} style={StyleSheet.absoluteFill} />
           <Symbol name={shown.icon ?? "rectangle.split.3x1"} size={15} color={theme.icon} style={{ width: 20, height: 20 }} />
           <View style={{ flexShrink: 1 }}>
             <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{shown.title}</Text>
