@@ -1754,7 +1754,7 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
         <h3>Known gaps</h3>
         <p>
           Recorded 14 November 2026, when P2–P5 were written without a runner build in between (the first run after them builds the engine and the APK
-          together). Each row is a difference from the system WebView build Android had before, or work the stages above still owe.
+          together). Each row is work still owed, or a limit outside Bay's code.
         </p>
         <div class="table-wrap" role="region" aria-label="Known gaps" tabindex="0">
           <table>
@@ -1773,35 +1773,29 @@ cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
                 </td>
               </tr>
               <tr>
-                <th scope="row">Desktop filter copied, not moved (P1)</th>
+                <th scope="row">Shared filter on desktop</th>
                 <td>
-                  <code>scripts/android/engine.py</code> copies desktop's request filter, cookie filter and mojom from <code>engine/nncore</code> into
-                  <code>//bay/core</code> at build time. Moving them into a directory both engines own is still to do.
+                  The request and cookie filters moved to <code>engine/shared</code> (<code>//bay/filter</code>), which both engines build on (P1). The patch
+                  series applies it in a scratch tree, but desktop's framework hasn't been rebuilt against it yet.
                 </td>
               </tr>
               <tr>
-                <th scope="row">Passkeys</th>
+                <th scope="row">Passkey providers</th>
                 <td>
-                  Android Autofill is wired as WebView wires it (the engine's <code>AutofillProvider</code> and a per-frame <code>AutofillAgent</code>), but
-                  WebAuthn isn't: sites can't ask for a passkey yet. This is the credential gate above, and it blocks shipping to the store.
+                  Sites can ask for passkeys on Android (WebAuthn in browser mode, through Credential Manager), but a provider only answers a browser it trusts:
+                  Google Password Manager's list of privileged browsers is a request to Google. iOS needs Apple's
+                  <code>web-browser.public-key-credential</code> entitlement (<code>BAY_WEB_PASSKEYS=1</code>), also granted on request.
                 </td>
               </tr>
               <tr>
-                <th scope="row">Private downloads</th>
-                <td>
-                  A private download still running when the private session ends is cancelled with its profile. Interrupted downloads are reported as failed and
-                  not resumed.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Desktop site layout</th>
-                <td>Desktop mode sends the desktop agent and client hints; it doesn't force a wide viewport the way the WebView build did.</td>
+                <th scope="row">Interrupted downloads</th>
+                <td>On Android an interrupted download is reported as failed and not resumed; iOS resumes once from WebKit's resume data.</td>
               </tr>
               <tr>
                 <th scope="row">Device proof</th>
                 <td>
-                  The Chromium page view hasn't run on a device: that needs the first built AAR. The iOS <code>desktopMode</code> prop, wired in the same work,
-                  hasn't been tried on a device either.
+                  The Chromium page view hasn't run on a device: that needs the first built AAR. On iOS, the desktop content mode and the private download
+                  store, added in the same work, haven't been tried on a device either.
                 </td>
               </tr>
             </tbody>
