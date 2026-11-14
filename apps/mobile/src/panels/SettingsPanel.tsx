@@ -117,13 +117,15 @@ function Note({ children }: { children: string }): JSX.Element {
 
 /** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
 function useDeviceLocale(): Locale {
-  const [device, setDevice] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+  // The formatting locale answers at once; the device's own languages follow. A picker that closed first drops them.
+  const [formatting] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+  const { run, result } = useCommand<Locale, never>();
 
   useEffect(() => {
-    void detectLocale().then(setDevice);
-  }, []);
+    run(Effect.promise(detectLocale));
+  }, [run]);
 
-  return device;
+  return result?._tag === "Done" ? result.value : formatting;
 }
 
 /** System first (it follows the phone), then each language in its own name. Choosing one changes the app at once. */
@@ -668,24 +670,23 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
   );
 }
 
-/** Copies a gallery photo into the app's documents and replaces the old one. */
-async function pickPhoto(previous: string | null): Promise<string | null> {
-  // The system photo picker needs no storage permission.
-  const result = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-  const asset = result.canceled ? undefined : result.assets[0];
+/** Copies a gallery photo into the app's documents and replaces the old one. Null when the picker was cancelled. */
+const pickPhoto = (previous: string | null) =>
+  Effect.gen(function* () {
+    // The system photo picker needs no storage permission.
+    const result = yield* Effect.tryPromise(() => launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 }));
+    const asset = result.canceled ? undefined : result.assets[0];
 
-  if (!asset) return null;
-  const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
-  new File(asset.uri).copy(file);
+    if (!asset) return null;
+    const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
 
-  if (previous) {
-    try {
-      new File(previous).delete();
-    } catch {}
-  }
+    yield* Effect.try(() => new File(asset.uri).copy(file));
 
-  return file.uri;
-}
+    // The old photo is only taking up space now: one that can't be deleted stays behind, and the new one still shows.
+    if (previous) yield* Effect.try(() => new File(previous).delete()).pipe(Effect.ignore);
+
+    return file.uri;
+  });
 
 /** Three columns of start page previews, then the user's photo. */
 function WallpaperPicker({
@@ -698,6 +699,8 @@ function WallpaperPicker({
   onChange: (id: WallpaperId, photo?: string) => void;
 }): JSX.Element {
   const [error, setError] = useState(false);
+  // Picking belongs to this page of the sheet: leaving it drops a photo still on its way.
+  const { run: runPick } = useCommand<void, never>();
   const foreground = useThemeColor("foreground");
   const t = useT();
   const tiles: WallpaperId[] = [...WALLPAPERS, "photo"];
@@ -722,9 +725,17 @@ function WallpaperPicker({
 
                 // Tapping the chosen photo again picks a new one.
                 if (photo && !selected) return onChange("photo");
-                pickPhoto(photo).then(
-                  (uri) => uri && onChange("photo", uri),
-                  () => setError(true),
+                // A photo that can't be picked or copied says so under the tiles; it isn't a crash worth reporting.
+                runPick(
+                  pickPhoto(photo).pipe(
+                    Effect.matchEffect({
+                      onSuccess: (uri) =>
+                        Effect.sync(() => {
+                          if (uri) onChange("photo", uri);
+                        }),
+                      onFailure: () => Effect.sync(() => setError(true)),
+                    }),
+                  ),
                 );
               }}
               className="items-center gap-2"
