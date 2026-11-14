@@ -56,6 +56,9 @@ class BayContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::URLLoaderFactoryOverridePtr* factory_override,
       scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
       bool is_for_network_service) override;
+  void RegisterAssociatedInterfaceBindersForRenderFrameHost(
+      content::RenderFrameHost& render_frame_host,
+      blink::AssociatedInterfaceRegistry& associated_registry) override;
   void ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,
                                   blink::AssociatedInterfaceRegistry* associated_registry,
                                   content::RenderProcessHost* render_process_host) override;

@@ -66,6 +66,8 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void CaptureSnapshot(int request_id, int max_width);
   // Downloads `url` as the page would, with its cookies (BayDownloadManagerDelegate saves it).
   void Download(const GURL& url);
+  // Hands the page's forms to Android's autofill service, once the Java AutofillProvider exists.
+  void InitializeAutofill();
 
   // Location, asked by BayPermissionManager. An answer lasts for the current page.
   bool HasLocationGrant(const url::Origin& origin) const;

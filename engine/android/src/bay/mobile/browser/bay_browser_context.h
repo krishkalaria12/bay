@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "content/public/browser/browser_context.h"
 
+class PrefService;
 class SimpleFactoryKey;
 
 namespace bay {
@@ -49,6 +50,8 @@ class BayBrowserContext : public content::BrowserContext {
   const base::FilePath path_;
   const bool off_the_record_;
   std::unique_ptr<SimpleFactoryKey> key_;
+  // In memory, for the components that read prefs (Android Autofill): Bay keeps its settings in the app.
+  std::unique_ptr<PrefService> prefs_;
   std::unique_ptr<BayDownloadManagerDelegate> download_delegate_;
   std::unique_ptr<BayPermissionManager> permission_manager_;
 };

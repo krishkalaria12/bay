@@ -8,8 +8,8 @@
 
 namespace bay {
 
-// Each sandboxed renderer's side of Bay: the messenger page tools post through (only in Bay's isolated world) and
-// the scripts the browser asks to run as documents start and finish.
+// Each sandboxed renderer's side of Bay: the messenger page tools post through (only in Bay's isolated world), the
+// scripts the browser asks to run as documents start and finish, and each frame's autofill agent.
 class BayContentRendererClient : public content::ContentRendererClient {
  public:
   BayContentRendererClient();

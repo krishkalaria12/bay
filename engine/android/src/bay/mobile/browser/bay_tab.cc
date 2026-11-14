@@ -24,6 +24,9 @@
 #include "bay/mobile/browser/bay_browser_context.h"
 #include "bay/mobile/browser/bay_content_blocker.h"
 #include "bay/mobile/common/bay_isolated_world.h"
+#include "components/android_autofill/browser/android_autofill_client.h"
+#include "components/android_autofill/browser/autofill_provider.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/js_injection/browser/js_communication_host.h"
@@ -424,6 +427,18 @@ void BayTab::Download(const GURL& url) {
   web_contents_->GetBrowserContext()->GetDownloadManager()->DownloadUrl(std::move(params));
 }
 
+// As WebView does (AwContents::InitializeAndroidAutofill): the Java AutofillProvider has made the native provider, and
+// the client makes a driver per frame, which the renderer's AutofillAgent talks to (BayContentRendererClient).
+void BayTab::InitializeAutofill() {
+  autofill::AutofillProvider* provider = autofill::AutofillProvider::FromWebContents(web_contents_.get());
+  if (!provider || autofill::ContentAutofillClient::FromWebContents(web_contents_.get())) {
+    return;
+  }
+  android_autofill::AndroidAutofillClient::CreateForWebContents(web_contents_.get());
+  // After the client and before any AutofillManager, as WebView orders it.
+  provider->MaybeInitKeyboardSuppressor();
+}
+
 // A long press on a link or an image: the app shows its own menu where the finger is. Anything else (text) keeps
 // Chromium's own selection.
 bool BayTab::HandleContextMenu(content::RenderFrameHost& render_frame_host, const content::ContextMenuParams& params) {
@@ -815,6 +830,10 @@ static bool JNI_BayTab_RestoreState(JNIEnv* env, int64_t tab_ptr, const JavaRef<
 
 static void JNI_BayTab_CaptureSnapshot(JNIEnv* env, int64_t tab_ptr, int32_t request_id, int32_t max_width) {
   reinterpret_cast<BayTab*>(tab_ptr)->CaptureSnapshot(request_id, max_width);
+}
+
+static void JNI_BayTab_InitializeAutofill(JNIEnv* env, int64_t tab_ptr) {
+  reinterpret_cast<BayTab*>(tab_ptr)->InitializeAutofill();
 }
 
 static void JNI_BayTab_Download(JNIEnv* env, int64_t tab_ptr, const JavaRef<jstring>& url) {

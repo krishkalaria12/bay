@@ -13,6 +13,7 @@
 #include "bay/mobile/browser/bay_browser_main_parts.h"
 #include "bay/mobile/browser/bay_tab.h"
 #include "bay/mobile/common/bay_descriptors.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/login_delegate.h"
@@ -24,6 +25,7 @@
 #include "net/http/http_request_headers.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "url/url_constants.h"
 
@@ -160,6 +162,14 @@ void BayContentBrowserClient::WillCreateURLLoaderFactory(
   if (cookie_policy) {
     std::move(cookie_policy).Run(header_client);
   }
+}
+
+// Each frame's AutofillAgent reports forms to its driver, which BayTab's autofill client hands to Android.
+void BayContentBrowserClient::RegisterAssociatedInterfaceBindersForRenderFrameHost(
+    content::RenderFrameHost& render_frame_host,
+    blink::AssociatedInterfaceRegistry& associated_registry) {
+  associated_registry.AddInterface<autofill::mojom::AutofillDriver>(
+      base::BindRepeating(&autofill::ContentAutofillDriverFactory::BindAutofillDriver, &render_frame_host));
 }
 
 void BayContentBrowserClient::ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,

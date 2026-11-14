@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/no_destructor.h"
+#include "bay/mobile/renderer/bay_render_frame_observer.h"
 #include "bay/core/mojom/nncore.mojom.h"
 #include "components/js_injection/common/interfaces.mojom.h"
 #include "components/js_injection/renderer/js_communication.h"
@@ -60,8 +61,9 @@ BayContentRendererClient::BayContentRendererClient() = default;
 BayContentRendererClient::~BayContentRendererClient() = default;
 
 void BayContentRendererClient::RenderFrameCreated(content::RenderFrame* render_frame) {
-  // Owned by the frame (a RenderFrameObserver): deleted with it.
+  // Both owned by the frame (RenderFrameObservers): deleted with it.
   new js_injection::JsCommunication(render_frame);
+  new BayRenderFrameObserver(render_frame);
 }
 
 void BayContentRendererClient::RunScriptsAtDocumentStart(content::RenderFrame* render_frame) {

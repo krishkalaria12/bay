@@ -5,8 +5,12 @@ package org.bay.engine;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.util.SparseArray;
+import android.view.ViewStructure;
+import android.view.autofill.AutofillValue;
 import android.widget.FrameLayout;
 
+import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.embedder_support.view.ContentViewRenderView;
 import org.chromium.content_public.browser.Visibility;
@@ -14,15 +18,18 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 
+import java.lang.ref.WeakReference;
+
 /**
  * A tab's Android view: the compositor surface Chromium draws the page into, under the view that takes the page's
- * touch, keyboard and accessibility. The app's own views draw over it.
+ * touch, keyboard, accessibility and autofill. The app's own views draw over it.
  */
 @SuppressLint("ViewConstructor")
 final class BayTabView extends FrameLayout {
     private final WebContents mWebContents;
     private final ContentViewRenderView mRenderView;
     private final ContentView mContentView;
+    private final AutofillProvider mAutofillProvider;
     private boolean mVisible = true;
 
     BayTabView(Context context, WebContents webContents, WindowAndroid window, String productVersion) {
@@ -36,14 +43,22 @@ final class BayTabView extends FrameLayout {
         addView(mRenderView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
         mContentView = ContentView.createContentView(context, webContents);
+        AutofillDelegate delegate = new AutofillDelegate(mContentView);
         webContents.setDelegates(
                 productVersion,
-                ViewAndroidDelegate.createBasicDelegate(mContentView),
+                delegate,
                 mContentView,
                 window,
                 WebContents.createDefaultInternalsHolder());
         addView(mContentView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         mRenderView.setCurrentWebContents(webContents);
+        // Android Autofill (the person's password manager, or another autofill service): the content view is the
+        // container the framework asks for the page's forms, through the delegate, as WebView's view is. Marked
+        // important, so the app's own views around it never hide the page from the service.
+        mContentView.setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
+        mAutofillProvider =
+                new AutofillProvider(new WeakReference<>(context), mContentView, webContents, "Bay");
+        delegate.mAutofillProvider = mAutofillProvider;
     }
 
     ContentView getContentView() {
@@ -65,7 +80,32 @@ final class BayTabView extends FrameLayout {
     }
 
     void destroy() {
+        mAutofillProvider.destroy();
         removeAllViews();
         mRenderView.destroy();
+    }
+
+    /** Answers the framework's autofill calls on the content view with the page's forms. */
+    private static final class AutofillDelegate extends ViewAndroidDelegate {
+        AutofillProvider mAutofillProvider;
+
+        AutofillDelegate(ContentView containerView) {
+            super(containerView);
+        }
+
+        @Override
+        public boolean providesAutofillStructure() {
+            return mAutofillProvider != null;
+        }
+
+        @Override
+        public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
+            if (mAutofillProvider != null) mAutofillProvider.onProvideAutoFillVirtualStructure(structure, flags);
+        }
+
+        @Override
+        public void autofill(SparseArray<AutofillValue> values) {
+            if (mAutofillProvider != null) mAutofillProvider.autofill(values);
+        }
     }
 }

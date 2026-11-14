@@ -88,6 +88,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
         mNativeTab = BayTabJni.get().create(this, profile.nativePointer());
         mWebContents = (WebContents) BayTabJni.get().getWebContents(mNativeTab);
         mView = new BayTabView(activity, mWebContents, BayEngine.windowFor(activity), BayEngine.getVersion());
+        BayTabJni.get().initializeAutofill(mNativeTab);
         mObserver = new Observer(mWebContents);
         mScrollListener =
                 new GestureStateListener() {
@@ -504,5 +505,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void captureSnapshot(long tabPtr, int requestId, int maxWidth);
 
         void download(long tabPtr, String url);
+
+        void initializeAutofill(long tabPtr);
     }
 }
