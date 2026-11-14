@@ -15,6 +15,7 @@ import { PAGE_SWITCH_MS } from "../window/constants";
 import { useUrlAnchors } from "../window/layout";
 import { Omnibox } from "./CommandBar";
 import { PaletteSurface } from "./CommandBarSurface";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { webviews } from "../../lib/webviews";
 import {
   DROPDOWN_MIN_WIDTH,
@@ -29,15 +30,26 @@ import {
 
 type NavigationInsets = { left?: number; right?: number; top?: number };
 
-export function CommandPanel({
-  windowWidth,
-  windowHeight = 800,
-  navigationInsets,
-}: {
-  windowWidth: number;
-  windowHeight?: number;
-  navigationInsets?: NavigationInsets;
-}) {
+type PanelProps = { windowWidth: number; windowHeight?: number; navigationInsets?: NavigationInsets };
+
+/** Search failing closes itself and says so, leaving the window around it working. */
+export function CommandPanel(props: PanelProps) {
+  const windowId = useWindowId();
+  const open = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel.open);
+
+  const onError = () => {
+    showToast(windowId, "Search ran into a problem", "Please try again.", { icon: "magnifyingglass" });
+    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch((error) => console.error("Couldn't close search", error));
+  };
+
+  return (
+    <ErrorBoundary resetKey={open} onError={onError}>
+      <PanelContents {...props} />
+    </ErrorBoundary>
+  );
+}
+
+function PanelContents({ windowWidth, windowHeight = 800, navigationInsets }: PanelProps) {
   const theme = useTheme();
   const windowId = useWindowId();
   const panel = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel);
