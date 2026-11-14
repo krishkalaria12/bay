@@ -46,7 +46,8 @@ jobs:
       # runner stages (GNU tar and zstd here).
       - name: Engine scripts
         run: python3 -m unittest engine/patches/test_series.py scripts/android/test_engine.py scripts/lib/test_engine_state.py -v
-      # Effect is the desktop app's: the shared packages, the other apps and the store stay free of it.
+      # Effect is the desktop, mobile and CLI apps': the shared packages, the other apps, mobile's engine and the pure state
+      # code stay free of it.
       - name: Effect boundary
         run: node --test scripts/tests/test-effect-boundary.mjs
       - name: React Compiler
