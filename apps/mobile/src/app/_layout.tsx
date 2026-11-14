@@ -6,7 +6,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useAppFonts } from "@/chrome/fonts";
 import { installCrashReports } from "@/crashReports";
-import { startAppServices } from "@/effect/runtime";
+import { runMobile, startAppServices } from "@/effect/runtime";
+import { selfCheck } from "@/effect/selfCheck";
 
 import "../global.css";
 
@@ -15,8 +16,9 @@ import "../global.css";
 installCrashReports();
 
 // The saved browsing state and language are read before the first screen draws, so the app opens on them. The splash
-// stays up until the store says it is ready.
-void startAppServices();
+// stays up until the store says it is ready. A development build then checks once that Effect behaves under Hermes as
+// it does in the tests; what it finds lands under Report a problem.
+void startAppServices().then(() => (__DEV__ ? runMobile(selfCheck) : undefined));
 
 export default function RootLayout(): JSX.Element | null {
   const fontsReady = useAppFonts();
