@@ -1,4 +1,27 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["**/fixtures/**", "engine/**", "**/dist/**", "**/build/**", "**/build-*/**", "tools/oxlint/anti-slop/**"]
+  "ignorePatterns": ["**/fixtures/**", "engine/**", "**/dist/**", "**/build/**", "**/build-*/**", "tools/oxlint/anti-slop/**"],
+  "overrides": [
+    {
+      "files": ["apps/browser/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react-native",
+                "importNames": ["findNodeHandle"],
+                "message": "findNodeHandle throws on React Native Web; use nodeTag from lib/nodeTag."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/browser/src/lib/nodeTag.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
 }
