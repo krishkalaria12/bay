@@ -2,7 +2,7 @@ import { isMac, TextInput, View, modKey } from "@bay/platform";
 import { customBangTable, displayUrl, hostOf, joinBangTables, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, onTextInputRestore, recordTextInputEdit, showTextInputMenu } from "@bay/desktop";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { findNodeHandle } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../../telemetry/track";
@@ -189,7 +189,7 @@ export function Omnibox({
 
   // The field's history keeps the scope with each text, so Undo and Redo move in and out of it too.
   const recordEdit = (before: string, after: string, options?: { state?: string; at?: Selection }) => {
-    const tag = findNodeHandle(input.current);
+    const tag = nodeTag(input.current);
 
     if (tag == null) return;
     const { start, end } = options?.at ?? selection.current;
@@ -205,7 +205,7 @@ export function Omnibox({
   });
 
   useEffect(() => {
-    const tag = findNodeHandle(input.current);
+    const tag = nodeTag(input.current);
 
     if (tag == null) return;
     const subscription = onTextInputRestore(tag, restoreScope);
@@ -484,7 +484,7 @@ export function Omnibox({
 
   const onContextMenu = async () => {
     const paste = await clipboardPasteAction();
-    const tag = findNodeHandle(input.current);
+    const tag = nodeTag(input.current);
 
     if (tag == null) return;
     const choice = await showTextInputMenu(tag, pasteMenuItem(paste));
