@@ -68,6 +68,9 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void Download(const GURL& url);
   // Hands the page's forms to Android's autofill service, once the Java AutofillProvider exists.
   void InitializeAutofill();
+  // Desktop site (BayTab.setDesktopMode), for navigations Bay starts itself (BayHttpsUpgradeThrottle).
+  void set_desktop_mode(bool desktop) { desktop_mode_ = desktop; }
+  bool desktop_mode() const { return desktop_mode_; }
 
   // Location, asked by BayPermissionManager. An answer lasts for the current page.
   bool HasLocationGrant(const url::Origin& origin) const;
@@ -136,6 +139,7 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<js_injection::JsCommunicationHost> js_communication_;
   bool page_committed_ = false;
+  bool desktop_mode_ = false;
   int next_request_id_ = 1;
   std::map<int, base::OnceCallback<void(bool)>> pending_permissions_;
   std::map<int, DialogClosedCallback> pending_dialogs_;

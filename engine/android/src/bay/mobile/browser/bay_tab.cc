@@ -832,6 +832,10 @@ static void JNI_BayTab_CaptureSnapshot(JNIEnv* env, int64_t tab_ptr, int32_t req
   reinterpret_cast<BayTab*>(tab_ptr)->CaptureSnapshot(request_id, max_width);
 }
 
+static void JNI_BayTab_SetDesktopMode(JNIEnv* env, int64_t tab_ptr, bool desktop) {
+  reinterpret_cast<BayTab*>(tab_ptr)->set_desktop_mode(desktop);
+}
+
 static void JNI_BayTab_InitializeAutofill(JNIEnv* env, int64_t tab_ptr) {
   reinterpret_cast<BayTab*>(tab_ptr)->InitializeAutofill();
 }

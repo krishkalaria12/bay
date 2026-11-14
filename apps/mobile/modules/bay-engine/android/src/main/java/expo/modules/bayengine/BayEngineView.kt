@@ -24,7 +24,6 @@ import org.bay.engine.BayTab
 import org.bay.engine.BayTabClient
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 import kotlin.math.max
 
 /**
@@ -70,7 +69,6 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private val scrollHandler = Handler(Looper.getMainLooper())
   private var scrollPending = false
   private val emitPendingScroll = Runnable { scrollPending = false; if (!disposed) emitScroll() }
-  private val https = BayHttpsUpgrades()
   private val snapshots = BaySnapshotWriter(context)
   private val fullscreen = BayFullscreen(context)
   private val gestures = BayPageGestures(this, object : BayPageGestures.Page {
@@ -199,8 +197,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     emitState(pending = target)
   }
 
-  /** The address without tracking parameters, or upgraded to HTTPS; the address itself when neither applies. */
-  private fun replacementFor(address: String): String = BayEngine.cleanUrl(address) ?: https.upgrade(address) ?: address
+  /** The address without tracking parameters. The engine moves it to HTTPS when it can (BayHttpsUpgradeThrottle). */
+  private fun replacementFor(address: String): String = BayEngine.cleanUrl(address) ?: address
 
   /** Loads once, when the view is created, unless a navigation already started. Invalid addresses are ignored. */
   fun loadInitial(address: String?) {
@@ -435,14 +433,6 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
 
     override fun onMainFrameError(url: String, code: String, description: String) {
-      if (code in CONNECTION_FAILURES || code.startsWith("ERR_CERT_") || code.startsWith("ERR_SSL_")) {
-        // An upgraded page that won't connect over HTTPS falls back to the HTTP address it came from.
-        val insecure = https.fallback(url)
-        if (insecure != null) {
-          tab?.loadUrl(insecure)
-          return
-        }
-      }
       emitState()
       onNavigationError(mapOf("url" to url, "code" to code, "message" to description.ifEmpty { "The page couldn't be loaded." }))
     }
@@ -598,11 +588,5 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   companion object {
     /** The page on screen, which saves images from its menu with its own cookies (BayEngineBackend.saveImage). */
     internal var lastActive: BayEngineView? = null
-
-    /** Errors after which an upgraded HTTPS address falls back to HTTP. */
-    private val CONNECTION_FAILURES = setOf(
-      "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_TIMED_OUT",
-      "ERR_TIMED_OUT", "ERR_ADDRESS_UNREACHABLE", "ERR_EMPTY_RESPONSE",
-    )
   }
 }

@@ -48,6 +48,8 @@ source_set("lib") {
     "browser/bay_download_manager_delegate.cc",
     "browser/bay_download_manager_delegate.h",
     "browser/bay_engine_android.cc",
+    "browser/bay_https_upgrade_throttle.cc",
+    "browser/bay_https_upgrade_throttle.h",
     "browser/bay_permission_manager.cc",
     "browser/bay_permission_manager.h",
     "browser/bay_tab.cc",

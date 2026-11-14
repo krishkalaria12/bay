@@ -11,6 +11,7 @@
 #include "base/posix/global_descriptors.h"
 #include "bay/core/nn_request_filter.h"
 #include "bay/mobile/browser/bay_browser_main_parts.h"
+#include "bay/mobile/browser/bay_https_upgrade_throttle.h"
 #include "bay/mobile/browser/bay_tab.h"
 #include "bay/mobile/common/bay_descriptors.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
@@ -139,6 +140,7 @@ std::vector<base::FilePath> BayContentBrowserClient::GetNetworkContextsParentDir
 // page, in every profile. It filters nothing until the app sets lists (BayContentBlocker).
 void BayContentBrowserClient::CreateThrottlesForNavigation(content::NavigationThrottleRegistry& registry) {
   nncore::MaybeAddRequestFilterThrottle(registry);
+  BayHttpsUpgradeThrottle::MaybeAdd(registry);
 }
 
 void BayContentBrowserClient::WillCreateURLLoaderFactory(

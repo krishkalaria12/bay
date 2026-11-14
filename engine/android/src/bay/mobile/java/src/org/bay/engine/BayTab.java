@@ -138,6 +138,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
     public void setDesktopMode(boolean desktop) {
         if (mDesktopMode == desktop) return;
         mDesktopMode = desktop;
+        if (mNativeTab != 0) BayTabJni.get().setDesktopMode(mNativeTab, desktop);
         mWebContents
                 .getNavigationController()
                 .setUseDesktopUserAgent(
@@ -507,5 +508,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void download(long tabPtr, String url);
 
         void initializeAutofill(long tabPtr);
+
+        void setDesktopMode(long tabPtr, boolean desktop);
     }
 }
