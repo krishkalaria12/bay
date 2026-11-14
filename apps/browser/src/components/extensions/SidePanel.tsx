@@ -3,7 +3,8 @@ import * as settingsCommands from "../../runtime/settingsActions";
 import { View } from "@bay/platform";
 import { WebView } from "@bay/chromium";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -78,7 +79,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
   return (
     <View style={{ flex: 1, borderRadius: layout.cardRadius, overflow: "hidden", backgroundColor: theme.card }}>
       <View style={{ height: SIDE_PANEL_HEADER, flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 5, gap: 8 }}>
-        {icon ? <Image source={{ uri: icon }} style={{ width: 16, height: 16 }} /> : null}
+        {icon ? <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 16, height: 16 }} /> : null}
         <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "500", color: theme.textPrimary }}>
           {title}
         </Text>

@@ -2,7 +2,8 @@ import { Pressable, View } from "@bay/platform";
 import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/chromium";
 import { ContextMenuArea, showMenu, Symbol } from "@bay/desktop";
 import { memo, useRef, useState } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { toggleCastPicker, useCastRoutes } from "../media/cast";
@@ -123,7 +124,7 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
               }}
             >
               {icon ? (
-                <Image source={{ uri: icon }} style={{ width: 16, height: 16, opacity: dimmed ? 0.45 : 1 }} />
+                <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 16, height: 16, opacity: dimmed ? 0.45 : 1 }} />
               ) : (
                 <Symbol name="puzzlepiece.extension" size={14} color={palette.icon} style={{ width: 18, height: 18 }} />
               )}

@@ -44,7 +44,12 @@ def install(root, sysroot, env, run):
                 subprocess.run(["ar", "p", str(cache / name), "data.tar.xz"],
                                stdout=output, env=env, check=True)
             run(["tar", "-xJf", archive, "-C", sysroot], env=env)
-    for relative in ("usr/lib/x86_64-linux-gnu/pkgconfig/libsecret-1.pc",
+    # Match Chromium's sysroot_creator.py: pkg-config.py searches usr/lib/pkgconfig,
+    # while Debian puts this file in its multiarch directory. Keep its library paths.
+    pkgconfig = sysroot / "usr/lib/pkgconfig"
+    pkgconfig.mkdir(parents=True, exist_ok=True)
+    (sysroot / "usr/lib/x86_64-linux-gnu/pkgconfig/libsecret-1.pc").replace(pkgconfig / "libsecret-1.pc")
+    for relative in ("usr/lib/pkgconfig/libsecret-1.pc",
                      "usr/include/libsecret-1/libsecret/secret.h",
                      "usr/lib/x86_64-linux-gnu/libsecret-1.so"):
         if not (sysroot / relative).is_file():

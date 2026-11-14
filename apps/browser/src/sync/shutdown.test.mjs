@@ -81,7 +81,9 @@ function defaults(folder) {
 }
 
 async function fixture(context, { enabled = true, scopes = { app: emptyScope() }, journal = {}, seqs = {}, overrides = {}, rawMetadata, start = true } = {}) {
-  context.mock.timers.enable({ apis: ["setTimeout"] });
+  // The worker compares Date.now() before sleeping. Keep its clock and timers
+  // together so elapsed wall time cannot start a cycle while timers are frozen.
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   shell.docs.clear();
   shell.heldSaves.on = false;
   shell.heldSaves.error = null;

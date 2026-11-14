@@ -11,6 +11,18 @@ import { fileURLToPath } from "node:url";
 
 const src = fileURLToPath(new URL("../src", import.meta.url));
 const pages = fileURLToPath(new URL("../tests/web/", import.meta.url));
+const valibot = fileURLToPath(import.meta.resolve("valibot"));
+
+function deadline(promise, timeout, label) {
+  let timer;
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeout}ms`)), timeout);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 export function findChromium(explicit) {
   const browser = explicit ?? process.env.CHROMIUM ?? ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"].find(existsSync);
@@ -24,18 +36,23 @@ export function findChromium(explicit) {
  * Starts Chromium with `args` and calls `run(open)`. `open(page, { width, height, dpr, query })` loads
  * tests/web/<page> in a new tab and resolves with its `window.results`.
  */
-export async function withChromium({ browser, args, scripts = {} }, run) {
+export async function withChromium({ browser, args, scripts = {}, timeout = 30000 }, run) {
   const server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
 
     if (Object.hasOwn(scripts, path)) return res.writeHead(200, { "content-type": "text/javascript" }).end(scripts[path]);
+
+    if (path === "/valibot.js") return res.writeHead(200, { "content-type": "text/javascript" }).end(readFileSync(valibot));
 
     if (path.endsWith(".html")) {
       const file = normalize(join(pages, path));
 
       if (!file.startsWith(pages) || !existsSync(file)) return res.writeHead(404).end();
 
-      return res.writeHead(200, { "content-type": "text/html" }).end(readFileSync(file));
+      // The raw TypeScript modules use the same validator as the bundled application.
+      const imports = '<script type="importmap">{"imports":{"valibot":"/valibot.js"}}</script>';
+
+      return res.writeHead(200, { "content-type": "text/html" }).end(readFileSync(file, "utf8").replace("<script", `${imports}<script`));
     }
 
     const file = normalize(join(src, path));
@@ -61,20 +78,39 @@ export async function withChromium({ browser, args, scripts = {} }, run) {
     stdio: ["ignore", "ignore", "pipe"],
   });
 
-  try {
-    const endpoint = await new Promise((resolve, reject) => {
-      let log = "";
-      chrome.stderr.on("data", (d) => {
-        log += d;
-        const m = log.match(/DevTools listening on (ws:\/\/\S+)/);
+  // Register before startup can fail; an exit event cannot be awaited a second time during cleanup.
+  const exited = new Promise((resolve) => chrome.once("exit", resolve).once("error", resolve));
+  let ws;
 
-        if (m) resolve(m[1]);
-      });
-      chrome.on("exit", () => reject(new Error(`Chromium exited:\n${log}`)));
+  try {
+    let log = "";
+
+    const endpoint = await deadline(
+      new Promise((resolve, reject) => {
+        chrome.stderr.on("data", (d) => {
+          log += d;
+          const m = log.match(/DevTools listening on (ws:\/\/\S+)/);
+
+          if (m) resolve(m[1]);
+        });
+        chrome.once("error", reject);
+        chrome.once("exit", () => reject(new Error("Chromium exited:")));
+      }),
+      timeout,
+      "Chromium startup",
+    ).catch((error) => {
+      throw new Error(`${error.message}\n${log}`, { cause: error });
     });
 
-    const ws = new WebSocket(endpoint);
-    await new Promise((resolve) => ws.addEventListener("open", resolve, { once: true }));
+    ws = new WebSocket(endpoint);
+    await deadline(
+      new Promise((resolve, reject) => {
+        ws.addEventListener("open", resolve, { once: true });
+        ws.addEventListener("error", () => reject(new Error("Chromium DevTools connection failed")), { once: true });
+      }),
+      timeout,
+      "Chromium DevTools connection",
+    );
     let id = 0;
     const waiting = new Map();
     ws.addEventListener("message", ({ data }) => {
@@ -86,12 +122,23 @@ export async function withChromium({ browser, args, scripts = {} }, run) {
       }
     });
 
-    const send = (method, params = {}, sessionId) =>
-      new Promise((resolve, reject) => {
-        const n = ++id;
-        waiting.set(n, (msg) => (msg.error ? reject(new Error(`${method}: ${msg.error.message}`)) : resolve(msg.result)));
-        ws.send(JSON.stringify({ id: n, method, params, sessionId }));
-      });
+    ws.addEventListener("close", () => {
+      for (const receive of waiting.values()) receive({ error: { message: "Chromium DevTools connection closed" } });
+      waiting.clear();
+    });
+
+    const send = (method, params = {}, sessionId, requestTimeout = timeout) => {
+      const n = ++id;
+
+      return deadline(
+        new Promise((resolve, reject) => {
+          waiting.set(n, (msg) => (msg.error ? reject(new Error(`${method}: ${msg.error.message}`)) : resolve(msg.result)));
+          ws.send(JSON.stringify({ id: n, method, params, sessionId }));
+        }),
+        requestTimeout,
+        method,
+      ).finally(() => waiting.delete(n));
+    };
 
     const open = async (page, { width = 800, height = 600, dpr = 1, query = "", timeout = 60000 } = {}) => {
       const { targetId } = await send("Target.createTarget", { url: "about:blank" });
@@ -111,6 +158,7 @@ export async function withChromium({ browser, args, scripts = {} }, run) {
             timeout,
           },
           sessionId,
+          timeout + 1000,
         );
 
         if (exceptionDetails) throw new Error(JSON.stringify(exceptionDetails));
@@ -121,14 +169,16 @@ export async function withChromium({ browser, args, scripts = {} }, run) {
       }
     };
 
-    const value = await run(open);
-    ws.close();
-
-    return value;
+    return await run(open);
   } finally {
+    ws?.close();
     chrome.kill();
     server.close();
-    await new Promise((r) => chrome.once("exit", r).once("error", r));
+    server.closeAllConnections();
+    await deadline(exited, 5000, "Chromium shutdown").catch(async () => {
+      chrome.kill("SIGKILL");
+      await exited;
+    });
     rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }

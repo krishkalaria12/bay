@@ -2,7 +2,8 @@ import { checked } from "../lib/checked";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { setDialogPresenter, Surface, type ConfirmOptions, type ConfirmResult, type PromptOptions } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { create } from "zustand";
 import { APP_ICON } from "../lib/assets";
 import { useTheme } from "../lib/theme";
@@ -134,7 +135,7 @@ function AppDialog({ request, finish }: { request: Request; finish: (answer: (re
             style={{ padding: 24 }}
           >
             <View style={{ width: 28, height: 28, borderRadius: 7, overflow: "hidden", backgroundColor: "#FFFFFF", ...ICON_SHADOW }}>
-              <Image source={APP_ICON} style={{ width: 28, height: 28 }} />
+              <Image cachePolicy="memory" source={APP_ICON} style={{ width: 28, height: 28 }} />
             </View>
             <Text style={{ marginTop: 16, fontSize: 17, fontWeight: "700", color: theme.textPrimary }}>{title}</Text>
             {message ? (

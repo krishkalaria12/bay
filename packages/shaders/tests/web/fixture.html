@@ -2,6 +2,11 @@
 <meta charset="utf-8" />
 <title>Bay web shader fixture</title>
 <body style="margin: 0">
+  <script>
+    addEventListener("error", (event) => {
+      window.results = [{ name: "shader fixture loads", ok: false, detail: String(event.error?.stack ?? event.message) }];
+    });
+  </script>
   <script type="module">
     import { createSurface } from "/webgl/surface.ts";
     import { registerStatic, staticStats } from "/webgl/staticRenderer.ts";

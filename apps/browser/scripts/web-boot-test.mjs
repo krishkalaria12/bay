@@ -15,11 +15,29 @@ if (!existsSync(join(dist, "index.html"))) throw new Error("Nothing to boot: run
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".css": "text/css", ".ttf": "font/ttf", ".woff2": "font/woff2" };
 
+// Exercise the rendered images too: a successful boot can still leave every bundled icon broken.
+const imageProbe = `<script>
+(async () => {
+  let images = [];
+  for (let attempt = 0; attempt < 100; attempt++) {
+    images = Array.from(document.querySelectorAll('[data-expoimage] img[src]'));
+    if (images.length) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const results = await Promise.allSettled(images.map(image => image.decode()));
+  document.documentElement.setAttribute('data-bay-images',
+    images.length && results.every(result => result.status === 'fulfilled') ? 'decoded' : 'failed');
+})();
+</script>`;
+
 const server = createServer((request, response) => {
   const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
   const asked = normalize(join(dist, path));
   const file = asked.startsWith(dist) && existsSync(asked) && statSync(asked).isFile() ? asked : join(dist, "index.html");
-  response.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream" }).end(readFileSync(file));
+  const body = readFileSync(file);
+  response
+    .writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream" })
+    .end(extname(file) === ".html" ? body.toString().replace("</body>", `${imageProbe}</body>`) : body);
 });
 
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -39,9 +57,10 @@ for (const platform of ["linux", "windows"]) {
   const failure = /Bay could not start[^<]*/.exec(stdout)?.[0];
   // The views' own stylesheet and the sidebar's field: the app rendered, rather than only not failing.
   const rendered = stdout.includes("bay-view-focus-rings") && stdout.includes("Search or enter address");
-  console.log(`${platform}: ${failure ?? (rendered ? "booted" : "rendered nothing")}`);
+  const imagesDecoded = stdout.includes('data-bay-images="decoded"');
+  console.log(`${platform}: ${failure ?? (rendered ? "booted" : "rendered nothing")}, images ${imagesDecoded ? "decoded" : "failed"}`);
 
-  if (failure || !rendered) failed = true;
+  if (failure || !rendered || !imagesDecoded) failed = true;
 }
 
 server.close();

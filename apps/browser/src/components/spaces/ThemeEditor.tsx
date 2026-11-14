@@ -4,7 +4,8 @@ import { Pressable, View } from "@bay/platform";
 import { hapticTick, Surface, Symbol } from "@bay/desktop";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, useState } from "react";
-import { Image, PanResponder, StyleSheet, Text, type GestureResponderEvent } from "react-native";
+import { PanResponder, StyleSheet, Text, type GestureResponderEvent } from "react-native";
+import { Image } from "expo-image";
 import { create } from "zustand";
 import {
   defaultHarmony,
@@ -331,7 +332,7 @@ export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; w
       }}
     >
       <View pointerEvents="none">
-        <Image source={theme.dark ? DOTS.dark : DOTS.light} style={{ width, height }} />
+        <Image cachePolicy="memory" source={theme.dark ? DOTS.dark : DOTS.light} style={{ width, height }} />
       </View>
       {/* Back to front, so the first colour's dot is on top. */}
       {colors

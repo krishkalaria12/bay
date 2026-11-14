@@ -1,0 +1,12 @@
+#!/bin/sh
+# Registers Bay as a browser alternative and loads its AppArmor profile, so the sandbox works without a reboot where
+# AppArmor restricts user namespaces (Ubuntu 23.10 and later).
+set -e
+
+if [ "$1" = configure ]; then
+  update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/bay 120
+  update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/bay 120
+  if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+    apparmor_parser -r -T -W /etc/apparmor.d/bay || true
+  fi
+fi

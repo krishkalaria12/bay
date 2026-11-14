@@ -14,7 +14,8 @@ import {
 } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { useShallow } from "zustand/react/shallow";
 import { useFileExists } from "../useFileExists";
 import { useTheme } from "../../lib/theme";
@@ -324,8 +325,10 @@ function MediaCard({ media, windowId, width, height }: { media: LibraryMedia; wi
           >
             {available ? (
               <Image
+                cachePolicy="memory"
                 source={{ uri: libraryImageUri(media.path) }}
-                resizeMode="contain"
+                recyclingKey={media.path}
+                contentFit="contain"
                 onError={() => setBroken(true)}
                 accessibilityIgnoresInvertColors
                 style={{ width: "100%", height: "100%" }}
@@ -513,7 +516,15 @@ function EaselImage({ path }: { path: string }) {
 
   if (broken || exists !== true) return <Text style={{ fontSize: 9, color: "#777777" }}>Image unavailable</Text>;
 
-  return <Image source={{ uri: libraryImageUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <Image
+      cachePolicy="memory"
+      source={{ uri: libraryImageUri(path) }}
+      contentFit="contain"
+      onError={() => setBroken(true)}
+      style={{ width: "100%", height: "100%" }}
+    />
+  );
 }
 
 function SpacesSection({ windowId, query, pad }: { windowId: string; query: string; pad: number }) {

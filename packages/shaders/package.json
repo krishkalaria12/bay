@@ -15,7 +15,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p . && tsc -p tsconfig.web.json",
-    "test": "node --import ../platform/src/test-loader.mjs --test \"src/**/*.test.mjs\"",
+    "test": "node --import ../platform/src/test-loader.mjs --test \"src/**/*.test.mjs\" && node --test \"scripts/*.test.mjs\"",
     "test:web": "node scripts/check-web-shaders.mjs",
     "shaders:check": "node scripts/check-shaders.mjs"
   },

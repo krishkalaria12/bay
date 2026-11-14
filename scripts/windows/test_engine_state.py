@@ -3,6 +3,7 @@ import builtins
 import importlib.util
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import sys
@@ -36,7 +37,32 @@ def make_tree(root):
     return source
 
 
+def gnu_tar():
+    try:
+        version = subprocess.run(["tar", "--version"], capture_output=True, text=True).stdout
+    except OSError:
+        return False
+    return "GNU tar" in version and shutil.which("zstd") is not None
+
+
 class EngineStateTests(unittest.TestCase):
+    @unittest.skipUnless(gnu_tar(), "GNU tar and zstd write the Linux state archive")
+    def test_zstd_round_trip_preserves_links_and_nanosecond_times(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "engine"
+            source = make_tree(root)
+            exact = 1700000000123456789
+            os.utime(source, ns=(exact, exact))
+            archive = base / "state.tar.zst"
+            subprocess.run([sys.executable, SCRIPT, "check", "--root", root, "--archive", archive], check=True)
+            subprocess.run([sys.executable, SCRIPT, "create", "--root", root, "--archive", archive], check=True)
+            restored = base / "restored"
+            subprocess.run([sys.executable, SCRIPT, "restore", "--root", restored, "--archive", archive], check=True)
+            self.assertEqual((restored / "source/hello ü.txt").stat().st_mtime_ns, exact)
+            self.assertEqual(state.describe(restored), state.describe(root))
+            self.assertEqual(os.readlink(restored / "dangling-directory"), "missing-directory")
+
     def test_round_trip_preserves_links_and_exact_times(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

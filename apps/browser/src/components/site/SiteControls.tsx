@@ -22,7 +22,8 @@ import {
 import { cleanUrl, displayHost, markdownLink } from "@bay/core";
 import { confirm, copyText, sharePage, showMenu, Symbol, translation, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -642,7 +643,7 @@ function ExtensionTile({
     <View ref={ref} style={{ width }}>
       <ActionTile title={state?.title || ext.actionTitle || ext.name} width={width} onPress={open}>
         {icon ? (
-          <Image source={{ uri: icon }} style={{ width: 22, height: 22, opacity: state && !state.enabled ? 0.45 : 1 }} />
+          <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 22, height: 22, opacity: state && !state.enabled ? 0.45 : 1 }} />
         ) : (
           <Symbol name="puzzlepiece.extension" size={18} color={theme.textPrimary} style={{ width: 24, height: 24 }} />
         )}

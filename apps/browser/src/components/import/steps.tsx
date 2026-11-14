@@ -1,6 +1,7 @@
 import { View, isMac } from "@bay/platform";
 import type { DiaTabsResult, ImportKind } from "@bay/import";
-import { ActivityIndicator, Image, Text } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
+import { Image } from "expo-image";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { plural } from "../../store/model";
@@ -178,7 +179,7 @@ export function SpacesStep({ flow }: StepProps) {
                 onToggle={(on) => flow.setSourceProfiles((prev) => toggle(prev, p.id, on))}
                 icon={
                   p.avatarPath ? (
-                    <Image source={{ uri: `file://${p.avatarPath}` }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                    <Image cachePolicy="memory" source={{ uri: `file://${p.avatarPath}` }} style={{ width: 28, height: 28, borderRadius: 14 }} />
                   ) : (
                     <Monogram name={p.name} color={p.color} />
                   )
@@ -260,7 +261,7 @@ export function SafariStep({ flow }: StepProps) {
             subtitle={`${APP_NAME} can read Safari directly. Bring your bookmarks, history, Reading List, open tabs and sign-ins into ${APP_NAME}.`}
           />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 }}>
-            {flow.source?.iconPath ? <Image source={{ uri: `file://${flow.source.iconPath}` }} style={{ width: 40, height: 40 }} /> : null}
+            {flow.source?.iconPath ? <Image cachePolicy="memory" source={{ uri: `file://${flow.source.iconPath}` }} style={{ width: 40, height: 40 }} /> : null}
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Bookmarks, history, Reading List and tabs</Text>
               <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 1 }}>Full Disk Access is granted.</Text>

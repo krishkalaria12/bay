@@ -1,7 +1,8 @@
 import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { openLiveItem } from "../../activity/activityEngine";
@@ -87,7 +88,9 @@ export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: str
       }}
     >
       <Text style={{ fontSize: size * 0.42, fontWeight: "600", color: theme.textPrimary }}>{initials || "?"}</Text>
-      {uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ position: "absolute", width: size, height: size }} /> : null}
+      {uri && !failed ? (
+        <Image cachePolicy="memory" source={{ uri }} onError={() => setFailed(true)} style={{ position: "absolute", width: size, height: size }} />
+      ) : null}
     </View>
   );
 }

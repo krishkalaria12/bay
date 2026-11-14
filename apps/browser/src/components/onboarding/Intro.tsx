@@ -2,7 +2,8 @@ import { Pressable, View } from "@bay/platform";
 import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
 import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -93,7 +94,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
       <PowerUp palette={DIA_SPECTRUM} speed={0.8} origin={0.5} style={[StyleSheet.absoluteFill, { opacity: dark ? 0.9 : 0.6 }]} />
       <Animated.View style={[{ alignItems: "center", gap: 18 }, zoom]}>
         <Animated.View style={iconStyle}>
-          <Image source={APP_ICON} style={{ width: 96, height: 96 }} />
+          <Image cachePolicy="memory" source={APP_ICON} style={{ width: 96, height: 96 }} />
         </Animated.View>
         <View style={{ flexDirection: "row" }} accessibilityLabel={APP_NAME}>
           {[...APP_NAME].map((ch, i) => (

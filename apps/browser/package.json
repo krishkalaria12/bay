@@ -17,6 +17,7 @@
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
     "web": "node ../../scripts/web.mjs dev",
     "test:web-boot": "node scripts/web-boot-test.mjs",
+    "test:images:macos": "node scripts/image-macos-test.mjs",
     "build:web": "node ../../scripts/web.mjs build",
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
@@ -32,6 +33,7 @@
     "@legendapp/list": "^3.6.0",
     "effect": "4.1.3",
     "expo": "~54.0.37",
+    "expo-image": "~3.0.11",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",
     "react-dom": "19.1.4",

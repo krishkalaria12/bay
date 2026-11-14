@@ -2,14 +2,16 @@
 """Save and restore the resumable engine tree without following symbolic links.
 
 Windows' tar.exe crashes with an access violation on the checked-out tree, and
-7-Zip can't store its dangling and forward-slash links, so Python writes the
-archive.
+7-Zip can't store its dangling and forward-slash links, so Python writes a
+.tar.gz there. Linux names a .tar.zst instead: GNU tar's POSIX format keeps
+nanosecond times, and multithreaded zstd saves the tree in minutes.
 """
 import argparse
 import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
 import tarfile
 import tempfile
 
@@ -69,6 +71,29 @@ def add_entry(tar, entry, name):
         tar.addfile(info)
 
 
+def uses_zstd(archive):
+    return archive.name.endswith(".tar.zst")
+
+
+def pipe(producer, consumer):
+    """Run producer | consumer, failing if either fails."""
+    with subprocess.Popen(producer, stdout=subprocess.PIPE) as first:
+        second = subprocess.run(consumer, stdin=first.stdout, check=False)
+        first.stdout.close()
+    for command, code in ((producer, first.returncode), (consumer, second.returncode)):
+        if code:
+            raise OSError(f"{command[0]} exited with code {code}")
+
+
+def create_zstd(root, temporary):
+    pipe(["tar", "--format=posix", "--numeric-owner", "-C", str(root), "-cf", "-", "."],
+         ["zstd", "-T0", "-3", "-q", "-f", "-o", str(temporary)])
+
+
+def restore_zstd(root, archive):
+    pipe(["zstd", "-dcq", str(archive)], ["tar", "--numeric-owner", "-C", str(root), "-xpf", "-"])
+
+
 def create(root: Path, archive: Path):
     root = root.resolve()
     archive = archive.resolve()
@@ -84,10 +109,13 @@ def create(root: Path, archive: Path):
     try:
         # Compression streams directly to disk; a second, uncompressed tree would
         # exhaust the runner's free space.
-        with tarfile.open(temporary, "w:gz", compresslevel=1) as tar:
-            for count, (entry, name) in enumerate(walk(root), 1):
-                add_entry(tar, entry, name)
-                report_progress("saved", count)
+        if uses_zstd(archive):
+            create_zstd(root, temporary)
+        else:
+            with tarfile.open(temporary, "w:gz", compresslevel=1) as tar:
+                for count, (entry, name) in enumerate(walk(root), 1):
+                    add_entry(tar, entry, name)
+                    report_progress("saved", count)
         temporary.replace(archive)
     finally:
         temporary.unlink(missing_ok=True)
@@ -101,6 +129,9 @@ def restore(root: Path, archive: Path):
     if root.exists() and (not root.is_dir() or any(root.iterdir())):
         raise ValueError(f"restore destination must be empty: {root}")
     root.mkdir(parents=True, exist_ok=True)
+    if uses_zstd(archive):
+        restore_zstd(root, archive)
+        return
     links = []
     # Keep tarfile's small default buffer: every read recopies what's left of it.
     # The archive comes from this repository's own runs, and its links may point

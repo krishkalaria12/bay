@@ -4,7 +4,8 @@ import { lookup } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { fileIcon, hapticTick, Surface, Symbol } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Image, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
+import { ActivityIndicator, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
+import { Image } from "expo-image";
 import Animated, {
   Easing,
   Extrapolation,
@@ -614,7 +615,7 @@ function SourceIcon({ name, icon }: { name: string; icon: ImageSourcePropType | 
 function AppIcon({ icon, size }: { icon: ImageSourcePropType | null; size: number }) {
   if (!icon) return <Symbol name="globe" size={Math.round(size * 0.6)} color="#FFFFFF" style={{ width: size, height: size }} />;
 
-  return <Image source={icon} style={{ width: size, height: size }} />;
+  return <Image cachePolicy="memory" source={icon} style={{ width: size, height: size }} />;
 }
 
 function Chips({ chips }: { chips: Chip[] }) {
@@ -775,7 +776,7 @@ function BayHalf({
           ]}
         />
         <Animated.View style={iconStyle}>
-          <Image source={APP_ICON} style={{ width: ICON, height: ICON }} />
+          <Image cachePolicy="memory" source={APP_ICON} style={{ width: ICON, height: ICON }} />
         </Animated.View>
       </View>
       <Reveal

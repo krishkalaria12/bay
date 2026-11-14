@@ -10,7 +10,8 @@ import {
 } from "@bay/chromium";
 import { Symbol } from "@bay/desktop";
 import { useState, type ReactNode } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -49,7 +50,7 @@ function PromptBody({
   return (
     <View style={{ padding: 14, gap: 10 }}>
       <View style={{ flexDirection: "row", gap: 6 }}>
-        {image ? <Image source={{ uri: image }} style={{ width: 32, height: 32, marginLeft: -1, marginVertical: -1 }} /> : null}
+        {image ? <Image cachePolicy="memory" source={{ uri: image }} style={{ width: 32, height: 32, marginLeft: -1, marginVertical: -1 }} /> : null}
         {icons.map((icon) => (
           <View
             key={icon}

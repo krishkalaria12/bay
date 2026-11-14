@@ -13,6 +13,7 @@
   },
   "peerDependencies": {
     "expo": "*",
+    "expo-image": "~3.0.11",
     "react": "*",
     "react-native": "*"
   }
