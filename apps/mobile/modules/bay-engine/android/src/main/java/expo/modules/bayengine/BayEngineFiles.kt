@@ -20,9 +20,7 @@ internal object BayEngineSnapshots {
  * gets its back/forward history back. Private tabs never write one.
  */
 internal object BayEngineTabStates {
-  private const val DIRECTORY = "bay-engine-tab-states-chromium"
-  /** Where the system WebView's states were kept, in versions before Bay's own engine; Chromium can't read them. */
-  private const val WEBVIEW_DIRECTORY = "bay-engine-tab-states"
+  private const val DIRECTORY = "bay-engine-tab-states"
 
   private fun directory(context: Context) = File(context.filesDir, DIRECTORY)
 
@@ -59,7 +57,6 @@ internal object BayEngineTabStates {
 
   /** Deletes states whose tab ids aren't in `keep`. Recent files stay: their tab may not have been told yet. */
   fun prune(context: Context, keep: List<String>) {
-    File(context.filesDir, WEBVIEW_DIRECTORY).deleteRecursively()
     val names = keep.filter(::isSafeKey).toHashSet()
     val cutoff = System.currentTimeMillis() - 30_000
     directory(context).listFiles()?.forEach { file ->
@@ -69,9 +66,7 @@ internal object BayEngineTabStates {
   }
 
   fun clear(context: Context) {
-    for (name in listOf(DIRECTORY, WEBVIEW_DIRECTORY)) {
-      val directory = File(context.filesDir, name)
-      if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear saved tab states.")
-    }
+    val directory = directory(context)
+    if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear saved tab states.")
   }
 }
