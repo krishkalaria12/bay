@@ -20,7 +20,10 @@ SOURCES = {
     " public static final class string { public static int ok = 1; } }",
     "androidx/core/Thing.java": "package androidx.core; public final class Thing { public static int value() { return 2; } }",
     "org/bay/engine/Uses.java": "package org.bay.engine; public final class Uses {"
-    " public static int ids() { return org.chromium.ui.R.string.ok + androidx.core.Thing.value(); } }",
+    " public static int ids() { return org.chromium.ui.R.string.ok + androidx.core.Thing.value()"
+    " + android.R.drawable.ic_media_play; } }",
+    "android/R.java": "package android; public final class R {"
+    " public static final class drawable { public static int ic_media_play = 3; } }",
 }
 
 
@@ -48,7 +51,11 @@ class PackageAarTests(unittest.TestCase):
         with zipfile.ZipFile(self.aar, "w") as aar:
             aar.write(self.jar, "classes.jar")
             aar.writestr("AndroidManifest.xml", '<manifest package="org.bay.engine"/>')
-            aar.writestr("R.txt", "int string ok 0x7f010001\n")
+            aar.writestr("R.txt", "int attr layout 0x0\nint attr layout 0x7f010001\nint string ok 0x7f010001\n"
+                         "int styleable Bar_color 1\nint styleable BarLayout_gravity 1\nint styleable Bar_size 1\n"
+                         "int[] styleable Bar {0x7f010001}\nint[] styleable BarLayout { 0x0 }\n")
+            aar.writestr("res/0_res/layout/item.xml", "<View/>")
+            aar.writestr("res/values-de/strings_2.xml", "<resources/>")
 
     def test_scan_finds_missing_r_and_app_classes(self):
         defined, referenced = package_aar.scan_jar(self.jar.read_bytes())
@@ -68,9 +75,35 @@ class PackageAarTests(unittest.TestCase):
             self.assertEqual(aar.read("bay-engine/app-classes.txt"), b"androidx.core\n")
             self.assertIn("classes.jar", aar.namelist())
             self.assertIn("AndroidManifest.xml", aar.namelist())
+            self.assertEqual(aar.read("R.txt").decode(), "int attr layout 0x0\nint string ok 0x7f010001\n"
+                             "int[] styleable Bar { 0x0, 0x0 }\nint styleable Bar_color 0\nint styleable Bar_size 1\n"
+                             "int[] styleable BarLayout { 0x0 }\nint styleable BarLayout_gravity 0\n")
+            self.assertIn("res/layout/item.xml", aar.namelist())
+            self.assertIn("res/values-de/strings_2.xml", aar.namelist())
+            self.assertFalse([name for name in aar.namelist() if name.startswith("res/0_res/")])
             with zipfile.ZipFile(io.BytesIO(aar.read("classes.jar"))) as jar:
                 self.assertEqual(sorted(jar.namelist()), ["META-INF/services/org.chromium.base.Thing",
                                                           "org/bay/engine/Uses.class", "org/chromium/base/data.txt"])
+
+    def test_attributes_are_defined_once_per_folder(self):
+        files = [
+            ("res/0_res/values/attrs_1.xml", b'<resources><declare-styleable name="Stub">'
+             b'<attr name="layout" format="reference"/></declare-styleable></resources>'),
+            ("res/values/values_2.xml", b'<resources xmlns:tools="http://schemas.android.com/tools">'
+             b'<attr name="elevation" format="dimension"/><declare-styleable name="SearchView">'
+             b'<attr name="layout" format="reference"/><attr name="android:focusable"/></declare-styleable>'
+             b'</resources>'),
+            ("res/values/values_3.xml", b'<resources><declare-styleable name="Bar">'
+             b'<attr name="elevation" format="dimension"/></declare-styleable><attr name="elevation"'
+             b' format="dimension"/></resources>'),
+            ("res/values-v21/values_4.xml", b'<resources><attr name="elevation" format="dimension"/></resources>'),
+        ]
+        changed = package_aar.single_attribute_definitions(files)
+        self.assertEqual(sorted(changed), ["res/values/values_2.xml", "res/values/values_3.xml"])
+        self.assertIn(b'<attr name="layout" /><attr name="android:focusable" />', changed["res/values/values_2.xml"])
+        self.assertIn(b'<attr name="elevation" format="dimension" />', changed["res/values/values_2.xml"])
+        self.assertTrue(changed["res/values/values_3.xml"].endswith(
+            b'<resources><declare-styleable name="Bar"><attr name="elevation" /></declare-styleable></resources>'))
 
     def test_gn_lists_parse(self):
         self.assertEqual(package_aar.parse_gn_list('["androidx/*", "kotlin/*"]'), ["androidx/*", "kotlin/*"])

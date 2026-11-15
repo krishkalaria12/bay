@@ -206,10 +206,11 @@ jinja_template("manifest") {
 }
 
 # Classes the app supplies from its own Gradle dependencies, so the APK has one copy of each. _COROUTINE is
-# kotlinx-coroutines-core's, org/intellij the JetBrains annotations'; the checker and jspecify annotations are only
-# annotations, which the runtime skips when their classes are missing.
+# kotlinx-coroutines-core's, android/support androidx.core's and org/intellij the JetBrains annotations'; the checker
+# and jspecify annotations are only annotations, which the runtime skips when their classes are missing.
 _app_provided_classes = [
   "_COROUTINE/*",
+  "android/support/*",
   "androidx/*",
   "com/google/*",
   "javax/*",
@@ -251,12 +252,34 @@ _dependency_metadata = [
   "META-INF/versions/*",
 ]
 
+# Chromium writes these two for each APK and leaves them out of //build/android:build_java: the build's settings, and
+# the native libraries LibraryLoader loads, which for Bay is libbay_engine.so alone.
+generate_build_config_srcjar("build_config_srcjar") {
+}
+
+_native_libraries_list = "$target_gen_dir/native_libraries.list"
+write_file(_native_libraries_list, [ "libbay_engine.so" ])
+
+write_native_libraries_java("native_libraries_srcjar") {
+  use_final_fields = true
+  native_libraries_list_file = _native_libraries_list
+  native_lib_64_bit = true
+}
+
+android_library("build_config_java") {
+  srcjar_deps = [
+    ":build_config_srcjar",
+    ":native_libraries_srcjar",
+  ]
+}
+
 dist_aar("aar_base") {
   output = "$root_out_dir/bay_engine_base.aar"
   android_manifest = "$target_gen_dir/manifest/AndroidManifest.xml"
   native_libraries = [ "$root_out_dir/libbay_engine.so" ]
   jar_excluded_patterns = _app_provided_classes + _dependency_metadata
   deps = [
+    ":build_config_java",
     ":java",
     ":jni_registration_java",
     ":libbay_engine",
