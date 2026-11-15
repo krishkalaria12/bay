@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A translucent capsule on the widget, as Bay's own controls are on Android. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#26FFFFFF" />
+    <corners android:radius="24dp" />
+</shape>

@@ -41,6 +41,7 @@ test("a bay command (B15) names its action and leaves everything else alone", ()
   assert.equal(bayCommand("bay://new-tab"), "new-tab");
   assert.equal(bayCommand("bay://private-tab"), "private-tab");
   assert.equal(bayCommand("bay://search"), "search");
+  assert.equal(bayCommand("bay://voice"), "voice");
   // Scheme and host are spelled by the OSes; the parser is case-insensitive like URL is.
   assert.equal(bayCommand("BAY://NEW-TAB"), "new-tab");
   assert.equal(bayCommand(null), null);

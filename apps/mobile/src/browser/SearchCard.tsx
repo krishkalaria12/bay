@@ -42,6 +42,8 @@ export interface SearchCardProps {
   /** Offer the private toggle (false when the engine can't keep a private profile). */
   /** Start with private on, as when searching from a private tab. */
   initialPrivate: boolean;
+  /** Starts listening as it opens: the widget's microphone (C7). */
+  listenOnOpen?: boolean;
   onOpen: (target: OpenTarget, privately: boolean) => void;
   onDismiss: () => void;
 }
@@ -54,7 +56,7 @@ function targetFor(row: Row): OpenTarget {
   return { kind: "url", url: row.url };
 }
 
-export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: open, onDismiss }: SearchCardProps): JSX.Element {
+export function SearchCard({ initialText, engine, data, initialPrivate, listenOnOpen = false, onOpen: open, onDismiss }: SearchCardProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
   const foreground = useThemeColor("foreground");
@@ -167,6 +169,13 @@ export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: 
 
     if (text) fill(text);
   }
+
+  // Opened from the widget's microphone: listen at once, as if the mic had been tapped.
+  useEffect(() => {
+    if (listenOnOpen) void listen();
+    // Once, as the card opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function submit(): void {
     const first = rows[0];

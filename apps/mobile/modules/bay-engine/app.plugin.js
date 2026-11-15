@@ -146,6 +146,9 @@ module.exports = function withBayEngine(config) {
       bundleIdSuffix: "widgets",
       plist: widgetExtensionInfoPlist,
       sources: widgetExtensionSources,
+      // The widgets' buttons open Bay through OpenURLIntent (C7), which arrived in iOS 18. Phones on older versions
+      // keep Bay itself and go without the widget.
+      minimumOS: "18.0",
     });
 
     return mod;
@@ -238,7 +241,7 @@ module.exports.chromiumEngineEdits = chromiumEngineEdits;
 // rest is done by hand here, for two node-xcode quirks: `updateBuildProperty` matches targets by comment, where
 // the created name is already quoted, and `addTargetDependency` writes nothing at all when a fresh project lacks
 // its sections.
-function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuffix, plist, sources }) {
+function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuffix, plist, sources, minimumOS }) {
   if (findTargetKeyFor(project, targetName)) return;
 
   const extension = project.addTarget(targetName, "app_extension", subfolder, `${bundleId}.${bundleIdSuffix}`);
@@ -254,7 +257,8 @@ function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuf
 
   // The extension matches Bay's own deployment target and builds like it does; its plist, sources and bundle id
   // come from addTarget and the constants above.
-  const minimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
+  const appMinimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
+  const minimum = minimumOS && Number.parseFloat(minimumOS) > Number.parseFloat(appMinimum) ? minimumOS : appMinimum;
 
   const settings = {
     INFOPLIST_FILE: plist,

@@ -145,6 +145,8 @@ export function BrowserScreen(): JSX.Element {
   // The search Bay opened as it started (C1): over a page it opens a new tab, but the page stays on screen behind it
   // and putting the search away goes back to that page, not to the switcher.
   const [launchSearch, setLaunchSearch] = useState(false);
+  // The search card opened from the widget's microphone starts listening (C7).
+  const [searchListening, setSearchListening] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
   // Dialogs pages are waiting on (`alert`/`confirm`/`prompt`, I3), in the order they asked; the engine holds each
@@ -453,7 +455,7 @@ export function BrowserScreen(): JSX.Element {
   // Quick actions and the search widget (B15) hand their `bay://` commands to the same desk as incoming links (B9):
   // a fresh tab, a private tab, or the search card over the current tab, exactly as the bar and the tabs menu open
   // them. A private tab here is a private tab or nothing: the menus don't offer one the engine can't keep private.
-  function openIncomingCommand(command: Exclude<BayCommand, "search">): void {
+  function openIncomingCommand(command: Exclude<BayCommand, "search" | "voice">): void {
     setOverlay("none");
     setPanel(null);
     setLink(null);
@@ -467,7 +469,11 @@ export function BrowserScreen(): JSX.Element {
 
     if (command) {
       if (command === "search") search(false);
-      else openIncomingCommand(command);
+      else if (command === "voice") {
+        // The widget's microphone (C7): the search card, already listening.
+        search(false);
+        setSearchListening(true);
+      } else openIncomingCommand(command);
 
       return;
     }
@@ -488,6 +494,7 @@ export function BrowserScreen(): JSX.Element {
 
   function search(inNewTab: boolean, privately = false): void {
     setLaunchSearch(false);
+    setSearchListening(false);
     setSearchInNewTab(inNewTab);
     setSearchPrivately(privately);
     setOverlay("search");
@@ -1172,6 +1179,7 @@ export function BrowserScreen(): JSX.Element {
           engine={engine}
           data={data}
           initialPrivate={searchPrivately || (!searchInNewTab && Boolean(active.private))}
+          listenOnOpen={searchListening}
           onOpen={open}
           onDismiss={() => {
             Keyboard.dismiss();
