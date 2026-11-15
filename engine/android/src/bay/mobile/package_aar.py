@@ -10,7 +10,10 @@ R classes (org.chromium.ui.R, …) that Chromium only generates when it builds a
   * writes bay-engine/r-packages.txt: each package whose R class the engine's code uses and the AAR doesn't contain.
     The app's Gradle build generates those classes from the AAR's R.txt (apps/mobile/modules/bay-engine);
   * writes bay-engine/app-classes.txt: the packages of classes the engine uses but the AAR leaves for the app's own
-    dependencies to supply (AndroidX and the like), so a missing one is a build error rather than a crash.
+    dependencies to supply (AndroidX and the like), so a missing one is a build error rather than a crash;
+  * keeps only classes, service registrations and the engine's own packages' files in classes.jar. Other files there
+    are the dependency jars' (licences, build properties), which the app's libraries also carry, and Gradle fails on
+    two different copies of a Java resource.
 """
 import argparse
 import fnmatch
@@ -97,6 +100,21 @@ def app_supplied_packages(defined, referenced, excluded_globs):
     return sorted(packages)
 
 
+# Java resources kept in classes.jar besides classes: ServiceLoader registrations (Chromium's @ServiceImpl) and files
+# under the engine's own packages.
+KEPT_RESOURCES = ("META-INF/services/", "org/bay/", "org/chromium/", "org/jni_zero/")
+
+
+def engine_jar(jar_bytes):
+    """classes.jar without the dependency jars' other files."""
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(jar_bytes)) as source, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as jar:
+        for info in source.infolist():
+            if info.filename.endswith(".class") or info.filename.startswith(KEPT_RESOURCES):
+                jar.writestr(info, source.read(info))
+    return output.getvalue()
+
+
 def parse_gn_list(value):
     value = value.strip()
     if not value.startswith("["):
@@ -110,7 +128,7 @@ def package(base_aar, output, assets, excluded_globs):
         defined, referenced = scan_jar(jar_bytes)
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as target:
             for info in source.infolist():
-                target.writestr(info, source.read(info))
+                target.writestr(info, engine_jar(jar_bytes) if info.filename == "classes.jar" else source.read(info))
             for path, name in assets:
                 # Stored: the engine maps these straight out of the APK, so the app must keep them uncompressed too.
                 target.write(path, f"assets/{name}", compress_type=zipfile.ZIP_STORED)
