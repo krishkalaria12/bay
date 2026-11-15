@@ -1092,6 +1092,11 @@
                   Screen widgets. New e2e tests for: the launch search, Display options, restore without blocking, swipe to archive and back, the tips, the
                   setup sheet, About, the custom engine and tab export. Look at the iOS widgets in the gallery (they need iOS 18: the widget target's minimum is
                   18.0).
+                  <br />C18–C20 are written for Android but not yet built or run (the engine code compiles only on the runner): a site turning ads,
+                  trackers or cookie banners off (the group engines load the first time, then come from their own cache), the blocked count on the page menu
+                  (failed requests, blocked frames and stand-ins), "Open app links in" handing a tapped link to another site to its app (Android 11 and later),
+                  and swipe to navigate per site. Expect compile fixes in <code>bay_content_blocker.cc</code>, <code>bay_tab.cc</code> and
+                  <code>bay_app_link_throttle.cc</code> on the first run.
                 </td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>M</td>
@@ -1150,38 +1155,6 @@
 
               <tr class="band">
                 <th>From the Cra comparison: the rest of the round</th>
-              </tr>
-              <tr id="c18">
-                <td class="id">C18</td>
-                <th scope="row">Blocking count and per-site groups on Android</th>
-                <td>
-                  iOS counts what the blocker stopped (C2) and lets a site turn ads, trackers or cookie banners off on their own (C3). Android's engine has
-                  neither: <code>BayTabClient</code> needs a blocked-request callback, and <code>//bay/filter</code> needs list groups and per-host exceptions.
-                  Until then Android shows the single blocking switch and no count. Write it after V1's first engine build, not before.
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c19">
-                <td class="id">C19</td>
-                <th scope="row">App links on Android</th>
-                <td>
-                  "Open app links in" (C12) works on iOS through universal links. Android's engine offers no hook before a page's link loads, so web links stay
-                  in Bay there and the setting is iOS only. Needs a navigation callback in <code>BayTabClient</code>, then an intent with
-                  <code>FLAG_ACTIVITY_REQUIRE_NON_BROWSER</code>.
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c20">
-                <td class="id">C20</td>
-                <th scope="row">Swipe to navigate per site, and a sharper blocked count</th>
-                <td>
-                  Swipe to navigate (C5) is one setting for every site; Cra also keeps it per site. The count (C2) checks failed loads against every list, so a
-                  site with a group turned off can still count requests from that group.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
               </tr>
               <tr id="c4">
                 <td class="id">C4</td>
@@ -1321,13 +1294,13 @@
         <h2>What happens next</h2>
         <ol>
           <li>
-            <b>Done on <code>feat/mobile-cra</code> (15 November, iOS simulator):</b> the Cra round (U1–U7, C1–C3, C5–C7, C10–C17, the About page). What it left
-            is C18–C20, U8, U9 and V8.
+            <b>Done on <code>feat/mobile-cra</code> (15 November, iOS simulator):</b> the Cra round (U1–U7, C1–C3, C5–C7, C10–C20, the About page). What it left
+            is U8, U9 and V8.
           </li>
           <li><b>Now, while the engine builds:</b> R3 (send the requests), R5, V3's Arc Search export before 23 November.</li>
-          <li><b>When the APK exists:</b> V1, then V2 and V8 in one Android batch; then C18 and C19 on the engine.</li>
+          <li><b>When the APK exists:</b> V1, then V2 and V8 in one Android batch.</li>
           <li><b>Test builds:</b> R1 and R2 (with U9's App Group), then V4 and V5 with the builds on real phones.</li>
-          <li><b>Then:</b> C20, U8, B2, V6 and V7; C4, C8 and C9 when they are picked up again.</li>
+          <li><b>Then:</b> U8, B2, V6 and V7; C4, C8 and C9 when they are picked up again.</li>
           <li><b>After release:</b> L1–L4.</li>
         </ol>
         <p class="note">Each batch is tested on both devices and committed in chunks; a stage isn't done until its flows pass on both.</p>
