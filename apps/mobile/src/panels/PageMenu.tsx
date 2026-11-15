@@ -98,7 +98,7 @@ function NavigationAction({
   );
 }
 
-/** A square with an icon and its label under it, four to a row (U3, Cra's page menu). */
+/** A square with an icon and its label under it, four to a row (U3). */
 function Tile({
   id,
   icon,
@@ -309,7 +309,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
   );
 }
 
-/** Page zoom, a tenth at a time, kept for this site (Cra's stepper in Display Options). */
+/** Page zoom, a tenth at a time, kept for this site (the stepper in Display Options). */
 function ZoomRow({ zoom, onZoom }: { zoom: number; onZoom: (zoom: number) => void }): JSX.Element {
   const t = useT();
   const foreground = useThemeColor("foreground");

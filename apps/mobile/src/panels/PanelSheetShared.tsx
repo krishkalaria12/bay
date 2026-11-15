@@ -258,7 +258,7 @@ export function ActionRow({
 }: {
   testID: string;
   icon?: IconName;
-  /** Draws the icon white in a square of this colour, as Arc Search's and Cra's settings do (U6). */
+  /** Draws the icon white in a square of this colour (U6). */
   tint?: string;
   /** Drawn where the icon goes, `iconSize.control` wide: an app's own icon, say. */
   leading?: ReactNode;

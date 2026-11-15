@@ -124,7 +124,7 @@ export function inputFont(variant: TextVariant = "body", weight?: TextWeight): T
 }
 
 /**
- * The colours settings rows put their icons on (U6), one per kind of setting, after Arc Search's and Cra's settings.
+ * The colours settings rows put their icons on (U6), one per kind of setting.
  * Mid-tone, so the white icon reads on them in light and dark mode.
  */
 export const rowTint = {

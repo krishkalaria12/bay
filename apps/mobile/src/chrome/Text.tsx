@@ -21,7 +21,7 @@ const toneColor = { default: "foreground", muted: "muted", accent: "accent", dan
 
 /**
  * How far each step follows the phone's text size (C15). Reading text follows it a long way; the labels that sit in
- * fixed shapes (tiles, the bar, chips) stop before they spill out of them, as Arc Search's and Cra's do.
+ * fixed shapes (tiles, the bar, chips) stop before they spill out of them.
  */
 const MAX_SCALE: Record<TextVariant, number> = {
   display: 1.3,

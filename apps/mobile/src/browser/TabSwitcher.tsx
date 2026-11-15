@@ -321,7 +321,7 @@ function TabCard({
     // 0 is the card in front, negative ones are behind it (left), positive ones still to come (right).
     const position = index - scrollX.value / step;
     const x = position >= 0 ? position * cardWidth * 1.04 : position * cardWidth * 0.3;
-    // Cra's measured row (U5): cards behind shrink towards 0.9, the next ones grow a hair past the one in front.
+    // The measured row (U5): cards behind shrink towards 0.9, the next ones grow a hair past the one in front.
     const scale = position >= 0 ? Math.min(tabCarousel.maximumScale, 1 + 0.0096 * position) : Math.max(tabCarousel.minimumScale, 1 + 0.023 * position);
 
     // The card sits clear of the notch side and stays put on screen while the scroll view moves its content: add the
@@ -339,7 +339,7 @@ function TabCard({
     opacity: interpolate(index - scrollX.value / step, [-0.6, 0], [0, 1], Extrapolation.CLAMP),
   }));
 
-  // Cards behind dim, a card's width at a time, to Cra's 0.16.
+  // Cards behind dim, a card's width at a time, down to 0.16.
   const shade = useAnimatedStyle(() => ({
     opacity: interpolate(index - scrollX.value / step, [-1, 0], [tabCarousel.maximumDim, 0], Extrapolation.CLAMP),
   }));

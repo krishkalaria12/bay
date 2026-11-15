@@ -25,7 +25,7 @@ export interface SiteSettingsPanelProps {
   onTextSize: (textSize: number | null) => void;
   onReader: (reader: boolean) => void;
   onDesktop: (desktop: boolean) => void;
-  /** Ad and tracker blocking here (U6): its switch sits with the site's other choices, as in Cra's Site Settings. */
+  /** Ad and tracker blocking here (U6): its switch sits with the site's other choices. */
   blocking: "on" | "paused" | "restored" | "off";
   onToggleBlocking: () => void;
   /** What this site doesn't block (C3): ads, trackers or cookie banners. */

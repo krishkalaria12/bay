@@ -14,7 +14,7 @@ import { useT } from "@/i18n";
 export type TipTarget = "capsule" | "more";
 
 /**
- * A first-run tip (U7), after Arc Search's and Cra's: a card above the bar, with a ring (TipRing) round the control it
+ * A first-run tip (U7): a card above the bar, with a ring (TipRing) round the control it
  * means. It stays until "Got it", or until the control it points at is used.
  */
 export function Tip({ title, body, target, onDone }: { title: string; body: string; target: TipTarget; onDone: () => void }): JSX.Element {

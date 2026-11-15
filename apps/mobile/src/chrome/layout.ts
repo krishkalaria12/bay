@@ -1,6 +1,6 @@
-// Layout and motion rules for the phone's chrome, ported from Cra's iPhone app (CraCore/Mobile, MIT licence, notice in
-// Settings → About). Cra measured them from Arc Search's footage on an iPhone 15 Pro (393 × 852 pt). Everything here is
-// plain arithmetic with no React Native in it, so tests/layout.test.ts runs it under Node and both apps share it.
+// Layout and motion rules for the phone's chrome, ported from MIT-licensed code (its notice is in NOTICE and Settings →
+// About), with sizes measured on an iPhone 15 Pro (393 × 852 pt). Everything here is plain arithmetic with no React
+// Native in it, so tests/layout.test.ts runs it under Node and both apps share it.
 
 /** The search sheet that rises with the keyboard (U4). */
 export const searchSheet = {

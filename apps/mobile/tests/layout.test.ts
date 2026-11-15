@@ -1,4 +1,4 @@
-// The chrome's layout and motion rules (src/chrome/layout.ts), ported with their measurements from Cra's CraCore tests.
+// The chrome's layout and motion rules (src/chrome/layout.ts), with the measurements they were ported with.
 import assert from "node:assert/strict";
 import test from "node:test";
 
