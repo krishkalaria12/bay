@@ -35,6 +35,7 @@ public final class BayEngine {
 
     public static void setContentBlocking(
             String[] files,
+            String[] groups,
             String version,
             String cachePath,
             @Nullable String resourcesPath,
@@ -43,6 +44,10 @@ public final class BayEngine {
     }
 
     public static void setBlockingPausedHosts(String[] hosts) {
+        throw new UnsupportedOperationException();
+    }
+
+    public static void setSiteBlocking(String json) {
         throw new UnsupportedOperationException();
     }
 

@@ -40,22 +40,27 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/file_select_listener.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/media_capture_devices.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_entry_restore_context.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/javascript_dialog_type.h"
+#include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/common/messaging/string_message_codec.h"
 #include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -735,6 +740,59 @@ void BayTab::PrimaryPageChanged(content::Page& page) {
   // Answers belong to the page that asked.
   location_grants_.clear();
   CancelRequests(/*notify_java=*/true);
+  // A new page: nothing blocked on it yet (C18). Requests the new document starts count from here.
+  blocked_count_ = 0;
+  ReportBlocked();
+}
+
+bool BayTab::OpenAppLink(const GURL& url) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> java_tab = GetJavaDelegate(env);
+  return !java_tab.is_null() && Java_BayTab_openAppLink(env, java_tab, ConvertUTF8ToJavaString(env, url.spec()));
+}
+
+void BayTab::NoteBlocked() {
+  blocked_count_ += 1;
+  if (blocked_report_pending_) {
+    return;
+  }
+  // A page blocks dozens of requests at once: they go to Java together, once the current ones are counted.
+  blocked_report_pending_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&BayTab::ReportBlocked, weak_factory_.GetWeakPtr()));
+}
+
+void BayTab::ReportBlocked() {
+  blocked_report_pending_ = false;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> java_tab = GetJavaDelegate(env);
+  if (!java_tab.is_null()) {
+    Java_BayTab_onBlockedCount(env, java_tab, blocked_count_);
+  }
+}
+
+void BayTab::DidFinishNavigation(content::NavigationHandle* navigation) {
+  // A frame the content blocker stopped, in the page the tab shows. (A main frame it stops shows Bay's own page.)
+  if (navigation->GetNetErrorCode() != net::ERR_BLOCKED_BY_CLIENT || navigation->IsInMainFrame()) {
+    return;
+  }
+  content::RenderFrameHost* parent = navigation->GetParentFrameOrOuterDocument();
+  if (parent && parent->GetOutermostMainFrame()->IsInPrimaryMainFrame()) {
+    NoteBlocked();
+  }
+}
+
+void BayTab::ResourceLoadComplete(content::RenderFrameHost* render_frame_host,
+                                  const content::GlobalRequestID& request_id,
+                                  const GURL& original_url,
+                                  const blink::mojom::ResourceLoadInfo& resource_load_info) {
+  // Frame loads are navigations: DidFinishNavigation counts those.
+  if (resource_load_info.net_error != net::ERR_BLOCKED_BY_CLIENT ||
+      blink::IsRequestDestinationFrame(resource_load_info.request_destination) || !render_frame_host ||
+      !render_frame_host->GetOutermostMainFrame()->IsInPrimaryMainFrame()) {
+    return;
+  }
+  NoteBlocked();
 }
 
 void BayTab::CancelRequests(bool notify_java) {

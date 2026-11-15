@@ -96,8 +96,11 @@ internal object BayEngineBackend {
    * Blocks with these filter list files (`file://` URIs; null or empty stops blocking). The engine compiles them off
    * the main thread and caches the result per `version`, so later launches load it at once.
    */
-  fun setContentBlocking(files: List<String>?, version: String, context: Context, onDone: (Result<Unit>) -> Unit) {
-    val paths = files.orEmpty().mapNotNull { Uri.parse(it).path }.toTypedArray()
+  /** `groups` names each file's group (C18), in the same order; without one for every file, the lists have none. */
+  fun setContentBlocking(files: List<String>?, groups: List<String>?, version: String, context: Context, onDone: (Result<Unit>) -> Unit) {
+    val pairs = files.orEmpty().mapIndexedNotNull { index, file -> Uri.parse(file).path?.let { it to groups?.getOrNull(index) } }
+    val paths = pairs.map { it.first }.toTypedArray()
+    val fileGroups = pairs.mapNotNull { it.second }.takeIf { it.size == pairs.size }?.toTypedArray() ?: emptyArray()
     val directory = File(context.cacheDir, "bay-engine-blocker")
     // The resources file is copied out of the app's assets once per install, off the main thread.
     resourcesCopier.execute {
@@ -105,7 +108,7 @@ internal object BayEngineBackend {
       val resources = BayBlockerResources.file(context, directory)?.path
       main.post {
         whenStarted(context, ready = {
-          BayEngine.setContentBlocking(paths, version, directory.resolve("engine.bin").path, resources) { loaded ->
+          BayEngine.setContentBlocking(paths, fileGroups, version, directory.resolve("engine.bin").path, resources) { loaded ->
             onDone(if (loaded) Result.success(Unit) else Result.failure(IllegalStateException("The filter lists couldn't be read.")))
           }
         }, failed = { onDone(Result.failure(IllegalStateException("Bay's engine didn't start."))) })
@@ -117,6 +120,9 @@ internal object BayEngineBackend {
 
   fun setBlockingPausedHosts(hosts: List<String>) =
     runWhenStarted { BayEngine.setBlockingPausedHosts(hosts.toTypedArray()) }
+
+  /** The groups each site turns off (C18), as `{ host: [group] }` JSON. */
+  fun setSiteBlocking(json: String) = runWhenStarted { BayEngine.setSiteBlocking(json) }
 
   fun setTrackingParameters(json: String): Boolean {
     runWhenStarted { BayEngine.setTrackingParameters(json) }

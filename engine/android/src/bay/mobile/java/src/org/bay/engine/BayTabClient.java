@@ -45,6 +45,15 @@ public interface BayTabClient {
     /** A link to another app (tel:, mailto:, intent:, an app's scheme). The page stays where it is. */
     void onExternalUrl(String url, boolean userGesture);
 
+    /**
+     * A link the person tapped in the page, to another site (C19). Return true when the app opened it in another app
+     * that claims it (Android's verified app links), which stops the tab's navigation; false loads it in the tab.
+     */
+    boolean onAppLink(String url);
+
+    /** How many requests the content blocker stopped on the current page (C18); 0 as each new page commits. */
+    void onBlockedCount(int count);
+
     void onRequestsCancelled();
 
     void onFullscreenChanged(boolean fullscreen);

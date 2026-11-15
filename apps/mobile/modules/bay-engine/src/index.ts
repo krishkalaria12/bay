@@ -99,7 +99,7 @@ export interface EngineViewProps extends ViewProps {
   swipeToNavigate?: SwipeToNavigate;
   /**
    * Open app links in (C12): "app" first offers a link tapped in the page to another site to the app that claims it
-   * (iOS universal links); "browser" keeps every link here. Android keeps every web link here for now.
+   * (iOS universal links, Android verified app links from Android 11); "browser" keeps every link here.
    */
   appLinks?: "app" | "browser";
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
@@ -117,7 +117,7 @@ export interface EngineViewProps extends ViewProps {
   onNewWindow?: (event: NativeSyntheticEvent<NewWindow>) => void;
   /** A swipe back past the tab's first page, or forward past its last (C6). */
   onSwipeNavigation?: (event: NativeSyntheticEvent<{ action: "pastFirstPage" | "pastLastPage" }>) => void;
-  /** How many requests the blocker stopped on the page now showing (C2). iOS only: Android doesn't count yet. */
+  /** How many requests the blocker stopped on the page now showing (C2, C18). */
   onBlockedCount?: (event: NativeSyntheticEvent<{ count: number }>) => void;
 }
 
@@ -159,8 +159,8 @@ const nativeEngine = requireNativeModule<{
   setPrivateSessionActive(active: boolean): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
   pruneTabStates(keep: string[]): Promise<void>;
-  setContentBlocking(listFiles: string[] | null, version: string, groups?: string[]): Promise<number | null>;
-  setSiteBlocking?(json: string): void;
+  setContentBlocking(listFiles: string[] | null, version: string, groups: string[] | null): Promise<number | null>;
+  setSiteBlocking(json: string): void;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   openDownload(reference: string): Promise<void>;
@@ -180,14 +180,13 @@ const nativeEngine = requireNativeModule<{
  * compiles WebKit rules once per version and reuses them on later launches. Applies to every page view.
  */
 export async function setContentBlocking(listFiles: readonly string[] | null, version: string, groups?: readonly string[]): Promise<void> {
-  // iOS compiles each group's lists on their own, so a site can turn one group off (C3); Android blocks with them all.
-  if (Platform.OS === "ios" && groups && listFiles) await nativeEngine.setContentBlocking([...listFiles], version, [...groups]);
-  else await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version);
+  // Each list's group goes with it, so a site can turn one group off (C3, C18).
+  await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version, listFiles && groups ? [...groups] : null);
 }
 
-/** The groups each site turns off (C3), by host (matching its subdomains). iOS only: Android blocks every group. */
+/** The groups each site turns off (C3, C18), by host (matching its subdomains). */
 export function setSiteBlocking(groupsOff: Readonly<Record<string, readonly string[]>>): void {
-  nativeEngine.setSiteBlocking?.(JSON.stringify(groupsOff));
+  nativeEngine.setSiteBlocking(JSON.stringify(groupsOff));
 }
 
 /** Sites (hosts, matching their subdomains) where blocking is paused. */

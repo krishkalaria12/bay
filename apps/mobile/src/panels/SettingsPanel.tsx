@@ -514,16 +514,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               chevron
               onPress={() => setPage("swipe")}
             />
-            {Platform.OS === "ios" ? (
-              <ActionRow
-                testID="settings-app-links"
-                icon="link"
-                label={t("settings.appLinks")}
-                value={prefs.appLinks === "app" ? t("settings.appLinks.app") : t("settings.appLinks.browser")}
-                chevron
-                onPress={() => setPage("appLinks")}
-              />
-            ) : null}
+            <ActionRow
+              testID="settings-app-links"
+              icon="link"
+              label={t("settings.appLinks")}
+              value={prefs.appLinks === "app" ? t("settings.appLinks.app") : t("settings.appLinks.browser")}
+              chevron
+              onPress={() => setPage("appLinks")}
+            />
             <ActionRow
               testID="settings-pull-refresh"
               icon="reload"

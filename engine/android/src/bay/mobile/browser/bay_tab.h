@@ -88,6 +88,14 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   // A link to another app (tel:, mailto:, intent:, an app's own scheme): Bay asks before leaving.
   void OpenExternalUrl(const GURL& url, bool has_user_gesture);
 
+  // A link tapped in the page to another site (C19): whether the app opened it in an app that claims it, in which case
+  // the navigation stops. Asked by BayAppLinkThrottle.
+  bool OpenAppLink(const GURL& url);
+
+  // A request the content blocker stopped, or answered with a stand-in, on the page the tab shows (C18). Counted per
+  // page and reported to Java once per turn.
+  void NoteBlocked();
+
   base::WeakPtr<BayTab> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
   // content::WebContentsDelegate (beyond what WebContentsDelegateAndroid forwards to Java):
@@ -112,6 +120,11 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
 
   // content::WebContentsObserver:
   void PrimaryPageChanged(content::Page& page) override;
+  void DidFinishNavigation(content::NavigationHandle* navigation) override;
+  void ResourceLoadComplete(content::RenderFrameHost* render_frame_host,
+                            const content::GlobalRequestID& request_id,
+                            const GURL& original_url,
+                            const blink::mojom::ResourceLoadInfo& resource_load_info) override;
 
   // content::JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
@@ -133,6 +146,7 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
                           content::MediaResponseCallback callback,
                           bool granted);
   void DeliverSnapshot(int request_id, const SkBitmap* bitmap);
+  void ReportBlocked();
   // Declines every open request: its page is gone. Java hears of it unless the tab itself is going.
   void CancelRequests(bool notify_java);
 
@@ -140,6 +154,9 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   std::unique_ptr<js_injection::JsCommunicationHost> js_communication_;
   bool page_committed_ = false;
   bool desktop_mode_ = false;
+  // Requests blocked on the current page (C18), and whether a report to Java is already on its way.
+  int blocked_count_ = 0;
+  bool blocked_report_pending_ = false;
   int next_request_id_ = 1;
   std::map<int, base::OnceCallback<void(bool)>> pending_permissions_;
   std::map<int, DialogClosedCallback> pending_dialogs_;

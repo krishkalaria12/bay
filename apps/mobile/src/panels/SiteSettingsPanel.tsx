@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
@@ -28,7 +28,7 @@ export interface SiteSettingsPanelProps {
   /** Ad and tracker blocking here (U6): its switch sits with the site's other choices, as in Cra's Site Settings. */
   blocking: "on" | "paused" | "restored" | "off";
   onToggleBlocking: () => void;
-  /** What this site doesn't block (C3); iOS keeps ads, trackers and cookie banners apart, Android blocks them together. */
+  /** What this site doesn't block (C3): ads, trackers or cookie banners. */
   blockOff: readonly SiteBlockGroup[];
   onBlockOff: (groups: SiteBlockGroup[]) => void;
   /** Swipe to navigate here (C20), or null while it follows Bay's. */
@@ -128,7 +128,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
               toggle={props.blocking === "on"}
               onPress={props.onToggleBlocking}
             />
-            {props.blocking === "on" && Platform.OS === "ios"
+            {props.blocking === "on"
               ? GROUP_ROWS.map(({ group, label }) => (
                   <ActionRow
                     key={group}

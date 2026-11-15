@@ -135,12 +135,15 @@ public final class BayEngine {
     // Content blocking --------------------------------------------------------------------------------------------
 
     /**
-     * Blocks requests in every tab with these filter list files (paths), or stops blocking with an empty list. The
-     * lists are compiled off the UI thread and cached at {@code cachePath} for {@code version}, so a later launch with
-     * the same version loads them at once. {@code resourcesPath} is the scriptlet and redirect resources file.
+     * Blocks requests in every tab with these filter list files (paths), or stops blocking with an empty list. {@code
+     * groups} names each file's group ("ads", "trackers", "cookies", or "shared" for lists every group needs), so a
+     * site can turn one off ({@link #setSiteBlocking}); empty when the lists have none. The lists are compiled off the
+     * UI thread and cached at {@code cachePath} for {@code version}, so a later launch with the same version loads them
+     * at once. {@code resourcesPath} is the scriptlet and redirect resources file.
      */
     public static void setContentBlocking(
             String[] files,
+            String[] groups,
             String version,
             String cachePath,
             @Nullable String resourcesPath,
@@ -151,6 +154,7 @@ public final class BayEngine {
         BayEngineJni.get()
                 .setContentBlocking(
                         new JSONArray(java.util.Arrays.asList(files)).toString(),
+                        new JSONArray(java.util.Arrays.asList(groups)).toString(),
                         version,
                         cachePath,
                         resourcesPath,
@@ -167,6 +171,15 @@ public final class BayEngine {
     /** Sites (hosts, matching their subdomains) where blocking is paused. */
     public static void setBlockingPausedHosts(String[] hosts) {
         BayEngineJni.get().setBlockingPausedHosts(new JSONArray(java.util.Arrays.asList(hosts)).toString());
+    }
+
+    /**
+     * The groups each site turns off, as {@code {"host": ["ads", ...]}} JSON; a host covers its subdomains. The first
+     * time a site turns one off, the engine loads an engine per group, from its own cache. UI thread.
+     */
+    public static void setSiteBlocking(String json) {
+        ThreadUtils.assertOnUiThread();
+        BayEngineJni.get().setSiteBlocking(json);
     }
 
     /** The tracking-parameter table navigations drop (@bay/core's TRACKING_PARAMS, as JSON). */
@@ -199,12 +212,15 @@ public final class BayEngine {
     interface Natives {
         void setContentBlocking(
                 String filesJson,
+                String groupsJson,
                 String version,
                 String cachePath,
                 @Nullable String resourcesPath,
                 int requestId);
 
         void setBlockingPausedHosts(String hostsJson);
+
+        void setSiteBlocking(String json);
 
         boolean setTrackingParameters(String json);
 

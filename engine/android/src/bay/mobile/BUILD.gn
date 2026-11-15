@@ -37,6 +37,8 @@ source_set("lib") {
   sources = [
     "app/bay_main_delegate.cc",
     "app/bay_main_delegate.h",
+    "browser/bay_app_link_throttle.cc",
+    "browser/bay_app_link_throttle.h",
     "browser/bay_browser_context.cc",
     "browser/bay_browser_context.h",
     "browser/bay_browser_main_parts.cc",

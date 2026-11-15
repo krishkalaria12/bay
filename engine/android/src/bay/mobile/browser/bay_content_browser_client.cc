@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/posix/global_descriptors.h"
 #include "bay/filter/nn_request_filter.h"
+#include "bay/mobile/browser/bay_app_link_throttle.h"
 #include "bay/mobile/browser/bay_browser_main_parts.h"
 #include "bay/mobile/browser/bay_https_upgrade_throttle.h"
 #include "bay/mobile/browser/bay_tab.h"
@@ -141,6 +142,8 @@ std::vector<base::FilePath> BayContentBrowserClient::GetNetworkContextsParentDir
 void BayContentBrowserClient::CreateThrottlesForNavigation(content::NavigationThrottleRegistry& registry) {
   nncore::MaybeAddRequestFilterThrottle(registry);
   BayHttpsUpgradeThrottle::MaybeAdd(registry);
+  // After the HTTPS upgrade, which restarts an http: link at its https: address before an app is asked.
+  BayAppLinkThrottle::MaybeAdd(registry);
 }
 
 void BayContentBrowserClient::WillCreateURLLoaderFactory(

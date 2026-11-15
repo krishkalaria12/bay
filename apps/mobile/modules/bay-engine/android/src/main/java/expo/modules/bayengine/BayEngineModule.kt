@@ -92,18 +92,20 @@ class BayEngineModule : Module() {
 
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
-    AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
+    AsyncFunction("setContentBlocking") { files: List<String>?, version: String, groups: List<String>?, promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
         promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
         return@AsyncFunction
       }
-      BayEngineBackend.setContentBlocking(files, version, context) { result ->
+      BayEngineBackend.setContentBlocking(files, groups, version, context) { result ->
         result.fold({ promise.resolve(null) }, { promise.reject("E_CONTENT_BLOCKING", "Couldn't prepare the content blocker.", it) })
       }
     }.runOnQueue(Queues.MAIN)
 
     Function("setBlockingPausedHosts") { hosts: List<String> -> BayEngineBackend.setBlockingPausedHosts(hosts) }
+
+    Function("setSiteBlocking") { json: String -> BayEngineBackend.setSiteBlocking(json) }
 
     Function("setTrackingParameters") { json: String -> BayEngineBackend.setTrackingParameters(json) }
 

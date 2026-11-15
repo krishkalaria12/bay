@@ -356,6 +356,16 @@ public final class BayTab extends WebContentsDelegateAndroid {
         mClient.onExternalUrl(url, userGesture);
     }
 
+    @CalledByNative
+    private boolean openAppLink(String url) {
+        return mClient.onAppLink(url);
+    }
+
+    @CalledByNative
+    private void onBlockedCount(int count) {
+        mClient.onBlockedCount(count);
+    }
+
     /** Native coordinates are CSS pixels in the view; the client gets fractions of the view's size. */
     @CalledByNative
     private void onContextMenu(String linkUrl, String linkText, String imageUrl, int x, int y) {

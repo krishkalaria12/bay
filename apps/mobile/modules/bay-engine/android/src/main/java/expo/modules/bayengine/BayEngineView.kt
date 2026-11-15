@@ -2,10 +2,12 @@ package expo.modules.bayengine
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -98,8 +100,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   var swipeMode = "edges"
 
   /**
-   * Open app links in (C12). Declared for the shared API: the engine doesn't ask before a link loads in the page yet, so
-   * Android keeps every web link in Bay.
+   * Open app links in (C12, C19): "app" hands a link tapped in the page to another site to the app that claims it
+   * (Android's verified app links, never another browser); "browser" keeps every web link in Bay.
    */
   var appLinks = "app"
 
@@ -518,6 +520,25 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       val id = newRequestId("external")
       pendingExternal[id] = url
       emitPageRequest(id, "external", externalUrl = url)
+    }
+
+    override fun onAppLink(url: String): Boolean {
+      // A non-browser app only (Android 11 and later can say so); on Android 10 every web link stays in Bay.
+      if (appLinks != "app" || disposed || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+      val activity = activityFor(context) ?: appContext.currentActivity ?: return false
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        .addCategory(Intent.CATEGORY_BROWSABLE)
+        .addFlags(Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
+      return try {
+        activity.startActivity(intent)
+        true
+      } catch (_: ActivityNotFoundException) {
+        false
+      }
+    }
+
+    override fun onBlockedCount(count: Int) {
+      if (!disposed) onBlockedCount(mapOf("count" to count))
     }
 
     override fun onRequestsCancelled() = forgetPageRequests()
