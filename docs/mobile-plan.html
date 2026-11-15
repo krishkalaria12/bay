@@ -520,2348 +520,1076 @@
   <body>
     <main>
       <header>
-        <div class="eyebrow">Plan · 10 November 2026 · one document for the mobile app</div>
-        <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
+        <div class="eyebrow">Plan · 15 November 2026 · what is left for the mobile app</div>
+        <h1>Bay for iPhone and Android.<br />What is left, and what Cra shows we're missing.</h1>
         <p class="lead">
-          Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
-          opens to a search field, the page runs edge to edge, and floating controls sit at the bottom. iOS draws it in Liquid Glass. Android draws it with our
-          own components, the way Arc Search does on Android: no Material and no imitation glass.
+          Everything the earlier rounds listed (I1–I6, A1–A8, B1–B21, the motion round and the stages) is now in code. This plan keeps only the work that is
+          still open: proving it on real devices and on our own Android engine, shipping test builds, and the gaps a side-by-side run against Cra's iPhone app
+          turned up.
         </p>
         <p>
-          This is the whole mobile plan in one place: how the app is built and tested, what is still missing, what the next round adds, and the order the work
-          happens in. It merges three earlier documents — the roadmap, the 5 November iOS parity audit and the next round's plan — so there is one plan and one
-          set of item ids (<code>I</code>, <code>A</code>, <code>B</code>) to point at.
+          What was built, and why, is in the pull requests (#11–#24) and their commits. Item ids are new: <code>V</code> proves what exists,
+          <code>R</code> ships it, <code>C</code> comes from the Cra comparison, <code>L</code> is after the first release.
         </p>
         <div class="numbers">
-          <div><b>7,055</b><span>lines of TypeScript that run on both apps: every screen, panel, page script and the store (6,438 on 5 November)</span></div>
-          <div><b>218 / 230</b><span>lines of UI written for iOS only / Android only (192 / 203)</span></div>
-          <div><b>0</b><span>real iOS gaps left: all six (I1–I6) are done in code as of 7 November; I5 is accepted as an engine limit (D4).</span></div>
-          <div><b>1</b><span>things Android lacks and iOS has or is closer on, left of six: only on-device translation (A6) remains.</span></div>
+          <div>
+            <b>17,545</b><span>lines of shared TypeScript in <code>src</code> (English strings counted once)</span>
+          </div>
+          <div><b>341 / 181</b><span>lines of UI written for iOS only / Android only</span></div>
+          <div>
+            <b>18</b><span>Argent e2e tests in <code>.argent/e2e</code>, all passing on the iPhone simulator</span>
+          </div>
+          <div><b>0</b><span>runs of Bay's own Chromium on a device: the first engine build is running now</span></div>
         </div>
         <nav aria-label="Plan sections">
-          <a href="#design">Design</a><a href="#testing">Testing</a><a href="#engine">Engines</a><a href="#architecture">Architecture</a
-          ><a href="#target">Target UI</a><a href="#reuse">What we reuse</a><a href="#progress">Where we are</a><a href="#gaps">What is missing</a
-          ><a href="#arc">Arc mobile</a><a href="#motion">The next round</a><a href="#compare">Arc, Lens, Bay</a><a href="#prs">PRs</a
-          ><a href="#stages">Stages</a><a href="#phases">Phases</a><a href="#decisions">Decisions</a><a href="#risks">Risks</a><a href="#sources">Sources</a>
+          <a href="#now">Where we are</a><a href="#built">How it's built</a><a href="#cra">Cra compared</a><a href="#screens">Screen by screen</a
+          ><a href="#theirs">Cra has, Bay lacks</a><a href="#ours">Bay has, Cra lacks</a><a href="#ui">UI to take</a><a href="#open">What is left</a
+          ><a href="#order">Order</a><a href="#decisions">Decisions</a><a href="#risks">Risks</a><a href="#sources">Sources</a>
         </nav>
         <div class="clock">
-          <div><b>13 days</b><span>until 23 Nov: Arc turns off AI, sign-in and sync</span></div>
-          <div><b>42 days</b><span>until 22 Dec: Arc Search leaves Google Play</span></div>
-          <div><b>9 commits</b><span>shipped since the 5 Nov audit: downloads, Google sign-in, pull to refresh</span></div>
+          <div><b>8 days</b><span>until 23 Nov: Arc turns off Browse for Me, sign-in and sync</span></div>
+          <div><b>37 days</b><span>until 22 Dec: Arc Search leaves Google Play</span></div>
+          <div><b>3 PRs</b><span>open and stacked: #21 → #22 → #24</span></div>
         </div>
       </header>
 
-      <section id="design">
-        <div class="eyebrow">01 · Design</div>
-        <h2>One design, drawn natively on each platform</h2>
+      <section id="now">
+        <div class="eyebrow">01 · Where we are</div>
+        <h2>Three stacked pull requests, one engine build away from Android</h2>
         <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>&nbsp;</th>
-                <th>iOS</th>
-                <th>Android</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Design</td>
-                <td colspan="2">Lens, on both: same screens, layout, flows and gestures (the screen list is under <a href="#target">Target UI</a>)</td>
-              </tr>
-              <tr>
-                <td>Floating controls</td>
-                <td>
-                  Liquid Glass through <code>@expo/ui/swift-ui</code> (<code>buttonStyle("glass")</code>, <code>glassEffect</code>,
-                  <code>GlassEffectContainer</code>)
-                </td>
-                <td>
-                  Our own React Native views, following Arc Search for Android: flat surfaces, translucent fills and hairline edges; over a page, the bar takes
-                  the page's colour. No Material components, ripples or elevation, and no blur pretending to be glass.
-                </td>
-              </tr>
-              <tr>
-                <td>Sheets and screens</td>
-                <td colspan="2">HeroUI Native, shared (settings, archive, reader settings, inspector panels, fonts, downloads)</td>
-              </tr>
-              <tr>
-                <td>Icons</td>
-                <td>SF Symbols</td>
-                <td>Material Symbols outline paths (<code>src/chrome/MaterialSymbol.tsx</code>), the same style Arc uses on Android</td>
-              </tr>
-              <tr>
-                <td>Motion and gestures</td>
-                <td colspan="2">Reanimated and Gesture Handler, shared: the bar hides on scroll, swipe the bar to switch tabs, drag up to expand it</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">
-          Arc's Android app shows the pattern: a flat bar with a tab-stack button, a wide translucent pill in the middle, and a control that pulls up into a
-          tinted sheet with back/forward, the domain, copy link, reload, a row of tiles (Translate, Pinned, Find, Share), and a blocked-trackers line. We use
-          that way of drawing for Lens's layout. The placeholder already does: <code>StartToolbar.ios.tsx</code> uses glass buttons, and
-          <code>StartToolbar.android.tsx</code> uses flat round buttons in the same places.
-        </p>
-      </section>
-
-      <section id="testing">
-        <div class="eyebrow">02 · Testing</div>
-        <h2>Testing: iOS completely, Android for every UI change</h2>
-        <ul>
-          <li><b>iOS is tested completely:</b> every flow, screen and state, with Argent on the simulator.</li>
-          <li>
-            <b>Every UI change is also tested on Android</b> before it's done: run it on the emulator, screenshot it next to iOS, and pass <code>pnpm e2e</code>
-            on both. The Android UI is our own code, so it breaks independently; passing on iOS is never enough on its own.
-          </li>
-          <li>
-            Each finished flow is recorded once as an Argent e2e test with a launch map (<code>ios:</code> / <code>android:</code>), so one file runs on both.
-          </li>
-          <li>Engine work adds a parity check: the same page gives the same features and blocking results on both engines.</li>
-          <li>Performance claims need Argent's profilers on both: <code>native-profiler-*</code> uses Instruments on iOS and Perfetto on Android.</li>
-        </ul>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Command (in <code>apps/mobile</code>)</th>
-                <th>What it does</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>pnpm start</code></td>
-                <td>Metro, serving both apps (run it in the background).</td>
-              </tr>
-              <tr>
-                <td><code>pnpm native</code></td>
-                <td>
-                  Boots the iOS simulator and the <code>bay-pixel</code> emulator, then builds and installs both dev clients in parallel.
-                  <code>pnpm ios</code> or <code>pnpm android</code> builds one.
-                </td>
-              </tr>
-              <tr>
-                <td><code>pnpm e2e</code></td>
-                <td>Boots both devices if needed and runs every Argent test in <code>.argent/e2e</code> on iOS, then on Android.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="engine">
-        <div class="eyebrow">03 · Engines</div>
-        <h2>Two engines, one API</h2>
-        <p>
-          The app's JavaScript talks to one interface, <code>@bay/engine</code> (the local Expo module <code>modules/bay-engine</code>). Every feature ships on
-          both, built with each engine's own tools. Page scripts (reader, hide elements, inspector, font identifier) are shared JavaScript injected into an
-          isolated world on both engines.
-        </p>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>&nbsp;</th>
-                <th>iOS: WebKit</th>
-                <th>Android, phases 1–6: system WebView</th>
-                <th>Android, phase 7 on: our Chromium</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>What renders</td>
-                <td><code>WKWebView</code>, updated with iOS</td>
-                <td><code>android.webkit.WebView</code> (Chromium, updated through Google Play)</td>
-                <td>Chromium's content layer with our embedder <code>//bay/mobile</code>, arm64</td>
-              </tr>
-              <tr>
-                <td>Native side of <code>bay-engine</code></td>
-                <td>Swift</td>
-                <td>Kotlin over WebView and <code>androidx.webkit</code></td>
-                <td>Kotlin over <code>bay-engine.aar</code> (Java API + JNI)</td>
-              </tr>
-              <tr>
-                <td>Blocking</td>
-                <td>
-                  Bay's Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust) converts the lists to WebKit content rule lists, compiled once per
-                  list version
-                </td>
-                <td>
-                  The same Rust blocker checks every request (<code>shouldInterceptRequest</code>) and supplies cosmetic CSS; the built engine is cached per
-                  list version
-                </td>
-                <td>Desktop's blocker itself, through <code>//bay/content</code></td>
-              </tr>
-              <tr>
-                <td>Private tabs</td>
-                <td>Non-persistent data store</td>
-                <td>A separate WebView profile (<code>androidx.webkit</code> multi-profile), wiped on close</td>
-                <td>Off-the-record profile</td>
-              </tr>
-              <tr>
-                <td>Tab snapshots</td>
-                <td><code>takeSnapshot(with:)</code></td>
-                <td>Draw the WebView to a bitmap</td>
-                <td>Surface copy</td>
-              </tr>
-              <tr>
-                <td>Engine build</td>
-                <td>None</td>
-                <td>None</td>
-                <td>
-                  On a Linux machine (Chromium doesn't build for Android on macOS), published per <code>engine/</code> tree as a GitHub prerelease like
-                  desktop's <code>publish-engine.sh</code>; the app fetches it
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">
-          Because the swap happens behind <code>@bay/engine</code> and the e2e tests only use the UI, the same tests prove the Android app before and after our
-          Chromium goes in. Blink on iOS stays out of scope: Apple allows it only in the EU and Japan.
-        </p>
-      </section>
-
-      <section id="architecture">
-        <div class="eyebrow">04 · Architecture</div>
-        <h2>Architecture</h2>
-        <div class="layers">
-          <div class="layer">
-            <b>Routes · <code>src/app</code></b>
-            <p>
-              One browser route: the start page, page view, tab switcher and search are overlays of one screen, so the engine view never remounts. Settings and
-              archive are sheets.
-            </p>
-          </div>
-          <div class="layer">
-            <b>Chrome · <code>src/chrome</code></b>
-            <p>
-              Floating controls, search card, popovers, edit-mode toolbars: <code>*.ios.tsx</code> in SwiftUI glass, <code>*.android.tsx</code> as our own
-              views. Each pair shares one props type.
-            </p>
-          </div>
-          <div class="layer">
-            <b>Panels · <code>src/panels</code></b>
-            <p>HeroUI Native screens and sheets, the same on both.</p>
-          </div>
-          <div class="layer">
-            <b>State · <code>src/store</code></b>
-            <p>
-              One zustand store for tabs, history, pins, the archive and preferences, saved as a versioned JSON file (<code>expo-file-system</code>, written
-              atomically). The tab model matches desktop's so sync is a mapping.
-            </p>
-          </div>
-          <div class="layer">
-            <b>Engine API · <code>modules/bay-engine</code></b>
-            <p>
-              <code>EngineView</code>, <code>Tab</code> (load, back and forward, snapshot, run script in an isolated world, find), profiles, blocking, downloads
-              and events. <code>ios/</code> wraps <code>WKWebView</code>; <code>android/</code> wraps the system WebView, then <code>bay-engine.aar</code>.
-            </p>
-          </div>
-          <div class="layer">
-            <b>Page scripts · <code>modules/bay-engine/scripts</code></b>
-            <p>Shared JavaScript injected on both engines: reader, hide elements, inspector, font identifier.</p>
-          </div>
-          <div class="layer">
-            <b>Android embedder · <code>engine/android</code> → <code>//bay/mobile</code> (phase 7)</b>
-            <p>
-              C++ on <code>content/public</code>, with <code>//bay/content</code> for blocking; copied into the Chromium tree by an <code>apply.sh</code>, like
-              <code>engine/nncore</code>.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="target">
-        <div class="eyebrow">05 · Target UI</div>
-        <h2>Target UI, screen by screen</h2>
-        <p>
-          From the 25-second demo and Lens's press kit. Times refer to <code>apps/mobile/.reference/lens-demo.mp4</code> (git-ignored, with one frame per second
-          and the press screenshots). Each screen ships on both platforms in the same layout. Bay keeps its own name, icon, art and copy.
-        </p>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Screen</th>
-                <th>What it shows</th>
-                <th>Engine feature it needs</th>
-                <th>Phase</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Start page <span class="note">0:00</span></td>
-                <td>Gradient wallpaper with a dot grid, "Tap to search ↓", three round buttons: archive, search, settings.</td>
-                <td>None</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Search sheet <span class="note">0:01–0:02</span></td>
-                <td>Card above the keyboard: address field, pinned sites, history and suggestions with a ↖ fill button, inline autocomplete.</td>
-                <td>None (<code>@bay/core</code> omnibox)</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Page view <span class="note">0:03, 0:09</span></td>
-                <td>Edge-to-edge page; a small floating bar (tabs, search pill, "…") that hides on scroll.</td>
-                <td>Scroll events</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Link menu <span class="note">0:10–0:11</span></td>
-                <td>Long-press preview: Open in New Tab, Open in Background, Copy Link, Share, Where Does It Go.</td>
-                <td>Long-press hit test with the link URL</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Tab switcher <span class="note">0:23–0:24</span></td>
-                <td>Horizontal stack of overlapping page cards with favicon and title.</td>
-                <td>Snapshots</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Private browsing <span class="note">press kit</span></td>
-                <td>Dark search card, "You're browsing privately", optional biometric lock.</td>
-                <td>Private profile</td>
-                <td>3</td>
-              </tr>
-              <tr>
-                <td>Reader <span class="note">0:04–0:05</span></td>
-                <td>Typeset article; popover with font, seven themes, size, Hide Reader.</td>
-                <td>Shared page script (Readability)</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td>Hide elements <span class="note">0:06–0:08</span></td>
-                <td>Edit mode with highlight label, Zap, undo/redo, "2 hidden here".</td>
-                <td>Shared page script + per-site rules</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td>Font identifier <span class="note">0:12–0:13</span></td>
-                <td>Magnifier on selected text; Fonts sheet with samples.</td>
-                <td>Shared page script (computed fonts, loaded font faces)</td>
-                <td>5</td>
-              </tr>
-              <tr>
-                <td>Mini player <span class="note">0:16–0:17</span></td>
-                <td>Video keeps playing in a compact bar.</td>
-                <td>Media session; a background playback service on Android</td>
-                <td>5</td>
-              </tr>
-              <tr>
-                <td>Web inspector <span class="note">0:18–0:21</span></td>
-                <td>Tap to select; selector, size, Box/Text/Colors/Element, box model, Parent/Child.</td>
-                <td>Shared page script (computed styles, box sizes)</td>
-                <td>5</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="reuse">
-        <div class="eyebrow">06 · What we reuse</div>
-        <h2>What we reuse</h2>
-        <h2>What carries over from the desktop engine (phase 7)</h2>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Desktop piece</th>
-                <th>On mobile</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Pinned Chromium 154 checkout (<code>scripts/download-engine</code>)</td>
-                <td><b>Reused for Android</b>, from a Linux copy of the same pin with <code>target_os = ["android"]</code> in <code>.gclient</code>.</td>
-              </tr>
-              <tr>
-                <td>ungoogled-chromium patches and domain substitution</td>
-                <td>
-                  <b>Audit and pin for Android.</b> Verify compatible privacy patches and domain substitution against the selected Chromium revision; a
-                  compatible Android variant is not yet a proven dependency. See the <a href="android-chromium-plan.html#reuse">engine implementation plan</a>.
-                </td>
-              </tr>
-              <tr>
-                <td>Bay's 33 <code>chromium-*.patch</code> files</td>
-                <td>
-                  <b>Mostly not:</b> most hook desktop Chrome UI. Branding, the scripts policy, injected style-sheet order and local password generation may be
-                  shared.
-                </td>
-              </tr>
-              <tr>
-                <td>18 <code>cef-*.patch</code> files</td>
-                <td><b>No.</b> CEF isn't built for mobile.</td>
-              </tr>
-              <tr>
-                <td><code>//bay/core</code> (NNCore)</td>
-                <td>
-                  <b>Split:</b> move the parts that only need <code>content/</code> (request blocking, renderer code, mojom) into <code>//bay/content</code>,
-                  shared with <code>//bay/mobile</code>.
-                </td>
-              </tr>
-              <tr>
-                <td>Filter lists and the content blocker</td>
-                <td><b>Reused</b> on every engine: one list source for desktop, iOS and Android.</td>
-              </tr>
-              <tr>
-                <td><code>@bay/core</code> (omnibox, bangs, engines, <code>cleanUrl</code>, …)</td>
-                <td><b>Reused</b> from phase 2, as-is, on both platforms.</td>
-              </tr>
-              <tr>
-                <td><code>@bay/sync</code></td>
-                <td><b>Reused after the first release</b>: the TypeScript as-is, the Swift module ported to iOS, a Kotlin version for Android.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <h3 id="reuse-layers">Reusable vs standalone</h3>
-        <p>The app is already built so that most new work lands once. The table shows what exists today.</p>
-        <div class="wrap" tabindex="0" role="region" aria-label="Code layers">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Layer</th>
-                <th scope="col">Where</th>
-                <th scope="col">Size</th>
-                <th scope="col">Rule for new work</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row"><span class="tag shared">Shared</span> Screens and panels</th>
-                <td><code>src/browser</code>, <code>src/panels</code></td>
-                <td rowspan="3">7,055 lines in <code>src</code></td>
-                <td>Default home for any feature</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag shared">Shared</span> Page scripts</th>
-                <td><code>src/pagescripts</code> (Reader, picker, find, inspect, media)</td>
-                <td>Reach for these before native code. They work on both engines and on the Chromium swap.</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag shared">Shared</span> Store</th>
-                <td><code>src/store</code>, one versioned JSON document</td>
-                <td>New preferences go here</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag api">Shared + 2 native</span> Engine API</th>
-                <td><code>modules/bay-engine/src/index.ts</code></td>
-                <td>213 lines</td>
-                <td>Any native ability gets one TypeScript shape first</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag ios">iOS only</span> Engine</th>
-                <td><code>modules/bay-engine/ios</code>, Swift over <code>WKWebView</code></td>
-                <td>1,160 lines</td>
-                <td>Stays when Android swaps engines</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag android">Android only</span> Engine</th>
-                <td><code>modules/bay-engine/android</code>, Kotlin over WebView</td>
-                <td>1,748 lines</td>
-                <td><strong>Replaced in phase 7.</strong> Keep new WebView code thin: it has a known end date.</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag ios">iOS only</span> Drawing</th>
-                <td><code>src/chrome/*.ios.tsx</code>: bar, glass button, pill button, icon, surface, toggle</td>
-                <td>218 lines</td>
-                <td>Share one props type with the Android file</td>
-              </tr>
-              <tr>
-                <th scope="row"><span class="tag android">Android only</span> Drawing</th>
-                <td><code>src/chrome/*.android.tsx</code>, <code>MaterialSymbol.tsx</code></td>
-                <td>230 lines</td>
-                <td>Same</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h3 id="page-requests">The one new shared piece: Page requests</h3>
-        <p>
-          Four separate gaps are the same shape: a page asks a question and waits for the person to answer. They are
-          <code>alert</code>/<code>confirm</code>/<code>prompt</code> (I3), location, camera and microphone (B7), HTTP sign-in (B3), and "open this in another
-          app?" (B5). Build one engine event, <code>onPageRequest</code>, one call, <code>answerPageRequest(id, answer)</code>, and one shared sheet. Each
-          native side only holds the completion handler until the answer arrives. It also keeps the promise of one design with no Material on Android, and each
-          site's answers can feed per-site settings (B12) later.
-        </p>
-
-        <h3 id="from-desktop">From desktop</h3>
-        <div class="wrap" tabindex="0" role="region" aria-label="Desktop code reuse">
           <table class="tight">
             <thead>
               <tr>
-                <th scope="col">Package</th>
-                <th scope="col">Status</th>
-                <th scope="col">Use</th>
+                <th scope="col">PR</th>
+                <th scope="col">What it does</th>
+                <th scope="col">State</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <th scope="row"><code>@bay/core</code></th>
-                <td>In use: input, engines, suggestions, <code>cleanUrl</code>, element info</td>
+                <th scope="row">#21 <code>feat/android-engine</code></th>
+                <td>Android renders with Bay's own Chromium (154), built on GitHub runners. No system WebView fallback.</td>
                 <td>
-                  Already there and filtered out or unused: bangs, currency, emoji and quick-create rows (<code>useSuggestions.ts:12</code> keeps only page,
-                  search and calc), site search, and text fragments for "copy link to highlight". Turning these on costs almost nothing.
+                  <span class="st part">Building</span>
+                  <small>
+                    P0 built and ran content shell. P2–P5 were written without compiling (Chromium can't build for Android on a Mac); run 43662871170 is the
+                    first build of Bay's own engine code. Details and gaps: <a href="android-chromium-plan.html">android-chromium-plan.html</a>.
+                  </small>
                 </td>
               </tr>
               <tr>
-                <th scope="row"><code>packages/adblock</code></th>
-                <td>In use on both</td>
-                <td>Nothing to do</td>
+                <th scope="row">#22 <code>refactor/mobile-effect</code></th>
+                <td>Async work on one Effect runtime (<a href="mobile-effect-plan.html">mobile-effect-plan.html</a>).</td>
+                <td><span class="st done">Tested on iOS</span><small>All e2e passed on iPhone and the WebView-era Android emulator.</small></td>
               </tr>
               <tr>
-                <th scope="row"><code>@bay/sync</code></th>
-                <td>Not used yet</td>
-                <td>
-                  After first release: TypeScript as it is, Swift core ported to iOS, Kotlin written for Android. Mobile's tab model already mirrors desktop's.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row"><code>packages/import</code></th>
-                <td>Not reusable here</td>
-                <td>It reads browser files on a Mac. B2 is a small new text parser instead.</td>
-              </tr>
-              <tr>
-                <th scope="row"><code>packages/chromium</code>, <code>cef</code>, <code>nncore</code></th>
-                <td>Not reusable now</td>
-                <td>Bound to desktop's engine. Phase 7 splits out the parts Android can use.</td>
+                <th scope="row">#24 <code>feat/mobile-import</code></th>
+                <td>Import bookmarks and history from Safari, Chrome (Takeout), any bookmarks file, or pasted Arc Search tabs; bookmarks on mobile.</td>
+                <td><span class="st part">iOS only</span><small>Android built but never run. Real Safari and Takeout exports not tried (V3).</small></td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section id="progress">
-        <div class="eyebrow">07 · Where we are</div>
-        <h2>Since the plan: what landed</h2>
+      <section id="built">
+        <div class="eyebrow">02 · How it's built</div>
+        <h2>The rules that still hold</h2>
+        <ul>
+          <li>
+            <b>One design, Lens, on both.</b> iOS draws it in Liquid Glass (<code>@expo/ui/swift-ui</code>); Android with our own views in Arc Search for
+            Android's style: no Material, no imitation glass. Tokens and the type scale are in <code>apps/mobile/AGENTS.md</code>.
+          </li>
+          <li>
+            <b>Two engines, one API.</b> <code>@bay/engine</code> (<code>modules/bay-engine</code>): WebKit on iOS (1,867 lines of Swift), Bay's Chromium on
+            Android (2,336 lines of Kotlin). Page scripts are shared JavaScript. Blocking is Bay's Rust blocker (<code>packages/adblock</code>) on both.
+          </li>
+          <li>
+            <b>Shared first.</b> Screens, panels, store and page scripts are shared; platform files are <code>Name.ios.tsx</code> /
+            <code>Name.android.tsx</code> with one props type.
+          </li>
+          <li>
+            <b>Testing.</b> iOS completely; every UI change also on Android; finished flows become Argent e2e tests that run on both. Batch changes, run e2e
+            once per batch through the MCP runner (<code>apps/mobile/AGENTS.md</code>, "Testing efficiently").
+          </li>
+          <li><b>No server.</b> Nothing leaves the phone except what a page or search engine asks for. AI, if any, runs on the device.</li>
+        </ul>
+      </section>
+
+      <section id="cra">
+        <div class="eyebrow">03 · Cra compared</div>
+        <h2>Cra for iPhone, run next to Bay</h2>
         <p>
-          Two PRs merged on 5 November: #12 (Android downloads, YouTube avatars, Google sign-in on Android) and #11 (the iOS side, plus polish shared by both).
-          Both came out of testing on a real phone, a Galaxy M34 on Android 16.
+          <a href="https://github.com/VictorKildahl/cra/tree/main/iOS">Cra</a> is an MIT-licensed Arc replacement (Swift, Chromium through CEF on the Mac). Its
+          iPhone app sets out to match Arc Search 1.49 screen for screen: UIKit on WKWebView, 10,394 lines of Swift plus about 3,300 lines of layout and policy
+          in <code>CraCore/Mobile</code>, measured from Arc Search's App Store footage and recordings, with 41 XCUITests. It is iPhone and iPad only, has a
+          TestFlight beta, and its branch paused on 12 November (<code>docs/ios-parity.md</code>).
         </p>
-        <div class="wrap" tabindex="0" role="region" aria-label="Work landed since the plan">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Item</th>
-                <th scope="col">What changed</th>
-                <th scope="col">Commits</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">B1 Sign in with Google</th>
-                <td>
-                  Android removes <code>; wv</code> and <code>Version/…</code> from the user agent and sends no <code>X-Requested-With</code> header. iOS adds
-                  Safari's <code>Version/… Mobile/15E148 Safari/604.1</code> through <code>applicationNameForUserAgent</code>.
-                </td>
-                <td><code>1da5f44d</code>, <code>e72e2f19</code></td>
-                <td>
-                  <span class="st done">Landed</span> Not yet tried on a device: the phone disconnected before the test, and iOS isn't built. "Continue with
-                  Google" popups still replace the page (B19).
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">I2 Downloads that outlive the app</th>
-                <td>
-                  iOS keeps <code>WKDownload</code>. On iOS 26 each download runs as a <code>BGContinuedProcessingTask</code>, so the system shows its progress
-                  and a stop button, and a private tab's file shows as "Private download". Older versions get the usual background time. File names, "Starting…"
-                  and error messages now match Android, and an error status from the server (anything outside 2xx) fails the download instead of saving the
-                  error page.
-                </td>
-                <td><code>38bd632b</code>, <code>6c3d571f</code></td>
-                <td>
-                  <span class="st done">Landed</span> Added 7 November: a failed download resumes once from its <code>resumeData</code> in place instead of
-                  deleting the partial file, and a finished or failed download posts a notification when Bay isn't on screen (permission asked on the first
-                  download, as on Android). Still missing, deliberately deferred: a background <code>URLSession</code> that survives the app being killed — the
-                  plan only calls for it if that turns out to matter, and Expo's app delegate doesn't forward the completion handler it needs.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">I6 Liquid Glass coverage</th>
-                <td>
-                  Open, Cancel and Remove in the download toast and panel are glass capsules (<code>PillButton.ios.tsx</code>). Pull to refresh gives a light
-                  haptic at the trigger point.
-                </td>
-                <td><code>1c3b7072</code>, <code>f8b63568</code>, <code>4aa4561b</code></td>
-                <td>
-                  <span class="st done">Landed</span> Added 7 November: <code>PanelSheet</code> now has a glass background on iOS (<code
-                    >PanelSheet.ios.tsx</code
-                  >
-                  over the shared contents, solid on Android), and haptics via <code>expo-haptics</code> on tab close, pin and long-press. The new page-request
-                  sheet reuses <code>PillButton</code> for its OK/Cancel buttons.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">I1 System media controls</th>
-                <td>
-                  iOS implements <code>setMediaSession</code>: <code>BayMedia.swift</code> posts Now Playing info and registers play/pause/toggle/stop remote
-                  commands, so the lock screen and Control Center work like Android's media notification. WebKit doesn't populate the Now Playing center for
-                  <code>WKWebView</code> media, so Bay posts it itself from the page's media report.
-                </td>
-                <td><code>93920de1</code></td>
-                <td><span class="st done">Landed</span> In code only; needs a real iPhone to check against what WebKit shows on its own (stage 0).</td>
-              </tr>
-              <tr>
-                <th scope="row">I3 <code>alert</code>, <code>confirm</code>, <code>prompt</code></th>
-                <td>
-                  Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> delivers the answer (iOS's
-                  <code>runJavaScript…Panel</code> delegate methods, Android's <code>WebChromeClient</code> <code>onJs…</code> methods). One shared sheet
-                  (<code>PageRequest.tsx</code>) presents them on both apps, with a queue per tab; dismissing it or pressing Android Back cancels the dialog,
-                  and a navigation cancels it too.
-                </td>
-                <td><code>936d624e</code></td>
-                <td><span class="st done">Landed</span> In code only; needs a real page that calls <code>alert</code> on a device on both apps.</td>
-              </tr>
-              <tr>
-                <th scope="row">I4 Link menu misses some links</th>
-                <td>
-                  iOS now gets the link from WebKit's <code>contextMenuConfigurationForElement</code>, whose <code>linkURL</code> covers iframes and shadow DOM.
-                  The injected callout style, the long-press gesture recognizer and the main-frame hit test are gone; the menu title is the URL, since the
-                  context-menu info carries no anchor text.
-                </td>
-                <td><code>4840aa3b</code></td>
-                <td><span class="st done">Landed</span> In code only; needs an iframe link long-pressed on a real iPhone (stage 1's new check).</td>
-              </tr>
-              <tr>
-                <th scope="row">I5 Depth of ad blocking</th>
-                <td>
-                  Accepted as an engine limit (D4): a web view can't intercept subresources, so iOS stays on static WebKit rules plus scriptlets. No code
-                  changed. iOS's measured score stands at 73% (97 of 132); the same test on Android still needs a device.
-                </td>
-                <td>—</td>
-                <td><span class="st done">Landed</span> Decision recorded; Android score and any generic-hiding page script wait on real-device evidence.</td>
-              </tr>
-              <tr>
-                <th scope="row">Android downloads <span class="kind">Not in the plan</span></th>
-                <td>
-                  On Android 10 and later, <code>BayDownloader.kt</code> fetches the file itself in a data-sync foreground service and saves it to Downloads
-                  through MediaStore. Its notification shows progress and Cancel, opens the file when done, and gives the reason when a download fails.
-                  <code>DownloadManager</code> is kept only for Android 9 and older. Bay asks for <code>POST_NOTIFICATIONS</code> on the first download.
-                </td>
-                <td><code>b12b1685</code></td>
-                <td>
-                  <span class="st extra">New</span> Tested on the phone, except Cancel, a large file and downloading in the background. Makes I2's description
-                  of Android out of date.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Download-only tab <span class="kind">Not in the plan</span></th>
-                <td>
-                  If a new tab's first navigation turns into a download, the tab goes back to the start page. Before, it kept the file's address and downloaded
-                  the file again each time it was restored.
-                </td>
-                <td><code>b12b1685</code>, <code>e72e2f19</code></td>
-                <td><span class="st extra">New</span> Both apps. Tested on Android only.</td>
-              </tr>
-              <tr>
-                <th scope="row">Pull to refresh <span class="kind">Not in the plan</span></th>
-                <td>
-                  Android: the gap above the page takes the page's own colour, the arc draws as you pull, and the page stays down with a spinner until the
-                  reload runs. iOS: the same haptic at the trigger point, and the spinner shows for at least 0.45 s.
-                </td>
-                <td><code>e7746b14</code>, <code>f8b63568</code></td>
-                <td><span class="st extra">New</span> Recorded and checked on Android.</td>
-              </tr>
-              <tr>
-                <th scope="row">Bar swipe <span class="kind">Not in the plan</span></th>
-                <td>
-                  The search capsule follows the finger, slides out and springs back in with the next tab's site. It resists at the first and last tab. Shared,
-                  so iOS's glass capsule moves the same way.
-                </td>
-                <td><code>511ad37d</code></td>
-                <td><span class="st extra">New</span> Recorded and checked on Android.</td>
-              </tr>
-              <tr>
-                <th scope="row">Ad blocking <span class="kind">Next to I5</span></th>
-                <td>
-                  Peter Lowe's list now comes as bare hostnames, and adblock-rust matched each one anywhere in a URL. Its <code>t.co</code> entry blocked
-                  <code>ggpht.com</code> and <code>googleusercontent.com</code>, which carry YouTube's avatars and Google account pictures, and broke
-                  <code>microsoft.com</code>. Now a line that is only a hostname is read as <code>||host^</code>. This changes desktop too. Mobile bumps
-                  <code>ENGINE_RULES</code> so both engines rebuild their rules.
-                </td>
-                <td><code>f7318207</code></td>
-                <td><span class="st extra">New</span> Checked against the real lists on a Mac, not yet on the phone.</td>
-              </tr>
-              <tr>
-                <th scope="row">A1 to A8 Motion <span class="kind">Next round</span></th>
-                <td>
-                  The next round of the plan: one spring and one press feedback for everything (<code>src/chrome/motion.ts</code>,
-                  <code>src/chrome/PressFeedback.tsx</code>), haptics for pin, unpin, long press and the switcher's snap, the start page's tiles that close the
-                  gap when one is taken away, the load's progress along the capsule's edge, the search card that grows out of the capsule, the tab card that
-                  zooms into the page, and a history row that is swiped away to remove it.
-                </td>
-                <td><code>08a5b33f</code> to <code>2f9160a3</code></td>
-                <td>
-                  <span class="st done">Landed</span> Checked on the Android phone: the tab zoom, the search card and the capsule's progress line were watched
-                  in a screen recording. The iOS build is still being made.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">B8 Release setup <span class="kind">Next round</span></th>
-                <td>
-                  <code>eas.json</code> with the development, preview and production builds; <code>supportsTablet: false</code>, as D7 says, until there is a
-                  tablet layout; and a crash report: Bay keeps what went wrong and Settings offers to send it on (<code>src/crashReports.ts</code>).
-                </td>
-                <td><code>feat/implement-pr-14</code></td>
-                <td><span class="st extra">New</span> The EAS project itself still has to be made, and the builds have never been run.</td>
-              </tr>
-              <tr>
-                <th scope="row">Builds that failed <span class="kind">Next round</span></th>
-                <td>
-                  Four things stopped the apps from building at all: <code>pictureInPicture</code> is not a <code>configChanges</code> flag, so AAPT2 refused
-                  the Android manifest; the iOS quick actions overrode a method no superclass has; the iOS download resume called a
-                  <code>WKDownload</code> method that does not exist; and the voice search and media controls used APIs the current SDK renamed.
-                </td>
-                <td><code>2222f488</code> and the iOS fixes after it</td>
-                <td>
-                  <span class="st done">Landed</span> Android builds and runs again. Metro also could not resolve <code>@bay/core</code>'s own dependencies, so
-                  the repo's <code>node_modules</code> is watched now.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">What the iPhone shows <span class="kind">Next round</span></th>
-                <td>
-                  The iOS app had never been compiled, so the first run on the simulator found more than the compiler did: the widget extension's
-                  <code>Info.plist</code> named a principal class, which WidgetKit extensions may not do, so the app could not be installed; and the share that
-                  launched Bay cold asked the module for something it had no answer for, which stopped the app on its first frame.
-                </td>
-                <td><code>81d15293</code>, <code>a85d8544</code></td>
-                <td>
-                  <span class="st done">Landed</span> The app builds, installs and runs on the simulator now. Sheets lost their glass, icons and pill buttons
-                  because they drew in a full-window overlay with no view controller, where Expo UI's <code>Host</code> never attaches; they now draw in the
-                  app's own window (<code>59d373d4</code>).
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">The e2e tests <span class="kind">Next round</span></th>
-                <td>
-                  The tests were written before the stacked switcher and the Settings pages, so most of them failed on the app as it was: they looked for rows
-                  that had moved, for a sheet's contents in a row of their own, and for the notifications prompt iOS asks for when the first download starts.
-                  The shared flow now scrolls to the row it needs before tapping it.
-                </td>
-                <td><code>3d581367</code>, <code>99b6a584</code>, <code>243011af</code></td>
-                <td>
-                  <span class="st done">Landed</span> Eight of the nine pass on the iPhone now. On Android one passes and eight still fail: the download toast,
-                  the reader, the find on page and the search suggestions depend on what the pages themselves say, and the switcher's own scroll does not reach
-                  the second card.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">The round after <span class="kind">12 November</span></th>
-                <td>
-                  Languages and the accessibility pass (B18), system AutoFill and passkeys (B20), the sheet glass, a cancelled sign-in that came back as a
-                  refused download on iOS, "Where does it go?" failing on a plain-http redirect on iOS, and the switcher's cards missing from Android's
-                  accessibility tree. Tests now load pages Bay serves itself (<code>.argent/pages/</code>), and seven new ones cover the settings pages, the
-                  start page, wallpaper, YouTube and swipe up to close.
-                </td>
-                <td><code>74de77b3</code>..<code>fd79e7df</code></td>
-                <td>
-                  <span class="st done">Landed</span> All sixteen e2e tests pass on both the iPhone and the Android emulator. Not yet tried on a real phone:
-                  AutoFill, passkeys, VoiceOver and TalkBack, and switching language. Known gaps, each passed on a rerun: on Android one tap in ten on page
-                  zoom's "larger" was lost, and a new tab once stayed on <code>about:blank</code> while the bar showed m.youtube.com (the load never reached the
-                  WebView, possibly a race in a new tab's first load); on iOS a tap in fresh-start was lost once just after a cold boot.
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Effect, <span class="kind">13–14 November</span></th>
-                <td>
-                  The app's asynchronous work moved onto one Effect runtime (<code>docs/mobile-effect-plan.html</code>, packages 01–06): saving state, the
-                  language, the app lifecycle, the content blocker, page scripts, reading tools and find, snapshots, site icons, saved logins, page requests,
-                  the private session, incoming links, the link resolver, downloads and clearing data. A dynamic <code>import("react-native")</code> read React
-                  Native's deprecated exports and crashed iOS at launch; it is now a lazy <code>require</code>.
-                </td>
-                <td><code>c8dfb5fc</code>..<code>68087831</code></td>
-                <td>
-                  <span class="st done">Landed</span> All seventeen e2e tests pass on both the iPhone and the Android emulator, and 166 Node tests pass. Not yet
-                  measured: the Hermes bundle size, cold launch on Release builds and the React Profiler page-load check the plan asks for. Not yet tried on a
-                  real phone: killing Bay in the background and reopening, Face ID, a real sign-in answered silently, AutoFill. Known gaps, each passed on a
-                  rerun: on iOS <code>private-session</code> lost its tap on Find's Done three runs in a row, still in the first private session (no cookie
-                  crossed sessions), then passed eleven times; the find bar rides on the keyboard, which may still be resizing its predictions bar when the
-                  count shows, so the test now waits for the screen to settle before tapping Done. On Android <code>power-tools</code> lost a tap once while
-                  Metro reloaded the app, and on iOS find counted "No matches" once for a word typed while the keyboard rose.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <p>
+          Both apps were built and run on the iPhone 18 Pro simulator (iOS 27) on 15 November: Cra from its <code>main</code>, Bay from
+          <code>feat/mobile-import</code>
+          (#24). Fresh installs, then search, a page, the page menu, site and app settings, the tab switcher and Spaces (Cra with its demo sidebar).
+        </p>
         <div class="callout">
-          <p><strong>Found on the real phone, which reading the code couldn't show</strong></p>
-          <ul>
-            <li>
-              Every Android download sat at "pending": <code>DownloadManager</code> runs as a JobScheduler job, and the system holds those jobs back while the
-              phone is warm (thermal status "moderate", common while charging on mobile data).
-            </li>
-            <li>
-              On Android 13 and later Bay showed no notifications at all, the I1 media notification included, because it never asked for
-              <code>POST_NOTIFICATIONS</code>.
-            </li>
-            <li><code>URLUtil.guessFileName</code> saved a film as "www.bin". Names now come from Content-Disposition or the address.</li>
-          </ul>
           <p>
-            <strong>Still unverified:</strong> none of #11's Swift has been compiled. It only passed <code>swiftc -parse</code>, and the iOS 26
-            <code>BGContinuedProcessingTask</code> calls are the riskiest part. <code>pnpm e2e</code> wasn't run for either PR. Stage 0 now starts with an iOS
-            build.
+            <b>The short version.</b> Cra is Arc Search, rebuilt carefully: fewer features, each finished, measured and explained to the user (onboarding, tips,
+            per-site switches). Bay is a broader browser (Android, Reader, bookmarks and import, history, Peek, media, page tools, seven languages) with a
+            plainer first run and a busier page menu. The useful things to take are mostly <i>UX</i> (open ready to type, show what blocking did, per-site
+            blocker switches, swipe from anywhere, teach the gestures) and three platform features (on-device translation through Apple's framework, richer
+            widgets and Siri shortcuts, alternate icons). On the UI side, Cra's measured sheets, page menu, switcher physics and springs port straight into
+            Bay's shared code (<a href="#ui">UI to take</a>); its Arc Search colours, copy and art stay out.
           </p>
         </div>
       </section>
 
-      <section id="gaps">
-        <div class="eyebrow">08 · What is missing</div>
-        <h2>What still needs building</h2>
-        <p>Every piece of work below carries one of these tags:</p>
-        <ul class="legend">
-          <li><span class="tag shared">Shared</span> TypeScript only, one change covers both apps</li>
-          <li><span class="tag api">Shared + 2 native</span> one <code>@bay/engine</code> API and shared UI, with Swift and Kotlin behind it</li>
-          <li><span class="tag ios">iOS only</span> standalone Swift or <code>.ios.tsx</code></li>
-          <li><span class="tag android">Android only</span> standalone Kotlin or <code>.android.tsx</code></li>
-        </ul>
-        <p class="note">
-          Sizes (S, M, L) are rough estimates relative to each other. They are not dates. The <span class="st done">Landed</span> and
-          <span class="st part">Partly done</span> labels come from the code and from running the app. Done marks are yours, saved in your browser, not in the
-          repo.
-        </p>
-        <h3 id="ios-gaps">Android has it, iOS doesn't</h3>
-        <p>
-          This is the full list I could find. Everything not listed here uses the same code on both apps; the <a href="#same">same-on-both list</a> follows the
-          table.
-        </p>
-        <p class="progress" id="ios-count" aria-live="polite" hidden></p>
-        <div class="wrap" tabindex="0" role="region" aria-label="iOS gaps">
-          <table data-checklist data-count="ios-count">
+      <section id="screens">
+        <div class="eyebrow">04 · Screen by screen</div>
+        <h2>What each app shows, and what it means for Bay</h2>
+        <div class="wrap">
+          <table class="checklist">
             <thead>
               <tr>
-                <th scope="col">#</th>
-                <th scope="col">Gap</th>
-                <th scope="col">What the code shows</th>
-                <th scope="col">Fix</th>
-                <th scope="col">Type</th>
-                <th scope="col">Size</th>
-                <th scope="col">Stage</th>
+                <th scope="col">Screen</th>
+                <th scope="col">Cra</th>
+                <th scope="col">Bay</th>
+                <th scope="col">Take away</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td class="id">I1</td>
-                <th scope="row">System media controls <span class="st done">Landed</span></th>
+                <th scope="row">First run</th>
                 <td>
-                  Android has a media notification with play, pause and stop (<code>BayMediaService.kt</code>). iOS now posts Now Playing info and remote
-                  commands from <code>BayMedia.swift</code> (<code>93920de1</code>), so <code>useTabMedia</code>'s call through
-                  <code>setMediaSession</code> works and <code>onMediaControl</code> is sent. WebKit doesn't populate the Now Playing center for
-                  <code>WKWebView</code> media, so Bay posts it itself.
+                  Six steps on a moving gradient: a promise, four feature cards, "try it" Browse for Me, a real pinch to summarize, an icon picker, a blocking
+                  demo with a switch, then "Set as Default Browser" with a how-to sheet. "Show Onboarding" in Settings brings it back.
                 </td>
-                <td>Done in code. Still to check on a real iPhone what WebKit shows on the lock screen on its own, per stage 0.</td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>S</td>
-                <td>1</td>
+                <td>One welcome screen (swipe the glass dome up), then a card on the start page offering the import.</td>
+                <td>
+                  Bay's is faster but teaches nothing: bar swipe, drag up, private, blocking and default browser go unseen. <a href="#c10">C10</a>,
+                  <a href="#c11">C11</a>.
+                </td>
               </tr>
               <tr>
-                <td class="id">I2</td>
-                <th scope="row">Downloads that outlive the app <span class="st done">Landed</span></th>
-                <td>
-                  Android 10 and later now download in a foreground service with a progress notification (<code>BayDownloader.kt</code>), and
-                  <code>DownloadManager</code> remains only on Android 9 and older. iOS runs <code>WKDownload</code> in the background as a
-                  <code>BGContinuedProcessingTask</code> on iOS 26 (background time before that), resumes once from <code>resumeData</code> instead of deleting
-                  the partial file, and posts a finished notification when Bay isn't on screen (<code>6c3d571f</code>).
-                </td>
-                <td>
-                  Done, except the background <code>URLSession</code> for downloads that survive the app being killed: that stays deferred unless device testing
-                  shows it matters, since Expo's app delegate doesn't forward the completion handler it needs.
-                </td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>M</td>
-                <td>1</td>
+                <th scope="row">Launch</th>
+                <td>Opens with the search sheet and keyboard up ("Auto-Open Keyboard", on by default), the last page dimmed behind it.</td>
+                <td>Opens on the start page; "Tap to search" is one more tap.</td>
+                <td>Lens and Arc Search both open ready to type. <a href="#c1">C1</a>.</td>
               </tr>
               <tr>
-                <td class="id">I3</td>
-                <th scope="row"><code>alert</code>, <code>confirm</code>, <code>prompt</code> <span class="st done">Landed</span></th>
+                <th scope="row">Search</th>
                 <td>
-                  Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> answers: iOS implements the three
-                  <code>runJavaScript…Panel</code> delegate methods, Android the three <code>WebChromeClient</code> <code>onJs…</code> methods
-                  (<code>936d624e</code>).
+                  Rows of search suggestions, each with a Browse for Me chip; favorites under an empty field; mic and incognito in the field; the first run
+                  shows four sample questions with a coach mark. Scrolling the rows puts each into the field.
                 </td>
                 <td>
-                  Done as the shared <a href="#page-requests">Page requests</a> sheet (<code>PageRequest.tsx</code>), which also replaces Android's
-                  Material-looking dialogs. Dialogs queue per tab; dismissing the sheet or pressing Android Back cancels, as does a navigation.
+                  Suggestions say "Search Google" and have a fill arrow; pins and Paste and Go under an empty field; inline completion; mic and private in the
+                  field.
                 </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>2</td>
+                <td>Bay's rows are clearer about what Enter does. Nothing to copy beyond C1.</td>
               </tr>
               <tr>
-                <td class="id">I4</td>
-                <th scope="row">Link menu misses some links <span class="st done">Landed</span></th>
-                <td>
-                  iOS now gets the link from WebKit's <code>contextMenuConfigurationForElement</code> (<code>4840aa3b</code>), whose <code>linkURL</code> covers
-                  iframes and shadow DOM. The injected callout style, the long-press gesture recognizer and the main-frame hit test are removed. The menu title
-                  is the URL, since the context-menu info carries no anchor text.
-                </td>
-                <td>Done. Stage 1's new check (an iframe link on a real iPhone) still has to run.</td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>S</td>
-                <td>1</td>
+                <th scope="row">Page bar</th>
+                <td>Arc Search's: tab stack, a "+" pill, and ^ for the menu. No address on screen. Hold the pill for voice.</td>
+                <td>Tabs, a capsule with the host and the load's progress, and "…".</td>
+                <td>Keep Bay's: the host on screen is safer and the capsule is where search grows from.</td>
               </tr>
               <tr>
-                <td class="id">I5</td>
-                <th scope="row">Depth of ad blocking <span class="st done">Landed</span></th>
+                <th scope="row">Page menu</th>
                 <td>
-                  Android checks every request in adblock-rust, answers <code>$redirect</code> rules with stand-ins, and adds generic hiding from each page's
-                  classes and ids. iOS uses static WebKit rules plus scriptlets, because a web view can't intercept subresources. Measured score: 73% (97 of
-                  132) on iOS; the plan records no Android score.
+                  Address capsule (back, forward, host, copy link, reload), four tiles (Find, Summarize, Pin, Share), "Display Options" that opens in place
+                  (Translate, Reader, Page Zoom with − / +, Request Desktop Site), Site Settings, and a footer "Cra scrubbed N trackers / Problems? Tap to
+                  restore original page".
                 </td>
                 <td>
-                  Accepted as an engine limit (D4), so no code changed. Still to run: the same test on Android and recording the number; generic hiding from a
-                  page script only if real sites show a difference.
+                  Title, URL and "Secure · Ads and trackers blocked", a blocking switch for the site, back / forward / reload / share, then twelve tiles in a 4
+                  × 3 grid (New tab, Private tab, Find, Reader, Pin, Translate, Bookmark, Tools, This site, History, Downloads, Archive).
                 </td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>S</td>
-                <td>0</td>
+                <td>
+                  Bay's grid is complete but every action weighs the same. Cra shows four, folds the rest, and turns blocking into a count.
+                  <a href="#c2">C2</a>, <a href="#u3">U3</a>.
+                </td>
               </tr>
               <tr>
-                <td class="id">I6</td>
-                <th scope="row">Liquid Glass coverage <span class="note">(design)</span> <span class="st done">Landed</span></th>
+                <th scope="row">Site settings</th>
                 <td>
-                  Glass appears on the bar buttons, panels drawn with <code>Surface</code>, the download buttons (<code>PillButton.ios.tsx</code>) and now the
-                  sheets themselves: <code>PanelSheet.ios.tsx</code> draws a Liquid Glass background over the shared contents while Android stays solid
-                  (<code>4aa4561b</code>). Haptics via <code>expo-haptics</code> cover tab close, pin and long-press, on top of the pull-to-refresh tick.
+                  Per site: Block Ads, Block Cookie Banners, Block Trackers (three switches), Pinch to Summarize, Collapse Bottom Bar, Swipe to Navigate
+                  (anywhere, edges, off). "Global Site Settings" sets the defaults.
                 </td>
-                <td>Done; the page-request sheet reuses <code>PillButton</code> for OK/Cancel. Needs the screenshot comparison against Android (stage 0/1).</td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>M</td>
-                <td>1</td>
+                <td>Per site: one blocking pause, page zoom, Reader on open, desktop mode.</td>
+                <td>A site that breaks loses all blocking in Bay. <a href="#c3">C3</a>, <a href="#c5">C5</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Tab switcher</th>
+                <td>Overlapping cards, newest right; Spaces button, "+", Settings; a "Sync with Cra for Mac" card until synced.</td>
+                <td>Stacked cards with title and close, a tab count, Archive, "New tab", Settings; spaces from the tabs menu.</td>
+                <td>
+                  Equivalent. Cra adds: swipe back on a tab's first page archives it, and dragging up from the bar shrinks the page into its card.
+                  <a href="#c6">C6</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Spaces</th>
+                <td>
+                  Read-only: the Mac's sidebar from iCloud (pinned tabs, folders, Today), one Space a page in its colour. Before sync, an explainer sheet.
+                </td>
+                <td>Spaces and folders made and kept on the phone; no sync.</td>
+                <td>
+                  Same design question for both: sync is an iCloud folder shared with desktop. Cra hasn't solved writing back either. <a href="#l1">L1</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">App settings</th>
+                <td>
+                  One long list: Downloads, Archive, Global Site Settings, Default Browser, App Icon, Add Widget, Search Engine (incl. custom), Languages,
+                  Auto-Open Keyboard, Archive Inactive Tabs, Open App Links in, Clear Data, Export Data, Sync, Share with a friend, Contact, Show Onboarding,
+                  Privacy Policy, Licences, version.
+                </td>
+                <td>
+                  Grouped: blocking with list count, Browser (engine, privacy, appearance, language, browsing), Your data (import, bookmarks, history,
+                  downloads, …).
+                </td>
+                <td>
+                  Bay's grouping reads better. Missing rows: licences and privacy policy (<a href="#r4">R4</a>), export tabs (<a href="#c16">C16</a>), app icon,
+                  custom engine.
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
+      </section>
 
-        <h3 id="same">Same on both, no port needed</h3>
-        <p>
-          Start page and wallpapers, search card and suggestions, stacked tab switcher, bar swipe and its sliding capsule, archive, history, pins, page menu,
-          Settings pages, theme, page zoom, AMP skipping, YouTube cleanup, Reader, Hide elements, Copy as Markdown, Find, Inspect, mini player UI, private tabs
-          and lock, toasts, tracking-parameter stripping, HTTPS upgrades, per-site blocking pause, the download toast and panel with their animations, the blank
-          download-only tab, and the trigger tick and minimum spin of pull to refresh.
-        </p>
-
-        <h3 id="android-gaps">The other direction: iOS has it, Android doesn't</h3>
-        <p>You didn't ask for this list directly, but these are real bugs in the app you consider ahead, and most sit on the same native hooks as stage 2.</p>
-        <p class="progress" id="android-count" aria-live="polite" hidden></p>
-        <div class="wrap" tabindex="0" role="region" aria-label="Android gaps">
-          <table data-checklist data-count="android-count">
+      <section id="theirs">
+        <div class="eyebrow">05 · Cra has, Bay lacks</div>
+        <h2>Features to take, adapt or leave</h2>
+        <p class="note">Each one we take becomes a C item in <a href="#open">What is left</a>. "Leave" says why.</p>
+        <div class="wrap">
+          <table class="checklist">
             <thead>
               <tr>
-                <th scope="col">#</th>
-                <th scope="col">Gap</th>
-                <th scope="col">What the code shows</th>
-                <th scope="col">Type</th>
-                <th scope="col">Size</th>
-                <th scope="col">Stage</th>
+                <th scope="col">Cra</th>
+                <th scope="col">How it does it</th>
+                <th scope="col">For Bay</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td class="id">A1</td>
-                <th scope="row">File upload <span class="st done">Landed</span></th>
-                <td>
-                  Android now opens the system picker: <code>WebChromeClient.onShowFileChooser</code> forwards to <code>BayFileChooser</code>, which launches
-                  <code>FileChooserParams.createIntent()</code> (falling back to <code>ACTION_GET_CONTENT</code> with the page's <code>accept</code> types) and
-                  delivers the chosen files back through the module's <code>OnActivityResult</code>. WebKit already had this on iOS.
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>S</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">A2</td>
-                <th scope="row">Video fullscreen <span class="st done">Landed</span></th>
-                <td>
-                  Both now go fullscreen: iOS sets <code>isElementFullscreenEnabled</code>, and Android's <code>onShowCustomView</code>/<code
-                    >onHideCustomView</code
-                  >
-                  add the player's view to the window's decor view, request landscape, hide the system bars, and exit on Back. Both report through
-                  <code>onFullscreenChange</code>, and <code>BrowserScreen</code> hides the bar and top strip while a tab reports fullscreen.
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">A3</td>
-                <th scope="row"><code>blob:</code> and <code>data:</code> downloads <span class="st done">Landed</span></th>
-                <td>
-                  Page-generated files are fetched in the page and saved natively: a capture-phase click interceptor (plus a one-shot fetch for a main-frame
-                  <code>blob:</code> jump) posts the bytes as base64 to <code>BayDownloads.saveBlob</code>, which writes them to MediaStore (Android 10+) or a
-                  MediaStore <code>DATA</code> row (older). <code>WKDownload</code> remains the route for these on iOS.
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">A4</td>
-                <th scope="row">Edge swipe back and forward <span class="st done">Landed</span></th>
-                <td>
-                  Both now have native edge gestures: iOS via <code>allowsBackForwardNavigationGestures</code>, Android via a 24dp edge swipe in
-                  <code>BayEngineView</code> (history-armed, the page follows the finger, a haptic at the trigger point, coexisting with pull to refresh).
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">A5</td>
-                <th scope="row">Isolated page scripts <span class="st done">Landed</span></th>
-                <td>
-                  Accepted until our Chromium arrives (phase 7): Android keeps the token-checked main-world bridge, the token now rotates on each main-frame
-                  navigation, and the engine README documents the limit. iOS already runs page scripts in an isolated world.
-                </td>
-                <td><span class="tag android">Android only</span></td>
-                <td>L</td>
-                <td>Phase 7</td>
-              </tr>
-              <tr>
-                <td class="id">A6</td>
                 <th scope="row">On-device translation</th>
+                <td>Apple's Translation framework (iOS 18): visible text collected node by node, translated in batches, written back; "Show Original".</td>
                 <td>
-                  Parked on <code>feat/mobile-translation</code>. It passes on iOS. Android is blocked because Mozilla's CDN answers 406 to user agents
-                  containing <code>Chrome/</code>. Both apps use the Google Translate URL today.
+                  <span class="st done">Take</span> on iOS: it unblocks our parked translation without Mozilla's CDN. Android keeps the Bergamot route.
+                  <a href="#c4">C4</a>.
                 </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>Last</td>
+              </tr>
+              <tr>
+                <th scope="row">Blocked count and tips</th>
+                <td>
+                  Footer "scrubbed N trackers" (requests to listed domains that failed while blocking was on). First block shows a one-time tip with a ring on
+                  the menu button. After "restore original page", "Did it fix the issue?" turns that site's blockers off.
+                </td>
+                <td>
+                  <span class="st done">Take</span>. Shows people what Bay does for them and turns a broken page into a one-tap fix. <a href="#c2">C2</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Three blockers per site, global defaults</th>
+                <td>Ads, trackers and cookie banners switch separately, per site and as defaults.</td>
+                <td><span class="st done">Take</span>. Maps onto our lists (ads, privacy, cookie). <a href="#c3">C3</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Swipe to navigate from anywhere</th>
+                <td>Back and forward from anywhere on the page, or edges only, or off, per site.</td>
+                <td><span class="st done">Take</span>. Lens has it too; Bay has edge swipes only. <a href="#c5">C5</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Tab gestures</th>
+                <td>Swipe back on a tab's first page archives it (forward reopens); drag up from the bar shrinks the page into the switcher.</td>
+                <td><span class="st done">Take</span>. <a href="#c6">C6</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Opens ready to type</th>
+                <td>Search sheet and keyboard on launch, with a setting.</td>
+                <td><span class="st done">Take</span>, as a setting, on by default. <a href="#c1">C1</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Widgets</th>
+                <td>Small (gradient, Search capsule, Voice and Spaces buttons), medium, Lock Screen circular and rectangular; "Add Widget" walkthrough.</td>
+                <td><span class="st done">Take</span>. Bay has one plain small "Search Bay" widget on each platform. <a href="#c7">C7</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Siri, Spotlight, Action button</th>
+                <td>App Shortcuts: "Search with Cra", "Voice Search with Cra", "Browse for Me". Quick actions: Search, Voice, Change Icon.</td>
+                <td><span class="st done">Take</span> the App Intents. Bay has quick actions (new tab, private tab) only. <a href="#c8">C8</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Alternate app icons</th>
+                <td>Four icons, picked in onboarding or from a dock sheet.</td>
+                <td><span class="st done">Take</span>, with Bay's own icons; Android through activity aliases. <a href="#c9">C9</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Teaching onboarding, default-browser sheet</th>
+                <td>Interactive steps; an inset "How to change your default browser" sheet with three steps and "Open Settings".</td>
+                <td><span class="st done">Adapt</span>: keep the dome, add a few steps after it. <a href="#c10">C10</a>, <a href="#c11">C11</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Open App Links in…</th>
+                <td>A tapped link another app claims as a universal link opens that app (setting: Native App or Cra).</td>
+                <td>
+                  <span class="st done">Take</span>. Bay hands off <code>tel:</code>, <code>mailto:</code> and other schemes, not https links apps claim.
+                  <a href="#c12">C12</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Wallet passes, certificate warnings, Handoff</th>
+                <td>
+                  <code>.pkpass</code> opens in Wallet; an unverifiable certificate can be continued for that host for the run; the page on screen is offered to
+                  other Apple devices.
+                </td>
+                <td>
+                  <span class="st done">Take</span> Wallet and Handoff (small, iOS). Certificate bypass is a decision (<a href="#d4">D4</a>).
+                  <a href="#c13">C13</a>, <a href="#c14">C14</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Export open tabs, custom search engine</th>
+                <td>Open tabs' addresses through the share sheet; a custom engine as an https address with <code>%s</code>.</td>
+                <td><span class="st done">Take</span>, both small. <a href="#c16">C16</a>, <a href="#c17">C17</a>.</td>
+              </tr>
+              <tr>
+                <th scope="row">Summarize (tile and pinch)</th>
+                <td>Apple's on-device model (Foundation Models), only where Apple Intelligence is on; the page folds into a card with the summary.</td>
+                <td>
+                  <span class="st part">Decide</span>. Cra proves it needs no server, which was D6's main reason. iOS only for most phones.
+                  <a href="#d3">D3</a>, <a href="#l3">L3</a>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Browse for Me</th>
+                <td>Reads six DuckDuckGo results on the phone and writes an answer page with the on-device model.</td>
+                <td>
+                  <span class="st miss">Leave</span>: scrapes a search engine's HTML, answer quality depends on a small model, and it isn't Lens's browser.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Scroll-to-fill suggestions, hold-to-talk pill, fidget logo, starter questions</th>
+                <td>Arc Search's small delights.</td>
+                <td><span class="st miss">Leave</span>: they copy Arc Search's identity rather than Lens's.</td>
+              </tr>
+              <tr>
+                <th scope="row">iPad</th>
+                <td>Builds for iPad; the bar stretches, the menu is centred at 540 pt.</td>
+                <td><span class="st miss">Later</span>: tablets stay after the first release (<a href="#l2">L2</a>).</td>
               </tr>
             </tbody>
           </table>
         </div>
+      </section>
 
-        <h3 id="both">Missing from both</h3>
+      <section id="ours">
+        <div class="eyebrow">06 · Bay has, Cra lacks</div>
+        <h2>Where Bay is ahead</h2>
+        <ul>
+          <li>
+            <b>Android.</b> Cra has no Android app, and Arc Search for Android goes on 22 December. This is Bay's opening; nothing in the Cra list outranks R1.
+          </li>
+          <li>
+            <b>Blocking depth.</b> Brave's adblock-rust with uBlock Origin's lists, scriptlets and <code>$redirect</code> stand-ins, HTTPS upgrade,
+            tracking-parameter stripping, AMP skipping and YouTube cleanup. Cra compiles a domain list into WebKit rules and hides cookie banners.
+          </li>
+          <li>
+            <b>Reading and page tools.</b> Reader with seven themes and three fonts (Cra's is a plain serif), Hide elements, Inspect with the font identifier,
+            Copy as Markdown, Find with highlights.
+          </li>
+          <li>
+            <b>Your data.</b> Bookmarks, history, and import from Safari, Chrome, any bookmarks file and Arc Search (#24). Cra's phone has an archive only.
+          </li>
+          <li>
+            <b>Links and media.</b> Peek previews, image long-press, new windows as real tabs, the shared page-request sheet (dialogs, sign-in, camera,
+            location), mini player, lock-screen controls, Picture in Picture.
+          </li>
+          <li>
+            <b>Private tabs with Face ID</b>, tabs that keep their history across relaunches, spaces made on the phone, seven interface languages, wallpapers
+            and themes, crash reports.
+          </li>
+        </ul>
+      </section>
+
+      <section id="ui">
+        <div class="eyebrow">07 · UI to take from Cra</div>
+        <h2>Copy the structure, the numbers and the motion; keep Bay's brand</h2>
         <p>
-          Ordered from easy to hard, with the most important first within each size. "Seen in" shows where the expectation comes from: general browser
-          behaviour, Lens (the design reference), Arc, or desktop Bay. Build order still follows the <a href="#stages">stages</a>, because some easy items
-          depend on harder ones.
+          Cra is MIT-licensed, so its UI can be copied as long as its notice ships with Bay (R4). The code itself is UIKit and Bay is React Native, so the copy
+          is a port, not a paste. The part worth taking is <code>Packages/CraCore/Sources/CraCore/Mobile</code>: about 3,300 lines of pure layout and motion
+          rules (no UIKit), measured from Arc Search's footage, with 1,128 lines of tests. Those port to TypeScript and become shared code, so Android gets the
+          same result as iOS.
         </p>
-        <p class="progress" id="both-count" aria-live="polite" hidden></p>
+        <div class="wrap">
+          <table class="checklist">
+            <thead>
+              <tr>
+                <th scope="col">Surface</th>
+                <th scope="col">Cra's numbers and behaviour</th>
+                <th scope="col">Bay today</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Search sheet</th>
+                <td>
+                  A full-width sheet that rises with the keyboard, 38 pt top corners, 48 pt field 16 pt in, 56 pt rows (two lines allowed), four rows and a
+                  fixed 302 pt height so it never jumps while typing. In landscape it keeps as many rows as fit. The page sits behind it as a dimmed card 10 pt
+                  in from each side. A tap above or a swipe down closes it.
+                </td>
+                <td>A floating card whose height follows the rows, over a dimmed page.</td>
+              </tr>
+              <tr>
+                <th scope="row">Page menu</th>
+                <td>
+                  38 pt sheet; a 47 pt address capsule; four 88.7 pt tiles filling the width (22 pt corners, labels under them); 48 pt rows with 14 pt corners;
+                  "Display Options" opens in place; a 55.7 pt footer card for what was blocked and the restore.
+                </td>
+                <td>Header, blocking switch, a nav row and twelve equal tiles.</td>
+              </tr>
+              <tr>
+                <th scope="row">Tab switcher</th>
+                <td>
+                  Cards at 0.694 of the page with 17 pt corners. Cards behind dim up to 0.16 and shrink to 0.9, while the next card grows up to 1.02. Past
+                  either end the row follows at a third of the speed. A flick above 300 pt/s goes one card further. A card thrown up 120 pt (or 30 pt fast)
+                  closes. Dragging up from the bar shrinks the page under the finger, and 110 pt opens the switcher.
+                </td>
+                <td>Already close: same 0.56 step and a swipe-up close. No drag up from the bar, no dimming of the cards behind.</td>
+              </tr>
+              <tr>
+                <th scope="row">Motion</th>
+                <td>
+                  Springs fitted to the footage are all critically damped (no overshoot): the row settles in 0.34 s and a card opens into its page in 0.26 s.
+                </td>
+                <td>One spring for everything (damping 22, stiffness 240, mass 0.9: damping ratio about 0.75, so it overshoots).</td>
+              </tr>
+              <tr>
+                <th scope="row">Settings sheets</th>
+                <td>
+                  Arc Search 1.49's: a coloured rounded-square icon per row, 17 pt text in 52 pt rows, grouped cards, a back chevron and Done. Site Settings is
+                  its own 465 pt sheet over the page menu. Toggles show their state at a glance.
+                </td>
+                <td>Grouped rows with plain outline icons; site settings fold into the page menu's "This site".</td>
+              </tr>
+              <tr>
+                <th scope="row">First run, tips and cards</th>
+                <td>
+                  Full-bleed animated gradient; large titles with one italic word; a phone-in-a-phone mock that runs the real interaction (pinch, a blocking
+                  switch on a demo page). A tip card over the bar with a ring round the button it points at. A dismissible promo card in the switcher.
+                </td>
+                <td>The dome welcome and an import card on the start page.</td>
+              </tr>
+              <tr>
+                <th scope="row">Share sheet</th>
+                <td>"Saved" with a heart and check, a place picker that remembers the last choice, and Done; the link waits in an App Group inbox.</td>
+                <td>Closes at once and opens Bay.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>What not to copy</h3>
+        <ul>
+          <li>
+            <b>Arc Search's identity.</b> Cra's colours are sampled from Arc Search (<code>Palette.swift</code>: the lavender-to-pink sheet, the #583dae →
+            #c3699d gradient, #354FFF buttons). So are its copy ("scrubbed N trackers", "Get what you want twice as fast", the starter questions), its logo and
+            fidget mark, and its widget gradient. Copying those would make Bay look like Arc Search, which The Browser Company still ships on iOS. Use Bay's own
+            paper, dusk and accent colours, icon and wording.
+          </li>
+          <li>
+            <b>The bar.</b> Arc Search's bar (tab stack, "+" pill, ^) hides the address. Keep Bay's capsule with the host and the load's progress: it is where
+            the search sheet grows from (A2) and it shows people where they are.
+          </li>
+          <li>
+            <b>Pre-iOS 26 chrome.</b> Cra opts out of Liquid Glass (<code>UIDesignRequiresCompatibility</code>). Keep glass on Bay's floating controls on iOS,
+            but take Cra's flat, opaque sheets. Those are also how Bay's Android sheets look, so the two apps get closer.
+          </li>
+        </ul>
+      </section>
 
-        <div class="wrap" tabindex="0" role="region" aria-label="Missing from both, easy to hard">
-          <table data-checklist data-count="both-count">
+      <section id="open">
+        <div class="eyebrow">08 · What is left</div>
+        <h2>Every open item</h2>
+        <ul class="legend" aria-label="Tags">
+          <li><span class="tag shared">Shared</span> TypeScript only</li>
+          <li><span class="tag api">Shared + 2 native</span> one engine API, Swift and Kotlin behind it</li>
+          <li><span class="tag ios">iOS only</span></li>
+          <li><span class="tag android">Android only</span></li>
+        </ul>
+        <p class="note">
+          Sizes (S, M, L) compare items with each other; they aren't dates. Done marks are saved in your browser, not in the repo.
+          <span id="open-count" hidden></span>
+        </p>
+        <div class="wrap">
+          <table class="checklist" data-checklist data-count="open-count">
             <thead>
               <tr>
                 <th scope="col">#</th>
-                <th scope="col">Missing</th>
-                <th scope="col">Notes</th>
-                <th scope="col">Seen in</th>
+                <th scope="col">Item</th>
+                <th scope="col">What it takes</th>
                 <th scope="col">Type</th>
                 <th scope="col">Size</th>
-                <th scope="col">Stage</th>
               </tr>
             </thead>
             <tbody>
               <tr class="band">
-                <th colspan="8" scope="colgroup">Easy (S)</th>
+                <th>Prove what exists</th>
               </tr>
-              <tr>
-                <td class="id">B1</td>
-                <th scope="row">Sign in with Google <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
+              <tr id="v1">
+                <td class="id">V1</td>
+                <th scope="row">Bay's Chromium on Android</th>
                 <td>
-                  Google's policy blocks OAuth in embedded web views with <code>disallowed_useragent</code>. Fixed in code on both apps: Android drops
-                  <code>; wv</code>, <code>Version/…</code> and <code>X-Requested-With</code> (<code>1da5f44d</code>), and iOS adds Safari's tokens
-                  (<code>e72e2f19</code>). Not yet tried on a device, so stage 0 confirms it. Popup sign-ins still need B19.
+                  Finish run 43662871170 and fix what the first native compile finds. Install the APK on the emulator and pass every e2e test unchanged, then
+                  measure app size, cold start, memory with five tabs and Speedometer. The gaps are in android-chromium-plan.html.
                 </td>
-                <td>Basics</td>
+                <td><span class="tag android">Android only</span></td>
+                <td>L</td>
+              </tr>
+              <tr id="v2">
+                <td class="id">V2</td>
+                <th scope="row">Android for #21–#24's features</th>
+                <td>
+                  Once V1 runs: import (browser list, picker, unzip), bookmarks, spaces, page requests, downloads (Cancel, a large file, in the background),
+                  fullscreen and landscape, edge swipes, the media notification, the widget and quick actions. Every UI change gets its screenshot next to iOS.
+                </td>
+                <td><span class="tag android">Android only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="v3">
+                <td class="id">V3</td>
+                <th scope="row">Import with real exports</th>
+                <td>
+                  A real Safari export and a real Takeout zip from a phone; replace the made-up fixtures with them. Before 23 November, export a real Arc Search
+                  tab list too. iOS only detects browsers listed in <code>app.json</code> (Opera and Arc Search go through "Another browser" or Paste).
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="v4">
+                <td class="id">V4</td>
+                <th scope="row">On a real iPhone</th>
+                <td>
+                  What the simulator can't show: Face ID on private tabs, audio and Now Playing with the screen locked, a download finishing with Bay killed,
+                  "Take Photo" from a file input, an iframe link long-pressed, Google sign-in and a popup sign-in, AutoFill, VoiceOver, switching language,
+                  "always dark" over light-mode glass.
+                </td>
+                <td><span class="tag ios">iOS only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="v5">
+                <td class="id">V5</td>
+                <th scope="row">On a real Android phone</th>
+                <td>Google sign-in, TalkBack, the adblock test score next to iOS's 73% (97 of 132), and the downloads the Galaxy M34 couldn't finish.</td>
+                <td><span class="tag android">Android only</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="v6">
+                <td class="id">V6</td>
+                <th scope="row">e2e tests for what has none</th>
+                <td>
+                  Peek, per-site settings and desktop mode, image long-press, share to Bay, quick actions, voice search, media controls, languages, spaces, and
+                  a site-compat test (a dialog, an upload, a <code>tel:</code> link, a popup and a tab restored with its history). Pages from
+                  <code>.argent/pages/</code>, not live sites.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="v7">
+                <td class="id">V7</td>
+                <th scope="row">Performance numbers</th>
+                <td>Hermes bundle size, cold launch on a Release build, and a React Profiler page-load pass on both.</td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+
+              <tr class="band">
+                <th>Ship test builds</th>
+              </tr>
+              <tr id="r1">
+                <td class="id">R1</td>
+                <th scope="row">Android test build before 22 December</th>
+                <td>
+                  The runner's signed release APK on Bay Chromium, then Google Play's testing track. Check the Play account type now: newer personal accounts
+                  need a 14-day closed test with 12 testers, which would have to start by about 1 December.
+                </td>
+                <td><span class="tag android">Android only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="r2">
+                <td class="id">R2</td>
+                <th scope="row">TestFlight</th>
+                <td>
+                  A Release build signed for the Lately team, uploaded to App Store Connect (<a href="mobile-releasing.md">mobile-releasing.md</a>). No EAS
+                  token exists, so build locally or on a runner.
+                </td>
+                <td><span class="tag ios">iOS only</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="r3">
+                <td class="id">R3</td>
+                <th scope="row">Entitlements and privileges</th>
+                <td>
+                  Apple's web-browser entitlement (default browser, AutoFill) and its passkey entitlement (<code>BAY_WEB_PASSKEYS=1</code>); Google's privileged
+                  browser list for passkeys. All three are requests to someone else: send them now.
+                </td>
                 <td><span class="tag api">Shared + 2 native</span></td>
                 <td>S</td>
-                <td>2</td>
               </tr>
-              <tr>
+              <tr id="r4">
+                <td class="id">R4</td>
+                <th scope="row">Licences, privacy policy, contact</th>
+                <td>
+                  An About page in Settings: Bay's licence, the filter lists' and uBlock Origin resources' notices, Chromium's credits on Android (required to
+                  ship it), a privacy policy link (the stores require one) and a way to reach us.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+
+              <tr class="band">
+                <th>From the Cra comparison, in order</th>
+              </tr>
+              <tr id="c1">
+                <td class="id">C1</td>
+                <th scope="row">Open ready to type</th>
+                <td>
+                  Launch (and return after the start-page delay) with the search card and keyboard up, over the start page; a Browsing setting turns it off.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c2">
+                <td class="id">C2</td>
+                <th scope="row">Show what blocking did</th>
+                <td>
+                  A per-page count in the page menu ("N ads and trackers blocked"), a one-time tip the first time something is blocked, and "Page broken? Reload
+                  without blocking" for this tab only, followed by "Did that fix it?" that turns the site's blocking off. Android counts in the request filter;
+                  iOS content rules report nothing, so count resource loads to listed hosts that failed, as Cra does.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c3">
+                <td class="id">C3</td>
+                <th scope="row">Ads, trackers, cookie banners per site</th>
+                <td>
+                  Split the one pause into three switches per site, with global defaults, keyed to the list groups (ads, privacy, cookie). iOS needs a content
+                  rule list per group so a site can drop one; Android filters by the group a rule came from. Store migration from
+                  <code>blockingPausedHosts</code>.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c4">
+                <td class="id">C4</td>
+                <th scope="row">On-device translation on iOS</th>
+                <td>
+                  Apple's Translation framework (iOS 18+) behind the existing Translate tile: collect text nodes in a page script, translate in batches
+                  natively, write back, "Show original". The simulator can't run it, so it needs V4's phone. Android stays on the parked Bergamot branch
+                  (<code>feat/mobile-translation</code>) behind the mirror; Google Translate remains the fallback until then.
+                </td>
+                <td><span class="tag ios">iOS only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c5">
+                <td class="id">C5</td>
+                <th scope="row">Swipe to navigate from anywhere</th>
+                <td>
+                  A setting (anywhere, edges, off), also per site. iOS: a pan over the web view that drives back and forward with WebKit's snapshots; Android:
+                  widen the existing edge swipe.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c6">
+                <td class="id">C6</td>
+                <th scope="row">Tab gestures</th>
+                <td>
+                  Back on a tab's first page archives it (forward reopens it); dragging up from the bar shrinks the page into its card in the switcher (A1's
+                  zoom, run by the finger).
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c7">
+                <td class="id">C7</td>
+                <th scope="row">Widgets</th>
+                <td>
+                  A designed small widget (search, voice, private), a medium one, and Lock Screen circular and rectangular on iOS; the same set on Android; an
+                  "Add widget" guide in Settings.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c8">
+                <td class="id">C8</td>
+                <th scope="row">Siri, Spotlight and the Action button</th>
+                <td>
+                  App Intents: "Search with Bay", "Voice search with Bay", "Open a private tab", answered through <code>bay://</code>. Android: add voice to the
+                  static shortcuts.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c9">
+                <td class="id">C9</td>
+                <th scope="row">Alternate app icons</th>
+                <td>
+                  Three or four Bay icons (the desktop icon's wallpapers fit), picked in Appearance. iOS <code>setAlternateIconName</code>; Android activity
+                  aliases.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c10">
+                <td class="id">C10</td>
+                <th scope="row">A first run that teaches</th>
+                <td>
+                  After the dome: three short steps (blocking on a demo page, the bar swipe and drag up, private tabs), then import and default browser.
+                  Skippable, and "Show welcome again" in Settings. <code>fresh-start</code> keeps skipping it.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c11">
+                <td class="id">C11</td>
+                <th scope="row">Default browser, asked properly</th>
+                <td>A "Make Bay your default" row and a how-to sheet (iOS: steps and Open Settings; Android: the system's role request).</td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c12">
+                <td class="id">C12</td>
+                <th scope="row">Links apps claim</th>
+                <td>
+                  "Open app links in: App / Bay": iOS opens with <code>universalLinksOnly</code> before loading, Android resolves the intent. (The page menu's
+                  redesign is U3.)
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c13">
+                <td class="id">C13</td>
+                <th scope="row">Wallet and calendar files</th>
+                <td>A downloaded <code>.pkpass</code> opens in Wallet, an <code>.ics</code> in Calendar (Android: hand both to their apps).</td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c14">
+                <td class="id">C14</td>
+                <th scope="row">Handoff</th>
+                <td>Offer the page on screen to the user's other Apple devices; never a private tab.</td>
+                <td><span class="tag ios">iOS only</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c15">
+                <td class="id">C15</td>
+                <th scope="row">Text size</th>
+                <td>
+                  Bay's <code>Text</code> follows Dynamic Type with no cap. Check every sheet at the accessibility sizes and cap the bar and tiles where they
+                  break.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c16">
+                <td class="id">C16</td>
+                <th scope="row">Export open tabs</th>
+                <td>Settings → Your data: the open tabs' addresses (and bookmarks as HTML) through the share sheet.</td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c17">
+                <td class="id">C17</td>
+                <th scope="row">Custom search engine</th>
+                <td>An https address with <code>%s</code>; suggestions off for it.</td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+
+              <tr class="band">
+                <th>UI from Cra, in order</th>
+              </tr>
+              <tr id="u1">
+                <td class="id">U1</td>
+                <th scope="row">Port Cra's layout and motion rules</th>
+                <td>
+                  <code>MobileSearchSheet</code>, <code>MobilePageMenu</code>, <code>MobileTabCarousel</code>, <code>MobileMotion</code> and the suggestion rows
+                  into <code>src/chrome/layout/</code> as pure TypeScript, with their tests ported to <code>tests/</code>. Add Cra's MIT notice (R4). Nothing
+                  changes on screen yet.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u2">
+                <td class="id">U2</td>
+                <th scope="row">Motion: critically damped springs</th>
+                <td>
+                  Replace <code>SPRING</code> in <code>src/chrome/motion.ts</code> with Cra's: settle 0.34 s and open 0.26 s, both with no overshoot. Run the
+                  switcher, tab zoom and search card on them; Reduce Motion still crossfades.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="u3">
+                <td class="id">U3</td>
+                <th scope="row">Page menu, rebuilt to Cra's layout</th>
+                <td>
+                  An address capsule (back, forward, host, copy link, reload), then four tiles: Find, Reader, Bookmark, Share. Below them, a "Display options"
+                  group that opens in place (Translate, page zoom with − / + and the percentage, desktop site), "Site settings", "Tools" (Hide elements,
+                  Inspect, Copy as Markdown), and the blocked-count footer with the restore (C2). New tab, private tab, history, downloads and archive leave for
+                  the switcher and Settings, where they already are. The tile set is Bay's choice, not Arc's.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u4">
+                <td class="id">U4</td>
+                <th scope="row">Search sheet anchored to the keyboard</th>
+                <td>
+                  A full-width sheet with a fixed height (field plus four 56 pt rows) that rises on the keyboard's curve. The page sits behind it as a dimmed
+                  inset card. Swipe down or tap above to close; in landscape, show the rows that fit. Keep Bay's rows: "Search Google", fill arrow, pins, Paste
+                  and Go. The capsule still grows into it (A2). Goes with C1.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u5">
+                <td class="id">U5</td>
+                <th scope="row">Switcher physics and drag up from the bar</th>
+                <td>
+                  Dim and shrink the cards behind, rubber-band at both ends, let a flick go one card further, and use Cra's close thresholds. Dragging up from
+                  the bar shrinks the page under the finger into its card (this is C6's second half).
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u6">
+                <td class="id">U6</td>
+                <th scope="row">Settings and site settings sheets</th>
+                <td>
+                  Coloured rounded-square icons per row (one hue per group, Bay's palette) and opaque sheets on both platforms. "Site settings" becomes a sheet
+                  of its own over the page menu, with the C3 switches, C5's swipe choice, zoom, Reader and desktop mode. "Default site settings" sits in
+                  Settings.
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u7">
+                <td class="id">U7</td>
+                <th scope="row">Tips and promo cards</th>
+                <td>
+                  One shared component for a tip over the bar that rings the control it means (first block, C2; bar swipe and drag up, C10). A dismissible card
+                  in the switcher replaces the start page's import card (import, default browser, widgets).
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="u8">
+                <td class="id">U8</td>
+                <th scope="row">First run in Cra's form</th>
+                <td>After the dome: large titles over Bay's wallpaper gradient and live phone mocks that run the real gesture. This is how C10 gets built.</td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="u9">
+                <td class="id">U9</td>
+                <th scope="row">Share sheet that saves</th>
+                <td>
+                  "Saved" with a place picker (open as a tab, bookmark, a space) and Done. The choice waits in the App Group or an Android inbox, and Bay files
+                  it when it next opens. Swiping down saves nothing.
+                </td>
+                <td><span class="tag api">Shared + 2 native</span></td>
+                <td>M</td>
+              </tr>
+
+              <tr class="band">
+                <th>Still open from before</th>
+              </tr>
+              <tr id="b2">
                 <td class="id">B2</td>
-                <th scope="row">Import from other browsers <span class="kind">Feature</span> <span class="st part">Partly done</span></th>
-                <td>
-                  A phone's browsers keep their data to themselves, so Settings → Import from another browser lists the browsers on the phone (Android asks the
-                  system; iOS asks each one's URL scheme, with Safari always there) and walks through how each hands its data over: Safari's export (Settings →
-                  Apps → Safari → Export), Google Takeout for Chrome, a bookmarks HTML file for the rest, or a pasted list of tabs (Arc Search).
-                  <code>modules/bay-import</code> unpacks the file natively (ZIP64 included) and only bookmark pages and history files come out; passwords and
-                  cards stay in the archive. Shared TypeScript (<code>src/import</code>) reads them; the review imports bookmarks into a folder named for the
-                  browser, favorites onto the start page and history (the newest 1,000 pages). Passwords aren't imported: Bay fills them from the phone's
-                  password manager (B20), which already has Chrome's. Bookmarks landed with it: a tree in the browsing state, a Bookmarks sheet (folders,
-                  search, remove), Bookmark in the page menu and bookmarks in the address bar's suggestions. See <a href="#arc">Arc mobile</a>. <br /><strong
-                    >Known gaps:</strong
-                  >
-                  Android is built but untested (no engine on this Mac while <code>android-engine.yml</code> runs; the browser list, the picker and unzip need a
-                  run on the emulator). iOS can only see browsers whose URL schemes are listed in <code>app.json</code> (Chrome, Firefox, Edge, Brave,
-                  DuckDuckGo); Opera and Arc Search aren't detected there and go through Another browser or Paste. Bookmarks can't be renamed, moved or
-                  reordered yet, and the tree is capped at 5,000 nodes. Firefox and Chrome on a phone can't export bookmarks themselves, so their users need
-                  Takeout or a computer. The Takeout and Safari steps are written from their documented flows and still need a check on a real phone.
-                </td>
-                <td>Arc, Desktop</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>3</td>
-              </tr>
-              <tr>
-                <td class="id">B3</td>
-                <th scope="row">Password-protected sites <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td>No HTTP auth handler on either engine, so sites using it just fail. Easy once <a href="#page-requests">Page requests</a> exists.</td>
-                <td>Basics</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>S</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B4</td>
-                <th scope="row">Small Arc touches <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>
-                  A 12-hour archive option (<code>SettingsPanel.tsx:46</code> starts at one day, and <code>model.ts:311</code> counts in days), long-press "…"
-                  to share, a gesture back to the last tab, Paste and Go.
-                </td>
-                <td>Arc</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
-                <td>3</td>
-              </tr>
-            </tbody>
-            <tbody>
-              <tr class="band">
-                <th colspan="8" scope="colgroup">Medium (M)</th>
-              </tr>
-              <tr>
-                <td class="id">B5</td>
-                <th scope="row">Links to other apps <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td>
-                  <code>tel:</code>, <code>mailto:</code>, <code>sms:</code>, maps and app links are dropped silently (<code>BayEngineView.swift:322</code>,
-                  <code>BayEngineView.kt:226</code>). The code comment says a later phase would handle this, but no phase lists it.
-                </td>
-                <td>Basics, Arc</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B6</td>
-                <th scope="row">Tabs lose their state <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td>
-                  Only four tabs stay loaded (<code>BrowserScreen.tsx:42</code>) and only each tab's address is saved. Beyond that, or after a relaunch, back
-                  history, scroll position and form text are gone. A page the system killed shows an error screen instead of reloading.
-                </td>
-                <td>Basics, Lens</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B7</td>
-                <th scope="row">Location, camera, microphone <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td>
-                  iOS has no usage strings in <code>app.json</code> and <code>expo-image-picker</code> removes the camera one on purpose. A file input's "Take
-                  Photo" may crash there, so stage 0 tests it. Android has no <code>onPermissionRequest</code> or location handler, so both are refused.
-                </td>
-                <td>Basics, Lens</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B8</td>
-                <th scope="row">Release setup <span class="kind">Feature</span></th>
-                <td>
-                  No <code>eas.json</code> or production build setup and no crash reports. <code>supportsTablet: true</code> is set while the app is
-                  portrait-only and has no tablet layout.
-                </td>
-                <td>Release</td>
+                <th scope="row">Bookmarks you can edit</th>
+                <td>Rename, move and reorder bookmarks and folders (only remove exists); the tree is capped at 5,000 nodes.</td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>M</td>
-                <td>3</td>
               </tr>
-              <tr>
-                <td class="id">B9</td>
-                <th scope="row">Default browser, links from other apps <span class="kind">Phase 6</span> <span class="st done">Landed</span></th>
+              <tr id="a6">
+                <td class="id">A6</td>
+                <th scope="row">On-device translation on Android</th>
                 <td>
-                  <code>expo-linking</code> is installed, but nothing in <code>src</code> uses it and there's no web intent filter. A link from another app
-                  can't open in Bay.
+                  Bergamot on <code>feat/mobile-translation</code> passes on iOS; Android is blocked by Mozilla's CDN answering 406 to <code>Chrome/</code> user
+                  agents. The mirror needs your go-ahead (D8). C4 takes iOS off this path.
                 </td>
-                <td>Lens, Basics</td>
+                <td><span class="tag android">Android only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="i2">
+                <td class="id">I2</td>
+                <th scope="row">Downloads that survive a killed app</th>
+                <td>
+                  iOS: a background URLSession, only if V4 shows it matters (Expo's app delegate doesn't forward its completion handler). Android: resume an
+                  interrupted download (Chromium reports it failed).
+                </td>
                 <td><span class="tag api">Shared + 2 native</span></td>
                 <td>M</td>
-                <td>3</td>
-              </tr>
-              <tr>
-                <td class="id">B10</td>
-                <th scope="row">Landscape <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td><code>app.json</code> locks portrait. It matters most for fullscreen video. Arc for Android shipped a landscape mode.</td>
-                <td>Arc, Basics</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B11</td>
-                <th scope="row">Peek <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>
-                  The link menu shows text only, with no page preview. Lens and desktop Bay both preview. A second <code>EngineView</code> in an overlay works
-                  on both.
-                </td>
-                <td>Lens, Desktop</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B12</td>
-                <th scope="row">Per-site settings, desktop mode <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>
-                  Page zoom is one global value (<code>textSize</code>), and only blocking can be set per site. Lens keeps zoom, Reader, desktop mode and
-                  blocking per site. Builds on B1's user agent work.
-                </td>
-                <td>Lens</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B13</td>
-                <th scope="row">Image long-press <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>Android only reacts to link hits and iOS only looks for links. There's no save, copy or share for images.</td>
-                <td>Basics</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B14</td>
-                <th scope="row">Share to Bay <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>Bay doesn't appear as a share target in other apps.</td>
-                <td>Basics</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B15</td>
-                <th scope="row">Quick actions and widgets <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>
-                  New tab and private tab from the app icon, then a search widget. Arc shipped widgets on both; Lens adds Siri, Control Center and Lock Screen.
-                </td>
-                <td>Arc, Lens</td>
-                <td><span class="tag ios">iOS</span> <span class="tag android">Android</span> separately</td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B16</td>
-                <th scope="row">Voice search <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>Arc shipped it on both. Use the on-device speech recognisers and send the text to the shared search card.</td>
-                <td>Arc</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B17</td>
-                <th scope="row">Richer media controls <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>The mini player has play, pause and stop. Lens adds skip, Picture in Picture and fullscreen.</td>
-                <td>Lens, Desktop</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td class="id">B18</td>
-                <th scope="row">Languages, accessibility pass <span class="kind">Feature</span> <span class="st done">Landed</span></th>
-                <td>
-                  All text is hard-coded English; Lens ships 14 languages. Controls have labels, but no full VoiceOver and TalkBack pass is recorded. Now: seven
-                  languages (English, Spanish, French, German, Brazilian Portuguese, Japanese, Hindi) chosen in Settings or following the phone, a catalogue
-                  test that keeps their keys and placeholders in step, and screen-reader labels, states and headers across the app, with open sheets modal.
-                </td>
-                <td>Lens</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-                <td>4</td>
-              </tr>
-            </tbody>
-            <tbody>
-              <tr class="band">
-                <th colspan="8" scope="colgroup">Hard (L)</th>
-              </tr>
-              <tr>
-                <td class="id">B19</td>
-                <th scope="row">New windows <span class="kind">Sites break</span> <span class="st done">Landed</span></th>
-                <td>
-                  <code>target=_blank</code> and <code>window.open</code> replace the current page. iOS returns <code>nil</code> from
-                  <code>createWebViewWith</code> (<code>BayEngineView.swift:399</code>), so popup sign-ins lose the page that opened them.
-                </td>
-                <td>Basics</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>L</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td class="id">B20</td>
-                <th scope="row">Passwords and passkeys <span class="kind">Phase 6</span> <span class="st done">Landed</span></th>
-                <td>
-                  <code>expo-secure-store</code> isn't added yet. iOS needs Apple's web-browser entitlement; Android uses Credential Manager. Without this,
-                  people retype passwords on every site. Now: Android pages reach the autofill service, and passkeys go through Bay's Chromium to Android's
-                  Credential Manager; iOS gets password AutoFill with the web-browser entitlement and claims the passkey one only with
-                  <code>BAY_WEB_PASSKEYS=1</code>. Waiting on Apple for both entitlements and on Google to list Bay as a privileged browser for passkeys.
-                </td>
-                <td>Lens, Desktop</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>L</td>
-                <td>3</td>
-              </tr>
-              <tr>
-                <td class="id">B21</td>
-                <th scope="row">Spaces, folders, sync <span class="kind">Feature</span> <span class="st done">Landed (local)</span></th>
-                <td>
-                  Spaces and synced pinned tabs defined Arc on mobile and are central to desktop Bay. Mobile has one flat tab list. Stays after the first
-                  release.
-                </td>
-                <td>Arc, Desktop</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>L</td>
-                <td>Phase 9</td>
               </tr>
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section id="arc">
-        <div class="eyebrow">09 · Arc mobile</div>
-        <h2>What Arc mobile tells us</h2>
-        <p>
-          There were two apps. Arc's first iPhone companion was the desktop sidebar in your pocket: Spaces, pinned tabs and near-real-time sync. Arc Search
-          replaced that idea with a fast, minimal browser, then gained Arc Sync for Spaces, pinned tabs and Today tabs.
-          <strong>Arc is now being shut down</strong>, and that changes what's worth copying.
-        </p>
-        <ul class="dates">
+        <h3>After the first release</h3>
+        <div class="wrap">
+          <table class="tight">
+            <tbody>
+              <tr id="l1">
+                <td class="id">L1</td>
+                <th scope="row">Sync with desktop</th>
+                <td>
+                  <code>@bay/sync</code> through an iCloud Drive folder (Swift on iOS, Kotlin on Android). Cra reads the Mac's sidebar the same way and stalls
+                  on writing back (two writers to one file); give the phone its own file that desktop merges, as Cra proposes.
+                </td>
+              </tr>
+              <tr id="l2">
+                <td class="id">L2</td>
+                <th scope="row">Tablets</th>
+                <td>iPad and Android tablet layouts with keyboard shortcuts; until then <code>supportsTablet: false</code>.</td>
+              </tr>
+              <tr id="l3">
+                <td class="id">L3</td>
+                <th scope="row">Summarize on the device</th>
+                <td>
+                  If D3 says yes: Apple's Foundation Models on iOS 26 where Apple Intelligence is on, Gemini Nano through ML Kit's summarization API where
+                  Android has it, hidden elsewhere. No Browse for Me.
+                </td>
+              </tr>
+              <tr id="l4">
+                <td class="id">L4</td>
+                <th scope="row">Store release</th>
+                <td>App Store and Play Store together, on Bay Chromium, after V1–V7 and R1–R4.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Known flakes</h3>
+        <ul>
+          <li>iOS: a tap in <code>fresh-start</code> lost once just after a cold boot; Find's Done lost three runs in a row in a first private session.</li>
           <li>
-            <b>22 October 2026 (passed)</b>
-            Arc Search can export open tabs. New Arc accounts ended.
-          </li>
-          <li>
-            <b>23 November 2026 (17 days away)</b>
-            Browse for Me and other AI features turn off on both apps. Sign-in and sync end.
-          </li>
-          <li>
-            <b>22 December 2026 (46 days away)</b>
-            Arc Search for Android is removed from Google Play and, per reports, from phones. Arc stops working on Mac and Windows. Only a lite iPhone app
-            remains.
+            Android (WebView era, to recheck on Chromium): one tap in ten on page zoom's "larger" lost; a new tab once stayed on <code>about:blank</code> while
+            the bar showed the address.
           </li>
         </ul>
-        <div class="callout">
-          <p>
-            <strong>The opening:</strong> Android users of Arc Search lose the app in 46 days, and the company's replacement, Dia, has no announced phone app.
-            Bay's Android design already follows Arc Search. A public test build before 22 December is the best-timed thing in this plan. That's decision D1,
-            and the one to look at first.
-          </p>
-        </div>
-
-        <div class="wrap" tabindex="0" role="region" aria-label="Arc features compared with Bay">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Arc mobile feature</th>
-                <th scope="col">Bay today</th>
-                <th scope="col">Plan</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">Minimal bottom bar, favourites above the keyboard</th>
-                <td>Have</td>
-                <td>Nothing to do</td>
-              </tr>
-              <tr>
-                <th scope="row">App-switcher-style tabs, swipe up to close</th>
-                <td>Have, added 4 November</td>
-                <td>Nothing to do</td>
-              </tr>
-              <tr>
-                <th scope="row">Automatic archive, searchable</th>
-                <td>Have, shortest option is one day; Arc went down to 12 hours</td>
-                <td>Add 12 hours (B4)</td>
-              </tr>
-              <tr>
-                <th scope="row">Built-in ad and tracker blocking, Reader</th>
-                <td>Have</td>
-                <td>Measure both apps (I5)</td>
-              </tr>
-              <tr>
-                <th scope="row">Cookie popup handling</th>
-                <td>Partly: EasyList Cookie hides notices. Arc also denied consent when it could do so reliably.</td>
-                <td>Test top sites in stage 0, act only if it's visibly worse</td>
-              </tr>
-              <tr>
-                <th scope="row">Private browsing</th>
-                <td>Have, plus a biometric lock</td>
-                <td>Nothing to do</td>
-              </tr>
-              <tr>
-                <th scope="row">Open links in their apps</th>
-                <td>Missing</td>
-                <td>B5</td>
-              </tr>
-              <tr>
-                <th scope="row">Voice search, widgets, landscape</th>
-                <td>Missing</td>
-                <td>B16, B15, B10</td>
-              </tr>
-              <tr>
-                <th scope="row">Spaces, pinned tabs and Today tabs synced with desktop</th>
-                <td>Missing</td>
-                <td>B21, after first release</td>
-              </tr>
-              <tr>
-                <th scope="row">Export open tabs</th>
-                <td>Missing as an import path</td>
-                <td>B2, import side first</td>
-              </tr>
-              <tr>
-                <th scope="row">Browse for Me, Pinch to Summarize, Call Arc</th>
-                <td>Missing</td>
-                <td><strong>Don't build</strong> (D6)</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </section>
 
-      <section id="motion">
-        <div class="eyebrow">10 · The next round</div>
-        <h2>Motion: A1 to A8</h2>
-        <p>
-          Bay animates the bar hiding on scroll, the bar swipe between tabs, the stacked switcher, toasts and download rows. All of it uses Reanimated. Sheets
-          open with the library's default spring, there are no shared transitions between screens, and haptics exist only on the iOS pull to refresh. Arc and
-          Lens feel fast because each tap gets a response within one frame.
-        </p>
-        <div class="rules">
-          <div><b>Transform and opacity</b><span>Never animate width, height or layout props on the page path.</span></div>
-          <div><b>UI thread</b><span>Reanimated worklets only, nothing driven from JS state.</span></div>
-          <div><b>150 to 250 ms</b><span>Springs for drags, timing curves for taps.</span></div>
-          <div>
-            <b>Reduced motion</b><span><code>useReducedMotion()</code> turns every one into a crossfade.</span>
-          </div>
-        </div>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Animation</th>
-                <th>Where</th>
-                <th>Reference</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="id">A1</td>
-                <td>
-                  Tab card zooms into the page when opened, page shrinks back into its card when closed<small
-                    >Measure the card's frame and scale the snapshot, then swap in the live view.</small
-                  >
-                </td>
-                <td><code>TabSwitcher.tsx</code></td>
-                <td>Arc, Safari</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A2</td>
-                <td>Search capsule grows into the search card instead of a hard cut<small>One shared element, keyboard rises with it.</small></td>
-                <td><code>SearchCard.tsx</code>, <code>BrowserBar.*</code></td>
-                <td>Lens</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A3</td>
-                <td>
-                  Haptics on pin, unpin, tab close, long press and the switcher snap<small>Add <code>expo-haptics</code>. Android uses light ticks only.</small>
-                </td>
-                <td>shared hook</td>
-                <td>Arc, Lens</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A4</td>
-                <td>
-                  Press feedback on tiles and rows: scale to 0.96 and dim<small
-                    >One <code>Pressable</code> wrapper, reused by the page menu, Settings and the start page.</small
-                  >
-                </td>
-                <td><code>PageMenu.tsx</code>, <code>SettingsPanel.tsx</code></td>
-                <td>Arc</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A5</td>
-                <td>
-                  Pins and recents fade in, and close the gap when one is removed<small><code>LinearTransition</code> on the grid items.</small>
-                </td>
-                <td><code>StartPage.tsx</code></td>
-                <td>Lens</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A6</td>
-                <td>Load progress as a thin line along the capsule edge, fading out on finish</td>
-                <td><code>BrowserBar.*</code></td>
-                <td>Arc, Lens</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A7</td>
-                <td>Swipe a history or archive row left to remove it, with the list closing up</td>
-                <td><code>HistoryPanel.tsx</code>, <code>ArchivePanel.tsx</code></td>
-                <td>Arc</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-              <tr>
-                <td class="id">A8</td>
-                <td>Sheet springs tuned to one shared config, and the iOS glass sheet background (I6)</td>
-                <td><code>PanelSheet.tsx</code></td>
-                <td>Lens</td>
-                <td><span class="st done">Landed</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="compare">
-        <div class="eyebrow">11 · Comparison</div>
-        <h2>Arc Search, Lens and Bay</h2>
-        <p>
-          Arc Search is the model for the Android look and is going away, so its users need somewhere to go. Lens is the design reference for both apps. Rows
-          that both rivals have and Bay lacks come first.
-        </p>
-        <div class="legend">
-          <span><span class="st done">Landed</span> working on both apps</span>
-          <span><span class="st part">Partly</span> one app, or a weaker version</span>
-          <span><span class="st miss">Missing</span> not started</span>
-        </div>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Feature</th>
-                <th class="c">Arc Search</th>
-                <th class="c">Lens</th>
-                <th>Bay</th>
-                <th>Item</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Open links from other apps, default browser</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B9</td>
-              </tr>
-              <tr>
-                <td>Widgets and app icon quick actions</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B15</td>
-              </tr>
-              <tr>
-                <td>Voice search</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B16</td>
-              </tr>
-              <tr>
-                <td>Landscape and fullscreen video</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B10, A2</td>
-              </tr>
-              <tr>
-                <td>Tabs keep history after relaunch</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B6</td>
-              </tr>
-              <tr>
-                <td>Link preview (Peek)</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B11</td>
-              </tr>
-              <tr>
-                <td>Per-site zoom, Reader and desktop mode</td>
-                <td class="c">·</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B12</td>
-              </tr>
-              <tr>
-                <td>Picture in Picture, skip in media controls</td>
-                <td class="c">·</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">B17</td>
-              </tr>
-              <tr>
-                <td>Swipe anywhere to go back and forward</td>
-                <td class="c">·</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed, edge swipes</span></td>
-                <td class="id">A4</td>
-              </tr>
-              <tr>
-                <td>Languages beyond English</td>
-                <td class="c">✓</td>
-                <td class="c">14</td>
-                <td><span class="st done">Landed, 7</span></td>
-                <td class="id">B18</td>
-              </tr>
-              <tr>
-                <td>Import from other browsers</td>
-                <td class="c">export</td>
-                <td class="c">·</td>
-                <td><span class="st part">Partly done</span></td>
-                <td class="id">B2</td>
-              </tr>
-              <tr>
-                <td>Stacked tab switcher, swipe up to close</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">·</td>
-              </tr>
-              <tr>
-                <td>Auto archive, searchable</td>
-                <td class="c">12 h</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed, 12 h</span></td>
-                <td class="id">B4</td>
-              </tr>
-              <tr>
-                <td>Ad and tracker blocking, Reader, private lock</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed</span></td>
-                <td class="id">·</td>
-              </tr>
-              <tr>
-                <td>Google sign-in, background downloads</td>
-                <td class="c">✓</td>
-                <td class="c">✓</td>
-                <td><span class="st done">Landed, since 5 Nov</span></td>
-                <td class="id">B1, I2</td>
-              </tr>
-              <tr>
-                <td>Hide elements, inspect, copy as Markdown</td>
-                <td class="c">·</td>
-                <td class="c">·</td>
-                <td><span class="st done">Landed, Bay only</span></td>
-                <td class="id">·</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="prs">
-        <div class="eyebrow">12 · Pull requests</div>
-        <h2>The pull requests</h2>
-        <p>
-          Each PR is tested on the iPhone and the Android phone, and is done when its e2e flows pass on both. The branch names are the ones the plan proposed.
-        </p>
-        <div class="prs">
-          <div class="pr first">
-            <span class="n">1</span>
-            <div>
-              <code class="branch">feat/mobile-next-plan</code>
-              <h3>Animations A1 to A8, and the release setup</h3>
-              <p>
-                One spring and one press feedback for everything, the haptics, the start page that closes its gap, the capsule that carries the load's progress,
-                the search card that grows out of the capsule, the card that zooms into the page, the history row that is swiped away, and the release setup
-                (B8). Open as #14.
-              </p>
-            </div>
-          </div>
-          <div class="pr">
-            <span class="n">2</span>
-            <div>
-              <code class="branch">feat/mobile-page-requests</code>
-              <h3>Page requests sheet</h3>
-              <p>I3, B3, B5 and B7 behind one <code>@bay/engine</code> event. Landed on <code>main</code> in November.</p>
-            </div>
-          </div>
-          <div class="pr">
-            <span class="n">3</span>
-            <div>
-              <code class="branch">feat/mobile-site-compat</code>
-              <h3>Uploads, fullscreen, landscape</h3>
-              <p>A1, A2, A3, B10 and I4. Landed on <code>main</code> in November.</p>
-            </div>
-          </div>
-          <div class="pr">
-            <span class="n">4</span>
-            <div>
-              <code class="branch">feat/mobile-tab-state</code>
-              <h3>Tabs that survive</h3>
-              <p>B6, then B19 new windows. Landed on <code>main</code> in November.</p>
-            </div>
-          </div>
-          <div class="pr">
-            <span class="n">5</span>
-            <div>
-              <code class="branch">feat/mobile-arc-switch</code>
-              <h3>Arc switchers</h3>
-              <p>
-                B2 import, B4 touches, B9 default browser. Landed on <code>main</code> in November; B8, the release setup, landed with the animations above.
-              </p>
-            </div>
-          </div>
-          <div class="pr">
-            <span class="n">6</span>
-            <div>
-              <code class="branch">feat/mobile-lens-features</code>
-              <h3>Lens features</h3>
-              <p>B11 Peek, B12 per-site settings, B13 images, A4 swipes, B15 to B18. Landed on <code>main</code> in November.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="stages">
-        <div class="eyebrow">13 · Stages</div>
-        <h2>Stages</h2>
-        <p>
-          These run before phase 6 of <code>mobile-plan.html</code> and absorb it. Build a batch, then test it on both devices, as you do now. Following
-          <code>apps/mobile/AGENTS.md</code>, a stage isn't done until its flows pass on both. Verify per test with the MCP runner, since the
-          <code>argent e2e run</code> CLI has failed tests that pass there.
-        </p>
-
-        <section class="stage">
-          <h3>Stage 0: See iOS for real</h3>
-          <ul class="tasks">
-            <li>
-              <strong>New, do first:</strong> run <code>expo prebuild</code> and a full iOS build of #11's Swift, which has never been compiled. Then start a
-              large download and leave Bay, on iOS 26 and on an older iOS if one is at hand; type a download link into a new tab; and sign in to Google.
-            </li>
-            <li>
-              Finish #12's untested Android paths: the notification's Cancel, a large file, a download with Bay in the background, Google sign-in, and YouTube
-              avatars on the phone.
-            </li>
-            <li>
-              Build both apps and run all nine e2e tests on both. Their last recorded full pass predates the stacked switcher, the Settings pages and the rest
-              of the work since 2 November. Neither #11 nor #12 ran <code>pnpm e2e</code>, and <code>downloads</code> now covers new code on both.
-            </li>
-            <li>
-              Add e2e tests for what has none: no test references the theme, appearance, browsing, page zoom, start page, wallpaper or YouTube settings. Swipe
-              up to close is untested too, since <code>tabs-roundtrip</code> taps the close button.
-            </li>
-            <li>
-              On a real iPhone, check what simulators can't: Face ID lock, audio with the screen locked, what WebKit shows on the lock screen (I1), a long
-              download with the app closed (I2), "Take Photo" from a file input (B7), and whether "always dark" reaches the glass controls when the phone is in
-              light mode.
-            </li>
-            <li>
-              Try the failures on both: Google sign-in (B1, now with the user agent fix), a popup sign-in (B19), and the adblock test (I5, after the hostname
-              fix). Record the results in this file. The first real-phone findings are already in <a href="#progress">Since the plan</a>.
-            </li>
-            <li>
-              Fix the stale text in <code>apps/mobile/README.md</code> and the top of <code>mobile-plan.html</code>, both of which still describe early phases.
-            </li>
-          </ul>
-          <div class="done-when">
-            <p><strong>Done when:</strong> every test passes on both, and this plan is corrected with anything the real runs found.</p>
-          </div>
-        </section>
-
-        <section class="stage">
-          <h3>Stage 1: Close the standalone iOS gaps</h3>
-          <ul class="tasks">
-            <li><span class="tag ios">iOS only</span> Link menu through WebKit's context menu delegate (I4). <span class="st done">Landed</span></li>
-            <li>
-              <span class="tag ios">iOS only</span> Lock-screen media controls (I1). <span class="st done">Landed</span> Now Playing info and remote commands
-              are in; stage 0 still compares them with what WebKit shows on its own.
-            </li>
-            <li>
-              <span class="tag ios">iOS only</span> Background downloads, resume, finished notification (I2). <span class="st done">Landed</span> Background
-              running, <code>resumeData</code> and the notification are in. A background <code>URLSession</code> that survives the app being killed stays
-              deferred unless device testing shows it matters.
-            </li>
-            <li>
-              <span class="tag ios">iOS only</span> Glass sheets and haptics (I6). <span class="st done">Landed</span> Glass sheets and haptics on tab close,
-              pin and long-press are in.
-            </li>
-          </ul>
-          <div class="done-when">
-            <p>
-              <strong>Done when:</strong> <code>link-menu</code>, <code>downloads</code> and <code>mini-player</code> pass on both, with new checks for an
-              iframe link and a download that finishes with the app closed.
-            </p>
-          </div>
-        </section>
-
-        <section class="stage">
-          <h3>Stage 2: Make sites work on both</h3>
-          <ul class="tasks">
-            <li>
-              <span class="tag api">Shared + 2 native</span> Normal browser user agent on both (B1). <span class="st done">Landed</span> Chrome's on Android and
-              Safari's on iOS. Still needs a check on a device.
-            </li>
-            <li>
-              <span class="tag api">Shared + 2 native</span> Page requests, with dialogs (I3), HTTP sign-in (B3), other-app links (B5), and location, camera and
-              microphone (B7). <span class="st done">All landed</span> (the dialog sheet, HTTP sign-in, app links and device permissions on both apps).
-            </li>
-            <li>
-              <span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3). <span class="st done">Both landed</span>
-            </li>
-            <li><span class="tag api">Shared + 2 native</span> Fullscreen video (A2), then landscape (B10). <span class="st done">Both landed</span></li>
-            <li>
-              <span class="tag api">Shared + 2 native</span> Save and restore tab state (B6): <code>interactionState</code> on iOS and <code>saveState</code> on
-              Android, in their own files, never for private tabs. Reload pages the system killed.
-              <span class="st done">Landed</span>
-            </li>
-            <li><span class="tag api">Shared + 2 native</span> New windows open real tabs that keep their opener (B19).</li>
-          </ul>
-          <div class="done-when">
-            <p>
-              <strong>Done when:</strong> a new <code>site-compat</code> e2e test covers a dialog, an upload, a <code>tel:</code> link, a popup and a tab
-              restored with its history, on both apps, and Google sign-in works on real devices or the limit is written down.
-            </p>
-          </div>
-        </section>
-
-        <section class="stage">
-          <h3>Stage 3: Test release (phase 6, targeting before 22 December)</h3>
-          <ul class="tasks">
-            <li>
-              <span class="tag api">Shared + 2 native</span> Default browser and incoming links (B9). Request Apple's entitlement early, since approval isn't in
-              our hands. <span class="st done">Landed</span>: Bay answers <code>http</code>/<code>https</code> on both apps, opens what other apps hand it in a
-              tab, and claims the web-browser entitlement behind <code>BAY_DEFAULT_BROWSER=1</code> for the request to Apple.
-            </li>
-            <li>
-              <span class="tag api">Shared + 2 native</span> Password and passkey AutoFill (B20). <span class="st done">Landed</span>; passkeys wait on Apple's
-              and Google's approval.
-            </li>
-            <li><span class="tag shared">Shared</span> Import Arc tabs (B2) and the small Arc touches (B4). <span class="st done">Both landed</span></li>
-            <li>
-              <span class="tag shared">Shared</span> Release setup and tablet flag (B8, D7). <span class="st done">Landed</span>; the EAS project and the first
-              builds are still to do (<code>docs/mobile-releasing.md</code>).
-            </li>
-            <li>
-              Publish TestFlight and Google Play testing builds. Add one line to the switch guide on the Bay site: export your Arc Search tabs before 23
-              November. <span class="st done">The site line landed</span>; the builds wait on the EAS project.
-            </li>
-          </ul>
-          <div class="done-when">
-            <p>
-              <strong>Done when:</strong> someone outside this repo can install both apps from a link, sign in to a real site, and bring in their Arc tabs. If
-              time runs short, cut AutoFill on the system WebView before cutting the Android test build.
-            </p>
-          </div>
-        </section>
-
-        <section class="stage">
-          <h3>Stage 4: Features people expect</h3>
-          <p>
-            In order: Peek (B11), per-site settings and desktop mode (B12), image long-press (B13), Android edge swipes (A4), share to Bay (B14), quick actions
-            then widgets (B15), voice search (B16), richer media controls (B17), languages and accessibility (B18).
-            <span class="st done"
-              >Stage 4's features all landed: Peek, per-site settings, image long-press, share, quick actions with widgets, voice search, media controls, and
-              languages with accessibility</span
-            >. Their e2e tests are still to write.
-          </p>
-          <div class="done-when">
-            <p><strong>Done when:</strong> each has an e2e test on both, as usual.</p>
-          </div>
-        </section>
-
-        <section class="stage">
-          <h3>Then the existing roadmap</h3>
-          <p>
-            On-device translation (A6), phase 7 (our Chromium, which also resolves A5), phase 8 (store release), phase 9 (sync; spaces and folders landed
-            locally, cross-device sync still to come, B21).
-          </p>
-        </section>
-      </section>
-
-      <section id="phases">
-        <div class="eyebrow">14 · Phases</div>
-        <h2>Phases</h2>
-        <p class="note">
-          Every phase is done only when its flows pass on iOS completely and its UI is checked on Android, with <code>pnpm e2e</code> passing on both.
-        </p>
-
-        <div class="stage">
-          <div class="stage-number">0</div>
-          <div>
-            <h3>Project, both native builds, Argent <span class="done">done</span></h3>
-            <ul>
-              <li><code>apps/mobile</code>: Expo SDK 58, HeroUI Native, Expo UI (SwiftUI) and dev client, in its own workspace. Oxlint and oxfmt pass.</li>
-              <li>
-                Built and running on the iPhone 18 Pro simulator (iOS 27) and the <code>bay-pixel</code> emulator (Android 16, API 36). Argent drives both.
-              </li>
-              <li>
-                Placeholder start page: shared HeroUI text, glass buttons on iOS (<code>StartToolbar.ios.tsx</code>), flat round buttons on Android
-                (<code>StartToolbar.android.tsx</code>).
-              </li>
-              <li>
-                The dev launcher skips onboarding and the menu and opens Metro at <code>127.0.0.1:8081</code>. When Argent starts the Android app it shows the
-                launcher instead, so tests wait for it to settle and then open the dev-client link.
-              </li>
-              <li>
-                <code>pnpm native</code> and <code>pnpm e2e</code> boot and run both platforms. A <code>smoke</code> e2e test passes twice in a row on both.
-              </li>
-              <li>Argent's MCP server, skills and rules are in the repo; <code>apps/mobile/AGENTS.md</code> explains the loop and the testing rule.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">1</div>
-          <div>
-            <h3>Engine API on both platforms <span class="done">done</span></h3>
-            <p class="note">
-              The local <code>@bay/engine</code> module and initial address/navigation screen are implemented. Native builds succeed on both platforms.
-              <code>pnpm e2e</code> passes twice unchanged on iOS and Android, including page title/URL, clear address, back/forward and a reload smoke check.
-              The Lens browsing UI remains phase 2.
-            </p>
-            <ul>
-              <li>Write the <code>@bay/engine</code> TypeScript API and scaffold <code>modules/bay-engine</code>.</li>
-              <li>
-                <code>EngineView</code> with load, title, URL, progress and back/forward: Swift over <code>WKWebView</code>, Kotlin over the system WebView.
-              </li>
-            </ul>
-            <div class="check">
-              <strong>Done when</strong>
-              <ul>
-                <li>An Argent e2e test opens a URL and waits for the page title on both the simulator and the emulator.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">2</div>
-          <div>
-            <h3>Browsing core UI <span class="done">done</span></h3>
-            <p class="note">
-              <code>search-and-open</code>, <code>tabs-roundtrip</code>, <code>link-menu</code> and <code>smoke</code> pass twice in a row on the iPhone 18 Pro
-              simulator and the bay-pixel emulator; each starts from <code>.argent/flows/fresh-start.yaml</code>, which clears browsing data in Settings. The
-              start page, search card, page bar and switcher match on both platforms. Open: on a page too short to scroll, its last line sits under the floating
-              bar (the bar only hides on scroll); Android's back edge is the system back gesture, with no forward edge swipe; pull to reload and the hiding bar
-              have no e2e test yet; on iOS, taps inside the Settings sheet are sometimes lost during <code>fresh-start</code>, so a run can fail before its test
-              begins (Android passes every run).
-            </p>
-            <ul>
-              <li>Start page, search card with <code>@bay/core</code> suggestions, page view with the hiding bar, edge swipes, pull to reload.</li>
-              <li>Tabs and the card switcher from snapshots; automatic archive; the link menu.</li>
-              <li>Settings: search engine (desktop's list), clear data.</li>
-            </ul>
-            <div class="check">
-              <strong>Done when</strong>
-              <ul>
-                <li><code>search-and-open</code>, <code>tabs-roundtrip</code> and <code>link-menu</code> pass twice in a row on both platforms.</li>
-                <li>Screenshots of both platforms match the reference frames in layout.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">3</div>
-          <div>
-            <h3>Privacy and blocking <span class="done">done</span></h3>
-            <p class="note">
-              Blocking runs on Bay's own Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop, which now uses it instead of
-              uBlock Origin. Both engines use uBlock Origin's default lists plus EasyList Cookie, downloaded daily straight to files (list text never passes
-              through JavaScript), with uBO's <code>!#if</code> sections resolved per platform. iOS: 178,070 WebKit rules, compiled in about 14 s on first
-              launch in the background and ready in about 25 ms afterwards; adblock.turtlecute.org scores 73% (97 of 132). Android: the engine is built once and
-              loaded from its serialized cache. <code>privacy</code> joins the e2e tests (blocker running with every list, parameter stripping, HTTPS upgrade,
-              per-site pause, private tabs). Scriptlets (<code>##+js</code>) and <code>$redirect</code> stand-ins come from uBlock Origin's resources and
-              Brave's, assembled by <code>packages/adblock/scripts/assemble-resources.mjs</code> and shipped in the app: Android answers redirected requests
-              with the stand-in and registers a page's scriptlets as an origin-scoped document-start script; iOS, whose content rules can't run scripts, also
-              loads the engine (7 ms from cache) and installs them as a user script before each navigation. uBO's trusted scriptlets only run for uBO's own
-              lists. Sheets drag by their handle only, which fixed taps lost in them on iOS. Open: the biometric lock has no e2e test (the simulators have no
-              enrolled biometrics).
-            </p>
-            <ul>
-              <li>
-                Desktop's filter lists on both: content rule lists on iOS, request interception plus cosmetic CSS on Android. Blocking can be paused per site.
-              </li>
-              <li>Tracking-parameter stripping (<code>cleanUrl</code>), HTTPS upgrades, third-party cookies blocked by default.</li>
-              <li>Private tabs with a biometric lock.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">4</div>
-          <div>
-            <h3>Reading tools</h3>
-            <p>
-              Reader, Copy as Markdown and Hide elements share page scripts through the native engine bridge. Reader has seven themes, three font families and
-              adjustable text size. Hide elements has Zap, Parent, Undo and Reset site; rules persist per host, while private tabs keep separate rules in
-              memory. Article markup is sanitized before display or conversion. Reader preferences and hide rules have persistence tests, the page scripts have
-              DOM tests, and <code>reading-tools.yaml</code> passes on both devices. On-device translation remains open.
-            </p>
-            <ul>
-              <li>Reader with themes, font and size; Hide elements with Zap, undo and per-site rules; on-device translation; Copy as Markdown.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">5</div>
-          <div>
-            <h3>Power tools <span class="done">done</span></h3>
-            <p>
-              Find on page marks matches with the CSS Custom Highlight API and steps through them from a bar above the keyboard. Inspect reuses desktop's
-              Developer Mode element script (<code>ELEMENT_INFO</code> in <code>@bay/core</code>) through the picker, and adds the font identifier: the family
-              that actually renders, whether it's a web font and where its file comes from. Downloads go through <code>WKDownload</code> into Bay's Files folder
-              on iOS and the system DownloadManager on Android, with a toast and a Downloads list. A tab playing media stays loaded and shows a mini player when
-              it's off screen; iOS keeps playing in the background with the playback audio session, and Android runs a media playback service with a media
-              notification. <code>power-tools.yaml</code>, <code>downloads.yaml</code> and <code>mini-player.yaml</code> pass on both devices.
-            </p>
-            <ul>
-              <li>Web inspector and font identifier (shared page scripts), mini player, downloads, find on page.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">6</div>
-          <div>
-            <h3>Platform integration</h3>
-            <ul>
-              <li>Default browser on both (iOS needs Apple's web-browser entitlement, which also enables passkeys in the web view).</li>
-              <li>Password and passkey AutoFill: iOS AutoFill, Android Credential Manager.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">7</div>
-          <div>
-            <h3>Our Chromium on Android</h3>
-            <p>
-              The <a href="android-chromium-plan.html">Android Chromium implementation plan</a> expands this phase with repository evidence, native code
-              changes, GitHub runner capacity gates, AAR packaging, data migration and acceptance tests. iOS stays on <code>WKWebView</code> only.
-            </p>
-            <ul>
-              <li>
-                On a Linux GitHub Actions runner: resolve the direct Chromium pin and Android dependencies, measure disk and checkpoint capacity, then build
-                upstream <code>content_shell_apk</code> for arm64 and run it under Argent. Provision a larger Linux runner if standard hosted capacity is
-                insufficient.
-              </li>
-              <li>
-                Extract portable <code>//bay/content</code> code from NNCore, preserving desktop behavior. Write <code>//bay/mobile</code> and prove its AAR,
-                resources, JNI and sandboxed child processes in a small Gradle host before integrating Expo.
-              </li>
-              <li>
-                Replace the Kotlin WebView adapter with the Chromium adapter, preserve the shared engine contract, and version native state separately. iOS
-                keeps its WebKit implementation and blocker.
-              </li>
-              <li>
-                Publish an immutable engine artifact and fetch it during local and remote Android prebuild. Qualify both platforms and ship Chromium security
-                fixes through app updates.
-              </li>
-            </ul>
-            <div class="check">
-              <strong>Done when</strong>
-              <ul>
-                <li>Every e2e test passes on Android with our Chromium, unchanged.</li>
-                <li>We've measured app size, cold start, memory with five tabs and Speedometer against the system WebView.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">8</div>
-          <div>
-            <h3>Ship both</h3>
-            <ul>
-              <li>TestFlight and Google Play testing tracks, then the App Store and Play Store, released together.</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="stage">
-          <div class="stage-number">9</div>
-          <div>
-            <h3>After the first release</h3>
-            <ul>
-              <li>Sync with desktop through <code>@bay/sync</code> (iCloud Drive folder).</li>
-              <li>iPad and Android tablet layouts with keyboard shortcuts.</li>
-            </ul>
-          </div>
-        </div>
+      <section id="order">
+        <div class="eyebrow">09 · Order</div>
+        <h2>What happens next</h2>
+        <ol>
+          <li><b>Now, while the engine builds:</b> R3 (send the requests), V3's Arc Search export before 23 November, R4, C1.</li>
+          <li><b>When the APK exists:</b> V1, then V2 in one Android batch.</li>
+          <li><b>Test builds:</b> R1 and R2, then V4 and V5 with the builds on real phones.</li>
+          <li>
+            <b>UI round:</b> U1 and U2 first (no visible change, then the springs), then U3 with C2 and C3 (page menu, blocking count, per-site switches), U4
+            with C1, U5 with C5 and C6, U6.
+          </li>
+          <li><b>Next feature batch:</b> C4, then U7–U9 with C10 and C11.</li>
+          <li><b>Then:</b> C7–C9 (home screen and system), C12, the small ones C13–C17, B2, V6 and V7 alongside.</li>
+          <li><b>After release:</b> L1–L4.</li>
+        </ol>
+        <p class="note">Each batch is tested on both devices and committed in chunks; a stage isn't done until its flows pass on both.</p>
       </section>
 
       <section id="decisions">
-        <div class="eyebrow">15 · Decisions</div>
-        <h2>Decisions</h2>
-        <h3>How Bay is built</h3>
+        <div class="eyebrow">10 · Decisions</div>
+        <h2>Decisions in force</h2>
         <div class="wrap">
-          <table>
+          <table class="tight">
             <thead>
-              <tr>
-                <th>Decision</th>
-                <th>Why</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>Decision</th>
-                <th>Why</th>
-              </tr>
-              <tr>
-                <td>
-                  Lens's design on both platforms; Liquid Glass on iOS; on Android, our own components in Arc Search's Android style, with no Material and no
-                  imitation glass
-                </td>
-                <td>Your choice.</td>
-              </tr>
-              <tr>
-                <td>iOS renders with WebKit; Android with our Chromium, from the desktop engine tree</td>
-                <td>Your choice. The App Store requires WebKit outside the EU and Japan.</td>
-              </tr>
-              <tr>
-                <td>Android uses the system WebView until phase 7, when our Chromium build and swap happen</td>
-                <td>Your choice: Android's engine build comes last. The UI and features are proven first.</td>
-              </tr>
-              <tr>
-                <td>iOS tested completely; every UI change also tested on Android, with e2e tests passing on both</td>
-                <td>Your choice.</td>
-              </tr>
-              <tr>
-                <td>One engine API, <code>@bay/engine</code>; nothing ships on one platform only</td>
-                <td>The UI and JavaScript stay shared.</td>
-              </tr>
-              <tr>
-                <td>
-                  Platform code in <code>.ios.tsx</code> / <code>.android.tsx</code>; shared code in plain <code>.tsx</code>; <code>moduleSuffixes</code> in
-                  <code>tsconfig.json</code>
-                </td>
-                <td>Your choice, and Metro's built-in platform resolution.</td>
-              </tr>
-              <tr>
-                <td>Android engine builds run on your Linux machine and are published like desktop's engine</td>
-                <td>Recommended: desktop already builds Chromium locally and publishes it, because CI can't.</td>
-              </tr>
-              <tr>
-                <td>Phones first; iPad and Android tablets after the first release</td>
-                <td>Recommended: keeps the first release focused.</td>
-              </tr>
-              <tr>
-                <td>Sync with desktop after the first release</td>
-                <td>Recommended: it needs the Swift module ported and a Kotlin one written.</td>
-              </tr>
-              <tr>
-                <td>
-                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, persisted as one versioned JSON document with
-                  <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>; content blocking in Bay's Rust blocker
-                  (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop
-                </td>
-                <td>
-                  Recommended: Liquid Glass needs iOS 26; zustand matches desktop. expo-sqlite 58 doesn't register its native module on Android (its module is
-                  written against Expo's new module API, which this build doesn't wire up), and one document is all phase 2 needs; the store sits behind a
-                  repository interface, so SQLite can return when history outgrows a file. The Keychain/Keystore-backed secure store is for credentials (phase
-                  6).
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  Expo SDK 58 (React Native 0.88), Expo Router, dev-client builds, HeroUI Native with Uniwind; <code>apps/mobile</code> is its own pnpm
-                  workspace
-                </td>
-                <td>Your choice; the root workspace hoists react-native-macos 0.81 for desktop.</td>
-              </tr>
-              <tr>
-                <td>Bundle id and package <code>in.krishkalaria.bay.mobile</code>, scheme <code>bay://</code></td>
-                <td>Sits next to the desktop id <code>in.krishkalaria.bay</code>.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <h3 id="round-decisions">What the last two rounds decided</h3>
-        <div class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Decision</th>
-                <th>Why</th>
-              </tr>
-            </thead>
-            <tbody>
               <tr>
                 <th scope="col">#</th>
                 <th scope="col">Decision</th>
                 <th scope="col">Why</th>
               </tr>
+            </thead>
+            <tbody>
               <tr>
                 <td class="id">D1</td>
-                <th scope="row">
-                  Public test builds of both apps before 22 December, on the system WebView. Our Chromium still comes before the full store release.
-                </th>
-                <td>
-                  <strong>This changes the current order</strong>, where phase 8 follows phase 7. Arc's date won't wait for a Chromium build, and the swap sits
-                  behind <code>@bay/engine</code> anyway. Full release order stays as you chose it.
-                </td>
+                <th scope="row">Android is Bay Chromium only; public test builds before 22 December.</th>
+                <td>The system WebView fallback was dropped on 14 November. Arc Search's Android users are the opening.</td>
               </tr>
               <tr>
                 <td class="id">D2</td>
-                <th scope="row">Fix sites first, then add features: stages 0, 1 and 2 come before Peek, widgets or voice.</th>
-                <td>A browser that can't sign in or upload a file loses people faster than one with no widget.</td>
+                <th scope="row">iOS blocking stays on WebKit content rules plus scriptlets.</th>
+                <td>A web view can't intercept subresources on iOS. Measure it rather than chase it.</td>
               </tr>
-              <tr>
+              <tr id="d3">
                 <td class="id">D3</td>
-                <th scope="row">Page requests is one shared sheet, not native alerts on each side.</th>
-                <td>It fits your one-design rule, covers four gaps, and avoids Android's Material dialogs.</td>
+                <th scope="row">Open: summarize on the device? <span class="st part">Your call</span></th>
+                <td>
+                  D6 ruled out Browse for Me, Summarize and Call Arc because they needed a paid server. Cra shows Summarize runs on the phone's own model.
+                  Recommended: allow Summarize after the first release (L3), keep Browse for Me and Call Arc out.
+                </td>
               </tr>
-              <tr>
+              <tr id="d4">
                 <td class="id">D4</td>
-                <th scope="row">iOS ad blocking stays on WebKit content rules.</th>
-                <td>A web view can't intercept subresources on iOS, so full parity isn't possible. Measure it rather than chase it.</td>
+                <th scope="row">Open: let people continue past a bad certificate? <span class="st part">Your call</span></th>
+                <td>
+                  Cra allows it per host for the run. Recommended: no; keep Bay's "This connection isn't private" page. The people who need it can use another
+                  browser, and it's an easy trap for everyone else.
+                </td>
               </tr>
               <tr>
                 <td class="id">D5</td>
-                <th scope="row">Glass on iOS sheets; contents stay shared.</th>
-                <td>It closes the look gap for little code and keeps your shared-panels decision.</td>
-              </tr>
-              <tr>
-                <td class="id">D6</td>
-                <th scope="row">No Browse for Me, Pinch to Summarize or Call Arc.</th>
+                <th scope="row">Copy Cra's UI structure, measurements and motion; keep Bay's brand.</th>
                 <td>
-                  Arc is turning them off, Lens has none, they need a paid server, and they conflict with a browser that keeps data on the device. Copy as
-                  Markdown already covers taking an article elsewhere.
+                  Cra is MIT, so ported rules keep its notice (R4). Its colours, copy, logo and widget art are Arc Search's, so Bay keeps its own (see "What not
+                  to copy"). Lens stays the reference for the start page, the bar and the glass.
                 </td>
               </tr>
               <tr>
                 <td class="id">D7</td>
-                <th scope="row">Sync, Spaces and tablets stay after the first release. Set <code>supportsTablet: false</code> until then.</th>
-                <td>This keeps your existing decision. A portrait-only iPad build invites App Store problems for no benefit.</td>
+                <th scope="row">Sync and tablets after the first release.</th>
+                <td>Unchanged.</td>
               </tr>
               <tr>
                 <td class="id">D8</td>
-                <th scope="row">On-device translation stays last. Google Translate links stay until then.</th>
-                <td>This keeps your existing decision. The mirror for Mozilla's files still needs your go-ahead before anything is published.</td>
+                <th scope="row">The Bergamot mirror needs your go-ahead before anything is published.</th>
+                <td>Unchanged; C4 makes it Android-only.</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <h3>Left out on purpose</h3>
-        <div class="skip">
-          <p>Browse for Me, Pinch to Summarize and Call Arc: Arc is turning them off, Lens has none, and they need a paid server.</p>
-          <p>Blur or imitation glass on Android: Android stays flat, as decided on 2 November.</p>
-          <p>Spaces, sync and tablet layouts: after the first release, as in the roadmap.</p>
-        </div>
       </section>
 
       <section id="risks">
-        <div class="eyebrow">16 · Risks</div>
+        <div class="eyebrow">11 · Risks</div>
         <h2>Risks</h2>
         <div class="wrap">
-          <table>
+          <table class="tight">
             <thead>
-              <tr>
-                <th>Risk</th>
-                <th>Response</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>Risk</th>
-                <th>Mitigation</th>
-              </tr>
-              <tr>
-                <td>Testing mostly on iOS lets Android UI bugs through: Android's controls are our own code.</td>
-                <td>Every UI change is checked on the emulator, with screenshots next to iOS, and <code>pnpm e2e</code> must pass on both.</td>
-              </tr>
-              <tr>
-                <td>Swapping Android's engine late (phase 7) could break features built on the system WebView.</td>
-                <td>Keep everything behind <code>@bay/engine</code>; e2e tests use only the UI, so the same tests prove the swap.</td>
-              </tr>
-              <tr>
-                <td>The system WebView lacks some features (no content-blocking API, limited profile control).</td>
-                <td>Interim versions (request interception, a separate profile) until our Chromium takes over in phase 7.</td>
-              </tr>
-              <tr>
-                <td>Android engine builds need Linux and about 100 GB of disk.</td>
-                <td>Build on the Linux machine and publish the AAR; the app only downloads it.</td>
-              </tr>
-              <tr>
-                <td>No stable Chromium embedding API since WebLayer was deprecated; <code>content/public</code> changes every release.</td>
-                <td>Keep <code>//bay/mobile</code> small; rebase it with desktop's Chromium updates.</td>
-              </tr>
-              <tr>
-                <td>Shipping Chromium makes the Android app much larger than one using the system WebView.</td>
-                <td>Measure in phase 7; App Bundles split by ABI; strip symbols as desktop releases do.</td>
-              </tr>
-              <tr>
-                <td>Custom Android controls take more work than stock components and can feel off.</td>
-                <td>Follow Arc's Android app closely for touch targets, spacing and motion; build shared primitives (round button, pill, sheet) once.</td>
-              </tr>
-              <tr>
-                <td>iOS content rule lists have a per-list rule limit (about 150,000); WebKit disables Apple Pay in pages with injected scripts.</td>
-                <td>Split lists by category and cache compiled lists; skip injection on payment pages if needed.</td>
-              </tr>
-              <tr>
-                <td>
-                  Machine setup: <code>xcode-select</code> points at the Command Line Tools; Metro with <code>CI=1</code> doesn't watch files; cold emulator
-                  boots can show a System UI dialog.
-                </td>
-                <td>The scripts set the toolchain paths and close system dialogs after boot; the quirks are in <code>AGENTS.md</code>.</td>
-              </tr>
               <tr>
                 <th scope="col">Risk</th>
                 <th scope="col">Response</th>
               </tr>
+            </thead>
+            <tbody>
               <tr>
-                <th scope="row">This audit comes from reading code, so some gaps may behave differently when run.</th>
-                <td>Stage 0 runs first and corrects this file.</td>
+                <th scope="row">Bay Chromium's first compile fails late, and each runner round takes hours.</th>
+                <td>Fix compile errors in batches per run; keep the saved tree fresh (it expires seven days after upload). R1 is the deadline that matters.</td>
               </tr>
               <tr>
-                <th scope="row">Real new windows (B19) are the hardest item: WebKit needs a view returned synchronously, while React mounts tabs itself.</th>
-                <td>Do it last in stage 2. If it blocks, fall back to opening a new tab without an opener and list the sign-ins that fail.</td>
+                <th scope="row">Play's closed-test rule delays the Android build past 22 December.</th>
+                <td>Check the account type now; share the APK directly while the closed test runs.</td>
               </tr>
               <tr>
-                <th scope="row">Google may still block sign-in with a normal user agent.</th>
-                <td>
-                  Both apps now send one (B1), and neither has been tested signing in. If Google still refuses, the remaining signs of a web view are on
-                  Android, and our Chromium removes them later.
-                </td>
+                <th scope="row">Entitlements and Google's passkey list wait on others.</th>
+                <td>Send R3 now; AutoFill and passkeys ship when granted, nothing else waits on them.</td>
               </tr>
               <tr>
-                <th scope="row">#11's iOS code has never been compiled, and <code>BGContinuedProcessingTask</code> is new in iOS 26.</th>
-                <td>
-                  Build it before anything else in stage 0. Without the plugin's <code>BGTaskSchedulerPermittedIdentifiers</code> entry, Bay skips the task
-                  rather than crash, so an old prebuild falls back to background time.
-                </td>
+                <th scope="row">Import formats are read from documentation.</th>
+                <td>V3 with real exports before calling #24 done.</td>
               </tr>
               <tr>
-                <th scope="row">Our Now Playing info may conflict with WebKit's own.</th>
-                <td>Test on a real iPhone before writing any code (I1).</td>
-              </tr>
-              <tr>
-                <th scope="row">New work on the system WebView gets replaced in phase 7.</th>
-                <td>Stay behind <code>@bay/engine</code> and let e2e tests prove the swap.</td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  Store timing. I recall Google Play requiring newer personal accounts to run a 14-day closed test with 12 testers first. I didn't verify this.
-                </th>
-                <td>Check the account type now. If it applies, the closed test has to start by about 1 December.</td>
-              </tr>
-              <tr>
-                <th scope="row">I don't know the format of Arc's tab export.</th>
-                <td>Export a real list before 23 November and use it as the test file. The parser should find links in any text.</td>
+                <th scope="row">Chromium on Android makes the app much larger.</th>
+                <td>Measure in V1; split by ABI; strip symbols as desktop releases do.</td>
               </tr>
             </tbody>
           </table>
@@ -2869,67 +1597,33 @@
       </section>
 
       <section id="sources">
-        <div class="eyebrow">17 · Sources</div>
+        <div class="eyebrow">12 · Sources</div>
         <h2>Sources</h2>
         <ul class="sources">
           <li>
-            Arc Search for Android: <a href="https://play.google.com/store/apps/details?id=company.thebrowser.arc">Play Store listing</a>,
-            <a href="https://9to5google.com/2024/10/14/arc-search-android-fun-woe/">9to5Google review</a>,
-            <a href="https://www.androidpolice.com/chrome-vs-arc-which-browser-is-better-on-android/">Android Police</a>,
-            <a href="https://resources.arc.net/hc/en-us/articles/27306904379031-Arc-Search-for-Android-Release-Notes">release notes</a> (bar swipe to switch
-            tabs).
-          </li>
-          <li><a href="https://lens.maximos.work/">Lens</a>: the design on both platforms.</li>
-          <li>
-            <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md">Chromium Android build instructions</a>: Linux
-            host required.
+            <a href="https://github.com/VictorKildahl/cra/tree/main/iOS">Cra's iPhone app</a>, with its <code>docs/ios.md</code>,
+            <code>docs/ios-parity.md</code> and <code>docs/arc-search-reference.md</code> (read 15 November 2026).
           </li>
           <li>
-            <a href="https://chromium.googlesource.com/chromium/src/+/110.0.5481.77/weblayer/README.md">WebLayer / WebEngine README</a>: the deprecated
-            embedding API.
+            <a href="android-chromium-plan.html">android-chromium-plan.html</a> (Android engine),
+            <a href="mobile-effect-plan.html">mobile-effect-plan.html</a> (Effect runtime), <a href="mobile-releasing.md">mobile-releasing.md</a> (builds).
           </li>
           <li>
-            <a href="https://developer.apple.com/support/alternative-browser-engines/">Alternative browser engines in the EU</a> and
-            <a href="https://developer.apple.com/support/alternative-browser-engines-jp">in Japan</a> (Apple): why iOS stays on WebKit.
+            <a href="https://arc.net/">A farewell to Arc</a> and <a href="https://arc.net/search">Arc Search</a>,
+            <a href="https://www.androidpure.com/arc-search-android-shutdown/">Android Pure</a>: the 23 November and 22 December dates.
           </li>
           <li>
-            <a href="https://github.com/software-mansion/argent">Argent</a>,
-            <a href="https://heroui.com/docs/native/getting-started/quick-start">HeroUI Native</a>,
-            <a href="https://docs.expo.dev/versions/latest/sdk/ui/">Expo UI</a>.
+            Apple: <a href="https://developer.apple.com/documentation/translation">Translation</a>,
+            <a href="https://developer.apple.com/documentation/foundationmodels">Foundation Models</a>,
+            <a href="https://developer.apple.com/documentation/appintents">App Intents</a>.
           </li>
-          <li><a href="https://arc.net/">A farewell to Arc</a> and <a href="https://arc.net/search">Arc Search</a>: official dates and export steps.</li>
-          <li><a href="https://www.androidpure.com/arc-search-android-shutdown/">Android Pure</a>: Android removal details.</li>
-          <li>
-            <a href="https://piunikaweb.com/2026/11/03/the-browser-company-confirms-arc-search-on-ios-isnt-going-away/">PiunikaWeb</a> and
-            <a href="https://piunikaweb.com/2026/08/25/dia-browser-iphone-tabs-menu-ios-app-leak/">its Dia report</a>: the iOS lite app, and no announced Dia
-            phone app.
-          </li>
-          <li><a href="https://apps.apple.com/us/app/arc-search/id6472513080">Arc Search on the App Store</a>: feature list and release history.</li>
-          <li><a href="https://www.macstories.net/reviews/arc-search-for-iphone/">MacStories review</a>: toolbar, tabs, archive, what was missing.</li>
-          <li>
-            <a href="https://9to5google.com/2024/10/14/arc-search-android-fun-woe/">9to5Google review</a> and
-            <a href="https://9to5google.com/2024/11/14/arc-search-for-android-leaves-beta-adds-voice-search-widgets-and-more/">Android launch</a>: voice,
-            widgets, landscape, archive range.
-          </li>
-          <li>
-            <a href="https://www.inverse.com/tech/arc-mobile-companion-app-design-review-the-browser-company">Inverse</a> and
-            <a href="https://www.thurrott.com/?p=301442">Thurrott</a>: the Arc companion app and Arc Sync on iPhone.
-          </li>
-          <li><a href="https://lens.maximos.work">Lens</a>: the design reference and its feature list.</li>
-          <li>
-            <a href="https://goo.gle/3h0GhPw">Google's embedded web view policy</a> and
-            <a href="https://support.auth0.com/center/s/article/disallowed-useragent-403-with-Google-sign-in">Auth0 on <code>disallowed_useragent</code></a
-            >.
-          </li>
+          <li>Google: <a href="https://developers.google.com/ml-kit/genai">ML Kit GenAI APIs</a> (on-device summarization).</li>
+          <li>Lens (lens.maximos.work): the design reference on both platforms.</li>
         </ul>
+        <footer class="note">
+          Bay mobile plan · docs/mobile-plan.html · rewritten on 15 November 2026 to hold only open work; earlier rounds are in git history.
+        </footer>
       </section>
-
-      <footer>
-        <p class="meta">
-          Bay mobile plan · <code>docs/mobile-plan.html</code> · one document, merged on 10 November 2026 from the roadmap, the 5 November iOS parity audit and
-          the next round's plan.
-        </p>
-      </footer>
     </main>
     <script>
       // Done marks live in this browser's storage. The page still works when that's blocked; they just won't persist.
