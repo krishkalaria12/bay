@@ -7,8 +7,7 @@
 #include "content/public/app/content_jni_onload.h"
 #include "content/public/app/content_main.h"
 
-namespace {
-
+// Defines the hook library_loader_hooks.h declares for each shared library, as content shell does.
 bool NativeInitializationHook(base::android::LibraryProcessType library_process_type) {
   if (!content::android::OnJNIOnLoadInit()) {
     return false;
@@ -16,8 +15,6 @@ bool NativeInitializationHook(base::android::LibraryProcessType library_process_
   content::SetContentMainDelegate(new bay::BayMainDelegate());
   return true;
 }
-
-}  // namespace
 
 // Called by the VM when libbay_engine.so loads, in the app's process and in each child process.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
