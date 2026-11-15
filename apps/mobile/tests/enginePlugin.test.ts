@@ -63,6 +63,10 @@ test("the app compiles Chromium's R classes, which the engine module writes", ()
   assert.match(edited, /dependsOn\(":bay-engine:generateBayEngineRClasses"\)/);
 });
 
+test("the APK's native libraries and dex go in compressed, for a smaller download", () => {
+  assert.match(chromiumEngineEdits.appBuildGradle(appBuildGradle), /^android\.packaging\.dex\.useLegacyPackaging = true$/m);
+});
+
 test("the app starts nothing of its own in the engine's child processes", () => {
   const edited = chromiumEngineEdits.mainApplication(mainApplication);
 

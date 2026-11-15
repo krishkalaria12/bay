@@ -26,6 +26,10 @@ const gradleProperties = {
   // a copy of every native library. The Apple-Silicon emulator is arm64.
   reactNativeArchitectures: "arm64-v8a",
   "android.enableShrinkResourcesInReleaseBuilds": "true",
+  // The APK is downloaded whole (GitHub releases), so its native libraries go in compressed: the engine is 206 MB
+  // stored and 85 MB deflated, which takes the APK from 274 MB to 126 MB. Android extracts them once at install, so
+  // the installed app takes more space; a Play bundle would let the store choose instead.
+  "expo.useLegacyPackaging": "true",
 };
 
 // The share extension (B14) and the search widget (B15) each have one Swift file and one Info.plist, kept as plain
@@ -186,6 +190,13 @@ android.sourceSets.main.java.srcDirs += "\${rootDir}/../modules/bay-engine/andro
 tasks.named("preBuild").configure { dependsOn(":bay-engine:generateBayEngineRClasses") }
 `;
 
+// The dex goes in compressed too, for the same download (7.5 MB stored, 3.4 MB deflated); the runtime compiles it at
+// install either way. The Hermes bundle, the ICU data and the engine's packs stay stored: they're mapped from the APK.
+const compressedDex = `
+// Bay: a smaller download (modules/bay-engine/app.plugin.js).
+android.packaging.dex.useLegacyPackaging = true
+`;
+
 // Each edit leaves a file it has already made alone, so prebuilding twice changes nothing.
 const chromiumEngineEdits = {
   projectBuildGradle(gradle) {
@@ -211,6 +222,8 @@ const chromiumEngineEdits = {
     }
 
     if (!gradle.includes("bayEngineR")) gradle += engineRClasses;
+
+    if (!gradle.includes("dex.useLegacyPackaging")) gradle += compressedDex;
 
     return gradle;
   },
