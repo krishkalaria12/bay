@@ -130,7 +130,15 @@ export interface BrowserPreferences {
   customSearchUrl: string | null;
   /** The first-run tips already shown (U7), so each shows once. */
   tipsSeen: TipId[];
+  /** Swipe to navigate (C5): back and forward from anywhere on a page, from its edges, or not at all. */
+  swipeToNavigate: SwipeMode;
+  /** Open app links in (C12): the app that claims a link, or always Bay. */
+  appLinks: AppLinks;
 }
+
+export type SwipeMode = "anywhere" | "edges" | "off";
+
+export type AppLinks = "app" | "browser";
 
 /** A first-run tip (U7): the bar's gestures, and what blocking did on the first page. */
 export type TipId = "bar" | "blocking";
@@ -165,6 +173,8 @@ export const SIMPLE_PREFERENCE_KEYS = [
   "youtube",
   "welcomed",
   "searchOnLaunch",
+  "swipeToNavigate",
+  "appLinks",
 ] as const;
 
 export type SimplePreferences = Pick<BrowserPreferences, (typeof SIMPLE_PREFERENCE_KEYS)[number]>;

@@ -409,4 +409,13 @@ export const panelsHi: PanelStrings = {
   "settings.defaultBrowser": "डिफ़ॉल्ट ब्राउज़र",
   "settings.defaultBrowser.detail": "दूसरे ऐप के लिंक Bay में खोलें",
   "settings.showWelcome": "स्वागत फिर दिखाएँ",
+  "settings.swipe": "नेविगेट करने के लिए स्वाइप",
+  "settings.swipe.anywhere": "कहीं से भी",
+  "settings.swipe.edges": "किनारों से",
+  "settings.swipe.off": "बंद",
+  "settings.swipe.note": "पीछे जाने के लिए दाएँ और आगे के लिए बाएँ स्वाइप करें। टैब के पहले पेज पर पीछे जाने से टैब आर्काइव होता है; तुरंत आगे जाने से वापस आता है।",
+  "settings.appLinks": "ऐप लिंक कहाँ खोलें",
+  "settings.appLinks.app": "ऐप में",
+  "settings.appLinks.browser": "Bay में",
+  "settings.appLinks.note": "किसी दूसरी साइट का लिंक उसके ऐप में खुलता है, अगर कोई इंस्टॉल ऐप उसे संभालता है। टाइप किए पते और साइट के अंदर के लिंक हमेशा यहीं खुलते हैं।",
 };

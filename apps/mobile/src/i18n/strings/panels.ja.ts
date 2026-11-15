@@ -410,4 +410,14 @@ export const panelsJa: PanelStrings = {
   "settings.defaultBrowser": "デフォルトのブラウザ",
   "settings.defaultBrowser.detail": "他のアプリのリンクを Bay で開く",
   "settings.showWelcome": "ようこそ画面をもう一度表示",
+  "settings.swipe": "スワイプで移動",
+  "settings.swipe.anywhere": "どこからでも",
+  "settings.swipe.edges": "端から",
+  "settings.swipe.off": "オフ",
+  "settings.swipe.note": "右にスワイプで戻る、左で進む。タブの最初のページで戻るとタブをアーカイブし、すぐに進むと元に戻ります。",
+  "settings.appLinks": "アプリのリンクを開く場所",
+  "settings.appLinks.app": "アプリ",
+  "settings.appLinks.browser": "Bay",
+  "settings.appLinks.note":
+    "他のサイトへのリンクは、インストール済みのアプリが対応していればそのアプリで開きます。入力したアドレスやサイト内のリンクは常にここで開きます。",
 };

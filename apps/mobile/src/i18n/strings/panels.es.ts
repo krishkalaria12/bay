@@ -410,4 +410,15 @@ export const panelsEs: PanelStrings = {
   "settings.defaultBrowser": "Navegador predeterminado",
   "settings.defaultBrowser.detail": "Abre en Bay los enlaces de otras apps",
   "settings.showWelcome": "Volver a mostrar la bienvenida",
+  "settings.swipe": "Deslizar para navegar",
+  "settings.swipe.anywhere": "Desde cualquier lugar",
+  "settings.swipe.edges": "Desde los bordes",
+  "settings.swipe.off": "Desactivado",
+  "settings.swipe.note":
+    "Desliza a la derecha para volver y a la izquierda para avanzar. Volver en la primera página de una pestaña la archiva; avanzar justo después la recupera.",
+  "settings.appLinks": "Abrir enlaces de apps en",
+  "settings.appLinks.app": "La app",
+  "settings.appLinks.browser": "Bay",
+  "settings.appLinks.note":
+    "Un enlace a otro sitio se abre en su app si una app instalada lo reclama. Las direcciones escritas y los enlaces dentro de un sitio siempre se abren aquí.",
 };

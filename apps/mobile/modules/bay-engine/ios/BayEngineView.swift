@@ -6,7 +6,7 @@ private final class InvalidAddressException: Exception, @unchecked Sendable {
   override var reason: String { "Only HTTP and HTTPS addresses can be opened." }
 }
 
-class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate {
+class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   private(set) var webView: WKWebView
   let onNavigationStateChange = EventDispatcher()
   let onNavigationError = EventDispatcher()
@@ -18,6 +18,24 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onNewWindow = EventDispatcher()
   // Declared for the shared API (A2); WebKit presents element fullscreen itself and never emits it.
   let onFullscreenChange = EventDispatcher()
+  /// A swipe past the first or last page of the tab's history (C6): JavaScript archives the tab, or brings it back.
+  let onSwipeNavigation = EventDispatcher()
+  /// How many requests the blocker stopped on the page now showing (C2).
+  let onBlockedCount = EventDispatcher()
+  /// Swipe to navigate (C5): "anywhere" on the page, "edges" (WebKit's own edge swipe), or "off".
+  var swipeMode = "edges" {
+    didSet { webView.allowsBackForwardNavigationGestures = swipeMode != "off" }
+  }
+  /// Open app links in (C12): "app" first offers a tapped link to another site to the app that claims it as a
+  /// universal link; "browser" keeps every link here.
+  var appLinks = "app"
+  /// Bay's own swipe across the page (C5, C6), beside WebKit's edge swipe.
+  private lazy var swipePan = UIPanGestureRecognizer(target: self, action: #selector(swipe(_:)))
+  /// Requests the blocker stopped on this page, each counted once (C2).
+  private var blockedRequests = Set<String>()
+  private lazy var blockedProxy = BayBlockedMessageProxy(view: self)
+  /// The page on screen, offered to the user's other Apple devices (C14). Never a private page.
+  private var handoff: NSUserActivity?
   private lazy var messageProxy = BayPageMessageProxy(view: self)
   private let refreshControl = UIRefreshControl()
   /// When the current pull to refresh started: the spinner stays at least briefly, so a cached reload doesn't flash it.
@@ -61,6 +79,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     didSet {
       webView.accessibilityElementsHidden = !isActive
       if !isActive { saveState() }
+      updateHandoff()
     }
   }
 
@@ -132,6 +151,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private func applyScriptlets(for url: URL) {
     let controller = webView.configuration.userContentController
     controller.removeAllUserScripts()
+    controller.addUserScript(WKUserScript(source: Self.failedLoadScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .defaultClient))
     guard let script = BayContentBlocker.shared.scriptlets(for: url) else { return }
     NSLog("BayContentBlocker: scriptlets for %@: %d chars", url.host ?? "", script.count)
     controller.addUserScript(WKUserScript(source: "try{\(script)}catch(e){}", injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
@@ -140,7 +160,10 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private func setUpWebView() {
     webView.navigationDelegate = self
     webView.uiDelegate = self
-    webView.allowsBackForwardNavigationGestures = true
+    webView.allowsBackForwardNavigationGestures = swipeMode != "off"
+    swipePan.delegate = self
+    swipePan.maximumNumberOfTouches = 1
+    webView.addGestureRecognizer(swipePan)
     // Sites' custom players call `element.requestFullscreen()`, which WebKit only honours when this is on
     // (native `<video>` fullscreen already works with `allowsInlineMediaPlayback`). Android gets the same
     // behaviour from `onShowCustomView` in its WebChromeClient.
@@ -153,6 +176,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.scrollView.refreshControl = pullToRefreshEnabled ? refreshControl : nil
     // Page scripts run in this isolated world (see evaluate), so only they can post to the app.
     webView.configuration.userContentController.add(messageProxy, contentWorld: .defaultClient, name: "bay")
+    // What failed to load on the page, for the blocked count (C2); from every frame.
+    webView.configuration.userContentController.add(blockedProxy, contentWorld: .defaultClient, name: "bayBlocked")
     addSubview(webView)
     observations = [
       webView.observe(\.url, options: [.new]) { [weak self] _, _ in self?.emitState() },
@@ -169,6 +194,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     cancelPageRequests()
     observations = []
     webView.configuration.userContentController.removeScriptMessageHandler(forName: "bay", contentWorld: .defaultClient)
+    webView.configuration.userContentController.removeScriptMessageHandler(forName: "bayBlocked", contentWorld: .defaultClient)
+    webView.removeGestureRecognizer(swipePan)
     webView.navigationDelegate = nil
     webView.uiDelegate = nil
     webView.scrollView.delegate = nil
@@ -372,6 +399,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   private func emitState() {
     endRefreshingWhenLoaded()
+    updateHandoff()
     // A tab with no page yet whose navigation became a download (a download link typed into a new tab) says so, so it
     // goes back to the start page instead of keeping the file's address and downloading it again when restored.
     let blank = firstNavigationBecameDownload && webView.backForwardList.currentItem == nil
@@ -431,6 +459,32 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       decisionHandler(.download, preferences)
       return
     }
+    // Open app links in (C12): a link tapped in the page to another site goes to the app that claims it, when one
+    // does; otherwise it loads here. Typed addresses, redirects and links within the site always stay.
+    if appLinks == "app", navigationAction.navigationType == .linkActivated, navigationAction.targetFrame?.isMainFrame == true,
+       Self.isAnotherSite(url, from: webView.url) {
+      var answered = false
+      let answer: (Bool) -> Void = { [weak self] opened in
+        guard !answered else { return }
+        answered = true
+        if opened {
+          decisionHandler(.cancel, preferences)
+        } else if let self {
+          self.allowNavigation(navigationAction, to: url, preferences: preferences, decisionHandler: decisionHandler)
+        } else {
+          decisionHandler(.allow, preferences)
+        }
+      }
+      UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in DispatchQueue.main.async { answer(opened) } }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { answer(false) }
+      return
+    }
+    allowNavigation(navigationAction, to: url, preferences: preferences, decisionHandler: decisionHandler)
+  }
+
+  /// The rest of a web navigation's policy: tracking parameters and HTTPS first, then the page's blocking rules.
+  private func allowNavigation(_ navigationAction: WKNavigationAction, to url: URL, preferences: WKWebpagePreferences,
+                               decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
     if navigationAction.targetFrame?.isMainFrame == true {
       if (navigationAction.request.httpMethod ?? "GET") == "GET", let replacement = BayTracking.clean(url) ?? httpsUpgrade(url) {
         decisionHandler(.cancel, preferences)
@@ -660,6 +714,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     saveState()
   }
 
+  /// A new page: nothing blocked on it yet (C2).
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    blockedRequests = []
+    onBlockedCount(["count": 0])
+  }
+
   private func emitError(_ error: Error) {
     refreshControl.endRefreshing()
     let nativeError = error as NSError
@@ -696,5 +756,137 @@ private final class BayPageMessageProxy: NSObject, WKScriptMessageHandler {
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
     view?.receive(message)
+  }
+}
+
+// MARK: Swipes, Handoff and the blocked count (C5, C6, C14, C2)
+
+extension BayEngineView {
+  /// Whether `url` is on another site than the page at `current`: hosts without "www." that neither equal nor nest.
+  static func isAnotherSite(_ url: URL, from current: URL?) -> Bool {
+    guard let target = url.host?.lowercased(), !target.isEmpty else { return false }
+    guard let page = current?.host?.lowercased(), !page.isEmpty else { return true }
+    let strip: (String) -> String = { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
+    let (a, b) = (strip(target), strip(page))
+    return !(a == b || a.hasSuffix(".\(b)") || b.hasSuffix(".\(a)"))
+  }
+
+  /// Offers the page on screen to the user's other Apple devices (C14); a private page, a hidden tab or no page
+  /// offers nothing.
+  func updateHandoff() {
+    guard isActive, !isPrivate, let url = webView.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+      handoff?.invalidate()
+      handoff = nil
+      return
+    }
+    if handoff == nil { handoff = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb) }
+    guard let handoff else { return }
+    if handoff.webpageURL != url {
+      handoff.webpageURL = url
+      handoff.title = webView.title
+    }
+    handoff.becomeCurrent()
+  }
+
+  /// Reports every element whose load failed (an image, a script, a frame, a stylesheet), from every frame, in Bay's
+  /// isolated world: DOM events reach every world, the page's own scripts can't see this one.
+  static let failedLoadScript = """
+    (() => {
+      const kinds = { IMG: "image", SCRIPT: "script", IFRAME: "subdocument", LINK: "stylesheet", VIDEO: "media", AUDIO: "media", SOURCE: "media" };
+      window.addEventListener("error", (event) => {
+        const node = event.target;
+        if (!node || node === window || !node.tagName) return;
+        const url = node.currentSrc || node.src || node.href;
+        if (!url) return;
+        try { window.webkit.messageHandlers.bayBlocked.postMessage(JSON.stringify({ url: String(url), type: kinds[node.tagName] || "other" })); } catch (e) {}
+      }, true);
+    })();
+    """
+
+  /// A failed load the filter lists account for is one the blocker stopped (C2); each is counted once per page.
+  func receiveBlocked(_ message: WKScriptMessage) {
+    guard
+      let text = message.body as? String,
+      let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
+      let address = object["url"] as? String,
+      let page = webView.url,
+      BayContentBlocker.shared.isBlocking(page),
+      !blockedRequests.contains(address),
+      BayContentBlocker.shared.blocks(address, source: page.absoluteString, type: object["type"] as? String ?? "other")
+    else { return }
+    blockedRequests.insert(address)
+    onBlockedCount(["count": blockedRequests.count])
+  }
+
+  // Bay's swipe: anywhere on the page, and past the first and last page of the tab's history at the edges. WebKit's
+  // own edge swipe still moves through the history where there is one.
+
+  override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+    guard recognizer === swipePan, let pan = recognizer as? UIPanGestureRecognizer else {
+      return super.gestureRecognizerShouldBegin(recognizer)
+    }
+    let velocity = pan.velocity(in: webView)
+    guard swipeMode != "off", abs(velocity.x) > abs(velocity.y) * 2 else { return false }
+    let start = pan.location(in: webView).x
+    let width = webView.bounds.width
+    let rightwards = velocity.x > 0
+    let fromEdge = rightwards ? start < 24 : start > width - 24
+    // At the edges, WebKit's own swipe takes over wherever there is a page to go to.
+    if fromEdge { return rightwards ? !webView.canGoBack : !webView.canGoForward }
+    return swipeMode == "anywhere"
+  }
+
+  func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+    recognizer === swipePan && other === webView.scrollView.panGestureRecognizer
+  }
+
+  @objc func swipe(_ pan: UIPanGestureRecognizer) {
+    let width = max(webView.bounds.width, 1)
+    let translation = pan.translation(in: self).x
+    let back = translation > 0
+    let possible = back ? webView.canGoBack : webView.canGoForward
+    switch pan.state {
+    case .changed:
+      // The page follows the finger, holding back where the swipe would leave the tab (or do nothing) rather than
+      // move through its history.
+      webView.transform = CGAffineTransform(translationX: possible ? translation : translation * 0.3, y: 0)
+    case .ended, .cancelled, .failed:
+      let velocity = pan.velocity(in: self).x
+      let far = abs(translation) > width * 0.35
+      let flicked = abs(translation) > 30 && abs(velocity) > 500 && translation * velocity > 0
+      let committed = pan.state == .ended && (far || flicked)
+      guard committed else {
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.webView.transform = .identity }
+        return
+      }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      if possible {
+        UIView.animate(withDuration: 0.18, animations: {
+          self.webView.transform = CGAffineTransform(translationX: back ? width : -width, y: 0)
+          self.webView.alpha = 0
+        }, completion: { _ in
+          _ = back ? self.webView.goBack() : self.webView.goForward()
+          self.webView.transform = .identity
+          UIView.animate(withDuration: 0.2) { self.webView.alpha = 1 }
+        })
+      } else {
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.webView.transform = .identity }
+        onSwipeNavigation(["action": back ? "pastFirstPage" : "pastLastPage"])
+      }
+    default:
+      break
+    }
+  }
+}
+
+private final class BayBlockedMessageProxy: NSObject, WKScriptMessageHandler {
+  weak var view: BayEngineView?
+
+  init(view: BayEngineView) {
+    self.view = view
+  }
+
+  func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+    view?.receiveBlocked(message)
   }
 }

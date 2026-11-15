@@ -95,6 +95,13 @@ export interface EngineViewProps extends ViewProps {
    * rendered shrunk to fit. A private engine still keeps its private store. Changing it reloads the page.
    */
   desktopMode?: boolean;
+  /** Swipe to navigate (C5): back and forward from "anywhere" on the page, from the "edges" only, or "off". */
+  swipeToNavigate?: SwipeToNavigate;
+  /**
+   * Open app links in (C12): "app" first offers a link tapped in the page to another site to the app that claims it
+   * (iOS universal links); "browser" keeps every link here. Android keeps every web link here for now.
+   */
+  appLinks?: "app" | "browser";
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
   /** Main-frame failures only. Native certificate validation is never bypassed. */
   onNavigationError?: (event: NativeSyntheticEvent<NavigationError>) => void;
@@ -108,7 +115,13 @@ export interface EngineViewProps extends ViewProps {
   onFullscreenChange?: (event: NativeSyntheticEvent<FullscreenChange>) => void;
   /** A new window (`target=_blank`, `window.open`) that becomes a real tab (B19); the opener is the tab that sent it. */
   onNewWindow?: (event: NativeSyntheticEvent<NewWindow>) => void;
+  /** A swipe back past the tab's first page, or forward past its last (C6). */
+  onSwipeNavigation?: (event: NativeSyntheticEvent<{ action: "pastFirstPage" | "pastLastPage" }>) => void;
+  /** How many requests the blocker stopped on the page now showing (C2). iOS only: Android doesn't count yet. */
+  onBlockedCount?: (event: NativeSyntheticEvent<{ count: number }>) => void;
 }
+
+export type SwipeToNavigate = "anywhere" | "edges" | "off";
 
 export interface NewWindow {
   url: string;

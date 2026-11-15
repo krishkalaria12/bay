@@ -125,6 +125,23 @@ final class BayContentBlocker {
     engine = next
   }
 
+  /// Whether the filter lists stop a request of `type` (an adblock resource type) to `url` from the page at `source`
+  /// (C2): how a failed load on the page is told apart from one the blocker stopped. False while the engine is loading.
+  func blocks(_ url: String, source: String, type: String) -> Bool {
+    guard let engine else { return false }
+    return url.withCString { address in
+      source.withCString { page in
+        type.withCString { kind in "GET".withCString { bay_blocker_should_block(engine, address, page, kind, $0) } }
+      }
+    }
+  }
+
+  /// Whether the lists are in force on a page at `url`: blocking is on, and not paused for its site.
+  func isBlocking(_ url: URL?) -> Bool {
+    guard let url else { return false }
+    return !rules(for: url).isEmpty
+  }
+
   /// The scriptlets for a page, or nil when it has none or blocking is paused there.
   func scriptlets(for url: URL) -> String? {
     guard let engine, let host = url.host?.lowercased(), !isPaused(host),

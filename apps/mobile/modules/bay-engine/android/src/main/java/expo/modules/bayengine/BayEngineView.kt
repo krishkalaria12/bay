@@ -41,6 +41,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onPageRequest by EventDispatcher()
   val onNewWindow by EventDispatcher()
   val onFullscreenChange by EventDispatcher()
+  /** A swipe past the first or last page of the tab's history (C6): JavaScript archives the tab, or brings it back. */
+  val onSwipeNavigation by EventDispatcher()
+  /** Declared for the shared API (C2); the engine doesn't count what it blocks on Android yet. */
+  val onBlockedCount by EventDispatcher()
 
   override val shouldUseAndroidLayout = true
 
@@ -82,9 +86,22 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     override fun goBack() = this@BayEngineView.goBack()
     override fun goForward() = this@BayEngineView.goForward()
     override fun reload() = this@BayEngineView.reload()
+    override val swipeMode: String get() = this@BayEngineView.swipeMode
+    override fun pastHistory(back: Boolean) {
+      onSwipeNavigation(mapOf("action" to if (back) "pastFirstPage" else "pastLastPage"))
+    }
   })
 
   var pullToRefreshEnabled = true
+
+  /** Swipe to navigate (C5): "anywhere" on the page, "edges", or "off". */
+  var swipeMode = "edges"
+
+  /**
+   * Open app links in (C12). Declared for the shared API: the engine doesn't ask before a link loads in the page yet, so
+   * Android keeps every web link in Bay.
+   */
+  var appLinks = "app"
 
   /** Private pages use the private session's profile (BayEngineBackend), which ends with the session. Set at creation. */
   var isPrivate = false

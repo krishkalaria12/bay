@@ -410,4 +410,15 @@ export const panelsFr: PanelStrings = {
   "settings.defaultBrowser": "Navigateur par défaut",
   "settings.defaultBrowser.detail": "Ouvrir dans Bay les liens des autres apps",
   "settings.showWelcome": "Revoir l'accueil",
+  "settings.swipe": "Balayer pour naviguer",
+  "settings.swipe.anywhere": "Depuis n'importe où",
+  "settings.swipe.edges": "Depuis les bords",
+  "settings.swipe.off": "Désactivé",
+  "settings.swipe.note":
+    "Balayez vers la droite pour revenir, vers la gauche pour avancer. Revenir sur la première page d'un onglet l'archive ; avancer juste après le rouvre.",
+  "settings.appLinks": "Ouvrir les liens d'apps dans",
+  "settings.appLinks.app": "L'app",
+  "settings.appLinks.browser": "Bay",
+  "settings.appLinks.note":
+    "Un lien vers un autre site s'ouvre dans son app quand une app installée le prend en charge. Les adresses saisies et les liens internes s'ouvrent toujours ici.",
 };

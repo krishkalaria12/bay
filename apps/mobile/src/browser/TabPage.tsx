@@ -6,6 +6,7 @@ import {
   type NewWindow,
   type PageRequest,
   type PageScroll,
+  type SwipeToNavigate,
   type Tab,
 } from "@bay/engine";
 import { useEffect, useRef, useState, type JSX } from "react";
@@ -37,6 +38,10 @@ export interface TabPageProps {
   suspended: boolean;
   /** The site gets its desktop page (B12). */
   desktopMode: boolean;
+  swipeToNavigate: SwipeToNavigate;
+  appLinks: "app" | "browser";
+  onSwipeNavigation: (action: "pastFirstPage" | "pastLastPage") => void;
+  onBlockedCount: (count: number) => void;
   register: (view: Tab | null) => void;
   onNavigation: (state: NavigationState) => void;
   onError: (error: NavigationError) => void;
@@ -52,6 +57,10 @@ export function TabPage({
   visible,
   suspended,
   desktopMode,
+  swipeToNavigate,
+  appLinks,
+  onSwipeNavigation,
+  onBlockedCount,
   register,
   onNavigation,
   onError,
@@ -149,6 +158,10 @@ export function TabPage({
         active={visible}
         suspended={suspended}
         desktopMode={desktopMode}
+        swipeToNavigate={swipeToNavigate}
+        appLinks={appLinks}
+        onSwipeNavigation={({ nativeEvent }) => onSwipeNavigation(nativeEvent.action)}
+        onBlockedCount={({ nativeEvent }) => onBlockedCount(nativeEvent.count)}
         pullToRefreshEnabled={pullToRefresh}
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => {

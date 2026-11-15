@@ -108,7 +108,12 @@ class BayEngineModule : Module() {
     Function("setTrackingParameters") { json: String -> BayEngineBackend.setTrackingParameters(json) }
 
     View(BayEngineView::class) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest", "onNewWindow")
+      Events(
+        "onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest",
+        "onNewWindow", "onSwipeNavigation", "onBlockedCount",
+      )
+      Prop("swipeToNavigate") { view: BayEngineView, mode: String -> view.swipeMode = mode }
+      Prop("appLinks") { view: BayEngineView, mode: String -> view.appLinks = mode }
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }

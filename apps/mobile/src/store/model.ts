@@ -48,6 +48,8 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   searchOnLaunch: true,
   customSearchUrl: null,
   tipsSeen: [],
+  swipeToNavigate: "anywhere",
+  appLinks: "app",
 };
 
 /** The first-run tips, in the order they may show. */
@@ -1059,6 +1061,9 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
 
 const THEME_CHOICES = ["system", "light", "dark"] as const;
 
+/** Swipe to navigate's choices (C5), in the order Settings lists them. */
+export const SWIPE_MODES = ["anywhere", "edges", "off"] as const;
+
 function parseTipsSeen(value: JsonValue | undefined): TipId[] {
   if (!Array.isArray(value)) return [...TIP_IDS];
 
@@ -1125,6 +1130,8 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
       v.is(v.string(), savedPreferences.customSearchUrl) && isCustomSearchUrl(savedPreferences.customSearchUrl) ? savedPreferences.customSearchUrl : null,
     // Saved before the tips existed: whoever saved it knows Bay already, so they show to people new to it.
     tipsSeen: parseTipsSeen(savedPreferences.tipsSeen),
+    swipeToNavigate: v.is(v.picklist(SWIPE_MODES), savedPreferences.swipeToNavigate) ? savedPreferences.swipeToNavigate : DEFAULT_PREFERENCES.swipeToNavigate,
+    appLinks: savedPreferences.appLinks === "browser" ? "browser" : "app",
   };
 }
 

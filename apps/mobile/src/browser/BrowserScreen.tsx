@@ -165,6 +165,11 @@ export function BrowserScreen(): JSX.Element {
   const lastTab = useRef<string | null>(null);
   // A card in the switcher, growing into the page it stands for (A1).
   const [zoom, setZoom] = useState<{ tab: BrowserTab; frame: Frame } | null>(null);
+  // What the blocker stopped on each tab's page (C2), where the engine counts it.
+  const [blockedCounts, setBlockedCounts] = useState<Record<string, number>>({});
+  // The tab a swipe back past its first page archived (C6), and the tab that showed instead: forward from that one,
+  // straight away, brings it back.
+  const swipeArchived = useRef<{ id: string; shown: string } | null>(null);
   const barHidden = useSharedValue(0);
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
@@ -566,6 +571,24 @@ export function BrowserScreen(): JSX.Element {
     await Share.share({ message: crashReports().length ? crashReportText() : t("crash.none") });
   }
 
+  // A swipe back past a tab's first page archives the tab, and forward right after brings it back (C6), as in Arc Search.
+  function swipePastHistory(tabId: string, action: "pastFirstPage" | "pastLastPage"): void {
+    if (tabId !== active.id) return;
+
+    if (action === "pastFirstPage") {
+      if (data.tabs.length < 2) return;
+      archiveTab(tabId);
+      swipeArchived.current = { id: tabId, shown: useBrowserStore.getState().data.activeTabId };
+
+      return;
+    }
+
+    const archived = swipeArchived.current;
+    swipeArchived.current = null;
+
+    if (archived && archived.shown === tabId) restoreTab(archived.id);
+  }
+
   // Closing a tab archives it, so it can come straight back.
   function archiveTab(id: string): void {
     const tab = data.tabs.find((entry) => entry.id === id);
@@ -910,6 +933,10 @@ export function BrowserScreen(): JSX.Element {
                     skipAmp: data.preferences.skipAmp,
                   }}
                   desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
+                  swipeToNavigate={data.preferences.swipeToNavigate}
+                  appLinks={data.preferences.appLinks}
+                  onSwipeNavigation={(action) => swipePastHistory(id, action)}
+                  onBlockedCount={(count) => setBlockedCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count }))}
                   pullToRefresh={data.preferences.pullToRefresh}
                   pageColor={pageColors[id] ?? null}
                   onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
@@ -1199,7 +1226,7 @@ export function BrowserScreen(): JSX.Element {
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
         isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
-        blockedCount={null}
+        blockedCount={blockedCounts[active.id] ?? null}
         onRestore={restoreOriginal}
         zoom={siteSetting.textSize ?? data.preferences.textSize}
         onZoom={(textSize) => changeSiteSetting({ textSize: textSize === data.preferences.textSize ? null : textSize })}

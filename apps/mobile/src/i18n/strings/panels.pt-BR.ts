@@ -410,4 +410,15 @@ export const panelsPtBR: PanelStrings = {
   "settings.defaultBrowser": "Navegador padrão",
   "settings.defaultBrowser.detail": "Abrir no Bay os links de outros apps",
   "settings.showWelcome": "Mostrar as boas-vindas de novo",
+  "settings.swipe": "Deslizar para navegar",
+  "settings.swipe.anywhere": "De qualquer lugar",
+  "settings.swipe.edges": "Das bordas",
+  "settings.swipe.off": "Desligado",
+  "settings.swipe.note":
+    "Deslize para a direita para voltar e para a esquerda para avançar. Voltar na primeira página de uma aba a arquiva; avançar logo depois a traz de volta.",
+  "settings.appLinks": "Abrir links de apps em",
+  "settings.appLinks.app": "No app",
+  "settings.appLinks.browser": "No Bay",
+  "settings.appLinks.note":
+    "Um link para outro site abre no app dele quando um app instalado o reivindica. Endereços digitados e links dentro de um site sempre abrem aqui.",
 };

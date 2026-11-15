@@ -410,4 +410,15 @@ export const panelsDe: PanelStrings = {
   "settings.defaultBrowser": "Standardbrowser",
   "settings.defaultBrowser.detail": "Links aus anderen Apps in Bay öffnen",
   "settings.showWelcome": "Begrüßung erneut zeigen",
+  "settings.swipe": "Wischen zum Navigieren",
+  "settings.swipe.anywhere": "Überall",
+  "settings.swipe.edges": "Von den Rändern",
+  "settings.swipe.off": "Aus",
+  "settings.swipe.note":
+    "Nach rechts wischen geht zurück, nach links vor. Zurück auf der ersten Seite eines Tabs archiviert ihn; gleich danach vor holt ihn zurück.",
+  "settings.appLinks": "App-Links öffnen in",
+  "settings.appLinks.app": "Der App",
+  "settings.appLinks.browser": "Bay",
+  "settings.appLinks.note":
+    "Ein Link zu einer anderen Website öffnet sich in ihrer App, wenn eine installierte App ihn beansprucht. Eingetippte Adressen und Links innerhalb einer Website öffnen sich immer hier.",
 };

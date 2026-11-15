@@ -35,6 +35,10 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
     fun goBack()
     fun goForward()
     fun reload()
+    /** Swipe to navigate (C5): "anywhere", "edges" or "off". */
+    val swipeMode: String
+    /** A swipe went past the first page (`back`) or the last of the history (C6). */
+    fun pastHistory(back: Boolean)
   }
 
   private val density = host.resources.displayMetrics.density
@@ -59,7 +63,10 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
   /** Where the finger went down for an edge swipe, which edge, and whether it is being dragged. */
   private var edgeStartX = 0f
   private var edgeStartY = 0f
-  /** -1: left edge, swipe right to go back; 1: right edge, swipe left to go forward; 0: neither. */
+  /**
+   * -1: swipe right to go back; 1: swipe left to go forward; 2: anywhere on the page, the way the finger moves
+   * decides; 0: no swipe.
+   */
   private var edgeDirection = 0
   private var edgeSwiping = false
   /** Past the trigger point in the current edge swipe (one haptic tick when it's crossed). */
@@ -93,12 +100,14 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
         edgeStartY = event.y
         edgeSwiping = false
         edgeArmed = false
-        // The first 24dp at each side, matching iOS's allowsBackForwardNavigationGestures. A direction is only armed
-        // when there's history that way, so a swipe without history stays the page's.
+        // The first 24dp at each side, as iOS's edge swipe, or anywhere on the page (C5). Past the first page a
+        // swipe back archives the tab, past the last one forward brings it back (C6), so the edges always swipe.
         val edgeWidth = 24 * density
         edgeDirection = when {
-          event.x < edgeWidth && page.canGoBack() -> -1
-          event.x > host.width - edgeWidth && page.canGoForward() -> 1
+          page.swipeMode == "off" -> 0
+          event.x < edgeWidth -> -1
+          event.x > host.width - edgeWidth -> 1
+          page.swipeMode == "anywhere" -> 2
           else -> 0
         }
       }
@@ -116,6 +125,11 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
         if (!edgeSwiping && !pulling && edgeDirection != 0) {
           val dx = event.x - edgeStartX
           val dy = event.y - edgeStartY
+          // Anywhere on the page, a clearly sideways drag picks its way; anything else stays the page's.
+          if (edgeDirection == 2) {
+            if (abs(dx) <= touchSlop * 2 || abs(dx) <= abs(dy) * 2) return null
+            edgeDirection = if (dx > 0) -1 else 1
+          }
           val towardHistory = if (edgeDirection == -1) dx > 0 else dx < 0
           if (towardHistory && abs(dx) > touchSlop * 2 && abs(dx) > abs(dy) * 1.5) {
             edgeSwiping = true
@@ -156,7 +170,11 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
           edgeArmed = false
           host.parent?.requestDisallowInterceptTouchEvent(false)
           if (navigate) {
-            if (direction == -1) page.goBack() else page.goForward()
+            when {
+              direction == -1 && page.canGoBack() -> page.goBack()
+              direction == 1 && page.canGoForward() -> page.goForward()
+              else -> page.pastHistory(direction == -1)
+            }
           }
           settleEdge()
         }

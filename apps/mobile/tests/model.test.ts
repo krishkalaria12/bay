@@ -154,6 +154,8 @@ test("saved state is validated and repaired", () => {
     searchOnLaunch: true,
     customSearchUrl: null,
     tipsSeen: ["blocking", "bar"],
+    swipeToNavigate: "anywhere",
+    appLinks: "app",
   });
   assert.equal(data.spaces[0]?.id, "personal");
   assert.equal(data.activeSpaceId, "personal");
@@ -703,4 +705,14 @@ test("each tip shows once, and showing the welcome again brings them back", () =
   data = reduceBrowserData({ ...data, preferences: { ...data.preferences, welcomed: true } }, { type: "welcome-again" });
   assert.equal(data.preferences.welcomed, false);
   assert.deepEqual(data.preferences.tipsSeen, []);
+});
+
+test("swipe to navigate and app links keep a known choice", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "preferences", update: { swipeToNavigate: "edges", appLinks: "browser" } });
+  assert.equal(data.preferences.swipeToNavigate, "edges");
+  assert.equal(data.preferences.appLinks, "browser");
+  const saved = parseBrowserData({ version: 1, preferences: { swipeToNavigate: "sideways", appLinks: 3 } }, data);
+  assert.equal(saved.preferences.swipeToNavigate, "anywhere");
+  assert.equal(saved.preferences.appLinks, "app");
 });

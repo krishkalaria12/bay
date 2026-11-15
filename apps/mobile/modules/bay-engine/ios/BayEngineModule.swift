@@ -100,7 +100,16 @@ public class BayEngineModule: Module {
     }
 
     View(BayEngineView.self) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest", "onNewWindow")
+      Events(
+        "onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest",
+        "onNewWindow", "onSwipeNavigation", "onBlockedCount"
+      )
+      Prop("swipeToNavigate", "edges") { (view: BayEngineView, mode: String) in
+        view.swipeMode = mode
+      }
+      Prop("appLinks", "app") { (view: BayEngineView, mode: String) in
+        view.appLinks = mode
+      }
       Prop("pullToRefreshEnabled", true) { (view: BayEngineView, enabled: Bool) in
         view.pullToRefreshEnabled = enabled
       }

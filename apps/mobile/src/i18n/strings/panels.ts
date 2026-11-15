@@ -415,6 +415,16 @@ export const panels = {
   "settings.defaultBrowser": "Default browser",
   "settings.defaultBrowser.detail": "Open links from other apps in Bay",
   "settings.showWelcome": "Show the welcome again",
+  "settings.swipe": "Swipe to navigate",
+  "settings.swipe.anywhere": "From anywhere",
+  "settings.swipe.edges": "From the edges",
+  "settings.swipe.off": "Off",
+  "settings.swipe.note": "Swipe right to go back and left to go forward. Back on a tab's first page archives the tab; forward right after brings it back.",
+  "settings.appLinks": "Open app links in",
+  "settings.appLinks.app": "The app",
+  "settings.appLinks.browser": "Bay",
+  "settings.appLinks.note":
+    "A link to another site opens in its app when an installed app claims it. Typed addresses and links within a site always open here.",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

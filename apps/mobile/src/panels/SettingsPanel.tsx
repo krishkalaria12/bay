@@ -31,7 +31,7 @@ import {
 } from "@/i18n";
 import { CUSTOM_ENGINE_ID } from "@/browser/address";
 import { isCustomSearchUrl, START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
-import type { SimplePreferences, ThemeChoice, WallpaperId } from "@/store/types";
+import type { SimplePreferences, SwipeMode, ThemeChoice, WallpaperId } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface SettingsPanelProps {
@@ -117,6 +117,8 @@ type Page =
   | "textSize"
   | "archive"
   | "startPage"
+  | "swipe"
+  | "appLinks"
   | "about";
 
 const pages: Record<Page, { title: MessageKey; parent: Page }> = {
@@ -132,7 +134,15 @@ const pages: Record<Page, { title: MessageKey; parent: Page }> = {
   archive: { title: "settings.archiveInactive", parent: "browsing" },
   startPage: { title: "settings.startPage", parent: "browsing" },
   about: { title: "settings.about", parent: "main" },
+  swipe: { title: "settings.swipe", parent: "browsing" },
+  appLinks: { title: "settings.appLinks", parent: "browsing" },
 };
+
+const swipeModes: { id: SwipeMode; label: MessageKey }[] = [
+  { id: "anywhere", label: "settings.swipe.anywhere" },
+  { id: "edges", label: "settings.swipe.edges" },
+  { id: "off", label: "settings.swipe.off" },
+];
 
 /** The software Bay is built from, and the licence each ships under (R4). Names and licences stay as their projects write them. */
 const CREDITS: readonly { name: string; licence: string; url: string; android?: boolean }[] = [
@@ -497,6 +507,24 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               onPress={() => change({ searchOnLaunch: !prefs.searchOnLaunch })}
             />
             <ActionRow
+              testID="settings-swipe"
+              icon="back"
+              label={t("settings.swipe")}
+              value={t(swipeModes.find((mode) => mode.id === prefs.swipeToNavigate)?.label ?? "settings.swipe.anywhere")}
+              chevron
+              onPress={() => setPage("swipe")}
+            />
+            {Platform.OS === "ios" ? (
+              <ActionRow
+                testID="settings-app-links"
+                icon="link"
+                label={t("settings.appLinks")}
+                value={prefs.appLinks === "app" ? t("settings.appLinks.app") : t("settings.appLinks.browser")}
+                chevron
+                onPress={() => setPage("appLinks")}
+              />
+            ) : null}
+            <ActionRow
               testID="settings-pull-refresh"
               icon="reload"
               label={t("settings.pullToRefresh")}
@@ -563,6 +591,45 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             ))}
           </Group>
           <Note>{t("settings.startPage.note")}</Note>
+        </>
+      );
+      break;
+    case "swipe":
+      content = (
+        <>
+          <Group>
+            {swipeModes.map((mode) => (
+              <ActionRow
+                key={mode.id}
+                testID={`settings-swipe-${mode.id}`}
+                label={t(mode.label)}
+                selected={prefs.swipeToNavigate === mode.id}
+                onPress={choose(() => change({ swipeToNavigate: mode.id }))}
+              />
+            ))}
+          </Group>
+          <Note>{t("settings.swipe.note")}</Note>
+        </>
+      );
+      break;
+    case "appLinks":
+      content = (
+        <>
+          <Group>
+            <ActionRow
+              testID="settings-app-links-app"
+              label={t("settings.appLinks.app")}
+              selected={prefs.appLinks === "app"}
+              onPress={choose(() => change({ appLinks: "app" }))}
+            />
+            <ActionRow
+              testID="settings-app-links-browser"
+              label={t("settings.appLinks.browser")}
+              selected={prefs.appLinks === "browser"}
+              onPress={choose(() => change({ appLinks: "browser" }))}
+            />
+          </Group>
+          <Note>{t("settings.appLinks.note")}</Note>
         </>
       );
       break;
