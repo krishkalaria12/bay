@@ -121,8 +121,6 @@ export const browserEs: BrowserStrings = {
   "toast.bookmarked": "Añadido a marcadores",
   "toast.unbookmarked": "Marcador eliminado",
   "toast.showBookmarks": "Ver",
-  "toast.importOffer": "Trae tus marcadores de otro navegador",
-  "toast.importAction": "Importar",
   "toast.linksAlreadyHere": "Esos enlaces ya están aquí",
   "toast.openedTab": "{count} pestaña abierta",
   "toast.openedTabs": "{count} pestañas abiertas",
@@ -143,4 +141,9 @@ export const browserEs: BrowserStrings = {
   "tabs.privatePosition": "Pestaña privada {index} de {count}",
   "toast.restoredBlocking": "Mostrando la página tal como la hizo el sitio. ¿Se arregló?",
   "toast.keepBlockingOff": "Dejarlo desactivado aquí",
+  "tip.gotIt": "Entendido",
+  "tip.blocking.title": "Bay bloqueó anuncios y rastreadores aquí",
+  "tip.blocking.body": "En el menú ••• ves lo que se bloquea o lo desactivas en un sitio que falle.",
+  "tip.bar.title": "Desliza la barra para cambiar de pestaña",
+  "tip.bar.body": "De lado vas a la pestaña de al lado. Arrástrala hacia arriba para ver todas.",
 };

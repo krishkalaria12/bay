@@ -18,6 +18,7 @@ import type {
   SiteSetting,
   SpaceColor,
   TabUpdate,
+  TipId,
   WallpaperId,
 } from "./types";
 
@@ -46,7 +47,11 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   welcomed: false,
   searchOnLaunch: true,
   customSearchUrl: null,
+  tipsSeen: [],
 };
+
+/** The first-run tips, in the order they may show. */
+export const TIP_IDS: readonly TipId[] = ["blocking", "bar"];
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
 export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
@@ -172,6 +177,10 @@ export type BrowserAction =
   | { type: "archive-stale"; now: number }
   | { type: "block-content"; enabled: boolean }
   | { type: "pause-blocking"; host: string; paused: boolean }
+  /** A first-run tip was shown and put away (U7). */
+  | { type: "tip-seen"; id: TipId }
+  /** "Show the welcome again": the welcome and every tip come back. */
+  | { type: "welcome-again" }
   | { type: "lock-private-tabs"; enabled: boolean }
   | { type: "preferences"; update: Partial<SimplePreferences> }
   | { type: "left"; now: number }
@@ -554,6 +563,14 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         : data;
     case "block-content":
       return action.enabled === data.preferences.blockContent ? data : { ...data, preferences: { ...data.preferences, blockContent: action.enabled } };
+    case "tip-seen":
+      return data.preferences.tipsSeen.includes(action.id)
+        ? data
+        : { ...data, preferences: { ...data.preferences, tipsSeen: [...data.preferences.tipsSeen, action.id] } };
+
+    case "welcome-again":
+      return { ...data, preferences: { ...data.preferences, welcomed: false, tipsSeen: [] } };
+
     case "pause-blocking": {
       const host = action.host.toLowerCase().replace(/^www\./, "");
 
@@ -1042,6 +1059,12 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
 
 const THEME_CHOICES = ["system", "light", "dark"] as const;
 
+function parseTipsSeen(value: JsonValue | undefined): TipId[] {
+  if (!Array.isArray(value)) return [...TIP_IDS];
+
+  return TIP_IDS.filter((id) => value.includes(id));
+}
+
 /** A custom search engine's address: https, a host, and `%s` where the words go (C17). */
 export function isCustomSearchUrl(value: string): boolean {
   if (!value.includes("%s")) return false;
@@ -1100,6 +1123,8 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
     searchOnLaunch: savedPreferences.searchOnLaunch !== false,
     customSearchUrl:
       v.is(v.string(), savedPreferences.customSearchUrl) && isCustomSearchUrl(savedPreferences.customSearchUrl) ? savedPreferences.customSearchUrl : null,
+    // Saved before the tips existed: whoever saved it knows Bay already, so they show to people new to it.
+    tipsSeen: parseTipsSeen(savedPreferences.tipsSeen),
   };
 }
 

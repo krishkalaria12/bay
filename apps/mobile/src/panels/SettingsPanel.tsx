@@ -80,6 +80,10 @@ export interface SettingsPanelProps {
   onExportTabs: () => void;
   /** Opens a page in a new tab, from About (R4). */
   onOpenLink: (url: string) => void;
+  /** How to make Bay the default browser (C11). */
+  onDefaultBrowser: () => void;
+  /** The welcome and its tips again (C10). */
+  onShowWelcome: () => void;
 }
 
 /** Each choice's label, and the shorter value the Browsing page shows for it. */
@@ -585,6 +589,16 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           </Group>
           <Group label={t("settings.group.browser")}>
             <ActionRow
+              testID="settings-default-browser"
+              icon="link"
+              tint={rowTint.search}
+              label={t("settings.defaultBrowser")}
+              detail={t("settings.defaultBrowser.detail")}
+              chevron
+              disabled={busy}
+              onPress={props.onDefaultBrowser}
+            />
+            <ActionRow
               testID="settings-engine"
               icon="search"
               tint={rowTint.search}
@@ -728,6 +742,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               }
               disabled={busy}
               onPress={props.onReportProblem}
+            />
+            <ActionRow
+              testID="settings-show-welcome"
+              icon="visibility"
+              tint={rowTint.appearance}
+              label={t("settings.showWelcome")}
+              disabled={busy}
+              onPress={props.onShowWelcome}
             />
             <ActionRow
               testID="settings-about"

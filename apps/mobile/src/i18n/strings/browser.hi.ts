@@ -121,8 +121,6 @@ export const browserHi: BrowserStrings = {
   "toast.bookmarked": "बुकमार्क किया गया",
   "toast.unbookmarked": "बुकमार्क हटाया गया",
   "toast.showBookmarks": "दिखाएँ",
-  "toast.importOffer": "दूसरे ब्राउज़र से अपने बुकमार्क लाएँ",
-  "toast.importAction": "इंपोर्ट करें",
   "toast.linksAlreadyHere": "ये लिंक पहले से यहाँ हैं",
   "toast.openedTab": "{count} टैब खोला गया",
   "toast.openedTabs": "{count} टैब खोले गए",
@@ -143,4 +141,9 @@ export const browserHi: BrowserStrings = {
   "tabs.privatePosition": "{count} में से निजी टैब {index}",
   "toast.restoredBlocking": "पेज वैसा दिखाया जा रहा है जैसा साइट ने बनाया। क्या ठीक हुआ?",
   "toast.keepBlockingOff": "यहाँ बंद रखें",
+  "tip.gotIt": "समझ गया",
+  "tip.blocking.title": "Bay ने यहाँ विज्ञापन और ट्रैकर ब्लॉक किए",
+  "tip.blocking.body": "••• मेनू में देखें कि क्या ब्लॉक हुआ, या टूटने वाली साइट के लिए इसे बंद करें।",
+  "tip.bar.title": "टैब बदलने के लिए बार को स्वाइप करें",
+  "tip.bar.body": "बगल में स्वाइप करने से पास वाला टैब खुलता है। सारे टैब देखने के लिए ऊपर खींचें।",
 };

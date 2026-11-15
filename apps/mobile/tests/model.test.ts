@@ -153,6 +153,7 @@ test("saved state is validated and repaired", () => {
     welcomed: true,
     searchOnLaunch: true,
     customSearchUrl: null,
+    tipsSeen: ["blocking", "bar"],
   });
   assert.equal(data.spaces[0]?.id, "personal");
   assert.equal(data.activeSpaceId, "personal");
@@ -689,4 +690,17 @@ test("a custom search engine needs https and a place for the words", () => {
   assert.equal(data.preferences.customSearchUrl, "https://search.example/?q=%s");
   const saved = parseBrowserData({ version: 1, preferences: { customSearchUrl: "javascript:%s" } }, data);
   assert.equal(saved.preferences.customSearchUrl, null);
+});
+
+test("each tip shows once, and showing the welcome again brings them back", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "tip-seen", id: "bar" });
+  assert.deepEqual(data.preferences.tipsSeen, ["bar"]);
+  assert.equal(reduceBrowserData(data, { type: "tip-seen", id: "bar" }), data);
+  assert.deepEqual(parseBrowserData({ version: 1, preferences: { tipsSeen: ["bar", "nope", 3] } }, data).preferences.tipsSeen, ["bar"]);
+  // A document from before the tips: its owner knows Bay, so none show.
+  assert.deepEqual(parseBrowserData({ version: 1, preferences: {} }, data).preferences.tipsSeen, ["blocking", "bar"]);
+  data = reduceBrowserData({ ...data, preferences: { ...data.preferences, welcomed: true } }, { type: "welcome-again" });
+  assert.equal(data.preferences.welcomed, false);
+  assert.deepEqual(data.preferences.tipsSeen, []);
 });

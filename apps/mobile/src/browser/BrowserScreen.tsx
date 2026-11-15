@@ -40,6 +40,7 @@ import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
+import { DefaultBrowserPanel, SetupPanel } from "@/panels/SetupPanel";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privacy/contentBlocking";
@@ -58,6 +59,7 @@ import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
 import { TabZoom, type Frame } from "./TabZoom";
+import { Tip, TipRing } from "./Tip";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { Favicons } from "./favicons";
@@ -103,7 +105,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
+type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "setup" | "default" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -194,7 +196,8 @@ export function BrowserScreen(): JSX.Element {
     if (ready && !welcomed) sawWelcome.current = true;
     else if (ready && welcomed && sawWelcome.current) {
       sawWelcome.current = false;
-      toast.show(t("toast.importOffer"), { label: t("toast.importAction"), onPress: () => setPanel("import") });
+      // The welcome's last step (C10): import, and the default browser.
+      setPanel("setup");
     }
     // The toast and the translation are the screen's own and stay the same; only the welcome's ending asks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -494,6 +497,7 @@ export function BrowserScreen(): JSX.Element {
   const activeIndex = data.tabs.findIndex((tab) => tab.id === active.id);
 
   function swipeTabs(step: 1 | -1): void {
+    dispatch({ type: "tip-seen", id: "bar" });
     const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
 
     if (!next) return;
@@ -502,7 +506,11 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function showTabs(): void {
-    if (hasPage) capture(active.id);
+    if (hasPage) {
+      dispatch({ type: "tip-seen", id: "bar" });
+      capture(active.id);
+    }
+
     setOverlay("tabs");
   }
 
@@ -839,6 +847,31 @@ export function BrowserScreen(): JSX.Element {
     opacity: 1 - barHidden.value,
   }));
 
+  // First-run tips (U7): what blocking did on the first page, then the bar's gestures once there is a tab to swipe to.
+  // One at a time, only over a page that has finished loading, and never while anything else is up.
+  const { tipsSeen } = data.preferences;
+
+  const quiet = ready && welcomed && hasPage && showPages && overlay === "none" && panel === null && !link && !page.isLoading && !find.open;
+
+  const tip =
+    !quiet || locked
+      ? null
+      : !tipsSeen.includes("blocking") && blocking === "on" && blockerStatus.state === "ready"
+        ? "blocking"
+        : !tipsSeen.includes("bar") && data.tabs.filter((tab) => tab.url && !tab.private).length > 1
+          ? "bar"
+          : null;
+
+  const tipSeen = useCallback((id: "blocking" | "bar") => dispatch({ type: "tip-seen", id }), [dispatch]);
+
+  // A tip that isn't answered goes after a while; it has been seen.
+  useEffect(() => {
+    if (!tip) return;
+    const timer = setTimeout(() => tipSeen(tip), 12_000);
+
+    return () => clearTimeout(timer);
+  }, [tip, tipSeen]);
+
   const player = media.player;
   // A locked private tab or an error page shows Bay's own screen there, not the page.
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
@@ -1067,7 +1100,17 @@ export function BrowserScreen(): JSX.Element {
             />
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
+          {tip ? (
+            <Tip
+              key={tip}
+              target={tip === "blocking" ? "more" : "capsule"}
+              title={tip === "blocking" ? t("tip.blocking.title") : t("tip.bar.title")}
+              body={tip === "blocking" ? t("tip.blocking.body") : t("tip.bar.body")}
+              onDone={() => tipSeen(tip)}
+            />
+          ) : null}
           <View collapsable={false} {...behindSheet}>
+            {tip ? <TipRing target={tip === "blocking" ? "more" : "capsule"} /> : null}
             {hasPage && showPages ? (
               <GestureDetector gesture={dragUp}>
                 <View collapsable={false}>
@@ -1096,7 +1139,9 @@ export function BrowserScreen(): JSX.Element {
                         tabCount={data.tabs.length}
                         onSearch={() => search(false)}
                         onMore={() => {
-                          if (!(locked && active.private)) setPanel("page");
+                          if (locked && active.private) return;
+                          dispatch({ type: "tip-seen", id: "blocking" });
+                          setPanel("page");
                         }}
                         onMoreLongPress={() => {
                           if (locked && active.private) return;
@@ -1267,6 +1312,11 @@ export function BrowserScreen(): JSX.Element {
         onCustomEngine={(customUrl) => dispatch({ type: "search-engine", id: CUSTOM_ENGINE_ID, customUrl })}
         openTabCount={data.tabs.filter((tab) => tab.url && !tab.private).length}
         onExportTabs={() => void exportTabs()}
+        onDefaultBrowser={() => setPanel("default")}
+        onShowWelcome={() => {
+          setPanel(null);
+          dispatch({ type: "welcome-again" });
+        }}
         onOpenLink={(url) => {
           setPanel(null);
           setOverlay("none");
@@ -1366,6 +1416,13 @@ export function BrowserScreen(): JSX.Element {
         }}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
+      <SetupPanel
+        visible={panel === "setup"}
+        onClose={() => closePanel("setup")}
+        onImport={() => setPanel("import")}
+        onDefaultBrowser={() => setPanel("default")}
+      />
+      <DefaultBrowserPanel visible={panel === "default"} onClose={() => closePanel("default")} />
 
       {/* The card's picture, grown into the page (A1). It is drawn over everything, and the live page takes over. */}
       {zoom ? (

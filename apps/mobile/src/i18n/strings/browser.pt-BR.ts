@@ -121,8 +121,6 @@ export const browserPtBR: BrowserStrings = {
   "toast.bookmarked": "Adicionado aos favoritos",
   "toast.unbookmarked": "Favorito removido",
   "toast.showBookmarks": "Ver",
-  "toast.importOffer": "Traga seus favoritos de outro navegador",
-  "toast.importAction": "Importar",
   "toast.linksAlreadyHere": "Esses links já estão aqui",
   "toast.openedTab": "{count} aba aberta",
   "toast.openedTabs": "{count} abas abertas",
@@ -143,4 +141,9 @@ export const browserPtBR: BrowserStrings = {
   "tabs.privatePosition": "Aba privada {index} de {count}",
   "toast.restoredBlocking": "Mostrando a página como o site a fez. Resolveu?",
   "toast.keepBlockingOff": "Manter desligado aqui",
+  "tip.gotIt": "Entendi",
+  "tip.blocking.title": "O Bay bloqueou anúncios e rastreadores aqui",
+  "tip.blocking.body": "No menu •••, veja o que foi bloqueado ou desligue para um site que quebrar.",
+  "tip.bar.title": "Deslize a barra para trocar de aba",
+  "tip.bar.body": "De lado vai para a aba ao lado. Arraste para cima para ver todas as abas.",
 };

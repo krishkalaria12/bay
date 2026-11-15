@@ -128,7 +128,12 @@ export interface BrowserPreferences {
   searchOnLaunch: boolean;
   /** The custom search engine's address, https with `%s` where the words go; used while `searchEngineId` is "custom". */
   customSearchUrl: string | null;
+  /** The first-run tips already shown (U7), so each shows once. */
+  tipsSeen: TipId[];
 }
+
+/** A first-run tip (U7): the bar's gestures, and what blocking did on the first page. */
+export type TipId = "bar" | "blocking";
 
 export type ThemeChoice = "system" | "light" | "dark";
 

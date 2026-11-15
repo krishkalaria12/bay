@@ -399,6 +399,22 @@ export const panels = {
   "pageMenu.blockedCount": "{count} ads and trackers blocked",
   "pageMenu.blocking.restored": "Off on this page until you leave the site",
   "pageMenu.restore": "Page broken? Reload it without blocking",
+  "setup.title": "Make Bay yours",
+  "setup.body": "Two things that make switching painless. Both can wait: they're in Settings too.",
+  "setup.import": "Bring your bookmarks and history",
+  "setup.importDetail": "From Safari, Chrome or any other browser",
+  "setup.default": "Make Bay your default browser",
+  "setup.defaultDetail": "Links from other apps open here, with blocking",
+  "setup.done": "Start browsing",
+  "default.ios.step1": "Open Bay's page in Settings",
+  "default.ios.step2": "Tap Default Browser App",
+  "default.ios.step3": "Choose Bay",
+  "default.android.step1": "Open your phone's default apps",
+  "default.android.step2": "Tap Browser app",
+  "default.open": "Open Settings",
+  "settings.defaultBrowser": "Default browser",
+  "settings.defaultBrowser.detail": "Open links from other apps in Bay",
+  "settings.showWelcome": "Show the welcome again",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */
