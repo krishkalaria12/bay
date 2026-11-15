@@ -96,7 +96,7 @@ public class BayEngineModule: Module {
       let paths = files?.compactMap { URL(string: $0)?.path }
       DispatchQueue.main.async {
         BayContentBlocker.shared.apply(groups: byGroup, version: version, completion: finish)
-        BayContentBlocker.shared.loadScriptletEngine(paths: paths, version: version)
+        BayContentBlocker.shared.loadScriptletEngine(paths: paths, groups: groups, version: version)
       }
     }
 

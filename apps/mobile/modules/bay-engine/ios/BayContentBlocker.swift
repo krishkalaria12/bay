@@ -43,6 +43,7 @@ final class BayContentBlocker {
   func setSiteGroups(_ json: String) {
     let parsed = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: [String]] ?? [:]
     siteGroupsOff = parsed.reduce(into: [:]) { result, entry in result[entry.key.lowercased()] = Set(entry.value) }
+    loadGroupEnginesIfNeeded()
     refreshViews()
   }
 
@@ -130,18 +131,77 @@ final class BayContentBlocker {
   }
 
   /// Loads the engine from its cache (or builds and caches it) off the main thread, with the bundled scriptlet
-  /// resources; `nil` unloads it.
-  func loadScriptletEngine(paths: [String]?, version: String) {
+  /// resources; `nil` unloads it. `groups` names each path's group (C3), as `setContentBlocking` passes them: once a
+  /// site turns a group off, an engine per group loads too, so that site's scriptlets and blocked count (C20) leave
+  /// that group out. Every other site keeps the one engine of all the lists, whose exceptions reach across lists.
+  func loadScriptletEngine(paths: [String]?, groups: [String]?, version: String) {
     engineGeneration += 1
     let generation = engineGeneration
+    replaceGroupEngines([:])
     guard let paths, !paths.isEmpty else {
+      engineSource = nil
       replaceEngine(nil)
       return
     }
+    engineSource = EngineSource(paths: paths, groups: groups?.count == paths.count ? groups : nil, version: version)
+    Self.loadEngine(paths: paths, name: "engine", version: version) { [weak self] loaded in
+      guard let self, generation == self.engineGeneration else {
+        if let loaded { bay_blocker_free(loaded) }
+        return
+      }
+      self.replaceEngine(loaded)
+      self.loadGroupEnginesIfNeeded()
+    }
+  }
+
+  /// What the engines were last loaded from, so the group engines can follow when a site first turns a group off.
+  private struct EngineSource {
+    let paths: [String]
+    let groups: [String]?
+    let version: String
+  }
+
+  private var engineSource: EngineSource?
+  /// One engine per group (C20), each with the "shared" lists too; empty until a site turns a group off.
+  private var groupEngines: [String: OpaquePointer] = [:]
+  private var loadingGroupEngines = false
+
+  /// Loads the group engines the first time a site turns a group off; they stay until the lists change.
+  private func loadGroupEnginesIfNeeded() {
+    guard !siteGroupsOff.isEmpty, groupEngines.isEmpty, !loadingGroupEngines, engine != nil, let source = engineSource,
+          let groups = source.groups else { return }
+    let pairs = Array(zip(source.paths, groups))
+    let shared = pairs.filter { $0.1 == "shared" }.map(\.0)
+    let names = Set(groups).subtracting(["shared"]).sorted()
+    guard !names.isEmpty else { return }
+    loadingGroupEngines = true
+    let generation = engineGeneration
+    var loaded: [String: OpaquePointer] = [:]
+    func next(_ index: Int) {
+      guard index < names.count else {
+        loadingGroupEngines = false
+        guard generation == engineGeneration else {
+          loaded.values.forEach { bay_blocker_free($0) }
+          return
+        }
+        replaceGroupEngines(loaded)
+        return
+      }
+      let name = names[index]
+      Self.loadEngine(paths: pairs.filter { $0.1 == name }.map(\.0) + shared, name: "engine-\(name)", version: source.version) { engine in
+        if let engine { loaded[name] = engine }
+        next(index + 1)
+      }
+    }
+    next(0)
+  }
+
+  /// One engine from its cache, or built and cached, off the main thread; `done` runs on the main thread.
+  private static func loadEngine(paths: [String], name: String, version: String, done: @escaping (OpaquePointer?) -> Void) {
     DispatchQueue.global(qos: .utility).async {
       let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("bay-adblock")
       try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let cache = directory.appendingPathComponent("engine.bin").path
+      let cache = directory.appendingPathComponent("\(name).bin").path
       let resources = Bundle.main.path(forResource: "bay-adblock-resources", ofType: "json")
       let started = CACurrentMediaTime()
       let files = paths.map { strdup($0) }
@@ -149,14 +209,8 @@ final class BayContentBlocker {
       let loaded = files.map { UnsafePointer<CChar>($0) }.withUnsafeBufferPointer { buffer in
         bay_blocker_load(buffer.baseAddress, buffer.count, cache, version, resources, 2)
       }
-      NSLog("BayContentBlocker: scriptlet engine ready in %.0f ms", (CACurrentMediaTime() - started) * 1000)
-      DispatchQueue.main.async { [weak self] in
-        guard let self, generation == self.engineGeneration else {
-          if let loaded { bay_blocker_free(loaded) }
-          return
-        }
-        self.replaceEngine(loaded)
-      }
+      NSLog("BayContentBlocker: %@ ready in %.0f ms", name, (CACurrentMediaTime() - started) * 1000)
+      DispatchQueue.main.async { done(loaded) }
     }
   }
 
@@ -165,13 +219,32 @@ final class BayContentBlocker {
     engine = next
   }
 
+  private func replaceGroupEngines(_ next: [String: OpaquePointer]) {
+    groupEngines.values.forEach { bay_blocker_free($0) }
+    groupEngines = next
+  }
+
+  /// The engines that apply on a site: none while blocking is paused there, the groups it keeps once it turns some
+  /// off, and the engine of every list otherwise. While the group engines load, a site that turned ads off gets
+  /// no scriptlets, and its count still checks every list.
+  private func engines(for host: String, scriptlets: Bool) -> [OpaquePointer] {
+    guard let engine, !isPaused(host) else { return [] }
+    let off = groupsOff(host)
+    if off.isEmpty { return [engine] }
+    if !groupEngines.isEmpty { return groupEngines.filter { !off.contains($0.key) }.map(\.value) }
+    return scriptlets && off.contains("ads") ? [] : [engine]
+  }
+
   /// Whether the filter lists stop a request of `type` (an adblock resource type) to `url` from the page at `source`
-  /// (C2): how a failed load on the page is told apart from one the blocker stopped. False while the engine is loading.
+  /// (C2): how a failed load on the page is told apart from one the blocker stopped. Only the groups the page's site
+  /// keeps count (C20). False while the engine is loading.
   func blocks(_ url: String, source: String, type: String) -> Bool {
-    guard let engine else { return false }
-    return url.withCString { address in
-      source.withCString { page in
-        type.withCString { kind in "GET".withCString { bay_blocker_should_block(engine, address, page, kind, $0) } }
+    guard let host = URL(string: source)?.host?.lowercased() else { return false }
+    return engines(for: host, scriptlets: false).contains { engine in
+      url.withCString { address in
+        source.withCString { page in
+          type.withCString { kind in "GET".withCString { bay_blocker_should_block(engine, address, page, kind, $0) } }
+        }
       }
     }
   }
@@ -184,11 +257,18 @@ final class BayContentBlocker {
 
   /// The scriptlets for a page, or nil when it has none or blocking is paused there.
   func scriptlets(for url: URL) -> String? {
-    guard let engine, let host = url.host?.lowercased(), !isPaused(host), !groupsOff(host).contains("ads"),
-          let pointer = url.absoluteString.withCString({ bay_blocker_scriptlets(engine, $0) }) else { return nil }
-    defer { bay_string_free(pointer) }
-    let script = String(cString: pointer)
-    return script.isEmpty ? nil : script
+    guard let host = url.host?.lowercased() else { return nil }
+    let scripts = engines(for: host, scriptlets: true).compactMap { engine -> String? in
+      guard let pointer = url.absoluteString.withCString({ bay_blocker_scriptlets(engine, $0) }) else { return nil }
+      defer { bay_string_free(pointer) }
+      let script = String(cString: pointer)
+      return script.isEmpty ? nil : script
+    }
+    // Every group engine has the shared lists, so on a site whose scriptlets all come from those, each engine returns
+    // the same script: it runs once.
+    var seen = Set<String>()
+    let unique = scripts.filter { seen.insert($0).inserted }
+    return unique.isEmpty ? nil : unique.joined(separator: "\n")
   }
 
   private func refreshViews() {
