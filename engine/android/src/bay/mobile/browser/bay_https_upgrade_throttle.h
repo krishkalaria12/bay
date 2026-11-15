@@ -5,6 +5,7 @@
 #define BAY_MOBILE_BROWSER_BAY_HTTPS_UPGRADE_THROTTLE_H_
 
 #include "content/public/browser/navigation_throttle.h"
+#include "url/gurl.h"
 
 namespace bay {
 
