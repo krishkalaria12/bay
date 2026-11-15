@@ -939,7 +939,7 @@ export function BrowserScreen(): JSX.Element {
                     skipAmp: data.preferences.skipAmp,
                   }}
                   desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
-                  swipeToNavigate={data.preferences.swipeToNavigate}
+                  swipeToNavigate={siteSettingFor(data.preferences.siteSettings, tab.url).swipe ?? data.preferences.swipeToNavigate}
                   appLinks={data.preferences.appLinks}
                   onSwipeNavigation={(action) => swipePastHistory(id, action)}
                   onBlockedCount={(count) => setBlockedCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count }))}
@@ -1337,6 +1337,9 @@ export function BrowserScreen(): JSX.Element {
           // The change applies to new loads; reload so this page shows it.
           run((tab) => tab.reload());
         }}
+        swipe={siteSetting.swipe}
+        globalSwipe={data.preferences.swipeToNavigate}
+        onSwipe={(swipe) => changeSiteSetting({ swipe })}
       />
       <ArchivePanel
         visible={panel === "archive"}

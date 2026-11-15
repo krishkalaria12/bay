@@ -424,4 +424,7 @@ export const panelsDe: PanelStrings = {
   "site.block.ads": "Werbung blockieren",
   "site.block.trackers": "Tracker blockieren",
   "site.block.cookies": "Cookie-Banner blockieren",
+  "site.swipe.follows": "Folgt Bay: {mode}",
+  "site.swipe.follow": "Bay folgen ({mode})",
+  "site.swipe.note": "Nur auf dieser Website. Schalte es dort aus, wo die Seite selbst seitlich wischt, wie Karten und Karussells.",
 };

@@ -421,4 +421,7 @@ export const panelsHi: PanelStrings = {
   "site.block.ads": "विज्ञापन ब्लॉक करें",
   "site.block.trackers": "ट्रैकर ब्लॉक करें",
   "site.block.cookies": "कुकी बैनर ब्लॉक करें",
+  "site.swipe.follows": "Bay के अनुसार: {mode}",
+  "site.swipe.follow": "Bay के अनुसार ({mode})",
+  "site.swipe.note": "सिर्फ़ इस साइट पर। जहाँ पेज ख़ुद बग़ल में स्वाइप करता है, जैसे मैप और कैरूसेल, वहाँ इसे बंद करें।",
 };

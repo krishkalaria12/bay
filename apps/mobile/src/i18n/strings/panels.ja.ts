@@ -423,4 +423,7 @@ export const panelsJa: PanelStrings = {
   "site.block.ads": "広告をブロック",
   "site.block.trackers": "トラッカーをブロック",
   "site.block.cookies": "Cookie バナーをブロック",
+  "site.swipe.follows": "Bayに従う: {mode}",
+  "site.swipe.follow": "Bayに従う（{mode}）",
+  "site.swipe.note": "このサイトだけの設定です。地図やカルーセルのようにページ自体が横にスワイプする場所ではオフにしてください。",
 };

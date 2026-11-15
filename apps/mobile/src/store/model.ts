@@ -60,7 +60,7 @@ export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
 export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
 
 /** What a site with no entry of its own keeps: every global choice. */
-export const EMPTY_SITE_SETTING: SiteSetting = { textSize: null, reader: false, desktopMode: false, blockOff: [] };
+export const EMPTY_SITE_SETTING: SiteSetting = { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null };
 
 /** The kinds of blocking a site turns off on its own (C3), in Site Settings' order. */
 export const SITE_BLOCK_GROUPS: readonly SiteBlockGroup[] = ["ads", "trackers", "cookies"];
@@ -792,11 +792,12 @@ export function parseSiteSetting(value: JsonValue): SiteSetting {
     reader: setting.reader === true,
     desktopMode: setting.desktopMode === true,
     blockOff: SITE_BLOCK_GROUPS.filter((group) => Array.isArray(setting.blockOff) && setting.blockOff.includes(group)),
+    swipe: v.is(v.picklist(SWIPE_MODES), setting.swipe) ? setting.swipe : null,
   };
 }
 
 function isDefaultSiteSetting(setting: SiteSetting): boolean {
-  return setting.textSize === null && !setting.reader && !setting.desktopMode && !setting.blockOff.length;
+  return setting.textSize === null && !setting.reader && !setting.desktopMode && !setting.blockOff.length && setting.swipe === null;
 }
 
 function sameSiteSetting(previous: SiteSetting | null, setting: SiteSetting): boolean {
@@ -805,7 +806,8 @@ function sameSiteSetting(previous: SiteSetting | null, setting: SiteSetting): bo
     previous.textSize === setting.textSize &&
     previous.reader === setting.reader &&
     previous.desktopMode === setting.desktopMode &&
-    previous.blockOff.join(" ") === setting.blockOff.join(" ")
+    previous.blockOff.join(" ") === setting.blockOff.join(" ") &&
+    previous.swipe === setting.swipe
   );
 }
 

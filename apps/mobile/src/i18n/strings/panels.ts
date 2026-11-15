@@ -428,6 +428,9 @@ export const panels = {
   "site.block.ads": "Block ads",
   "site.block.trackers": "Block trackers",
   "site.block.cookies": "Block cookie banners",
+  "site.swipe.follows": "Follows Bay: {mode}",
+  "site.swipe.follow": "Follow Bay ({mode})",
+  "site.swipe.note": "Only on this site. Turn it off where the page swipes sideways itself, as maps and carousels do.",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

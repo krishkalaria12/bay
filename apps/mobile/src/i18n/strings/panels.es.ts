@@ -424,4 +424,7 @@ export const panelsEs: PanelStrings = {
   "site.block.ads": "Bloquear anuncios",
   "site.block.trackers": "Bloquear rastreadores",
   "site.block.cookies": "Bloquear avisos de cookies",
+  "site.swipe.follows": "Sigue a Bay: {mode}",
+  "site.swipe.follow": "Seguir a Bay ({mode})",
+  "site.swipe.note": "Solo en este sitio. Desactívalo donde la página use sus propios deslizamientos laterales, como los mapas y los carruseles.",
 };

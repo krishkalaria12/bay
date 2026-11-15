@@ -155,6 +155,8 @@ export type SiteSetting = {
   desktopMode: boolean;
   /** What isn't blocked on this site (C3): ads, trackers or cookie banners. Empty blocks all three. */
   blockOff: SiteBlockGroup[];
+  /** Swipe to navigate on this site (C20), or null for Bay's own choice. */
+  swipe: SwipeMode | null;
 };
 
 /** A kind of blocking a site can turn off on its own (C3). Kept here so the store needs nothing from the blocker. */

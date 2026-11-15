@@ -424,4 +424,7 @@ export const panelsPtBR: PanelStrings = {
   "site.block.ads": "Bloquear anúncios",
   "site.block.trackers": "Bloquear rastreadores",
   "site.block.cookies": "Bloquear avisos de cookies",
+  "site.swipe.follows": "Segue o Bay: {mode}",
+  "site.swipe.follow": "Seguir o Bay ({mode})",
+  "site.swipe.note": "Só neste site. Desligue onde a própria página desliza para os lados, como mapas e carrosséis.",
 };

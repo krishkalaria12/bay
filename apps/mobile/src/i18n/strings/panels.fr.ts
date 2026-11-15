@@ -424,4 +424,7 @@ export const panelsFr: PanelStrings = {
   "site.block.ads": "Bloquer les publicités",
   "site.block.trackers": "Bloquer les traqueurs",
   "site.block.cookies": "Bloquer les bannières de cookies",
+  "site.swipe.follows": "Suit Bay : {mode}",
+  "site.swipe.follow": "Suivre Bay ({mode})",
+  "site.swipe.note": "Sur ce site uniquement. Désactivez-le là où la page utilise ses propres balayages latéraux, comme les cartes et les carrousels.",
 };

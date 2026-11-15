@@ -6,8 +6,8 @@ import { Text } from "@/chrome/Text";
 import { radius, rowTint } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT, type MessageKey } from "@/i18n";
-import { TEXT_SIZE } from "@/store/model";
-import type { SiteBlockGroup } from "@/store/types";
+import { SWIPE_MODES, TEXT_SIZE } from "@/store/model";
+import type { SiteBlockGroup, SwipeMode } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface SiteSettingsPanelProps {
@@ -31,7 +31,18 @@ export interface SiteSettingsPanelProps {
   /** What this site doesn't block (C3); iOS keeps ads, trackers and cookie banners apart, Android blocks them together. */
   blockOff: readonly SiteBlockGroup[];
   onBlockOff: (groups: SiteBlockGroup[]) => void;
+  /** Swipe to navigate here (C20), or null while it follows Bay's. */
+  swipe: SwipeMode | null;
+  /** Bay's own swipe to navigate, shown as what this site follows. */
+  globalSwipe: SwipeMode;
+  onSwipe: (swipe: SwipeMode | null) => void;
 }
+
+const SWIPE_LABELS: Record<SwipeMode, MessageKey> = {
+  anywhere: "settings.swipe.anywhere",
+  edges: "settings.swipe.edges",
+  off: "settings.swipe.off",
+};
 
 const GROUP_ROWS: { group: SiteBlockGroup; label: MessageKey }[] = [
   { group: "ads", label: "site.block.ads" },
@@ -42,16 +53,50 @@ const GROUP_ROWS: { group: SiteBlockGroup; label: MessageKey }[] = [
 /** Per-site settings (B12): what this host keeps instead of the global choices. */
 export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
   const t = useT();
-  // Rarely needed zoom control sits one step away, so the panel fits without scrolling.
-  const [zoom, setZoom] = useState(false);
+  // Rarely needed controls (zoom, swipe) sit one step away, so the panel fits without scrolling.
+  const [page, setPage] = useState<"main" | "zoom" | "swipe">("main");
   useEffect(() => {
-    if (props.visible) setZoom(false);
+    if (props.visible) setPage("main");
   }, [props.visible]);
 
-  if (zoom) {
+  if (page === "zoom") {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setZoom(false)} title={t("site.zoom")} testID="site-settings" height="60%">
+      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setPage("main")} title={t("site.zoom")} testID="site-settings" height="60%">
         <SiteZoom textSize={props.textSize} globalTextSize={props.globalTextSize} onChange={props.onTextSize} />
+      </PanelSheet>
+    );
+  }
+
+  if (page === "swipe") {
+    return (
+      <PanelSheet
+        visible={props.visible}
+        onClose={props.onClose}
+        onBack={() => setPage("main")}
+        title={t("settings.swipe")}
+        testID="site-settings"
+        height="60%"
+      >
+        <Group>
+          <ActionRow
+            testID="site-swipe-follow"
+            label={t("site.swipe.follow", { mode: t(SWIPE_LABELS[props.globalSwipe]) })}
+            selected={props.swipe === null}
+            onPress={() => props.onSwipe(null)}
+          />
+          {SWIPE_MODES.map((mode) => (
+            <ActionRow
+              key={mode}
+              testID={`site-swipe-${mode}`}
+              label={t(SWIPE_LABELS[mode])}
+              selected={props.swipe === mode}
+              onPress={() => props.onSwipe(mode)}
+            />
+          ))}
+        </Group>
+        <Text testID="site-swipe-note" variant="footnote" tone="muted" className="mt-2 px-4">
+          {t("site.swipe.note")}
+        </Text>
       </PanelSheet>
     );
   }
@@ -108,7 +153,17 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
           detail={props.textSize === null ? t("site.zoom.follows", { size: props.globalTextSize }) : t("site.zoom.onSite", { size: props.textSize })}
           value={props.textSize === null ? undefined : `${props.textSize}%`}
           chevron
-          onPress={() => setZoom(true)}
+          onPress={() => setPage("zoom")}
+        />
+        <ActionRow
+          testID="site-swipe"
+          icon="back"
+          tint={rowTint.browsing}
+          label={t("settings.swipe")}
+          detail={props.swipe === null ? t("site.swipe.follows", { mode: t(SWIPE_LABELS[props.globalSwipe]) }) : undefined}
+          value={props.swipe === null ? undefined : t(SWIPE_LABELS[props.swipe])}
+          chevron
+          onPress={() => setPage("swipe")}
         />
         <ActionRow
           testID="site-reader"
@@ -129,7 +184,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
           onPress={() => props.onDesktop(!props.desktop)}
         />
       </Group>
-      {props.textSize !== null || props.reader || props.desktop ? (
+      {props.textSize !== null || props.reader || props.desktop || props.swipe !== null ? (
         <View className="mt-3">
           <Group>
             <ActionRow
@@ -140,6 +195,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
                 props.onTextSize(null);
                 props.onReader(false);
                 props.onDesktop(false);
+                props.onSwipe(null);
               }}
             />
           </Group>
