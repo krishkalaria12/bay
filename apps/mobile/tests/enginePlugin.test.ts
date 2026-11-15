@@ -56,6 +56,13 @@ test("the engine's resource packs stay uncompressed", () => {
   assert.match(chromiumEngineEdits.appBuildGradle(appBuildGradle), /androidResources \{\n {8}noCompress \+= \["pak", "dat", "bin"\]/);
 });
 
+test("the app compiles Chromium's R classes, which the engine module writes", () => {
+  const edited = chromiumEngineEdits.appBuildGradle(appBuildGradle);
+
+  assert.match(edited, /java\.srcDirs \+= "\$\{rootDir\}\/\.\.\/modules\/bay-engine\/android\/build\/generated\/source\/bayEngineR"/);
+  assert.match(edited, /dependsOn\(":bay-engine:generateBayEngineRClasses"\)/);
+});
+
 test("the app starts nothing of its own in the engine's child processes", () => {
   const edited = chromiumEngineEdits.mainApplication(mainApplication);
 
