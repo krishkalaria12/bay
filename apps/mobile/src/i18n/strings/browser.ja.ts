@@ -121,6 +121,8 @@ export const browserJa: BrowserStrings = {
   "toast.bookmarked": "ブックマークしました",
   "toast.unbookmarked": "ブックマークを削除しました",
   "toast.showBookmarks": "表示",
+  "toast.importOffer": "ほかのブラウザからブックマークを持ってくる",
+  "toast.importAction": "読み込む",
   "toast.linksAlreadyHere": "それらのリンクはすでにあります",
   "toast.openedTab": "{count}個のタブを開きました",
   "toast.openedTabs": "{count}個のタブを開きました",

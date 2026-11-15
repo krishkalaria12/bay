@@ -121,6 +121,8 @@ export const browserDe: BrowserStrings = {
   "toast.bookmarked": "Lesezeichen gesetzt",
   "toast.unbookmarked": "Lesezeichen entfernt",
   "toast.showBookmarks": "Zeigen",
+  "toast.importOffer": "Bring deine Lesezeichen aus einem anderen Browser mit",
+  "toast.importAction": "Importieren",
   "toast.linksAlreadyHere": "Diese Links sind schon da",
   "toast.openedTab": "{count} Tab geöffnet",
   "toast.openedTabs": "{count} Tabs geöffnet",

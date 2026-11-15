@@ -174,10 +174,23 @@ export function BrowserScreen(): JSX.Element {
   const hasPrivateTabs = data.tabs.some((tab) => tab.private);
   const lockEnabled = lockPrivateTabs && hasPrivateTabs;
 
-  const { theme, startPageAfterHours } = data.preferences;
+  const { theme, startPageAfterHours, welcomed } = data.preferences;
   useEffect(() => {
     Uniwind.setTheme(theme);
   }, [theme]);
+
+  // A fresh install, just through the welcome, is offered the import (desktop's first run has it as a step). Only a
+  // welcome seen in this session counts: Bay reopened later doesn't ask again.
+  const sawWelcome = useRef(ready && !welcomed);
+  useEffect(() => {
+    if (ready && !welcomed) sawWelcome.current = true;
+    else if (ready && welcomed && sawWelcome.current) {
+      sawWelcome.current = false;
+      toast.show(t("toast.importOffer"), { label: t("toast.importAction"), onPress: () => setPanel("import") });
+    }
+    // The toast and the translation are the screen's own and stay the same; only the welcome's ending asks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, welcomed]);
 
   // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
   // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.

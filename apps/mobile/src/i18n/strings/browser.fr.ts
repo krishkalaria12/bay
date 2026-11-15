@@ -121,6 +121,8 @@ export const browserFr: BrowserStrings = {
   "toast.bookmarked": "Ajouté aux signets",
   "toast.unbookmarked": "Signet supprimé",
   "toast.showBookmarks": "Voir",
+  "toast.importOffer": "Apportez vos signets d’un autre navigateur",
+  "toast.importAction": "Importer",
   "toast.linksAlreadyHere": "Ces liens sont déjà là",
   "toast.openedTab": "{count} onglet ouvert",
   "toast.openedTabs": "{count} onglets ouverts",

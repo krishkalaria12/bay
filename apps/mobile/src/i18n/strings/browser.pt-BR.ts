@@ -121,6 +121,8 @@ export const browserPtBR: BrowserStrings = {
   "toast.bookmarked": "Adicionado aos favoritos",
   "toast.unbookmarked": "Favorito removido",
   "toast.showBookmarks": "Ver",
+  "toast.importOffer": "Traga seus favoritos de outro navegador",
+  "toast.importAction": "Importar",
   "toast.linksAlreadyHere": "Esses links já estão aqui",
   "toast.openedTab": "{count} aba aberta",
   "toast.openedTabs": "{count} abas abertas",

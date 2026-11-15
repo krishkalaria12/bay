@@ -121,6 +121,8 @@ export const browserHi: BrowserStrings = {
   "toast.bookmarked": "बुकमार्क किया गया",
   "toast.unbookmarked": "बुकमार्क हटाया गया",
   "toast.showBookmarks": "दिखाएँ",
+  "toast.importOffer": "दूसरे ब्राउज़र से अपने बुकमार्क लाएँ",
+  "toast.importAction": "इंपोर्ट करें",
   "toast.linksAlreadyHere": "ये लिंक पहले से यहाँ हैं",
   "toast.openedTab": "{count} टैब खोला गया",
   "toast.openedTabs": "{count} टैब खोले गए",

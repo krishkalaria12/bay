@@ -121,6 +121,8 @@ export const browserEs: BrowserStrings = {
   "toast.bookmarked": "Añadido a marcadores",
   "toast.unbookmarked": "Marcador eliminado",
   "toast.showBookmarks": "Ver",
+  "toast.importOffer": "Trae tus marcadores de otro navegador",
+  "toast.importAction": "Importar",
   "toast.linksAlreadyHere": "Esos enlaces ya están aquí",
   "toast.openedTab": "{count} pestaña abierta",
   "toast.openedTabs": "{count} pestañas abiertas",

@@ -122,6 +122,8 @@ export const browser = {
   "toast.bookmarked": "Bookmarked",
   "toast.unbookmarked": "Bookmark removed",
   "toast.showBookmarks": "Show",
+  "toast.importOffer": "Bring your bookmarks from another browser",
+  "toast.importAction": "Import",
   "toast.linksAlreadyHere": "Those links are already here",
   "toast.openedTab": "Opened {count} tab",
   "toast.openedTabs": "Opened {count} tabs",
