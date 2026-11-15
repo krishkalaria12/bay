@@ -125,6 +125,12 @@ class ParsingTests(unittest.TestCase):
         text = engine.gn_args_text({"gnArgs": {"target_os": "android", "is_debug": False, "symbol_level": 0}})
         self.assertEqual(text, 'target_os = "android"\nis_debug = false\nsymbol_level = 0\n')
 
+    def test_args_gn_makes_the_target_a_root(self):
+        lock = {"target": "bay/mobile:aar", "gnArgs": {"target_os": "android"}}
+        self.assertEqual(engine.args_gn_text(lock), 'target_os = "android"\nroot_extra_deps = ["//bay/mobile:aar"]\n')
+        # The root changes no compile: the saved tree stays reusable.
+        self.assertNotIn("root_extra_deps", engine.LOCK["gnArgs"])
+
     def test_unused_gn_args_are_named(self):
         self.assertEqual(engine.unused_gn_args(GN_WARNING), ["enable_bay_magic"])
         self.assertEqual(engine.unused_gn_args("Done. Made 41321 targets\n"), [])
