@@ -1,5 +1,7 @@
-"""Check how bay-engine.aar is finished: assets, the R classes the app must generate, and app-supplied classes."""
+"""Check how bay-engine.aar is finished: assets, the R classes the app must generate, app-supplied classes and the
+Java resources classes.jar keeps."""
 import importlib.util
+import io
 from pathlib import Path
 import shutil
 import subprocess
@@ -38,6 +40,10 @@ class PackageAarTests(unittest.TestCase):
         self.jar = self.base / "classes.jar"
         with zipfile.ZipFile(self.jar, "w") as jar:
             jar.write(classes / "org/bay/engine/Uses.class", "org/bay/engine/Uses.class")
+            jar.writestr("META-INF/services/org.chromium.base.Thing", "org.chromium.base.ThingImpl\n")
+            jar.writestr("org/chromium/base/data.txt", "data")
+            jar.writestr("play-services-basement.properties", "version=1")
+            jar.writestr("LICENSE.txt", "licence")
         self.aar = self.base / "base.aar"
         with zipfile.ZipFile(self.aar, "w") as aar:
             aar.write(self.jar, "classes.jar")
@@ -62,6 +68,9 @@ class PackageAarTests(unittest.TestCase):
             self.assertEqual(aar.read("bay-engine/app-classes.txt"), b"androidx.core\n")
             self.assertIn("classes.jar", aar.namelist())
             self.assertIn("AndroidManifest.xml", aar.namelist())
+            with zipfile.ZipFile(io.BytesIO(aar.read("classes.jar"))) as jar:
+                self.assertEqual(sorted(jar.namelist()), ["META-INF/services/org.chromium.base.Thing",
+                                                          "org/bay/engine/Uses.class", "org/chromium/base/data.txt"])
 
     def test_gn_lists_parse(self):
         self.assertEqual(package_aar.parse_gn_list('["androidx/*", "kotlin/*"]'), ["androidx/*", "kotlin/*"])
