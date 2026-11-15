@@ -10,6 +10,5 @@ Pod::Spec.new do |s|
   s.source = { :git => s.homepage }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'Compression'
   s.source_files = '*.swift'
 end
