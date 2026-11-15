@@ -206,10 +206,11 @@ jinja_template("manifest") {
 }
 
 # Classes the app supplies from its own Gradle dependencies, so the APK has one copy of each. _COROUTINE is
-# kotlinx-coroutines-core's, org/intellij the JetBrains annotations'; the checker and jspecify annotations are only
-# annotations, which the runtime skips when their classes are missing.
+# kotlinx-coroutines-core's, android/support androidx.core's and org/intellij the JetBrains annotations'; the checker
+# and jspecify annotations are only annotations, which the runtime skips when their classes are missing.
 _app_provided_classes = [
   "_COROUTINE/*",
+  "android/support/*",
   "androidx/*",
   "com/google/*",
   "javax/*",
