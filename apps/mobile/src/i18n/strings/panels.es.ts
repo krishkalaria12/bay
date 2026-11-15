@@ -367,4 +367,23 @@ export const panelsEs: PanelStrings = {
   "settings.language.systemDetail": "Sigue tu teléfono · {language}",
   "pageRequest.thisSite": "este sitio",
   "linkMenu.unreachable": "No se pudo acceder a este enlace. Comprueba tu conexión e inténtalo de nuevo.",
+  "settings.customEngine": "Personalizado",
+  "settings.customEngine.detail": "Cualquier sitio que busque desde su dirección",
+  "settings.customEngine.note":
+    "Pega la dirección de una página de resultados y pon %s donde van las palabras. Debe empezar por https://. Bay no pide sugerencias a un buscador personalizado.",
+  "settings.customEngine.use": "Usar este buscador",
+  "settings.about": "Acerca de Bay",
+  "settings.about.source": "Código fuente",
+  "settings.about.issue": "Informar de un problema",
+  "settings.about.issueDetail": "En GitHub, donde el equipo los lee",
+  "settings.group.privacyPolicy": "Privacidad",
+  "settings.about.privacy":
+    "Bay guarda tus pestañas, historial, marcadores y ajustes en este teléfono y no nos envía nada. Las páginas, búsquedas y sugerencias van directamente a los sitios y al buscador que uses, y las listas de filtros llegan de sus propios servidores una vez al día. Un informe de problemas solo sale cuando lo envías.",
+  "settings.group.licences": "Hecho con",
+  "settings.about.licencesNote": "Cada uno se distribuye con su propia licencia. Toca uno para leerla en su sitio.",
+  "settings.searchOnLaunch": "Abrir la búsqueda al iniciar Bay",
+  "settings.searchOnLaunch.detail": "El teclado está listo en cuanto se abre Bay",
+  "settings.exportTabs": "Exportar pestañas abiertas",
+  "settings.exportTabs.one": "Compartir la dirección de 1 pestaña",
+  "settings.exportTabs.count": "Compartir las direcciones de {count} pestañas",
 };

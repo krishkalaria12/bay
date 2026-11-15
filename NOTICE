@@ -22,4 +22,5 @@ Bay builds on and ships third-party software under its own licenses, including:
 - Cra (MIT, Copyright (c) 2026 Victor Kildahl, https://github.com/VictorKildahl/cra): Tidy Tabs' and Tidy Downloads'
   prompts and answer checks (packages/core/src/tidyTabs.ts, packages/core/src/tidyDownloads.ts,
   packages/desktop/ios/TidyTabsModule.swift, packages/desktop/ios/TidyNamesModule.swift) and the sidebar's squiggle
-  follow Cra's TidyTabs, TidyDownloads and SquiggleLayer
+  follow Cra's TidyTabs, TidyDownloads and SquiggleLayer; the phone app's layout and motion rules
+  (apps/mobile/src/chrome/layout.ts) are ported from Cra's CraCore/Mobile

@@ -151,6 +151,8 @@ test("saved state is validated and repaired", () => {
     youtube: { shorts: false, suggestions: false, distractions: false },
     // Saved before the welcome existed, so its owner has seen Bay already.
     welcomed: true,
+    searchOnLaunch: true,
+    customSearchUrl: null,
   });
   assert.equal(data.spaces[0]?.id, "personal");
   assert.equal(data.activeSpaceId, "personal");
@@ -663,4 +665,28 @@ test("persisting drops private tabs but keeps the spaces they sat in", () => {
 
 test("spaces colours cover the palette and don't drift", () => {
   assert.deepEqual(SPACE_COLORS, ["blue", "green", "orange", "red", "violet", "gray"]);
+});
+
+test("Bay opens ready to type unless that is turned off, and an older document opens that way too", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  assert.equal(data.preferences.searchOnLaunch, true);
+  data = reduceBrowserData(data, { type: "preferences", update: { searchOnLaunch: false } });
+  assert.equal(data.preferences.searchOnLaunch, false);
+  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.searchOnLaunch, true);
+  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: false } }, data).preferences.searchOnLaunch, false);
+});
+
+test("a custom search engine needs https and a place for the words", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  const refused = reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: "http://search.example/?q=%s" });
+  assert.equal(refused, data);
+  assert.equal(reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: "https://search.example/" }), data);
+  data = reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: " https://search.example/?q=%s " });
+  assert.equal(data.preferences.searchEngineId, "custom");
+  assert.equal(data.preferences.customSearchUrl, "https://search.example/?q=%s");
+  // Another engine keeps the address for next time.
+  data = reduceBrowserData(data, { type: "search-engine", id: "google" });
+  assert.equal(data.preferences.customSearchUrl, "https://search.example/?q=%s");
+  const saved = parseBrowserData({ version: 1, preferences: { customSearchUrl: "javascript:%s" } }, data);
+  assert.equal(saved.preferences.customSearchUrl, null);
 });

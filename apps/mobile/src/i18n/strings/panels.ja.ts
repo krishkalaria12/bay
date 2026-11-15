@@ -367,4 +367,23 @@ export const panelsJa: PanelStrings = {
   "settings.language.systemDetail": "スマートフォンに合わせる · {language}",
   "pageRequest.thisSite": "このサイト",
   "linkMenu.unreachable": "このリンクに接続できませんでした。接続を確認して、もう一度お試しください。",
+  "settings.customEngine": "カスタム",
+  "settings.customEngine.detail": "アドレスで検索できる任意のサイト",
+  "settings.customEngine.note":
+    "検索結果ページのアドレスを貼り付け、検索語の位置に %s を入れてください。https:// で始まる必要があります。カスタム検索エンジンには候補を問い合わせません。",
+  "settings.customEngine.use": "この検索エンジンを使う",
+  "settings.about": "Bay について",
+  "settings.about.source": "ソースコード",
+  "settings.about.issue": "問題を報告",
+  "settings.about.issueDetail": "チームが確認する GitHub で",
+  "settings.group.privacyPolicy": "プライバシー",
+  "settings.about.privacy":
+    "Bay はタブ、履歴、ブックマーク、設定をこのスマートフォンに保存し、私たちには何も送りません。ページ、検索、候補は利用しているサイトと検索エンジンに直接送られ、フィルタリストは 1 日 1 回それぞれのサーバーから届きます。問題レポートはあなたが送信したときだけ送られます。",
+  "settings.group.licences": "使用しているソフトウェア",
+  "settings.about.licencesNote": "それぞれ独自のライセンスで配布されています。タップするとサイトで確認できます。",
+  "settings.searchOnLaunch": "起動時に検索を開く",
+  "settings.searchOnLaunch.detail": "Bay を開くとすぐに入力できます",
+  "settings.exportTabs": "開いているタブを書き出す",
+  "settings.exportTabs.one": "1 個のタブのアドレスを共有",
+  "settings.exportTabs.count": "{count} 個のタブのアドレスを共有",
 };

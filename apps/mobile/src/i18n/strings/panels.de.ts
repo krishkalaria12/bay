@@ -367,4 +367,23 @@ export const panelsDe: PanelStrings = {
   "settings.language.systemDetail": "Folgt deinem Telefon · {language}",
   "pageRequest.thisSite": "diese Website",
   "linkMenu.unreachable": "Dieser Link ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
+  "settings.customEngine": "Eigene",
+  "settings.customEngine.detail": "Jede Seite, die über ihre Adresse sucht",
+  "settings.customEngine.note":
+    "Füge die Adresse einer Ergebnisseite ein und setze %s an die Stelle der Suchwörter. Sie muss mit https:// beginnen. Bay fragt eigene Suchmaschinen nicht nach Vorschlägen.",
+  "settings.customEngine.use": "Diese Suchmaschine verwenden",
+  "settings.about": "Über Bay",
+  "settings.about.source": "Quellcode",
+  "settings.about.issue": "Problem melden",
+  "settings.about.issueDetail": "Auf GitHub, wo das Team sie liest",
+  "settings.group.privacyPolicy": "Datenschutz",
+  "settings.about.privacy":
+    "Bay speichert Tabs, Verlauf, Lesezeichen und Einstellungen auf diesem Telefon und schickt nichts davon an uns. Seiten, Suchen und Vorschläge gehen direkt an die Websites und die Suchmaschine, die du nutzt, und die Filterlisten kommen einmal am Tag von ihren eigenen Servern. Ein Problembericht geht nur raus, wenn du ihn sendest.",
+  "settings.group.licences": "Gebaut mit",
+  "settings.about.licencesNote": "Jedes wird unter seiner eigenen Lizenz ausgeliefert. Tippe darauf, um sie auf der Website zu lesen.",
+  "settings.searchOnLaunch": "Suche beim Start öffnen",
+  "settings.searchOnLaunch.detail": "Die Tastatur ist bereit, sobald Bay öffnet",
+  "settings.exportTabs": "Offene Tabs exportieren",
+  "settings.exportTabs.one": "Die Adresse von 1 Tab teilen",
+  "settings.exportTabs.count": "Die Adressen von {count} Tabs teilen",
 };

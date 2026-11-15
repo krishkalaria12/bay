@@ -367,4 +367,23 @@ export const panelsPtBR: PanelStrings = {
   "settings.language.systemDetail": "Segue seu celular · {language}",
   "pageRequest.thisSite": "este site",
   "linkMenu.unreachable": "Não foi possível acessar este link. Verifique sua conexão e tente novamente.",
+  "settings.customEngine": "Personalizado",
+  "settings.customEngine.detail": "Qualquer site que pesquise pelo endereço",
+  "settings.customEngine.note":
+    "Cole o endereço de uma página de resultados e coloque %s onde vão as palavras. Ele precisa começar com https://. O Bay não pede sugestões a um buscador personalizado.",
+  "settings.customEngine.use": "Usar este buscador",
+  "settings.about": "Sobre o Bay",
+  "settings.about.source": "Código-fonte",
+  "settings.about.issue": "Relatar um problema",
+  "settings.about.issueDetail": "No GitHub, onde a equipe lê",
+  "settings.group.privacyPolicy": "Privacidade",
+  "settings.about.privacy":
+    "O Bay guarda suas abas, histórico, favoritos e ajustes neste celular e não envia nada disso para nós. Páginas, buscas e sugestões vão direto para os sites e o buscador que você usa, e as listas de filtros vêm dos próprios servidores uma vez por dia. Um relatório de problema só sai quando você o envia.",
+  "settings.group.licences": "Feito com",
+  "settings.about.licencesNote": "Cada um é distribuído com sua própria licença. Toque em um para lê-la no site.",
+  "settings.searchOnLaunch": "Abrir a busca ao iniciar o Bay",
+  "settings.searchOnLaunch.detail": "O teclado fica pronto assim que o Bay abre",
+  "settings.exportTabs": "Exportar abas abertas",
+  "settings.exportTabs.one": "Compartilhar o endereço de 1 aba",
+  "settings.exportTabs.count": "Compartilhar os endereços de {count} abas",
 };

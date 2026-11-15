@@ -42,7 +42,7 @@ import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
-import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
+import { CUSTOM_ENGINE_ID, engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { ClearData, ViewRegistry } from "./clearData";
 import { Logins } from "./credentials";
 import { originOf } from "./logins";
@@ -135,6 +135,9 @@ export function BrowserScreen(): JSX.Element {
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [searchInNewTab, setSearchInNewTab] = useState(false);
   const [searchPrivately, setSearchPrivately] = useState(false);
+  // The search Bay opened as it started (C1): over a page it opens a new tab, but the page stays on screen behind it
+  // and putting the search away goes back to that page, not to the switcher.
+  const [launchSearch, setLaunchSearch] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
   // Dialogs pages are waiting on (`alert`/`confirm`/`prompt`, I3), in the order they asked; the engine holds each
@@ -161,10 +164,10 @@ export function BrowserScreen(): JSX.Element {
   const switcherTabs = spaceTabs.filter((tab) => !activeFolderId || tab.folderId === activeFolderId);
   const page = navigation[active.id] ?? { ...blankNavigation, url: active.url, title: active.title };
   const hasPage = Boolean(active.url);
-  const engine = engineFor(data.preferences.searchEngineId);
+  const engine = engineFor(data.preferences.searchEngineId, data.preferences.customSearchUrl);
   const existing = new Set(data.tabs.map((tab) => tab.id));
   // A search for a new tab opens over the wallpaper, like the switcher it came from.
-  const showPages = overlay === "none" || (overlay === "search" && !searchInNewTab);
+  const showPages = overlay === "none" || (overlay === "search" && (!searchInNewTab || launchSearch));
   const media = useTabMedia({ tabs: data.tabs, views, onScreenTabId: showPages && hasPage ? active.id : null, locked });
   // A tab playing media stays mounted, so its sound doesn't stop when other tabs are opened.
   const playing = media.playingTabIds.filter((id) => existing.has(id));
@@ -194,15 +197,16 @@ export function BrowserScreen(): JSX.Element {
 
   // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
   // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
-  const startFresh = useRef<() => void>(() => {});
+  // Says whether it put a fresh start page up.
+  const startFresh = useRef<() => boolean>(() => false);
   startFresh.current = () => {
     const { data: current } = useBrowserStore.getState();
 
-    if (startPageAfterHours === null || current.leftAt === null) return;
+    if (startPageAfterHours === null || current.leftAt === null) return false;
 
-    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return;
+    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return false;
 
-    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return;
+    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return false;
     const empty = current.tabs.find((tab) => !tab.url && !tab.private);
 
     if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
@@ -210,10 +214,28 @@ export function BrowserScreen(): JSX.Element {
     setOverlay("none");
     setPanel(null);
     setLink(null);
+
+    return true;
   };
 
+  // Bay opens ready to type (C1): when it starts, and when it comes back to a fresh start page, the search card and
+  // keyboard come up. Not on the run that showed the welcome, which offers the import instead.
+  const launched = useRef(false);
+
   useEffect(() => {
-    if (ready) startFresh.current();
+    if (!ready || launched.current) return;
+    launched.current = true;
+    const opened = startFresh.current();
+    const { data: current } = useBrowserStore.getState();
+
+    if (!current.preferences.welcomed || !current.preferences.searchOnLaunch) return;
+    const tab = current.tabs.find((entry) => entry.id === current.activeTabId);
+
+    // Over a page, a new search starts a new tab and leaves the page as it was.
+    search(!opened && Boolean(tab?.url));
+    setLaunchSearch(true);
+    // Only the launch asks; the handlers it calls stay the screen's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
   // Leaving the foreground and coming back, heard through the app's one lifecycle registration. The screen joins it
   // once the saved tabs are in, after the store's own handler, so each change is handled in the order it always was.
@@ -231,7 +253,8 @@ export function BrowserScreen(): JSX.Element {
 
         yield* lifecycle.onChange((state) => {
           if (state === "active") {
-            startFresh.current();
+            // A fresh start page after a long time away opens ready to type too (C1).
+            if (startFresh.current() && useBrowserStore.getState().data.preferences.searchOnLaunch) search(false);
 
             return;
           }
@@ -456,6 +479,7 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function search(inNewTab: boolean, privately = false): void {
+    setLaunchSearch(false);
     setSearchInNewTab(inNewTab);
     setSearchPrivately(privately);
     setOverlay("search");
@@ -508,6 +532,13 @@ export function BrowserScreen(): JSX.Element {
   function copy(url: string): void {
     // Android 13+ confirms copies itself with the system clipboard preview.
     void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show(t("toast.linkCopied")));
+  }
+
+  // The open tabs' addresses, one a line (C16), without their tracking parameters. Private tabs stay out.
+  async function exportTabs(): Promise<void> {
+    const urls = data.tabs.flatMap((tab) => (tab.url && !tab.private ? [cleanUrl(tab.url)] : []));
+
+    if (urls.length) await Share.share({ message: urls.join("\n") });
   }
 
   // What went wrong since Bay was opened (B8): sent on, so it can be looked at.
@@ -1010,7 +1041,7 @@ export function BrowserScreen(): JSX.Element {
           onOpen={open}
           onDismiss={() => {
             Keyboard.dismiss();
-            setOverlay(searchInNewTab ? "tabs" : "none");
+            setOverlay(searchInNewTab && !launchSearch ? "tabs" : "none");
           }}
         />
       ) : null}
@@ -1135,6 +1166,15 @@ export function BrowserScreen(): JSX.Element {
         engines={SEARCH_ENGINES}
         searchEngineId={engine.id}
         onSearchEngineChange={(id) => dispatch({ type: "search-engine", id })}
+        customSearchUrl={data.preferences.customSearchUrl}
+        onCustomEngine={(customUrl) => dispatch({ type: "search-engine", id: CUSTOM_ENGINE_ID, customUrl })}
+        openTabCount={data.tabs.filter((tab) => tab.url && !tab.private).length}
+        onExportTabs={() => void exportTabs()}
+        onOpenLink={(url) => {
+          setPanel(null);
+          setOverlay("none");
+          openTab(url);
+        }}
         archiveAfterDays={data.preferences.archiveAfterDays}
         onArchiveAfterDaysChange={(days) => dispatch({ type: "archive-days", days })}
         blockContent={blockContent}

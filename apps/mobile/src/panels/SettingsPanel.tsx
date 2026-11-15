@@ -1,10 +1,11 @@
+import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { useThemeColor } from "heroui-native";
 import * as Effect from "effect/Effect";
 import { useEffect, useState, type JSX } from "react";
-import { Image, View } from "react-native";
+import { Image, Platform, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import type { ClearData } from "@/browser/clearData";
@@ -14,7 +15,7 @@ import { useCommand, useScopedWork } from "@/effect/react";
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { radius, space } from "@/chrome/tokens";
+import { inputFont, radius, space } from "@/chrome/tokens";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -28,7 +29,8 @@ import {
   type MessageKey,
   type Translate,
 } from "@/i18n";
-import { START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
+import { CUSTOM_ENGINE_ID } from "@/browser/address";
+import { isCustomSearchUrl, START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
 import type { SimplePreferences, ThemeChoice, WallpaperId } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
@@ -38,6 +40,10 @@ export interface SettingsPanelProps {
   engines: readonly { id: string; name: string }[];
   searchEngineId: string;
   onSearchEngineChange: (id: string) => void;
+  /** The custom engine's address (C17), kept while another engine is chosen. */
+  customSearchUrl: string | null;
+  /** Chooses the custom engine with this address; the panel only passes one that is https with `%s`. */
+  onCustomEngine: (url: string) => void;
   archiveAfterDays: number | null;
   onArchiveAfterDaysChange: (days: number | null) => void;
   blockContent: boolean;
@@ -69,6 +75,11 @@ export interface SettingsPanelProps {
   crashCount: number;
   /** Sends the errors Bay kept, so they can be looked at. */
   onReportProblem: () => void;
+  /** How many tabs are open, and sharing their addresses (C16). */
+  openTabCount: number;
+  onExportTabs: () => void;
+  /** Opens a page in a new tab, from About (R4). */
+  onOpenLink: (url: string) => void;
 }
 
 /** Each choice's label, and the shorter value the Browsing page shows for it. */
@@ -90,11 +101,24 @@ const themes: { id: ThemeChoice; label: MessageKey }[] = [
   { id: "dark", label: "settings.theme.dark" },
 ];
 
-type Page = "main" | "engine" | "privacy" | "appearance" | "browsing" | "language" | "wallpaper" | "textSize" | "archive" | "startPage";
+type Page =
+  | "main"
+  | "engine"
+  | "customEngine"
+  | "privacy"
+  | "appearance"
+  | "browsing"
+  | "language"
+  | "wallpaper"
+  | "textSize"
+  | "archive"
+  | "startPage"
+  | "about";
 
 const pages: Record<Page, { title: MessageKey; parent: Page }> = {
   main: { title: "settings.title", parent: "main" },
   engine: { title: "settings.searchEngine", parent: "main" },
+  customEngine: { title: "settings.customEngine", parent: "engine" },
   privacy: { title: "settings.privacy", parent: "main" },
   appearance: { title: "settings.appearance", parent: "main" },
   browsing: { title: "settings.browsing", parent: "main" },
@@ -103,7 +127,27 @@ const pages: Record<Page, { title: MessageKey; parent: Page }> = {
   textSize: { title: "settings.pageZoom", parent: "appearance" },
   archive: { title: "settings.archiveInactive", parent: "browsing" },
   startPage: { title: "settings.startPage", parent: "browsing" },
+  about: { title: "settings.about", parent: "main" },
 };
+
+/** The software Bay is built from, and the licence each ships under (R4). Names and licences stay as their projects write them. */
+const CREDITS: readonly { name: string; licence: string; url: string; android?: boolean }[] = [
+  { name: "Bay", licence: "Apache-2.0", url: "https://github.com/krishkalaria12/bay" },
+  { name: "Cra", licence: "MIT · © 2026 Victor Kildahl", url: "https://github.com/VictorKildahl/cra" },
+  { name: "Chromium", licence: "BSD-3-Clause", url: "https://www.chromium.org/", android: true },
+  { name: "adblock-rust", licence: "MPL-2.0", url: "https://github.com/brave/adblock-rust" },
+  { name: "uBlock Origin", licence: "GPL-3.0", url: "https://github.com/gorhill/uBlock" },
+  { name: "brave/adblock-resources", licence: "MPL-2.0", url: "https://github.com/brave/adblock-resources" },
+  { name: "EasyList, EasyPrivacy", licence: "GPL-3.0 / CC BY-SA 3.0", url: "https://easylist.to/" },
+  { name: "Peter Lowe's list", licence: "pgl.yoyo.org", url: "https://pgl.yoyo.org/adservers/" },
+  { name: "React Native, Expo", licence: "MIT", url: "https://github.com/expo/expo" },
+  { name: "HeroUI Native", licence: "MIT", url: "https://github.com/heroui-inc/heroui-native" },
+  { name: "Material Symbols", licence: "Apache-2.0", url: "https://github.com/google/material-design-icons", android: true },
+  { name: "Inter", licence: "OFL-1.1", url: "https://github.com/rsms/inter", android: true },
+];
+
+const SOURCE_URL = "https://github.com/krishkalaria12/bay";
+const ISSUES_URL = "https://github.com/krishkalaria12/bay/issues";
 
 /** Explains the rows above it, in the sheet's muted small print, lined up with the rows' text. */
 function Note({ children }: { children: string }): JSX.Element {
@@ -240,7 +284,72 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               onPress={choose(() => props.onSearchEngineChange(engine.id))}
             />
           ))}
+          <ActionRow
+            testID="settings-engine-custom"
+            label={t("settings.customEngine")}
+            detail={props.customSearchUrl ?? t("settings.customEngine.detail")}
+            selected={props.searchEngineId === CUSTOM_ENGINE_ID}
+            chevron={props.searchEngineId !== CUSTOM_ENGINE_ID}
+            onPress={() => setPage("customEngine")}
+          />
         </Group>
+      );
+      break;
+    case "customEngine":
+      content = (
+        <CustomEngine
+          initial={props.customSearchUrl ?? ""}
+          onSave={(url) => {
+            props.onCustomEngine(url);
+            setPage("main");
+          }}
+        />
+      );
+      break;
+    case "about":
+      content = (
+        <>
+          <Group>
+            <ActionRow
+              testID="settings-about-source"
+              icon="link"
+              label={t("settings.about.source")}
+              detail={SOURCE_URL.replace("https://", "")}
+              onPress={() => props.onOpenLink(SOURCE_URL)}
+            />
+            <ActionRow
+              testID="settings-about-issues"
+              icon="error"
+              label={t("settings.about.issue")}
+              detail={t("settings.about.issueDetail")}
+              onPress={() => props.onOpenLink(ISSUES_URL)}
+            />
+          </Group>
+          <Group label={t("settings.group.privacyPolicy")}>
+            <Text testID="settings-about-privacy" variant="subhead" className="px-4 py-3">
+              {t("settings.about.privacy")}
+            </Text>
+          </Group>
+          <Group label={t("settings.group.licences")}>
+            {CREDITS.flatMap((credit) =>
+              credit.android && Platform.OS !== "android"
+                ? []
+                : [
+                    <ActionRow
+                      key={credit.name}
+                      testID={`settings-credit-${credit.name}`}
+                      label={credit.name}
+                      detail={credit.licence}
+                      onPress={() => props.onOpenLink(credit.url)}
+                    />,
+                  ],
+            )}
+          </Group>
+          <Note>{t("settings.about.licencesNote")}</Note>
+          <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
+            {t("settings.version", { version: Constants.expoConfig?.version ?? "" })}
+          </Text>
+        </>
       );
       break;
     case "privacy":
@@ -375,6 +484,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           <Group label={t("settings.group.pages")}>
+            <ActionRow
+              testID="settings-search-on-launch"
+              icon="keyboard"
+              label={t("settings.searchOnLaunch")}
+              detail={t("settings.searchOnLaunch.detail")}
+              toggle={prefs.searchOnLaunch}
+              onPress={() => change({ searchOnLaunch: !prefs.searchOnLaunch })}
+            />
             <ActionRow
               testID="settings-pull-refresh"
               icon="reload"
@@ -541,6 +658,16 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               disabled={busy}
               onPress={props.onDownloads}
             />
+            {props.openTabCount ? (
+              <ActionRow
+                testID="settings-export-tabs"
+                icon="share"
+                label={t("settings.exportTabs")}
+                detail={props.openTabCount === 1 ? t("settings.exportTabs.one") : t("settings.exportTabs.count", { count: props.openTabCount })}
+                disabled={busy}
+                onPress={props.onExportTabs}
+              />
+            ) : null}
             {confirming ? (
               <ActionRow
                 testID="clear-data-confirm"
@@ -581,6 +708,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               disabled={busy}
               onPress={props.onReportProblem}
             />
+            <ActionRow testID="settings-about" icon="info" label={t("settings.about")} chevron disabled={busy} onPress={() => setPage("about")} />
           </Group>
           {busy ? (
             <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-4">
@@ -611,6 +739,43 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     >
       {content}
     </PanelSheet>
+  );
+}
+
+/** The custom engine's address (C17): saved only once it is https with `%s` where the words go. */
+function CustomEngine({ initial, onSave }: { initial: string; onSave: (url: string) => void }): JSX.Element {
+  const t = useT();
+  const foreground = useThemeColor("foreground");
+  const muted = useThemeColor("muted");
+  const [url, setUrl] = useState(initial);
+  const valid = isCustomSearchUrl(url.trim());
+
+  return (
+    <>
+      <View className="flex-row items-center bg-default px-4" style={{ borderRadius: radius.control }}>
+        <BottomSheetTextInput
+          testID="settings-custom-engine-url"
+          accessibilityLabel={t("settings.customEngine")}
+          value={url}
+          onChangeText={setUrl}
+          placeholder="https://search.example/?q=%s"
+          placeholderTextColor={muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          returnKeyType="done"
+          autoFocus
+          onSubmitEditing={() => valid && onSave(url.trim())}
+          style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 12 }]}
+        />
+      </View>
+      <Note>{t("settings.customEngine.note")}</Note>
+      <View className="mt-4">
+        <Group>
+          <ActionRow testID="settings-custom-engine-save" label={t("settings.customEngine.use")} disabled={!valid} onPress={() => onSave(url.trim())} />
+        </Group>
+      </View>
+    </>
   );
 }
 

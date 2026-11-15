@@ -44,6 +44,8 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
   welcomed: false,
+  searchOnLaunch: true,
+  customSearchUrl: null,
 };
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
@@ -164,7 +166,8 @@ export type BrowserAction =
   | { type: "remove-archived"; id: string }
   | { type: "clear-archive" }
   | { type: "wallpaper"; id: WallpaperId; photo?: string }
-  | { type: "search-engine"; id: string }
+  /** Choosing the custom engine (C17) carries its address; one that isn't https with `%s` is refused. */
+  | { type: "search-engine"; id: string; customUrl?: string }
   | { type: "archive-days"; days: number | null }
   | { type: "archive-stale"; now: number }
   | { type: "block-content"; enabled: boolean }
@@ -531,8 +534,20 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return { ...data, favicons: Object.fromEntries([...Object.entries(rest), [action.host, action.uri]].slice(-FAVICON_LIMIT)) };
     }
 
-    case "search-engine":
-      return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
+    case "search-engine": {
+      if (!action.id) return data;
+
+      if (action.customUrl !== undefined) {
+        const customUrl = action.customUrl.trim();
+
+        if (!isCustomSearchUrl(customUrl)) return data;
+
+        return { ...data, preferences: { ...data.preferences, searchEngineId: action.id, customSearchUrl: customUrl } };
+      }
+
+      return action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
+    }
+
     case "archive-days":
       return [null, 0.5, 1, 7, 30].includes(action.days) && action.days !== data.preferences.archiveAfterDays
         ? { ...data, preferences: { ...data.preferences, archiveAfterDays: action.days } }
@@ -1027,6 +1042,19 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
 
 const THEME_CHOICES = ["system", "light", "dark"] as const;
 
+/** A custom search engine's address: https, a host, and `%s` where the words go (C17). */
+export function isCustomSearchUrl(value: string): boolean {
+  if (!value.includes("%s")) return false;
+
+  try {
+    const url = new URL(value.replaceAll("%s", "q"));
+
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 /** Saved preferences with anything unknown or out of range replaced by its default. */
 export function parsePreferences(savedPreferences: JsonObject): BrowserPreferences {
   return {
@@ -1069,6 +1097,9 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
     },
     // Saved before the welcome existed: whoever saved it has used Bay already.
     welcomed: savedPreferences.welcomed !== false,
+    searchOnLaunch: savedPreferences.searchOnLaunch !== false,
+    customSearchUrl:
+      v.is(v.string(), savedPreferences.customSearchUrl) && isCustomSearchUrl(savedPreferences.customSearchUrl) ? savedPreferences.customSearchUrl : null,
   };
 }
 

@@ -124,6 +124,10 @@ export interface BrowserPreferences {
   youtube: YouTubeCleanup;
   /** The welcome has been seen (or skipped); a fresh install shows it once. */
   welcomed: boolean;
+  /** Bay opens ready to type: the search card and keyboard come up when it starts (C1). */
+  searchOnLaunch: boolean;
+  /** The custom search engine's address, https with `%s` where the words go; used while `searchEngineId` is "custom". */
+  customSearchUrl: string | null;
 }
 
 export type ThemeChoice = "system" | "light" | "dark";
@@ -155,6 +159,7 @@ export const SIMPLE_PREFERENCE_KEYS = [
   "startPageAfterHours",
   "youtube",
   "welcomed",
+  "searchOnLaunch",
 ] as const;
 
 export type SimplePreferences = Pick<BrowserPreferences, (typeof SIMPLE_PREFERENCE_KEYS)[number]>;

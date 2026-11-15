@@ -8,6 +8,12 @@ steps:
       - tool: open-url
         args:
           url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
+  # Bay opens ready to type (C1): once the app has settled, put the search card away to reach the bar.
+  - await: { idle: true, timeout: 60000, stableFor: 2000 }
+  - when: { visible: { id: search-dismiss } }
+    steps:
+      - tap: { id: search-dismiss }
+      - await: { hidden: { id: search-dismiss }, timeout: 10000 }
   - await: { visible: { id: bar-search }, timeout: 60000 }
   - await: { idle: true, timeout: 15000 }
   # Bay asks for notifications at the first download; a run that stopped there leaves the system prompt over the app

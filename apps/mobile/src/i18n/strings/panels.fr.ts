@@ -367,4 +367,23 @@ export const panelsFr: PanelStrings = {
   "settings.language.systemDetail": "Suit votre téléphone · {language}",
   "pageRequest.thisSite": "ce site",
   "linkMenu.unreachable": "Impossible d'accéder à ce lien. Vérifiez votre connexion et réessayez.",
+  "settings.customEngine": "Personnalisé",
+  "settings.customEngine.detail": "Tout site qui cherche depuis son adresse",
+  "settings.customEngine.note":
+    "Collez l'adresse d'une page de résultats et mettez %s à la place des mots. Elle doit commencer par https://. Bay ne demande pas de suggestions à un moteur personnalisé.",
+  "settings.customEngine.use": "Utiliser ce moteur",
+  "settings.about": "À propos de Bay",
+  "settings.about.source": "Code source",
+  "settings.about.issue": "Signaler un problème",
+  "settings.about.issueDetail": "Sur GitHub, où l'équipe les lit",
+  "settings.group.privacyPolicy": "Confidentialité",
+  "settings.about.privacy":
+    "Bay garde vos onglets, votre historique, vos favoris et vos réglages sur ce téléphone et ne nous en envoie rien. Les pages, recherches et suggestions vont directement aux sites et au moteur que vous utilisez, et les listes de filtres viennent de leurs propres serveurs une fois par jour. Un rapport de problème ne part que si vous l'envoyez.",
+  "settings.group.licences": "Construit avec",
+  "settings.about.licencesNote": "Chacun est distribué sous sa propre licence. Touchez-en un pour la lire sur son site.",
+  "settings.searchOnLaunch": "Ouvrir la recherche au démarrage",
+  "settings.searchOnLaunch.detail": "Le clavier est prêt dès l'ouverture de Bay",
+  "settings.exportTabs": "Exporter les onglets ouverts",
+  "settings.exportTabs.one": "Partager l'adresse d'1 onglet",
+  "settings.exportTabs.count": "Partager les adresses de {count} onglets",
 };

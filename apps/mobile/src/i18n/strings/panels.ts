@@ -372,6 +372,25 @@ export const panels = {
   // Fallbacks for a missing host or an unreachable link (PageRequest.tsx, LinkMenu.tsx).
   "pageRequest.thisSite": "this site",
   "linkMenu.unreachable": "Couldn't reach this link. Check your connection and try again.",
+  "settings.customEngine": "Custom",
+  "settings.customEngine.detail": "Any site that searches from its address",
+  "settings.customEngine.note":
+    "Paste a search results address and put %s where the words go. It must start with https://. Bay doesn't ask a custom engine for suggestions.",
+  "settings.customEngine.use": "Use this engine",
+  "settings.about": "About Bay",
+  "settings.about.source": "Source code",
+  "settings.about.issue": "Report an issue",
+  "settings.about.issueDetail": "On GitHub, where the team reads them",
+  "settings.group.privacyPolicy": "Privacy",
+  "settings.about.privacy":
+    "Bay keeps your tabs, history, bookmarks and settings on this phone and sends none of it to us. Pages, searches and suggestions go straight to the sites and search engine you use, and the filter lists come from their own servers once a day. A problem report leaves only when you send it.",
+  "settings.group.licences": "Built with",
+  "settings.about.licencesNote": "Each one ships under its own licence. Tap one to read it on its site.",
+  "settings.searchOnLaunch": "Open search when Bay starts",
+  "settings.searchOnLaunch.detail": "The keyboard is ready as soon as Bay opens",
+  "settings.exportTabs": "Export open tabs",
+  "settings.exportTabs.one": "Share the address of 1 tab",
+  "settings.exportTabs.count": "Share the addresses of {count} tabs",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

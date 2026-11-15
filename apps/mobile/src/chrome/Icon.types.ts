@@ -47,7 +47,9 @@ export type IconName =
   | "bookmark"
   | "bookmarked"
   | "folder"
-  | "import";
+  | "import"
+  | "info"
+  | "keyboard";
 
 export interface IconProps {
   name: IconName;
