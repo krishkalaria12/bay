@@ -113,6 +113,13 @@ def gn_args_text(lock=LOCK) -> str:
     return "".join(f"{key} = {json.dumps(value)}\n" for key, value in lock["gnArgs"].items())
 
 
+def args_gn_text(lock=LOCK) -> str:
+    """args.gn: the lock's GN args, and the target as one of Chromium's roots. Nothing in Chromium depends on
+    //bay/mobile, so without root_extra_deps (Chromium's //BUILD.gn adds it to gn_all) GN never loads the overlay and
+    ninja doesn't know the target. It changes no compile, so it stays out of the saved tree's base."""
+    return gn_args_text(lock) + f'root_extra_deps = {json.dumps(["//" + lock["target"]])}\n'
+
+
 def unused_gn_args(output: str) -> list[str]:
     """GN only warns about an argument the pinned tree doesn't declare; treat it as an error."""
     names = re.findall(r'The variable "(\w+)" was set as a build argument', output)
@@ -296,8 +303,8 @@ def generate(root: pathlib.Path, env):
     directory = src / LOCK["outputDirectory"]
     directory.mkdir(parents=True, exist_ok=True)
     args = directory / "args.gn"
-    if not args.is_file() or args.read_text() != gn_args_text():
-        args.write_text(gn_args_text())
+    if not args.is_file() or args.read_text() != args_gn_text():
+        args.write_text(args_gn_text())
     result = subprocess.run(["gn", "gen", LOCK["outputDirectory"]], cwd=src, env=env, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     print(result.stdout, end="", flush=True)
