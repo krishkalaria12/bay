@@ -13,11 +13,13 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import { scheduleOnRN } from "react-native-worklets";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
-import { pageBehindSearch } from "@/chrome/layout";
+import { opensSwitcher, pageBehindSearch, switcherProgress } from "@/chrome/layout";
 import { SPRING } from "@/chrome/motion";
 import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
@@ -790,12 +792,46 @@ export function BrowserScreen(): JSX.Element {
     behind.value = withSpring(pageBehind ? 1 : 0, { ...SPRING, overshootClamping: true });
   }, [pageBehind, behind]);
 
+  // Dragging the bar up shrinks the page under the finger towards its card (U5, C6); far enough, it lets go into the
+  // switcher.
+  const shrink = useSharedValue(0);
+
   const behindStyle = useAnimatedStyle(() => {
     const scale = interpolate(behind.value, [0, 1], [1, (screenWidth - 2 * pageBehindSearch.sideInset) / screenWidth]);
     // Scaled about its middle, the page is moved back up so its top edge stays under the status bar.
     const lift = ((screenHeight - insets.top) * (1 - scale)) / 2;
+    const shrunk = interpolate(shrink.value, [0, 1], [1, 0.68]);
 
-    return { transform: [{ translateY: -lift }, { scale }], borderRadius: behind.value * pageBehindSearch.cornerRadius };
+    return {
+      transform: [{ translateY: -lift - shrink.value * 40 }, { scale: scale * shrunk }],
+      borderRadius: Math.max(behind.value * pageBehindSearch.cornerRadius, shrink.value * 28),
+    };
+  });
+
+  function openSwitcherFromDrag(): void {
+    showTabs();
+    shrink.value = 0;
+  }
+
+  const dragUp = usePanGesture({
+    // Up only: sideways drags move between tabs (TabSwipe), taps press the bar's buttons.
+    activeOffsetY: [-14, 10_000],
+    failOffsetX: [-14, 14],
+    onUpdate: (event) => {
+      "worklet";
+      shrink.value = switcherProgress(-event.translationY);
+    },
+    onDeactivate: (event) => {
+      "worklet";
+
+      if (!event.canceled && opensSwitcher(-event.translationY, -event.velocityY)) {
+        scheduleOnRN(openSwitcherFromDrag);
+
+        return;
+      }
+
+      shrink.value = withSpring(0, { ...SPRING, overshootClamping: true });
+    },
   });
 
   const barStyle = useAnimatedStyle(() => ({
@@ -1033,41 +1069,45 @@ export function BrowserScreen(): JSX.Element {
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
           <View collapsable={false} {...behindSheet}>
             {hasPage && showPages ? (
-              <TabSwipe
-                onSwipe={swipeTabs}
-                hasPrevious={activeIndex > 0}
-                hasNext={activeIndex < data.tabs.length - 1}
-                contentKey={`${active.id} ${host ?? ""}`}
-              >
-                {(capsuleStyle) => (
-                  <BrowserBar
-                    capsuleStyle={capsuleStyle}
-                    mode="page"
-                    site={locked && active.private ? undefined : host}
-                    insecure={active.url.startsWith("http:")}
-                    privately={Boolean(active.private)}
-                    // The capsule's edge carries the load's progress (A6).
-                    progress={page.progress}
-                    loading={page.isLoading}
-                    onTabs={() => showTabs()}
-                    onTabsLongPress={() => {
-                      tick();
-                      setPanel("tabs");
-                    }}
-                    onTabsSwipeUp={lastOpenTab}
-                    tabCount={data.tabs.length}
-                    onSearch={() => search(false)}
-                    onMore={() => {
-                      if (!(locked && active.private)) setPanel("page");
-                    }}
-                    onMoreLongPress={() => {
-                      if (locked && active.private) return;
-                      tick();
-                      void share(active.url);
-                    }}
-                  />
-                )}
-              </TabSwipe>
+              <GestureDetector gesture={dragUp}>
+                <View collapsable={false}>
+                  <TabSwipe
+                    onSwipe={swipeTabs}
+                    hasPrevious={activeIndex > 0}
+                    hasNext={activeIndex < data.tabs.length - 1}
+                    contentKey={`${active.id} ${host ?? ""}`}
+                  >
+                    {(capsuleStyle) => (
+                      <BrowserBar
+                        capsuleStyle={capsuleStyle}
+                        mode="page"
+                        site={locked && active.private ? undefined : host}
+                        insecure={active.url.startsWith("http:")}
+                        privately={Boolean(active.private)}
+                        // The capsule's edge carries the load's progress (A6).
+                        progress={page.progress}
+                        loading={page.isLoading}
+                        onTabs={() => showTabs()}
+                        onTabsLongPress={() => {
+                          tick();
+                          setPanel("tabs");
+                        }}
+                        onTabsSwipeUp={lastOpenTab}
+                        tabCount={data.tabs.length}
+                        onSearch={() => search(false)}
+                        onMore={() => {
+                          if (!(locked && active.private)) setPanel("page");
+                        }}
+                        onMoreLongPress={() => {
+                          if (locked && active.private) return;
+                          tick();
+                          void share(active.url);
+                        }}
+                      />
+                    )}
+                  </TabSwipe>
+                </View>
+              </GestureDetector>
             ) : (
               <BrowserBar
                 mode="start"
