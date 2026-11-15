@@ -618,6 +618,10 @@
 
       <section id="cra">
         <div class="eyebrow">03 · Cra compared</div>
+        <p class="note">
+          The comparison is as of 15 November, before <code>feat/mobile-cra</code>. Items marked ✓ landed there; what the round left is under
+          <a href="#open">What is left</a>.
+        </p>
         <h2>Cra for iPhone, run next to Bay</h2>
         <p>
           <a href="https://github.com/VictorKildahl/cra/tree/main/iOS">Cra</a> is an MIT-licensed Arc replacement (Swift, Chromium through CEF on the Mac). Its
@@ -663,16 +667,13 @@
                   demo with a switch, then "Set as Default Browser" with a how-to sheet. "Show Onboarding" in Settings brings it back.
                 </td>
                 <td>One welcome screen (swipe the glass dome up), then a card on the start page offering the import.</td>
-                <td>
-                  Bay's is faster but teaches nothing: bar swipe, drag up, private, blocking and default browser go unseen. <a href="#c10">C10</a>,
-                  <a href="#c11">C11</a>.
-                </td>
+                <td>Bay's is faster but teaches nothing: bar swipe, drag up, private, blocking and default browser go unseen. C10 ✓, C11 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Launch</th>
                 <td>Opens with the search sheet and keyboard up ("Auto-Open Keyboard", on by default), the last page dimmed behind it.</td>
                 <td>Opens on the start page; "Tap to search" is one more tap.</td>
-                <td>Lens and Arc Search both open ready to type. <a href="#c1">C1</a>.</td>
+                <td>Lens and Arc Search both open ready to type. C1 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Search</th>
@@ -703,10 +704,7 @@
                   Title, URL and "Secure · Ads and trackers blocked", a blocking switch for the site, back / forward / reload / share, then twelve tiles in a 4
                   × 3 grid (New tab, Private tab, Find, Reader, Pin, Translate, Bookmark, Tools, This site, History, Downloads, Archive).
                 </td>
-                <td>
-                  Bay's grid is complete but every action weighs the same. Cra shows four, folds the rest, and turns blocking into a count.
-                  <a href="#c2">C2</a>, <a href="#u3">U3</a>.
-                </td>
+                <td>Bay's grid is complete but every action weighs the same. Cra shows four, folds the rest, and turns blocking into a count. C2 ✓, U3 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Site settings</th>
@@ -715,16 +713,13 @@
                   (anywhere, edges, off). "Global Site Settings" sets the defaults.
                 </td>
                 <td>Per site: one blocking pause, page zoom, Reader on open, desktop mode.</td>
-                <td>A site that breaks loses all blocking in Bay. <a href="#c3">C3</a>, <a href="#c5">C5</a>.</td>
+                <td>A site that breaks loses all blocking in Bay. C3 ✓, C5 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Tab switcher</th>
                 <td>Overlapping cards, newest right; Spaces button, "+", Settings; a "Sync with Cra for Mac" card until synced.</td>
                 <td>Stacked cards with title and close, a tab count, Archive, "New tab", Settings; spaces from the tabs menu.</td>
-                <td>
-                  Equivalent. Cra adds: swipe back on a tab's first page archives it, and dragging up from the bar shrinks the page into its card.
-                  <a href="#c6">C6</a>.
-                </td>
+                <td>Equivalent. Cra adds: swipe back on a tab's first page archives it, and dragging up from the bar shrinks the page into its card. C6 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Spaces</th>
@@ -747,10 +742,7 @@
                   Grouped: blocking with list count, Browser (engine, privacy, appearance, language, browsing), Your data (import, bookmarks, history,
                   downloads, …).
                 </td>
-                <td>
-                  Bay's grouping reads better. Missing rows: licences and privacy policy (<a href="#r4">R4</a>), export tabs (<a href="#c16">C16</a>), app icon,
-                  custom engine.
-                </td>
+                <td>Bay's grouping reads better. Missing rows: licences and privacy policy (R4 ✓), export tabs (C16 ✓), app icon, custom engine.</td>
               </tr>
             </tbody>
           </table>
@@ -785,34 +777,32 @@
                   Footer "scrubbed N trackers" (requests to listed domains that failed while blocking was on). First block shows a one-time tip with a ring on
                   the menu button. After "restore original page", "Did it fix the issue?" turns that site's blockers off.
                 </td>
-                <td>
-                  <span class="st done">Take</span>. Shows people what Bay does for them and turns a broken page into a one-tap fix. <a href="#c2">C2</a>.
-                </td>
+                <td><span class="st done">Take</span>. Shows people what Bay does for them and turns a broken page into a one-tap fix. C2 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Three blockers per site, global defaults</th>
                 <td>Ads, trackers and cookie banners switch separately, per site and as defaults.</td>
-                <td><span class="st done">Take</span>. Maps onto our lists (ads, privacy, cookie). <a href="#c3">C3</a>.</td>
+                <td><span class="st done">Take</span>. Maps onto our lists (ads, privacy, cookie). C3 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Swipe to navigate from anywhere</th>
                 <td>Back and forward from anywhere on the page, or edges only, or off, per site.</td>
-                <td><span class="st done">Take</span>. Lens has it too; Bay has edge swipes only. <a href="#c5">C5</a>.</td>
+                <td><span class="st done">Take</span>. Lens has it too; Bay has edge swipes only. C5 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Tab gestures</th>
                 <td>Swipe back on a tab's first page archives it (forward reopens); drag up from the bar shrinks the page into the switcher.</td>
-                <td><span class="st done">Take</span>. <a href="#c6">C6</a>.</td>
+                <td><span class="st done">Take</span>. C6 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Opens ready to type</th>
                 <td>Search sheet and keyboard on launch, with a setting.</td>
-                <td><span class="st done">Take</span>, as a setting, on by default. <a href="#c1">C1</a>.</td>
+                <td><span class="st done">Take</span>, as a setting, on by default. C1 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Widgets</th>
                 <td>Small (gradient, Search capsule, Voice and Spaces buttons), medium, Lock Screen circular and rectangular; "Add Widget" walkthrough.</td>
-                <td><span class="st done">Take</span>. Bay has one plain small "Search Bay" widget on each platform. <a href="#c7">C7</a>.</td>
+                <td><span class="st done">Take</span>. Bay has one plain small "Search Bay" widget on each platform. C7 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Siri, Spotlight, Action button</th>
@@ -827,14 +817,13 @@
               <tr>
                 <th scope="row">Teaching onboarding, default-browser sheet</th>
                 <td>Interactive steps; an inset "How to change your default browser" sheet with three steps and "Open Settings".</td>
-                <td><span class="st done">Adapt</span>: keep the dome, add a few steps after it. <a href="#c10">C10</a>, <a href="#c11">C11</a>.</td>
+                <td><span class="st done">Adapt</span>: keep the dome, add a few steps after it. C10 ✓, C11 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Open App Links in…</th>
                 <td>A tapped link another app claims as a universal link opens that app (setting: Native App or Cra).</td>
                 <td>
-                  <span class="st done">Take</span>. Bay hands off <code>tel:</code>, <code>mailto:</code> and other schemes, not https links apps claim.
-                  <a href="#c12">C12</a>.
+                  <span class="st done">Take</span>. Bay hands off <code>tel:</code>, <code>mailto:</code> and other schemes, not https links apps claim. C12 ✓.
                 </td>
               </tr>
               <tr>
@@ -844,14 +833,13 @@
                   other Apple devices.
                 </td>
                 <td>
-                  <span class="st done">Take</span> Wallet and Handoff (small, iOS). Certificate bypass is a decision (<a href="#d4">D4</a>).
-                  <a href="#c13">C13</a>, <a href="#c14">C14</a>.
+                  <span class="st done">Take</span> Wallet and Handoff (small, iOS). Certificate bypass is a decision (<a href="#d4">D4</a>). C13 ✓, C14 ✓.
                 </td>
               </tr>
               <tr>
                 <th scope="row">Export open tabs, custom search engine</th>
                 <td>Open tabs' addresses through the share sheet; a custom engine as an https address with <code>%s</code>.</td>
-                <td><span class="st done">Take</span>, both small. <a href="#c16">C16</a>, <a href="#c17">C17</a>.</td>
+                <td><span class="st done">Take</span>, both small. C16 ✓, C17 ✓.</td>
               </tr>
               <tr>
                 <th scope="row">Summarize (tile and pinch)</th>
@@ -1094,6 +1082,19 @@
                 <td><span class="tag shared">Shared</span></td>
                 <td>M</td>
               </tr>
+              <tr id="v8">
+                <td class="id">V8</td>
+                <th scope="row">The Cra round on Android and in e2e</th>
+                <td>
+                  <code>feat/mobile-cra</code> ran only on the iPhone simulator; Android's Kotlin and resources compile against the engine stub. Once V1 runs:
+                  the launch search, search sheet, page menu, swipe from anywhere and past the first page, drag up from the bar, tips, setup sheet, widget (and
+                  its voice and private buttons) on Android. New e2e tests for: the launch search, Display options, restore without blocking, swipe to archive
+                  and back, the tips, the setup sheet, About, the custom engine and tab export. Look at the iOS widgets in the gallery (they need iOS 18: the
+                  widget target's minimum is 18.0).
+                </td>
+                <td><span class="tag shared">Shared</span></td>
+                <td>M</td>
+              </tr>
               <tr id="v7">
                 <td class="id">V7</td>
                 <th scope="row">Performance numbers</th>
@@ -1135,54 +1136,55 @@
                 <td><span class="tag api">Shared + 2 native</span></td>
                 <td>S</td>
               </tr>
-              <tr id="r4">
-                <td class="id">R4</td>
-                <th scope="row">Licences, privacy policy, contact</th>
+              <tr id="r5">
+                <td class="id">R5</td>
+                <th scope="row">A privacy policy page on the website</th>
                 <td>
-                  An About page in Settings: Bay's licence, the filter lists' and uBlock Origin resources' notices, Chromium's credits on Android (required to
-                  ship it), a privacy policy link (the stores require one) and a way to reach us.
+                  Both stores ask for a privacy policy link. The app's About page (Settings) says what Bay keeps and sends, and lists the licences with Cra's
+                  notice; bay.krishkalaria.in has no privacy page to link yet.
                 </td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>S</td>
               </tr>
 
               <tr class="band">
-                <th>From the Cra comparison, in order</th>
+                <th>From the Cra comparison: the rest of the round</th>
               </tr>
-              <tr id="c1">
-                <td class="id">C1</td>
-                <th scope="row">Open ready to type</th>
+              <tr id="c18">
+                <td class="id">C18</td>
+                <th scope="row">Blocking count and per-site groups on Android</th>
                 <td>
-                  Launch (and return after the start-page delay) with the search card and keyboard up, over the start page; a Browsing setting turns it off.
+                  iOS counts what the blocker stopped (C2) and lets a site turn ads, trackers or cookie banners off on their own (C3). Android's engine has
+                  neither: <code>BayTabClient</code> needs a blocked-request callback, and <code>//bay/filter</code> needs list groups and per-host exceptions.
+                  Until then Android shows the single blocking switch and no count. Write it after V1's first engine build, not before.
+                </td>
+                <td><span class="tag android">Android only</span></td>
+                <td>M</td>
+              </tr>
+              <tr id="c19">
+                <td class="id">C19</td>
+                <th scope="row">App links on Android</th>
+                <td>
+                  "Open app links in" (C12) works on iOS through universal links. Android's engine offers no hook before a page's link loads, so web links stay
+                  in Bay there and the setting is iOS only. Needs a navigation callback in <code>BayTabClient</code>, then an intent with
+                  <code>FLAG_ACTIVITY_REQUIRE_NON_BROWSER</code>.
+                </td>
+                <td><span class="tag android">Android only</span></td>
+                <td>S</td>
+              </tr>
+              <tr id="c20">
+                <td class="id">C20</td>
+                <th scope="row">Swipe to navigate per site, and a sharper blocked count</th>
+                <td>
+                  Swipe to navigate (C5) is one setting for every site; Cra also keeps it per site. The count (C2) checks failed loads against every list, so a
+                  site with a group turned off can still count requests from that group.
                 </td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>S</td>
               </tr>
-              <tr id="c2">
-                <td class="id">C2</td>
-                <th scope="row">Show what blocking did</th>
-                <td>
-                  A per-page count in the page menu ("N ads and trackers blocked"), a one-time tip the first time something is blocked, and "Page broken? Reload
-                  without blocking" for this tab only, followed by "Did that fix it?" that turns the site's blocking off. Android counts in the request filter;
-                  iOS content rules report nothing, so count resource loads to listed hosts that failed, as Cra does.
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c3">
-                <td class="id">C3</td>
-                <th scope="row">Ads, trackers, cookie banners per site</th>
-                <td>
-                  Split the one pause into three switches per site, with global defaults, keyed to the list groups (ads, privacy, cookie). iOS needs a content
-                  rule list per group so a site can drop one; Android filters by the group a rule came from. Store migration from
-                  <code>blockingPausedHosts</code>.
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-              </tr>
               <tr id="c4">
                 <td class="id">C4</td>
-                <th scope="row">On-device translation on iOS</th>
+                <th scope="row">On-device translation on iOS <span class="st part">Later</span></th>
                 <td>
                   Apple's Translation framework (iOS 18+) behind the existing Translate tile: collect text nodes in a page script, translate in batches
                   natively, write back, "Show original". The simulator can't run it, so it needs V4's phone. Android stays on the parked Bergamot branch
@@ -1191,39 +1193,9 @@
                 <td><span class="tag ios">iOS only</span></td>
                 <td>M</td>
               </tr>
-              <tr id="c5">
-                <td class="id">C5</td>
-                <th scope="row">Swipe to navigate from anywhere</th>
-                <td>
-                  A setting (anywhere, edges, off), also per site. iOS: a pan over the web view that drives back and forward with WebKit's snapshots; Android:
-                  widen the existing edge swipe.
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c6">
-                <td class="id">C6</td>
-                <th scope="row">Tab gestures</th>
-                <td>
-                  Back on a tab's first page archives it (forward reopens it); dragging up from the bar shrinks the page into its card in the switcher (A1's
-                  zoom, run by the finger).
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c7">
-                <td class="id">C7</td>
-                <th scope="row">Widgets</th>
-                <td>
-                  A designed small widget (search, voice, private), a medium one, and Lock Screen circular and rectangular on iOS; the same set on Android; an
-                  "Add widget" guide in Settings.
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-              </tr>
               <tr id="c8">
                 <td class="id">C8</td>
-                <th scope="row">Siri, Spotlight and the Action button</th>
+                <th scope="row">Siri, Spotlight and the Action button <span class="st part">Later</span></th>
                 <td>
                   App Intents: "Search with Bay", "Voice search with Bay", "Open a private tab", answered through <code>bay://</code>. Android: add voice to the
                   static shortcuts.
@@ -1233,7 +1205,7 @@
               </tr>
               <tr id="c9">
                 <td class="id">C9</td>
-                <th scope="row">Alternate app icons</th>
+                <th scope="row">Alternate app icons <span class="st part">Later</span></th>
                 <td>
                   Three or four Bay icons (the desktop icon's wallpapers fit), picked in Appearance. iOS <code>setAlternateIconName</code>; Android activity
                   aliases.
@@ -1241,154 +1213,17 @@
                 <td><span class="tag api">Shared + 2 native</span></td>
                 <td>M</td>
               </tr>
-              <tr id="c10">
-                <td class="id">C10</td>
-                <th scope="row">A first run that teaches</th>
-                <td>
-                  After the dome: three short steps (blocking on a demo page, the bar swipe and drag up, private tabs), then import and default browser.
-                  Skippable, and "Show welcome again" in Settings. <code>fresh-start</code> keeps skipping it.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c11">
-                <td class="id">C11</td>
-                <th scope="row">Default browser, asked properly</th>
-                <td>A "Make Bay your default" row and a how-to sheet (iOS: steps and Open Settings; Android: the system's role request).</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c12">
-                <td class="id">C12</td>
-                <th scope="row">Links apps claim</th>
-                <td>
-                  "Open app links in: App / Bay": iOS opens with <code>universalLinksOnly</code> before loading, Android resolves the intent. (The page menu's
-                  redesign is U3.)
-                </td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="c13">
-                <td class="id">C13</td>
-                <th scope="row">Wallet and calendar files</th>
-                <td>A downloaded <code>.pkpass</code> opens in Wallet, an <code>.ics</code> in Calendar (Android: hand both to their apps).</td>
-                <td><span class="tag api">Shared + 2 native</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c14">
-                <td class="id">C14</td>
-                <th scope="row">Handoff</th>
-                <td>Offer the page on screen to the user's other Apple devices; never a private tab.</td>
-                <td><span class="tag ios">iOS only</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c15">
-                <td class="id">C15</td>
-                <th scope="row">Text size</th>
-                <td>
-                  Bay's <code>Text</code> follows Dynamic Type with no cap. Check every sheet at the accessibility sizes and cap the bar and tiles where they
-                  break.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c16">
-                <td class="id">C16</td>
-                <th scope="row">Export open tabs</th>
-                <td>Settings → Your data: the open tabs' addresses (and bookmarks as HTML) through the share sheet.</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="c17">
-                <td class="id">C17</td>
-                <th scope="row">Custom search engine</th>
-                <td>An https address with <code>%s</code>; suggestions off for it.</td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
-              </tr>
 
               <tr class="band">
-                <th>UI from Cra, in order</th>
-              </tr>
-              <tr id="u1">
-                <td class="id">U1</td>
-                <th scope="row">Port Cra's layout and motion rules</th>
-                <td>
-                  <code>MobileSearchSheet</code>, <code>MobilePageMenu</code>, <code>MobileTabCarousel</code>, <code>MobileMotion</code> and the suggestion rows
-                  into <code>src/chrome/layout/</code> as pure TypeScript, with their tests ported to <code>tests/</code>. Add Cra's MIT notice (R4). Nothing
-                  changes on screen yet.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="u2">
-                <td class="id">U2</td>
-                <th scope="row">Motion: critically damped springs</th>
-                <td>
-                  Replace <code>SPRING</code> in <code>src/chrome/motion.ts</code> with Cra's: settle 0.34 s and open 0.26 s, both with no overshoot. Run the
-                  switcher, tab zoom and search card on them; Reduce Motion still crossfades.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
-              </tr>
-              <tr id="u3">
-                <td class="id">U3</td>
-                <th scope="row">Page menu, rebuilt to Cra's layout</th>
-                <td>
-                  An address capsule (back, forward, host, copy link, reload), then four tiles: Find, Reader, Bookmark, Share. Below them, a "Display options"
-                  group that opens in place (Translate, page zoom with − / + and the percentage, desktop site), "Site settings", "Tools" (Hide elements,
-                  Inspect, Copy as Markdown), and the blocked-count footer with the restore (C2). New tab, private tab, history, downloads and archive leave for
-                  the switcher and Settings, where they already are. The tile set is Bay's choice, not Arc's.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="u4">
-                <td class="id">U4</td>
-                <th scope="row">Search sheet anchored to the keyboard</th>
-                <td>
-                  A full-width sheet with a fixed height (field plus four 56 pt rows) that rises on the keyboard's curve. The page sits behind it as a dimmed
-                  inset card. Swipe down or tap above to close; in landscape, show the rows that fit. Keep Bay's rows: "Search Google", fill arrow, pins, Paste
-                  and Go. The capsule still grows into it (A2). Goes with C1.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="u5">
-                <td class="id">U5</td>
-                <th scope="row">Switcher physics and drag up from the bar</th>
-                <td>
-                  Dim and shrink the cards behind, rubber-band at both ends, let a flick go one card further, and use Cra's close thresholds. Dragging up from
-                  the bar shrinks the page under the finger into its card (this is C6's second half).
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="u6">
-                <td class="id">U6</td>
-                <th scope="row">Settings and site settings sheets</th>
-                <td>
-                  Coloured rounded-square icons per row (one hue per group, Bay's palette) and opaque sheets on both platforms. "Site settings" becomes a sheet
-                  of its own over the page menu, with the C3 switches, C5's swipe choice, zoom, Reader and desktop mode. "Default site settings" sits in
-                  Settings.
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>M</td>
-              </tr>
-              <tr id="u7">
-                <td class="id">U7</td>
-                <th scope="row">Tips and promo cards</th>
-                <td>
-                  One shared component for a tip over the bar that rings the control it means (first block, C2; bar swipe and drag up, C10). A dismissible card
-                  in the switcher replaces the start page's import card (import, default browser, widgets).
-                </td>
-                <td><span class="tag shared">Shared</span></td>
-                <td>S</td>
+                <th>UI from Cra: what is left</th>
               </tr>
               <tr id="u8">
                 <td class="id">U8</td>
-                <th scope="row">First run in Cra's form</th>
-                <td>After the dome: large titles over Bay's wallpaper gradient and live phone mocks that run the real gesture. This is how C10 gets built.</td>
+                <th scope="row">Live phone mocks in the first run</th>
+                <td>
+                  The first run now teaches with tips over the real bar and a setup sheet after the dome (C10). Cra's phone-in-a-phone mocks that run the real
+                  gesture (pinch, a blocking switch on a demo page) are still to build.
+                </td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>M</td>
               </tr>
@@ -1397,7 +1232,8 @@
                 <th scope="row">Share sheet that saves</th>
                 <td>
                   "Saved" with a place picker (open as a tab, bookmark, a space) and Done. The choice waits in the App Group or an Android inbox, and Bay files
-                  it when it next opens. Swiping down saves nothing.
+                  it when it next opens. Swiping down saves nothing. Needs an App Group on the app and the extension, so the release provisioning profiles
+                  change with it: do it together with R2.
                 </td>
                 <td><span class="tag api">Shared + 2 native</span></td>
                 <td>M</td>
@@ -1464,7 +1300,7 @@
               <tr id="l4">
                 <td class="id">L4</td>
                 <th scope="row">Store release</th>
-                <td>App Store and Play Store together, on Bay Chromium, after V1–V7 and R1–R4.</td>
+                <td>App Store and Play Store together, on Bay Chromium, after V1–V8 and R1–R5.</td>
               </tr>
             </tbody>
           </table>
@@ -1483,15 +1319,14 @@
         <div class="eyebrow">09 · Order</div>
         <h2>What happens next</h2>
         <ol>
-          <li><b>Now, while the engine builds:</b> R3 (send the requests), V3's Arc Search export before 23 November, R4, C1.</li>
-          <li><b>When the APK exists:</b> V1, then V2 in one Android batch.</li>
-          <li><b>Test builds:</b> R1 and R2, then V4 and V5 with the builds on real phones.</li>
           <li>
-            <b>UI round:</b> U1 and U2 first (no visible change, then the springs), then U3 with C2 and C3 (page menu, blocking count, per-site switches), U4
-            with C1, U5 with C5 and C6, U6.
+            <b>Done on <code>feat/mobile-cra</code> (15 November, iOS simulator):</b> the Cra round (U1–U7, C1–C3, C5–C7, C10–C17, the About page). What it left
+            is C18–C20, U8, U9 and V8.
           </li>
-          <li><b>Next feature batch:</b> C4, then U7–U9 with C10 and C11.</li>
-          <li><b>Then:</b> C7–C9 (home screen and system), C12, the small ones C13–C17, B2, V6 and V7 alongside.</li>
+          <li><b>Now, while the engine builds:</b> R3 (send the requests), R5, V3's Arc Search export before 23 November.</li>
+          <li><b>When the APK exists:</b> V1, then V2 and V8 in one Android batch; then C18 and C19 on the engine.</li>
+          <li><b>Test builds:</b> R1 and R2 (with U9's App Group), then V4 and V5 with the builds on real phones.</li>
+          <li><b>Then:</b> C20, U8, B2, V6 and V7; C4, C8 and C9 when they are picked up again.</li>
           <li><b>After release:</b> L1–L4.</li>
         </ol>
         <p class="note">Each batch is tested on both devices and committed in chunks; a stage isn't done until its flows pass on both.</p>
