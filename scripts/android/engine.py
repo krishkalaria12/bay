@@ -352,7 +352,8 @@ def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
     apply_overlay(root)
     build_adblock(source_dir(root), env)
     generate(root, env)
-    command = ["autoninja", "-C", LOCK["outputDirectory"]]
+    # -k 0 keeps compiling past a failure, so one run reports every broken file.
+    command = ["autoninja", "-C", LOCK["outputDirectory"], "-k", "0"]
     if jobs:
         command += ["-j", str(jobs)]
     command.append(LOCK["target"])
