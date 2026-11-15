@@ -13,6 +13,11 @@ steps:
   - when: { visible: { id: search-dismiss } }
     steps:
       - tap: { id: search-dismiss }
+      - await: { idle: true, timeout: 15000, stableFor: 1500 }
+  # A reload that was still on its way opens it once more as the app starts again.
+  - when: { visible: { id: search-dismiss } }
+    steps:
+      - tap: { id: search-dismiss }
       - await: { hidden: { id: search-dismiss }, timeout: 10000 }
   - await: { visible: { id: bar-search }, timeout: 60000 }
   - await: { idle: true, timeout: 15000 }
