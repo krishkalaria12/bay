@@ -332,11 +332,16 @@ def apply_overlay(root: pathlib.Path):
 def build_adblock(src: pathlib.Path, env: dict):
     """Bay's Rust content blocker as a static library for the engine's ABI, where //bay/mobile links it.
 
-    Pure Rust: a static library needs no linker."""
+    Pure Rust: a static library needs no linker. It carries its own Rust std, and libbay_engine.so already links
+    Chromium's, so both define rust_eh_personality and compiler_builtins' C symbols (aarch64 atomics). Making every
+    symbol in the library weak lets the link keep one of each instead of failing on duplicates; the blocker's own
+    bay_blocker_* functions are defined only here, so they still resolve to it."""
     require_tools(("cargo",), env)
+    target_dir = src / LOCK["outputDirectory"] / "bay_adblock"
     run(["cargo", "rustc", "--release", "--lib", "--locked", "--target", RUST_TARGET, "--crate-type", "staticlib",
-         "--manifest-path", ADBLOCK / "Cargo.toml",
-         "--target-dir", src / LOCK["outputDirectory"] / "bay_adblock"], env=env)
+         "--manifest-path", ADBLOCK / "Cargo.toml", "--target-dir", target_dir], env=env)
+    objcopy = src / "third_party/llvm-build/Release+Asserts/bin/llvm-objcopy"
+    run([objcopy, "--weaken", target_dir / RUST_TARGET / "release/libbay_adblock.a"], env=env)
 
 
 def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
@@ -347,7 +352,8 @@ def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
     apply_overlay(root)
     build_adblock(source_dir(root), env)
     generate(root, env)
-    command = ["autoninja", "-C", LOCK["outputDirectory"]]
+    # -k 0 keeps compiling past a failure, so one run reports every broken file.
+    command = ["autoninja", "-C", LOCK["outputDirectory"], "-k", "0"]
     if jobs:
         command += ["-j", str(jobs)]
     command.append(LOCK["target"])
