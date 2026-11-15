@@ -178,6 +178,14 @@ function withChromiumEngine(config) {
   });
 }
 
+// Chromium's R classes (org.chromium.ui.R and the like), which the engine module writes from bay-engine.aar: the app
+// compiles them, because a library's jars leave every R class out and Chromium's code needs them at run time.
+const engineRClasses = `
+// Bay's engine: Chromium's R classes (modules/bay-engine/android/build.gradle).
+android.sourceSets.main.java.srcDirs += "\${rootDir}/../modules/bay-engine/android/build/generated/source/bayEngineR"
+tasks.named("preBuild").configure { dependsOn(":bay-engine:generateBayEngineRClasses") }
+`;
+
 // Each edit leaves a file it has already made alone, so prebuilding twice changes nothing.
 const chromiumEngineEdits = {
   projectBuildGradle(gradle) {
@@ -198,9 +206,13 @@ const chromiumEngineEdits = {
   },
 
   appBuildGradle(gradle) {
-    if (gradle.includes("noCompress")) return gradle;
+    if (!gradle.includes("noCompress")) {
+      gradle = gradle.replace(/androidResources\s*\{/, (match) => `${match}\n        noCompress += ["pak", "dat", "bin"]`);
+    }
 
-    return gradle.replace(/androidResources\s*\{/, (match) => `${match}\n        noCompress += ["pak", "dat", "bin"]`);
+    if (!gradle.includes("bayEngineR")) gradle += engineRClasses;
+
+    return gradle;
   },
 
   mainApplication(source) {
