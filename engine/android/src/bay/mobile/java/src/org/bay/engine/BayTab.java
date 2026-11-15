@@ -472,11 +472,13 @@ public final class BayTab extends WebContentsDelegateAndroid {
         @Override
         public void primaryMainFrameRenderProcessGone(int terminationStatus) {
             rejectEvaluations("The page's process ended.");
-            // Killed or out of memory: the system reclaimed it. Anything else is a crash.
+            // Killed, out of memory or evicted: the system reclaimed it. Anything else is a crash. (Android has no
+            // PROCESS_WAS_KILLED_BY_OOM; that one is ChromeOS's.)
             mClient.onRendererGone(
                     terminationStatus != TerminationStatus.PROCESS_WAS_KILLED
-                            && terminationStatus != TerminationStatus.PROCESS_WAS_KILLED_BY_OOM
-                            && terminationStatus != TerminationStatus.OOM_PROTECTED);
+                            && terminationStatus != TerminationStatus.OOM
+                            && terminationStatus != TerminationStatus.OOM_PROTECTED
+                            && terminationStatus != TerminationStatus.EVICTED_FOR_MEMORY);
         }
     }
 
