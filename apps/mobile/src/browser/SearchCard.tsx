@@ -259,6 +259,8 @@ export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: 
                       placeholder={t("search.placeholder")}
                       placeholderTextColor={secondary}
                       keyboardAppearance={privately ? "dark" : "default"}
+                      // The field's height is fixed (U4): its text grows with the phone's text size only as far as it fits.
+                      maxFontSizeMultiplier={1.4}
                       style={[inputTextStyle, { color: text, height: FIELD }]}
                       value={query}
                       selection={selection}

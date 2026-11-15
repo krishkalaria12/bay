@@ -19,9 +19,25 @@ export interface TextProps extends NativeTextProps {
 
 const toneColor = { default: "foreground", muted: "muted", accent: "accent", danger: "danger" } as const;
 
+/**
+ * How far each step follows the phone's text size (C15). Reading text follows it a long way; the labels that sit in
+ * fixed shapes (tiles, the bar, chips) stop before they spill out of them, as Arc Search's and Cra's do.
+ */
+const MAX_SCALE: Record<TextVariant, number> = {
+  display: 1.3,
+  title: 1.5,
+  headline: 1.8,
+  body: 2,
+  callout: 2,
+  subhead: 1.8,
+  footnote: 1.6,
+  caption: 1.4,
+  micro: 1.3,
+};
+
 /** Every piece of text in Bay: one type scale and one font on both platforms. */
 export function Text({ variant = "body", weight, tone = "default", color, style, ...rest }: TextProps): JSX.Element {
   const themed = useThemeColor(toneColor[tone]);
 
-  return <NativeText {...rest} style={[fontFor(variant, weight), { color: color ?? themed }, style]} />;
+  return <NativeText maxFontSizeMultiplier={MAX_SCALE[variant]} {...rest} style={[fontFor(variant, weight), { color: color ?? themed }, style]} />;
 }
