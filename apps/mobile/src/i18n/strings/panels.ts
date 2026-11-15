@@ -185,7 +185,6 @@ export const panels = {
   "pageMenu.translate": "Translate",
   "pageMenu.copyLink": "Copy link",
   "pageMenu.bookmark": "Bookmark",
-  "pageMenu.bookmarked": "Bookmarked",
   "pageMenu.removeBookmark": "Remove bookmark",
   "pageMenu.thisSite": "This site",
   "pageMenu.history": "History",
@@ -249,7 +248,7 @@ export const panels = {
   "site.zoom.previewBody": "This site shows its text and images at this size, whatever Bay's zoom is.",
 
   // Importing tabs (ImportPanel.tsx).
-  "import.title": "Import from another browser",
+  "import.title": "Import",
   "import.help":
     "Bring your bookmarks, favorites and history to Bay. Phones keep each browser's data to itself, so Bay reads the files browsers export. Choose where yours are.",
   "import.paste.help": "Paste a list of tabs copied from Arc Search or another browser. Bay finds the links and ignores the rest.",
@@ -268,6 +267,7 @@ export const panels = {
   "import.paste.title": "Paste tabs",
   "import.onThisPhone": "On this phone",
   "import.another": "Another browser",
+  "import.importedFolder": "Imported bookmarks",
   "import.pasteTabs": "Paste a list of tabs",
   "import.method.safari": "Bookmarks, favorites and history, from Safari's export",
   "import.method.takeout": "Bookmarks and history, through Google Takeout",
@@ -288,6 +288,8 @@ export const panels = {
   "import.takeout.openLabel": "Open Google Takeout in a new tab",
   "import.file.step1":
     "Export your bookmarks from {name} as an HTML file. Most browsers can, in their bookmark settings; if {name} can't on a phone, use {name} on a computer.",
+  "import.file.step1Any":
+    "Export your bookmarks from your browser as an HTML file. Most browsers can, in their bookmark settings; if yours can't on a phone, use it on a computer.",
   "import.file.step2": "Save the file on this phone, in Files or Downloads.",
   "import.file.step3": "Tap Choose file and pick it.",
   "import.choose": "Choose file",
@@ -306,6 +308,7 @@ export const panels = {
   "import.review.historyNewest": "Bay keeps your newest {count} pages",
   "import.left.passwords": "Passwords in the file stay in it.",
   "import.left.cards": "Cards in the file stay in it.",
+  "import.left.both": "Passwords and cards in the file stay in it.",
   "import.review.import": "Import",
   "import.review.importLabel": "Import what's chosen",
   "import.done.title": "Imported",

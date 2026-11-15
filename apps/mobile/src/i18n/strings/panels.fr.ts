@@ -183,7 +183,6 @@ export const panelsFr: PanelStrings = {
   "pageMenu.translate": "Traduire",
   "pageMenu.copyLink": "Copier le lien",
   "pageMenu.bookmark": "Signet",
-  "pageMenu.bookmarked": "Enregistré",
   "pageMenu.removeBookmark": "Supprimer le signet",
   "pageMenu.thisSite": "Ce site",
   "pageMenu.history": "Historique",
@@ -247,7 +246,7 @@ export const panelsFr: PanelStrings = {
   "site.zoom.previewBody": "Ce site affiche son texte et ses images à cette taille, quel que soit le zoom de Bay.",
 
   // Importing tabs.
-  "import.title": "Importer d’un autre navigateur",
+  "import.title": "Importer",
   "import.help":
     "Apportez vos signets, favoris et votre historique dans Bay. Les téléphones gardent les données de chaque navigateur pour lui seul, alors Bay lit les fichiers que les navigateurs exportent. Choisissez où sont les vôtres.",
   "import.paste.help": "Collez une liste d’onglets copiée depuis Arc Search ou un autre navigateur. Bay trouve les liens et ignore le reste.",
@@ -266,6 +265,7 @@ export const panelsFr: PanelStrings = {
   "import.paste.title": "Coller des onglets",
   "import.onThisPhone": "Sur ce téléphone",
   "import.another": "Un autre navigateur",
+  "import.importedFolder": "Signets importés",
   "import.pasteTabs": "Coller une liste d’onglets",
   "import.method.safari": "Signets, favoris et historique, depuis l’export de Safari",
   "import.method.takeout": "Signets et historique, avec Google Takeout",
@@ -286,6 +286,8 @@ export const panelsFr: PanelStrings = {
   "import.takeout.openLabel": "Ouvrir Google Takeout dans un nouvel onglet",
   "import.file.step1":
     "Exportez vos signets de {name} en fichier HTML. La plupart des navigateurs le font dans leurs réglages de signets ; si {name} ne le peut pas sur téléphone, utilisez {name} sur un ordinateur.",
+  "import.file.step1Any":
+    "Exportez les signets de votre navigateur en fichier HTML. La plupart le font dans leurs réglages de signets ; si le vôtre ne le peut pas sur téléphone, utilisez-le sur un ordinateur.",
   "import.file.step2": "Enregistrez le fichier sur ce téléphone, dans Fichiers ou Téléchargements.",
   "import.file.step3": "Touchez Choisir un fichier et prenez-le.",
   "import.choose": "Choisir un fichier",
@@ -304,6 +306,7 @@ export const panelsFr: PanelStrings = {
   "import.review.historyNewest": "Bay garde vos {count} pages les plus récentes",
   "import.left.passwords": "Les mots de passe du fichier y restent.",
   "import.left.cards": "Les cartes du fichier y restent.",
+  "import.left.both": "Les mots de passe et les cartes du fichier y restent.",
   "import.review.import": "Importer",
   "import.review.importLabel": "Importer ce qui est choisi",
   "import.done.title": "Importé",

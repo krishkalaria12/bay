@@ -24,8 +24,11 @@ export interface ChosenExport {
   notes: ExportNotes;
 }
 
-/** Lets the user choose an export and reads it. Null when the picker was dismissed. */
-export const chooseExport: Effect.Effect<ChosenExport | null, ImportFilesError | NothingToImport, ImportFiles> = Effect.gen(function* () {
+/**
+ * Lets the user choose an export and reads it. Null when the picker was dismissed; NothingToImport (an answer, not a
+ * failure: the user chose the wrong file) when nothing in it could be read.
+ */
+export const chooseExport: Effect.Effect<ChosenExport | NothingToImport | null, ImportFilesError, ImportFiles> = Effect.gen(function* () {
   const files = yield* ImportFiles;
   const picked = yield* files.pick();
 
@@ -44,7 +47,10 @@ export const chooseExport: Effect.Effect<ChosenExport | null, ImportFilesError |
     });
 
     return { name: picked.name, contents, notes };
-  }).pipe(Effect.ensuring(files.discard(picked)));
+  }).pipe(
+    Effect.catchTag("NothingToImport", (nothing) => Effect.succeed(nothing)),
+    Effect.ensuring(files.discard(picked)),
+  );
 });
 
 /** The browsers on this phone. A failed look lists none, and the sheet still offers every way in. */

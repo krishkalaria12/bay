@@ -183,7 +183,6 @@ export const panelsHi: PanelStrings = {
   "pageMenu.translate": "अनुवाद करें",
   "pageMenu.copyLink": "लिंक कॉपी करें",
   "pageMenu.bookmark": "बुकमार्क",
-  "pageMenu.bookmarked": "सहेजा गया",
   "pageMenu.removeBookmark": "बुकमार्क हटाएँ",
   "pageMenu.thisSite": "यह साइट",
   "pageMenu.history": "इतिहास",
@@ -247,7 +246,7 @@ export const panelsHi: PanelStrings = {
   "site.zoom.previewBody": "यह साइट Bay के ज़ूम से अलग, अपना टेक्स्ट और इमेज इसी आकार में दिखाती है।",
 
   // Importing tabs.
-  "import.title": "दूसरे ब्राउज़र से इंपोर्ट करें",
+  "import.title": "इंपोर्ट करें",
   "import.help":
     "अपने बुकमार्क, पसंदीदा और इतिहास Bay में लाएँ। फ़ोन हर ब्राउज़र का डेटा उसी तक रखते हैं, इसलिए Bay वे फ़ाइलें पढ़ता है जो ब्राउज़र एक्सपोर्ट करते हैं। चुनें कि आपका डेटा कहाँ है।",
   "import.paste.help": "Arc Search या किसी दूसरे ब्राउज़र से कॉपी किए टैब की सूची पेस्ट करें। Bay लिंक ढूँढ लेता है और बाकी छोड़ देता है।",
@@ -266,6 +265,7 @@ export const panelsHi: PanelStrings = {
   "import.paste.title": "टैब पेस्ट करें",
   "import.onThisPhone": "इस फ़ोन पर",
   "import.another": "दूसरा ब्राउज़र",
+  "import.importedFolder": "इंपोर्ट किए गए बुकमार्क",
   "import.pasteTabs": "टैब की सूची पेस्ट करें",
   "import.method.safari": "बुकमार्क, पसंदीदा और इतिहास, Safari के एक्सपोर्ट से",
   "import.method.takeout": "बुकमार्क और इतिहास, Google Takeout से",
@@ -286,6 +286,8 @@ export const panelsHi: PanelStrings = {
   "import.takeout.openLabel": "Google Takeout को नए टैब में खोलें",
   "import.file.step1":
     "{name} से अपने बुकमार्क HTML फ़ाइल के रूप में एक्सपोर्ट करें। ज़्यादातर ब्राउज़र अपनी बुकमार्क सेटिंग में ऐसा कर सकते हैं; अगर {name} फ़ोन पर नहीं कर सकता, तो कंप्यूटर पर {name} इस्तेमाल करें।",
+  "import.file.step1Any":
+    "अपने ब्राउज़र से बुकमार्क HTML फ़ाइल के रूप में एक्सपोर्ट करें। ज़्यादातर ब्राउज़र अपनी बुकमार्क सेटिंग में ऐसा कर सकते हैं; अगर आपका फ़ोन पर नहीं कर सकता, तो उसे कंप्यूटर पर इस्तेमाल करें।",
   "import.file.step2": "फ़ाइल को इस फ़ोन पर Files या Downloads में सेव करें।",
   "import.file.step3": "फ़ाइल चुनें पर टैप करें और उसे चुनें।",
   "import.choose": "फ़ाइल चुनें",
@@ -304,6 +306,7 @@ export const panelsHi: PanelStrings = {
   "import.review.historyNewest": "Bay आपके सबसे नए {count} पेज रखता है",
   "import.left.passwords": "फ़ाइल के पासवर्ड उसी में रहते हैं।",
   "import.left.cards": "फ़ाइल के कार्ड उसी में रहते हैं।",
+  "import.left.both": "फ़ाइल के पासवर्ड और कार्ड उसी में रहते हैं।",
   "import.review.import": "इंपोर्ट करें",
   "import.review.importLabel": "चुनी हुई चीज़ें इंपोर्ट करें",
   "import.done.title": "इंपोर्ट हो गया",

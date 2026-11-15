@@ -61,7 +61,7 @@ export function ImportPanel(props: ImportPanelProps): JSX.Element {
   const [step, setStep] = useState<Step>({ kind: "sources" });
   const [browsers, setBrowsers] = useState<PhoneBrowser[]>([]);
   const looking = useCommand<PhoneBrowser[]>();
-  const reading = useCommand<ChosenExport | null>();
+  const reading = useCommand<ChosenExport | NothingToImport | null>();
   const [readError, setReadError] = useState<string | null>(null);
 
   // Each opening starts at the list, which looks at the phone again: a browser may have been installed meanwhile.
@@ -85,12 +85,16 @@ export function ImportPanel(props: ImportPanelProps): JSX.Element {
     if (!result || step.kind !== "guide") return;
 
     if (result._tag === "Done") {
-      if (result.value) {
-        const { contents } = result.value;
+      const read = result.value;
+
+      if (read instanceof NothingToImport) {
+        setReadError(t(read.tooLarge ? "import.error.tooLarge" : "import.error.nothing", { name: read.name }));
+      } else if (read) {
+        const { contents } = read;
         setStep({
           kind: "review",
           browser: step.browser,
-          chosen: result.value,
+          chosen: read,
           choice: { bookmarks: linkCount(contents.bookmarks) > 0, favorites: contents.favorites.length > 0, history: contents.history.length > 0 },
         });
       }
@@ -98,14 +102,7 @@ export function ImportPanel(props: ImportPanelProps): JSX.Element {
       return;
     }
 
-    if (result._tag === "Failed") {
-      const error = result.error;
-      setReadError(
-        error instanceof NothingToImport
-          ? t(error.tooLarge ? "import.error.tooLarge" : "import.error.nothing", { name: error.name })
-          : t("import.error.unreadable"),
-      );
-    }
+    if (result._tag === "Failed") setReadError(t("import.error.unreadable"));
     // Only a new result changes the step.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reading.result]);
@@ -142,7 +139,7 @@ export function ImportPanel(props: ImportPanelProps): JSX.Element {
         testID="import-screen"
         height="80%"
       >
-        <Guide method={step.browser.method} name={nameOf(step.browser)} />
+        <Guide method={step.browser.method} name={nameOf(step.browser)} named={Boolean(step.browser.name)} />
         {readError ? (
           <Text testID="import-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3">
             {readError}
@@ -178,13 +175,16 @@ export function ImportPanel(props: ImportPanelProps): JSX.Element {
 
   if (step.kind === "review") {
     const { contents, notes, name } = step.chosen;
-    const folderName = nameOf(step.browser);
+    // Bookmarks from a browser the sheet couldn't name go in a folder that says only where they came from.
+    const folderName = step.browser.name || t("import.importedFolder");
     const bookmarks = linkCount(contents.bookmarks);
     const history = contents.history.length;
     const favorites = contents.favorites.length;
     const { choice } = step;
     const toggle = (key: keyof ImportChoice) => setStep({ ...step, choice: { ...choice, [key]: !choice[key] } });
-    const left = [notes.passwords ? t("import.left.passwords") : null, notes.cards ? t("import.left.cards") : null].filter(Boolean).join(" ");
+
+    const left =
+      notes.passwords && notes.cards ? t("import.left.both") : notes.passwords ? t("import.left.passwords") : notes.cards ? t("import.left.cards") : "";
 
     return (
       <PanelSheet visible={props.visible} onClose={props.onClose} onBack={back} title={t("import.review.title")} testID="import-screen" height="80%">
@@ -344,7 +344,7 @@ function BrowserIcon({ browser }: { browser: PhoneBrowser }): JSX.Element {
 }
 
 /** The steps that get a browser's data into a file Bay can open. */
-function Guide({ method, name }: { method: PhoneBrowser["method"]; name: string }): JSX.Element {
+function Guide({ method, name, named }: { method: PhoneBrowser["method"]; name: string; named: boolean }): JSX.Element {
   const t = useT();
 
   const steps: string[] =
@@ -352,7 +352,7 @@ function Guide({ method, name }: { method: PhoneBrowser["method"]; name: string 
       ? [t("import.safari.step1"), t("import.safari.step2"), t("import.safari.step3")]
       : method === "takeout"
         ? [t("import.takeout.step1"), t("import.takeout.step2"), t("import.takeout.step3")]
-        : [t("import.file.step1", { name }), t("import.file.step2"), t("import.file.step3")];
+        : [named ? t("import.file.step1", { name }) : t("import.file.step1Any"), t("import.file.step2"), t("import.file.step3")];
 
   return (
     <View testID="import-guide" style={{ gap: space.md }}>

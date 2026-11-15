@@ -183,7 +183,6 @@ export const panelsEs: PanelStrings = {
   "pageMenu.translate": "Traducir",
   "pageMenu.copyLink": "Copiar el enlace",
   "pageMenu.bookmark": "Marcador",
-  "pageMenu.bookmarked": "Guardado",
   "pageMenu.removeBookmark": "Quitar marcador",
   "pageMenu.thisSite": "Este sitio",
   "pageMenu.history": "Historial",
@@ -247,7 +246,7 @@ export const panelsEs: PanelStrings = {
   "site.zoom.previewBody": "Este sitio muestra su texto y sus imágenes a este tamaño, sea cual sea el zoom de Bay.",
 
   // Importing tabs.
-  "import.title": "Importar de otro navegador",
+  "import.title": "Importar",
   "import.help":
     "Trae tus marcadores, favoritos e historial a Bay. Los teléfonos guardan los datos de cada navegador para él solo, así que Bay lee los archivos que exportan los navegadores. Elige dónde están los tuyos.",
   "import.paste.help": "Pega una lista de pestañas copiada de Arc Search u otro navegador. Bay encuentra los enlaces e ignora lo demás.",
@@ -266,6 +265,7 @@ export const panelsEs: PanelStrings = {
   "import.paste.title": "Pegar pestañas",
   "import.onThisPhone": "En este teléfono",
   "import.another": "Otro navegador",
+  "import.importedFolder": "Marcadores importados",
   "import.pasteTabs": "Pegar una lista de pestañas",
   "import.method.safari": "Marcadores, favoritos e historial, desde la exportación de Safari",
   "import.method.takeout": "Marcadores e historial, con Google Takeout",
@@ -286,6 +286,8 @@ export const panelsEs: PanelStrings = {
   "import.takeout.openLabel": "Abrir Google Takeout en una pestaña nueva",
   "import.file.step1":
     "Exporta tus marcadores de {name} como archivo HTML. La mayoría de navegadores pueden, en los ajustes de marcadores; si {name} no puede en el teléfono, usa {name} en un ordenador.",
+  "import.file.step1Any":
+    "Exporta los marcadores de tu navegador como archivo HTML. La mayoría pueden, en los ajustes de marcadores; si el tuyo no puede en el teléfono, usa el de un ordenador.",
   "import.file.step2": "Guarda el archivo en este teléfono, en Archivos o Descargas.",
   "import.file.step3": "Toca Elegir archivo y elígelo.",
   "import.choose": "Elegir archivo",
@@ -304,6 +306,7 @@ export const panelsEs: PanelStrings = {
   "import.review.historyNewest": "Bay guarda tus {count} páginas más recientes",
   "import.left.passwords": "Las contraseñas del archivo se quedan en él.",
   "import.left.cards": "Las tarjetas del archivo se quedan en él.",
+  "import.left.both": "Las contraseñas y tarjetas del archivo se quedan en él.",
   "import.review.import": "Importar",
   "import.review.importLabel": "Importar lo elegido",
   "import.done.title": "Importado",

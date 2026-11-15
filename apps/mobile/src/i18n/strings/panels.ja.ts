@@ -183,7 +183,6 @@ export const panelsJa: PanelStrings = {
   "pageMenu.translate": "翻訳",
   "pageMenu.copyLink": "リンクをコピー",
   "pageMenu.bookmark": "ブックマーク",
-  "pageMenu.bookmarked": "保存済み",
   "pageMenu.removeBookmark": "ブックマークを削除",
   "pageMenu.thisSite": "このサイト",
   "pageMenu.history": "履歴",
@@ -247,7 +246,7 @@ export const panelsJa: PanelStrings = {
   "site.zoom.previewBody": "Bayのズームに関係なく、このサイトでは文字と画像がこのサイズで表示されます。",
 
   // Importing tabs.
-  "import.title": "ほかのブラウザから読み込む",
+  "import.title": "読み込む",
   "import.help":
     "ブックマーク、お気に入り、履歴をBayに持ってきましょう。スマートフォンは各ブラウザのデータをそのブラウザだけのものにするため、Bayはブラウザが書き出したファイルを読み込みます。データのある場所を選んでください。",
   "import.paste.help": "Arc Searchなど別のブラウザからコピーしたタブの一覧を貼り付けてください。Bayがリンクを見つけ、それ以外は無視します。",
@@ -266,6 +265,7 @@ export const panelsJa: PanelStrings = {
   "import.paste.title": "タブを貼り付け",
   "import.onThisPhone": "このスマートフォン",
   "import.another": "ほかのブラウザ",
+  "import.importedFolder": "読み込んだブックマーク",
   "import.pasteTabs": "タブのリストを貼り付け",
   "import.method.safari": "ブックマーク、お気に入り、履歴をSafariの書き出しから",
   "import.method.takeout": "ブックマークと履歴をGoogleデータエクスポートから",
@@ -286,6 +286,8 @@ export const panelsJa: PanelStrings = {
   "import.takeout.openLabel": "Googleデータエクスポートを新しいタブで開く",
   "import.file.step1":
     "{name}からブックマークをHTMLファイルとして書き出します。多くのブラウザはブックマークの設定でできます。{name}がスマートフォンでできない場合は、パソコンの{name}を使ってください。",
+  "import.file.step1Any":
+    "ブラウザからブックマークをHTMLファイルとして書き出します。多くのブラウザはブックマークの設定でできます。スマートフォンでできない場合は、パソコンで書き出してください。",
   "import.file.step2": "ファイルをこのスマートフォンの「ファイル」または「ダウンロード」に保存します。",
   "import.file.step3": "「ファイルを選択」をタップして選びます。",
   "import.choose": "ファイルを選択",
@@ -304,6 +306,7 @@ export const panelsJa: PanelStrings = {
   "import.review.historyNewest": "Bayは新しい順に{count}ページを残します",
   "import.left.passwords": "ファイル内のパスワードはそのまま残ります。",
   "import.left.cards": "ファイル内のカードはそのまま残ります。",
+  "import.left.both": "ファイル内のパスワードとカードはそのまま残ります。",
   "import.review.import": "読み込む",
   "import.review.importLabel": "選んだものを読み込む",
   "import.done.title": "読み込みました",

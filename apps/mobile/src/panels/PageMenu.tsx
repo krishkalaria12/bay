@@ -248,7 +248,8 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         <Tile
           id="page-bookmark"
           icon={props.isBookmarked ? "bookmarked" : "bookmark"}
-          label={props.isBookmarked ? t("pageMenu.bookmarked") : t("pageMenu.bookmark")}
+          // The filled icon and the highlight say it's bookmarked; "Bookmarked" doesn't fit a tile in every language.
+          label={t("pageMenu.bookmark")}
           accessibilityLabel={props.isBookmarked ? t("pageMenu.removeBookmark") : t("pageMenu.bookmark")}
           active={props.isBookmarked}
           onPress={act(props.onBookmark)}

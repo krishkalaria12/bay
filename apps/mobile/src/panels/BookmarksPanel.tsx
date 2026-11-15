@@ -32,8 +32,8 @@ export interface BookmarksPanelProps {
 }
 
 /**
- * The bookmark tree, a folder at a time: folders first as they were saved, then links. Search looks through every
- * link, whichever folder it's in. Removing a folder asks first, since it takes everything inside with it.
+ * The bookmark tree, a folder at a time, in the order it was saved. Search looks through every link, whichever folder
+ * it's in. Removing a folder asks first, since it takes everything inside with it.
  */
 export function BookmarksPanel({ visible, onClose, bookmarks, onOpen, onRemove, onImport }: BookmarksPanelProps): JSX.Element {
   const t = useT();
@@ -124,6 +124,8 @@ export function BookmarksPanel({ visible, onClose, bookmarks, onOpen, onRemove, 
         <LegendList
           data={rows}
           keyExtractor={(node) => node.id}
+          // The folder asking to be removed lives outside the rows, so the list redraws when it changes.
+          extraData={confirming}
           estimatedItemSize={56}
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}

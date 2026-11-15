@@ -127,10 +127,11 @@ test("a file with nothing Bay reads says so, and what was unpacked is still dele
     texts: { "/x/notes.html": "<p>hi</p>" },
   });
 
-  const error = await Effect.runPromise(Effect.flip(chooseExport).pipe(Effect.provide(phone.layer)));
+  // An answer, not a failure: the user chose the wrong file, and nothing is reported.
+  const nothing = await Effect.runPromise(chooseExport.pipe(Effect.provide(phone.layer)));
 
-  assert.ok(error instanceof NothingToImport);
-  assert.equal(error.tooLarge, true);
+  assert.ok(nothing instanceof NothingToImport);
+  assert.equal(nothing.tooLarge, true);
   assert.deepEqual(phone.discarded, [picked]);
 });
 

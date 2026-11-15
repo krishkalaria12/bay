@@ -183,7 +183,6 @@ export const panelsPtBR: PanelStrings = {
   "pageMenu.translate": "Traduzir",
   "pageMenu.copyLink": "Copiar link",
   "pageMenu.bookmark": "Favoritar",
-  "pageMenu.bookmarked": "Favoritado",
   "pageMenu.removeBookmark": "Remover favorito",
   "pageMenu.thisSite": "Este site",
   "pageMenu.history": "Histórico",
@@ -247,7 +246,7 @@ export const panelsPtBR: PanelStrings = {
   "site.zoom.previewBody": "Este site mostra texto e imagens neste tamanho, seja qual for o zoom do Bay.",
 
   // Importing tabs.
-  "import.title": "Importar de outro navegador",
+  "import.title": "Importar",
   "import.help":
     "Traga seus favoritos, atalhos e histórico para o Bay. Os celulares guardam os dados de cada navegador só para ele, então o Bay lê os arquivos que os navegadores exportam. Escolha onde estão os seus.",
   "import.paste.help": "Cole uma lista de abas copiada do Arc Search ou de outro navegador. O Bay encontra os links e ignora o resto.",
@@ -266,6 +265,7 @@ export const panelsPtBR: PanelStrings = {
   "import.paste.title": "Colar abas",
   "import.onThisPhone": "Neste celular",
   "import.another": "Outro navegador",
+  "import.importedFolder": "Favoritos importados",
   "import.pasteTabs": "Colar uma lista de abas",
   "import.method.safari": "Favoritos, atalhos e histórico, da exportação do Safari",
   "import.method.takeout": "Favoritos e histórico, pelo Google Takeout",
@@ -286,6 +286,8 @@ export const panelsPtBR: PanelStrings = {
   "import.takeout.openLabel": "Abrir o Google Takeout em uma nova aba",
   "import.file.step1":
     "Exporte seus favoritos do {name} como arquivo HTML. A maioria dos navegadores consegue, nas configurações de favoritos; se o {name} não consegue no celular, use o {name} em um computador.",
+  "import.file.step1Any":
+    "Exporte os favoritos do seu navegador como arquivo HTML. A maioria consegue, nas configurações de favoritos; se o seu não consegue no celular, use-o em um computador.",
   "import.file.step2": "Salve o arquivo neste celular, em Arquivos ou Downloads.",
   "import.file.step3": "Toque em Escolher arquivo e escolha-o.",
   "import.choose": "Escolher arquivo",
@@ -304,6 +306,7 @@ export const panelsPtBR: PanelStrings = {
   "import.review.historyNewest": "O Bay guarda suas {count} páginas mais recentes",
   "import.left.passwords": "As senhas do arquivo ficam nele.",
   "import.left.cards": "Os cartões do arquivo ficam nele.",
+  "import.left.both": "As senhas e os cartões do arquivo ficam nele.",
   "import.review.import": "Importar",
   "import.review.importLabel": "Importar o que foi escolhido",
   "import.done.title": "Importado",

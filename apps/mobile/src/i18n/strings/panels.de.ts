@@ -183,7 +183,6 @@ export const panelsDe: PanelStrings = {
   "pageMenu.translate": "Übersetzen",
   "pageMenu.copyLink": "Link kopieren",
   "pageMenu.bookmark": "Lesezeichen",
-  "pageMenu.bookmarked": "Gemerkt",
   "pageMenu.removeBookmark": "Lesezeichen entfernen",
   "pageMenu.thisSite": "Diese Seite",
   "pageMenu.history": "Verlauf",
@@ -247,7 +246,7 @@ export const panelsDe: PanelStrings = {
   "site.zoom.previewBody": "Diese Seite zeigt Text und Bilder in dieser Größe, egal wie Bays Zoom eingestellt ist.",
 
   // Importing tabs.
-  "import.title": "Aus einem anderen Browser importieren",
+  "import.title": "Importieren",
   "import.help":
     "Bring deine Lesezeichen, Favoriten und deinen Verlauf zu Bay. Telefone halten die Daten jedes Browsers für sich, daher liest Bay die Dateien, die Browser exportieren. Wähle, wo deine sind.",
   "import.paste.help": "Füge eine Liste von Tabs aus Arc Search oder einem anderen Browser ein. Bay findet die Links und ignoriert den Rest.",
@@ -266,6 +265,7 @@ export const panelsDe: PanelStrings = {
   "import.paste.title": "Tabs einfügen",
   "import.onThisPhone": "Auf diesem Telefon",
   "import.another": "Anderer Browser",
+  "import.importedFolder": "Importierte Lesezeichen",
   "import.pasteTabs": "Eine Liste von Tabs einfügen",
   "import.method.safari": "Lesezeichen, Favoriten und Verlauf aus dem Safari-Export",
   "import.method.takeout": "Lesezeichen und Verlauf über Google Takeout",
@@ -286,6 +286,8 @@ export const panelsDe: PanelStrings = {
   "import.takeout.openLabel": "Google Takeout in einem neuen Tab öffnen",
   "import.file.step1":
     "Exportiere deine Lesezeichen aus {name} als HTML-Datei. Die meisten Browser können das in ihren Lesezeichen-Einstellungen; kann {name} es auf dem Telefon nicht, nutze {name} auf einem Computer.",
+  "import.file.step1Any":
+    "Exportiere deine Lesezeichen aus deinem Browser als HTML-Datei. Die meisten Browser können das in ihren Lesezeichen-Einstellungen; kann deiner es auf dem Telefon nicht, nutze ihn auf einem Computer.",
   "import.file.step2": "Sichere die Datei auf diesem Telefon, in Dateien oder Downloads.",
   "import.file.step3": "Tippe auf Datei wählen und wähle sie aus.",
   "import.choose": "Datei wählen",
@@ -304,6 +306,7 @@ export const panelsDe: PanelStrings = {
   "import.review.historyNewest": "Bay behält deine neuesten {count} Seiten",
   "import.left.passwords": "Passwörter in der Datei bleiben darin.",
   "import.left.cards": "Karten in der Datei bleiben darin.",
+  "import.left.both": "Passwörter und Karten in der Datei bleiben darin.",
   "import.review.import": "Importieren",
   "import.review.importLabel": "Das Gewählte importieren",
   "import.done.title": "Importiert",
