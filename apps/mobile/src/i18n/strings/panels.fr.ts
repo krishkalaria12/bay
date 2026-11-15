@@ -421,4 +421,7 @@ export const panelsFr: PanelStrings = {
   "settings.appLinks.browser": "Bay",
   "settings.appLinks.note":
     "Un lien vers un autre site s'ouvre dans son app quand une app installée le prend en charge. Les adresses saisies et les liens internes s'ouvrent toujours ici.",
+  "site.block.ads": "Bloquer les publicités",
+  "site.block.trackers": "Bloquer les traqueurs",
+  "site.block.cookies": "Bloquer les bannières de cookies",
 };

@@ -227,7 +227,11 @@ export class Blocker extends Context.Service<
           // ahead of a list that was still being applied.
           yield* Effect.uninterruptible(
             Effect.andThen(
-              engine.setContentBlocking(uris, listVersion([ENGINE_RULES, ...digests].join(":"))),
+              engine.setContentBlocking(
+                uris,
+                listVersion([ENGINE_RULES, ...digests].join(":")),
+                present.map((list) => list.group),
+              ),
               setStatus({ state: "ready", lists: present.length }),
             ),
           );
@@ -270,6 +274,7 @@ export class Blocker extends Context.Service<
           // Each runs one fiber at a time: a new preference interrupts the work the previous one started.
           const follow = yield* FiberHandle.makeRuntime<never>();
           const pausing = yield* FiberHandle.makeRuntime<never>();
+          const siting = yield* FiberHandle.makeRuntime<never>();
 
           let enabled: boolean | undefined;
           let saved: readonly string[] = [];
@@ -290,8 +295,33 @@ export class Blocker extends Context.Service<
             (unsubscribe) => Effect.sync(unsubscribe),
           );
 
+          // What each site turns off on its own (C3), sent when it changes.
+          let sitesKey: string | undefined;
+
+          const syncSites = (data: BrowserData): void => {
+            const groupsOff = Object.fromEntries(
+              Object.entries(data.preferences.siteSettings).flatMap(([host, setting]) => (setting.blockOff.length ? [[host, setting.blockOff]] : [])),
+            );
+
+            const key = JSON.stringify(groupsOff);
+
+            if (key === sitesKey) return;
+            sitesKey = key;
+            siting(
+              engine
+                .setSiteBlocking(groupsOff)
+                .pipe(
+                  Effect.catch((error) =>
+                    diagnostics.report({ operation: { name: "blocker.sites" }, message: "Couldn't set what each site blocks.", cause: error }),
+                  ),
+                ),
+            );
+          };
+
           const sync = (data: BrowserData): void => {
             const { blockContent, blockingPausedHosts } = data.preferences;
+
+            syncSites(data);
 
             if (blockingPausedHosts !== saved) {
               saved = blockingPausedHosts;

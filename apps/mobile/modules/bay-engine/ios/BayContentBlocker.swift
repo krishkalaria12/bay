@@ -16,8 +16,11 @@ final class BayContentBlocker {
   // WebKit rejects a rule list above roughly 150,000 rules; smaller lists also compile faster.
   private static let rulesPerList = 50_000
   private static let identifierPrefix = "bay-blocker-"
-  private var ruleLists: [WKContentRuleList] = []
+  /// Each group's compiled lists (C3): "ads", "trackers", "cookies", or "all" when the lists came without groups.
+  private var ruleLists: [String: [WKContentRuleList]] = [:]
   private var pausedHosts: Set<String> = []
+  /// The groups each site turns off (C3), by host; a host covers its subdomains.
+  private var siteGroupsOff: [String: Set<String>] = [:]
   private let views = NSHashTable<BayEngineView>.weakObjects()
   private var generation = 0
   /// adblock-rust engine for scriptlets (`##+js`), which content rules can't express. Used on the main thread only.
@@ -30,8 +33,23 @@ final class BayContentBlocker {
   }
 
   func rules(for url: URL?) -> [WKContentRuleList] {
-    guard let host = url?.host?.lowercased(), !isPaused(host) else { return url == nil ? ruleLists : [] }
-    return ruleLists
+    guard let url else { return ruleLists.values.flatMap { $0 } }
+    guard let host = url.host?.lowercased(), !isPaused(host) else { return [] }
+    let off = groupsOff(host)
+    return ruleLists.filter { !off.contains($0.key) }.flatMap { $0.value }
+  }
+
+  /// The groups each site turns off (C3), as `{ host: [group] }` JSON.
+  func setSiteGroups(_ json: String) {
+    let parsed = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: [String]] ?? [:]
+    siteGroupsOff = parsed.reduce(into: [:]) { result, entry in result[entry.key.lowercased()] = Set(entry.value) }
+    refreshViews()
+  }
+
+  private func groupsOff(_ host: String) -> Set<String> {
+    siteGroupsOff.reduce(into: Set<String>()) { result, entry in
+      if host == entry.key || host.hasSuffix(".\(entry.key)") { result.formUnion(entry.value) }
+    }
   }
 
   func setPausedHosts(_ hosts: [String]) {
@@ -43,49 +61,71 @@ final class BayContentBlocker {
     pausedHosts.contains { host == $0 || host.hasSuffix(".\($0)") }
   }
 
-  /// Applies the filter lists to every page view; `nil` turns blocking off. `lists` reads their text, and runs off the
-  /// main thread only when this `version` isn't compiled yet. Resolves with the rule count.
-  func apply(lists: (() -> String?)?, version: String, completion: @escaping (Result<Int, Error>) -> Void) {
+  /// Applies the filter lists to every page view; `nil` turns blocking off. Each group's reader returns its lists'
+  /// text, and runs off the main thread only when this `version` of that group isn't compiled yet; groups compile one
+  /// after another, each into rule lists of its own, so a site can leave one out (C3). Resolves with the rule count.
+  func apply(groups: [String: () -> String?]?, version: String, completion: @escaping (Result<Int, Error>) -> Void) {
     generation += 1
     let generation = generation
     let started = CACurrentMediaTime()
-    guard let lists else {
-      ruleLists = []
+    guard let groups, !groups.isEmpty else {
+      ruleLists = [:]
       refreshViews()
       completion(.success(0))
       return
     }
     let store = WKContentRuleListStore.default()!
-    let prefix = "\(Self.identifierPrefix)\(Self.safe(version))-"
-    let countKey = "bay.contentBlocker.\(prefix)"
-    let finish: (Result<([WKContentRuleList], Int), Error>) -> Void = { [weak self] result in
-      DispatchQueue.main.async {
-        guard let self, generation == self.generation else { return }
-        switch result {
-        case .success(let (compiled, count)):
-          NSLog("BayContentBlocker: %d rules ready in %.0f ms", count, (CACurrentMediaTime() - started) * 1000)
-          self.ruleLists = compiled
-          self.refreshViews()
-          Self.removeStale(except: prefix, store: store)
-          completion(.success(count))
-        case .failure(let error):
-          completion(.failure(error))
+    let versionPrefix = "\(Self.identifierPrefix)\(Self.safe(version))-"
+    let names = groups.keys.sorted()
+    var compiled: [String: [WKContentRuleList]] = [:]
+    var total = 0
+
+    func next(_ index: Int) {
+      guard generation == self.generation else { return }
+      guard index < names.count else {
+        NSLog("BayContentBlocker: %d rules ready in %.0f ms", total, (CACurrentMediaTime() - started) * 1000)
+        ruleLists = compiled
+        refreshViews()
+        Self.removeStale(except: versionPrefix, store: store)
+        completion(.success(total))
+        return
+      }
+      let name = names[index]
+      let prefix = "\(versionPrefix)\(name)-"
+      Self.applyGroup(read: groups[name]!, prefix: prefix, store: store) { [weak self] result in
+        DispatchQueue.main.async {
+          guard let self, generation == self.generation else { return }
+          switch result {
+          case .success(let (lists, count)):
+            compiled[name] = lists
+            total += count
+            next(index + 1)
+          case .failure(let error):
+            completion(.failure(error))
+          }
         }
       }
     }
 
+    next(0)
+  }
+
+  /// One group's rule lists: looked up when this version was compiled before, compiled otherwise.
+  private static func applyGroup(read: @escaping () -> String?, prefix: String, store: WKContentRuleListStore,
+                                 finish: @escaping (Result<([WKContentRuleList], Int), Error>) -> Void) {
+    let countKey = "bay.contentBlocker.\(prefix)"
     let cached = UserDefaults.standard.integer(forKey: countKey)
     let cachedRules = UserDefaults.standard.integer(forKey: countKey + ".rules")
-    if cached > 0 {
-      Self.lookUp(prefix: prefix, count: cached, store: store) { found in
-        if let found {
-          finish(.success((found, cachedRules)))
-        } else {
-          Self.compile(lists: lists, prefix: prefix, store: store, countKey: countKey, finish: finish)
-        }
+    guard cached > 0 else {
+      compile(lists: read, prefix: prefix, store: store, countKey: countKey, finish: finish)
+      return
+    }
+    lookUp(prefix: prefix, count: cached, store: store) { found in
+      if let found {
+        finish(.success((found, cachedRules)))
+      } else {
+        compile(lists: read, prefix: prefix, store: store, countKey: countKey, finish: finish)
       }
-    } else {
-      Self.compile(lists: lists, prefix: prefix, store: store, countKey: countKey, finish: finish)
     }
   }
 
@@ -144,7 +184,7 @@ final class BayContentBlocker {
 
   /// The scriptlets for a page, or nil when it has none or blocking is paused there.
   func scriptlets(for url: URL) -> String? {
-    guard let engine, let host = url.host?.lowercased(), !isPaused(host),
+    guard let engine, let host = url.host?.lowercased(), !isPaused(host), !groupsOff(host).contains("ads"),
           let pointer = url.absoluteString.withCString({ bay_blocker_scriptlets(engine, $0) }) else { return nil }
     defer { bay_string_free(pointer) }
     let script = String(cString: pointer)

@@ -153,7 +153,12 @@ export type SiteSetting = {
   reader: boolean;
   /** The site answers with its desktop page: the engine presents itself as a desktop browser. */
   desktopMode: boolean;
+  /** What isn't blocked on this site (C3): ads, trackers or cookie banners. Empty blocks all three. */
+  blockOff: SiteBlockGroup[];
 };
+
+/** A kind of blocking a site can turn off on its own (C3). Kept here so the store needs nothing from the blocker. */
+export type SiteBlockGroup = "ads" | "trackers" | "cookies";
 
 /** What to hide on YouTube, with Brave's lists. Kept a type alias so it stays assignable to `JsonValue`. */
 export type YouTubeCleanup = {

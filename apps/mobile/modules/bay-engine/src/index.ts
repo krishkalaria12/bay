@@ -159,7 +159,8 @@ const nativeEngine = requireNativeModule<{
   setPrivateSessionActive(active: boolean): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
   pruneTabStates(keep: string[]): Promise<void>;
-  setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
+  setContentBlocking(listFiles: string[] | null, version: string, groups?: string[]): Promise<number | null>;
+  setSiteBlocking?(json: string): void;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   openDownload(reference: string): Promise<void>;
@@ -178,8 +179,15 @@ const nativeEngine = requireNativeModule<{
  * files off the main thread, so list text never passes through JavaScript. `version` names their contents: iOS
  * compiles WebKit rules once per version and reuses them on later launches. Applies to every page view.
  */
-export async function setContentBlocking(listFiles: readonly string[] | null, version: string): Promise<void> {
-  await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version);
+export async function setContentBlocking(listFiles: readonly string[] | null, version: string, groups?: readonly string[]): Promise<void> {
+  // iOS compiles each group's lists on their own, so a site can turn one group off (C3); Android blocks with them all.
+  if (Platform.OS === "ios" && groups && listFiles) await nativeEngine.setContentBlocking([...listFiles], version, [...groups]);
+  else await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version);
+}
+
+/** The groups each site turns off (C3), by host (matching its subdomains). iOS only: Android blocks every group. */
+export function setSiteBlocking(groupsOff: Readonly<Record<string, readonly string[]>>): void {
+  nativeEngine.setSiteBlocking?.(JSON.stringify(groupsOff));
 }
 
 /** Sites (hosts, matching their subdomains) where blocking is paused. */

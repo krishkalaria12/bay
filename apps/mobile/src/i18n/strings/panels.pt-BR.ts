@@ -421,4 +421,7 @@ export const panelsPtBR: PanelStrings = {
   "settings.appLinks.browser": "No Bay",
   "settings.appLinks.note":
     "Um link para outro site abre no app dele quando um app instalado o reivindica. Endereços digitados e links dentro de um site sempre abrem aqui.",
+  "site.block.ads": "Bloquear anúncios",
+  "site.block.trackers": "Bloquear rastreadores",
+  "site.block.cookies": "Bloquear avisos de cookies",
 };

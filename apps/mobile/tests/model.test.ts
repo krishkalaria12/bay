@@ -501,22 +501,22 @@ test("site settings are kept per host, and an all-default entry means none at al
   const siteOf = () => data.preferences.siteSettings["a.com"];
   assert.equal(siteOf(), undefined);
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "www.a.com", update: { textSize: null, reader: true, desktopMode: false } });
-  assert.deepEqual(siteOf(), { textSize: null, reader: true, desktopMode: false });
+  data = reduceBrowserData(data, { type: "site-settings", host: "www.a.com", update: { textSize: null, reader: true, desktopMode: false, blockOff: [] } });
+  assert.deepEqual(siteOf(), { textSize: null, reader: true, desktopMode: false, blockOff: [] });
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 123, reader: true, desktopMode: false } });
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 123, reader: true, desktopMode: false, blockOff: [] } });
   // Zoom snaps to the steps and the range the global zoom uses.
-  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: false });
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: false, blockOff: [] });
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
-  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: true });
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true, blockOff: [] } });
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: true, blockOff: [] });
 
   // Everything back to the globals drops the entry, regardless of where it was written from.
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: null, reader: false, desktopMode: false } });
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: null, reader: false, desktopMode: false, blockOff: [] } });
   assert.equal(siteOf(), undefined);
 
   // Unknown hosts or values change nothing.
-  assert.equal(reduceBrowserData(data, { type: "site-settings", host: "", update: { textSize: null, reader: true, desktopMode: false } }), data);
+  assert.equal(reduceBrowserData(data, { type: "site-settings", host: "", update: { textSize: null, reader: true, desktopMode: false, blockOff: [] } }), data);
 
   const saved = {
     version: 1,
@@ -525,11 +525,11 @@ test("site settings are kept per host, and an all-default entry means none at al
   };
 
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.siteSettings, {
-    "a.com": { textSize: 200, reader: false, desktopMode: false },
+    "a.com": { textSize: 200, reader: false, desktopMode: false, blockOff: [] },
   });
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true, blockOff: [] } });
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...data })), data).preferences.siteSettings, {
-    "a.com": { textSize: 120, reader: true, desktopMode: true },
+    "a.com": { textSize: 120, reader: true, desktopMode: true, blockOff: [] },
   });
 });
 
@@ -715,4 +715,18 @@ test("swipe to navigate and app links keep a known choice", () => {
   const saved = parseBrowserData({ version: 1, preferences: { swipeToNavigate: "sideways", appLinks: 3 } }, data);
   assert.equal(saved.preferences.swipeToNavigate, "anywhere");
   assert.equal(saved.preferences.appLinks, "app");
+});
+
+test("a site can turn ads, trackers or cookie banners off on its own", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "news.example",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: ["cookies"] },
+  });
+  assert.deepEqual(data.preferences.siteSettings["news.example"]?.blockOff, ["cookies"]);
+  const saved = parseBrowserData({ version: 1, preferences: { siteSettings: { "news.example": { blockOff: ["trackers", "nope", "ads"] } } } }, data);
+  assert.deepEqual(saved.preferences.siteSettings["news.example"]?.blockOff, ["ads", "trackers"]);
+  data = reduceBrowserData(data, { type: "site-settings", host: "news.example", update: { textSize: null, reader: false, desktopMode: false, blockOff: [] } });
+  assert.equal(data.preferences.siteSettings["news.example"], undefined);
 });

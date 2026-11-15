@@ -1,14 +1,27 @@
-/** The filter lists both engines block with: uBlock Origin's default set (as on desktop) plus cookie notices. */
+/** What a site can turn off on its own (C3): ads, trackers, or cookie banners. */
+export const BLOCK_GROUPS = ["ads", "trackers", "cookies"] as const;
+
+export type BlockGroup = (typeof BLOCK_GROUPS)[number];
+
+/**
+ * The filter lists both engines block with: uBlock Origin's default set (as on desktop) plus cookie notices. Each
+ * belongs to the group a site turns off (C3); "shared" lists (the unbreak fixes) go with every group.
+ */
 export const FILTER_LISTS = [
-  { id: "ublock-filters", title: "uBlock filters", url: "https://ublockorigin.github.io/uAssets/filters/filters.min.txt" },
-  { id: "ublock-privacy", title: "uBlock filters – Privacy", url: "https://ublockorigin.github.io/uAssets/filters/privacy.min.txt" },
-  { id: "ublock-unbreak", title: "uBlock filters – Unbreak", url: "https://ublockorigin.github.io/uAssets/filters/unbreak.min.txt" },
-  { id: "ublock-badware", title: "uBlock filters – Badware risks", url: "https://ublockorigin.github.io/uAssets/filters/badware.min.txt" },
-  { id: "easylist", title: "EasyList", url: "https://easylist.to/easylist/easylist.txt" },
-  { id: "easyprivacy", title: "EasyPrivacy", url: "https://easylist.to/easylist/easyprivacy.txt" },
-  { id: "plowe", title: "Peter Lowe's list", url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext" },
-  { id: "cookies", title: "EasyList Cookie", url: "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt" },
-] as const;
+  { id: "ublock-filters", title: "uBlock filters", group: "ads", url: "https://ublockorigin.github.io/uAssets/filters/filters.min.txt" },
+  { id: "ublock-privacy", title: "uBlock filters – Privacy", group: "trackers", url: "https://ublockorigin.github.io/uAssets/filters/privacy.min.txt" },
+  { id: "ublock-unbreak", title: "uBlock filters – Unbreak", group: "shared", url: "https://ublockorigin.github.io/uAssets/filters/unbreak.min.txt" },
+  { id: "ublock-badware", title: "uBlock filters – Badware risks", group: "ads", url: "https://ublockorigin.github.io/uAssets/filters/badware.min.txt" },
+  { id: "easylist", title: "EasyList", group: "ads", url: "https://easylist.to/easylist/easylist.txt" },
+  { id: "easyprivacy", title: "EasyPrivacy", group: "trackers", url: "https://easylist.to/easylist/easyprivacy.txt" },
+  {
+    id: "plowe",
+    title: "Peter Lowe's list",
+    group: "ads",
+    url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext",
+  },
+  { id: "cookies", title: "EasyList Cookie", group: "cookies", url: "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt" },
+] as const satisfies readonly { id: string; title: string; group: BlockGroup | "shared"; url: string }[];
 
 export type FilterListId = (typeof FILTER_LISTS)[number]["id"];
 

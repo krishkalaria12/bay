@@ -420,4 +420,7 @@ export const panelsJa: PanelStrings = {
   "settings.appLinks.browser": "Bay",
   "settings.appLinks.note":
     "他のサイトへのリンクは、インストール済みのアプリが対応していればそのアプリで開きます。入力したアドレスやサイト内のリンクは常にここで開きます。",
+  "site.block.ads": "広告をブロック",
+  "site.block.trackers": "トラッカーをブロック",
+  "site.block.cookies": "Cookie バナーをブロック",
 };

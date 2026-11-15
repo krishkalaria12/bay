@@ -1,12 +1,13 @@
 import { useEffect, useState, type JSX } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { radius, rowTint } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
-import { useT } from "@/i18n";
+import { useT, type MessageKey } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
+import type { SiteBlockGroup } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface SiteSettingsPanelProps {
@@ -27,7 +28,16 @@ export interface SiteSettingsPanelProps {
   /** Ad and tracker blocking here (U6): its switch sits with the site's other choices, as in Cra's Site Settings. */
   blocking: "on" | "paused" | "restored" | "off";
   onToggleBlocking: () => void;
+  /** What this site doesn't block (C3); iOS keeps ads, trackers and cookie banners apart, Android blocks them together. */
+  blockOff: readonly SiteBlockGroup[];
+  onBlockOff: (groups: SiteBlockGroup[]) => void;
 }
+
+const GROUP_ROWS: { group: SiteBlockGroup; label: MessageKey }[] = [
+  { group: "ads", label: "site.block.ads" },
+  { group: "trackers", label: "site.block.trackers" },
+  { group: "cookies", label: "site.block.cookies" },
+];
 
 /** Per-site settings (B12): what this host keeps instead of the global choices. */
 export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
@@ -80,6 +90,19 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
               toggle={props.blocking === "on"}
               onPress={props.onToggleBlocking}
             />
+            {props.blocking === "on" && Platform.OS === "ios"
+              ? GROUP_ROWS.map(({ group, label }) => (
+                  <ActionRow
+                    key={group}
+                    testID={`site-block-${group}`}
+                    label={t(label)}
+                    toggle={!props.blockOff.includes(group)}
+                    onPress={() =>
+                      props.onBlockOff(props.blockOff.includes(group) ? props.blockOff.filter((entry) => entry !== group) : [...props.blockOff, group])
+                    }
+                  />
+                ))
+              : null}
           </Group>
         </View>
       )}

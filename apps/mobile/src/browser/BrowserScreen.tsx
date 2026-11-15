@@ -1325,6 +1325,12 @@ export function BrowserScreen(): JSX.Element {
         onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
         blocking={blocking}
         onToggleBlocking={toggleBlocking}
+        blockOff={siteSetting.blockOff}
+        onBlockOff={(blockOff) => {
+          changeSiteSetting({ blockOff });
+          // The change applies to new loads; reload so this page shows it.
+          run((tab) => tab.reload());
+        }}
       />
       <ArchivePanel
         visible={panel === "archive"}

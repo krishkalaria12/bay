@@ -425,6 +425,9 @@ export const panels = {
   "settings.appLinks.browser": "Bay",
   "settings.appLinks.note":
     "A link to another site opens in its app when an installed app claims it. Typed addresses and links within a site always open here.",
+  "site.block.ads": "Block ads",
+  "site.block.trackers": "Block trackers",
+  "site.block.cookies": "Block cookie banners",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

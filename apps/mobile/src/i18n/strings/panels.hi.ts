@@ -418,4 +418,7 @@ export const panelsHi: PanelStrings = {
   "settings.appLinks.app": "ऐप में",
   "settings.appLinks.browser": "Bay में",
   "settings.appLinks.note": "किसी दूसरी साइट का लिंक उसके ऐप में खुलता है, अगर कोई इंस्टॉल ऐप उसे संभालता है। टाइप किए पते और साइट के अंदर के लिंक हमेशा यहीं खुलते हैं।",
+  "site.block.ads": "विज्ञापन ब्लॉक करें",
+  "site.block.trackers": "ट्रैकर ब्लॉक करें",
+  "site.block.cookies": "कुकी बैनर ब्लॉक करें",
 };
