@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Bay's widget (B15, C7): a search field, the microphone and a private tab, each opening its bay:// command. -->
+<!-- The one-row widget (4×1): a search field, the microphone and a private tab. At 2×1 the private tab is hidden. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
@@ -14,6 +15,7 @@
         android:layout_height="48dp"
         android:layout_weight="1"
         android:background="@drawable/widget_field"
+        android:contentDescription="@string/search_widget_hint"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="14dp"
@@ -29,8 +31,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="@string/search_widget_hint"
-            android:textColor="#CCFFFFFF"
+            android:textColor="@color/widget_text_muted"
             android:textSize="15sp" />
     </LinearLayout>
 

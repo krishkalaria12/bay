@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Starts as the one-row bar (4×1) it always was; resizes to 2×1, 2×2 and 4×2, each with its own layout. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/search_widget_description"
-    android:initialLayout="@layout/search_widget"
-    android:minHeight="56dp"
-    android:minResizeHeight="56dp"
-    android:minResizeWidth="250dp"
+    android:initialLayout="@layout/widget_bar"
+    android:minHeight="40dp"
+    android:minResizeHeight="40dp"
+    android:minResizeWidth="110dp"
     android:minWidth="250dp"
-    android:previewImage="@android:drawable/ic_menu_search"
-    android:resizeMode="horizontal"
+    android:previewImage="@drawable/widget_search"
+    android:previewLayout="@layout/widget_bar"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

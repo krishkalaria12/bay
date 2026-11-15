@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The "Bay" wallpaper's night sky, top to bottom. -->
+<!-- The "Bay" wallpaper's sky, top to bottom: day, or night in dark mode. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:angle="270"
-        android:centerColor="#14202C"
-        android:endColor="#231D24"
-        android:startColor="#0F1C2A" />
-    <corners android:radius="24dp" />
+        android:centerColor="@color/widget_sky_middle"
+        android:endColor="@color/widget_sky_bottom"
+        android:startColor="@color/widget_sky_top" />
+    <corners android:radius="@dimen/widget_radius" />
 </shape>

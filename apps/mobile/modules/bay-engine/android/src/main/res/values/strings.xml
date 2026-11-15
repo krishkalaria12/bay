@@ -8,4 +8,8 @@
     <string name="search_widget_hint">Search Bay</string>
     <string name="search_widget_voice">Voice search</string>
     <string name="search_widget_private">Private tab</string>
+    <string name="search_widget_name">Bay</string>
+    <string name="search_widget_short">Search</string>
+    <string name="search_widget_address">Search or enter address</string>
+    <string name="search_widget_voice_short">Voice</string>
 </resources>
