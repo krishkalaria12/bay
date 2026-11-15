@@ -35,6 +35,7 @@
 #include "components/js_injection/browser/web_message_host_factory.h"
 #include "components/js_injection/browser/web_message_reply_proxy.h"
 #include "components/js_injection/common/interfaces.mojom.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/download_manager.h"
