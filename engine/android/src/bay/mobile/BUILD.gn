@@ -78,6 +78,7 @@ source_set("lib") {
     "//components/embedder_support/android:view",
     "//components/embedder_support/android:web_contents_delegate",
     "//components/js_injection/browser",
+    "//components/viz/common",
     "//components/js_injection/common:common_mojom",
     "//components/js_injection/renderer",
     "//components/keyed_service/content",

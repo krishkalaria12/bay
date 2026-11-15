@@ -3,6 +3,7 @@
 
 #include "bay/mobile/browser/bay_https_upgrade_throttle.h"
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -32,14 +33,15 @@ namespace {
 constexpr base::TimeDelta kRedirectBackWindow = base::Seconds(5);
 
 // Hosts that failed over HTTPS this session; they load over HTTP from then on.
-std::set<std::string>& HttpOnlyHosts() {
-  static base::NoDestructor<std::set<std::string>> hosts;
+// Keyed by GURL::host(), a string_view: the comparators are transparent, so lookups take it as it is.
+std::set<std::string, std::less<>>& HttpOnlyHosts() {
+  static base::NoDestructor<std::set<std::string, std::less<>>> hosts;
   return *hosts;
 }
 
 // Hosts this session moved from HTTP to HTTPS, with when.
-std::map<std::string, base::TimeTicks>& UpgradedHosts() {
-  static base::NoDestructor<std::map<std::string, base::TimeTicks>> hosts;
+std::map<std::string, base::TimeTicks, std::less<>>& UpgradedHosts() {
+  static base::NoDestructor<std::map<std::string, base::TimeTicks, std::less<>>> hosts;
   return *hosts;
 }
 
@@ -113,10 +115,10 @@ content::NavigationThrottle::ThrottleCheckResult BayHttpsUpgradeThrottle::WillSt
   }
   if (UpgradedRecently(url)) {
     // The HTTPS page sent the tab straight back to HTTP: the site doesn't serve HTTPS properly, so keep HTTP.
-    HttpOnlyHosts().insert(url.host());
+    HttpOnlyHosts().emplace(url.host());
     return PROCEED;
   }
-  UpgradedHosts()[url.host()] = base::TimeTicks::Now();
+  UpgradedHosts().insert_or_assign(std::string(url.host()), base::TimeTicks::Now());
   return Restart(WithScheme(url, url::kHttpsScheme));
 }
 
@@ -124,7 +126,7 @@ content::NavigationThrottle::ThrottleCheckResult BayHttpsUpgradeThrottle::WillRe
   const GURL& url = navigation_handle()->GetURL();
   // An upgraded page redirecting to its own HTTP address would loop; it keeps HTTP instead.
   if (url.SchemeIs(url::kHttpScheme) && UpgradedRecently(url)) {
-    HttpOnlyHosts().insert(url.host());
+    HttpOnlyHosts().emplace(url.host());
   }
   return PROCEED;
 }
@@ -135,7 +137,7 @@ content::NavigationThrottle::ThrottleCheckResult BayHttpsUpgradeThrottle::WillFa
       HttpOnlyHosts().contains(url.host()) || !IsHttpsFailure(navigation_handle()->GetNetErrorCode())) {
     return PROCEED;
   }
-  HttpOnlyHosts().insert(url.host());
+  HttpOnlyHosts().emplace(url.host());
   return Restart(WithScheme(url, url::kHttpScheme));
 }
 
