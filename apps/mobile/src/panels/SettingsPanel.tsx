@@ -63,6 +63,8 @@ export interface SettingsPanelProps {
   onDownloads: () => void;
   historyCount: number;
   onHistory: () => void;
+  bookmarkCount: number;
+  onBookmarks: () => void;
   /** How many times Bay broke since it was opened; shown on the row that reports it (B8). */
   crashCount: number;
   /** Sends the errors Bay kept, so they can be looked at. */
@@ -512,6 +514,15 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           </Group>
           <Group label={t("settings.group.data")}>
             <ActionRow testID="settings-import" icon="add" label={t("settings.importTabs")} chevron disabled={busy} onPress={props.onImport} />
+            <ActionRow
+              testID="settings-bookmarks"
+              icon="bookmark"
+              label={t("settings.bookmarks")}
+              value={count(props.bookmarkCount, t("bookmarks.folderOne"), t("bookmarks.folderCount", { count: props.bookmarkCount }))}
+              chevron
+              disabled={busy}
+              onPress={props.onBookmarks}
+            />
             <ActionRow
               testID="settings-history"
               icon="history"

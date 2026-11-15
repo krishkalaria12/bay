@@ -43,7 +43,11 @@ export type IconName =
   | "palette"
   | "tune"
   | "visibility"
-  | "tick";
+  | "tick"
+  | "bookmark"
+  | "bookmarked"
+  | "folder"
+  | "import";
 
 export interface IconProps {
   name: IconName;

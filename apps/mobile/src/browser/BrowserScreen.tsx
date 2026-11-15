@@ -31,12 +31,14 @@ import { useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
+import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, type BlockerStatus } from "@/privacy/contentBlocking";
+import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
@@ -96,7 +98,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "import" | null;
+type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -1008,6 +1010,7 @@ export function BrowserScreen(): JSX.Element {
         canGoForward={page.canGoForward}
         isLoading={page.isLoading}
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
+        isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
         readerActive={reading.reader}
         onReader={reading.openReader}
@@ -1032,6 +1035,18 @@ export function BrowserScreen(): JSX.Element {
           const pinned = data.pinnedSites.some((site) => site.url === active.url);
           dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
           toast.show(pinned ? t("toast.unpinned") : t("toast.pinned"));
+        }}
+        onBookmark={() => {
+          tick();
+          const bookmarked = isBookmarked(data.bookmarks, active.url);
+          dispatch({
+            type: "toggle-bookmark",
+            bookmark: { kind: "url", id: newId(), parentId: BOOKMARKS_ROOT, title: active.title || active.url, url: active.url, addedAt: Date.now() },
+          });
+          toast.show(
+            bookmarked ? t("toast.unbookmarked") : t("toast.bookmarked"),
+            bookmarked ? undefined : { label: t("toast.showBookmarks"), onPress: () => setPanel("bookmarks") },
+          );
         }}
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
@@ -1126,6 +1141,8 @@ export function BrowserScreen(): JSX.Element {
         onDownloads={() => setPanel("downloads")}
         historyCount={data.history.length}
         onHistory={() => setPanel("history")}
+        bookmarkCount={bookmarkLinks(data.bookmarks).length}
+        onBookmarks={() => setPanel("bookmarks")}
         crashCount={crashReports().length}
         onReportProblem={() => void reportProblem()}
       />
@@ -1142,6 +1159,20 @@ export function BrowserScreen(): JSX.Element {
         }}
         onRemove={(url) => dispatch({ type: "remove-history", url })}
         onClear={() => dispatch({ type: "clear-history" })}
+      />
+      <BookmarksPanel
+        visible={panel === "bookmarks"}
+        onClose={() => closePanel("bookmarks")}
+        bookmarks={data.bookmarks}
+        onOpen={(url) => {
+          setOverlay("none");
+
+          // As from history: a page on screen stays, and the bookmark opens beside it.
+          if (hasPage) openTab(url);
+          else navigate(active.id, url);
+        }}
+        onRemove={(id) => dispatch({ type: "remove-bookmark", id })}
+        onImport={() => setPanel("import")}
       />
       <DownloadsPanel
         visible={panel === "downloads"}
