@@ -4,6 +4,8 @@
 #include "bay/mobile/renderer/bay_render_frame_observer.h"
 
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/password_autofill_agent.h"
+#include "components/autofill/content/renderer/password_generation_agent.h"
 
 namespace bay {
 
