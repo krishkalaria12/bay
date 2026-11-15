@@ -41,3 +41,11 @@ export const openDownload = (item: DownloadItem): Effect.Effect<void, EngineErro
  */
 export const cancelDownload = (item: DownloadItem): Effect.Effect<void, never, Engine> =>
   Engine.use((engine) => engine.cancelDownload(item.id)).pipe(Effect.catchTag("EngineError", () => Effect.void));
+
+/**
+ * Files a person downloads to use somewhere else straight away (C13): a Wallet pass and a calendar invitation open in
+ * the phone's own viewer as soon as they arrive, which offers Add to Wallet or Add to Calendar.
+ */
+export function opensWhenFinished(filename: string): boolean {
+  return /\.(pkpass|pkpasses|ics)$/i.test(filename.trim());
+}

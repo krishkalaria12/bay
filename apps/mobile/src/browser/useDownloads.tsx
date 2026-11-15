@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { useThemeColor } from "heroui-native";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { PermissionsAndroid, Platform, Pressable, View } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -26,7 +26,7 @@ import { t as translate, useT } from "@/i18n";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
 import type { DownloadItem } from "@/store/types";
-import { cancelDownload, openDownload, watchDownloads } from "./downloads";
+import { cancelDownload, openDownload, opensWhenFinished, watchDownloads } from "./downloads";
 
 /** A finished download's toast stays this long. */
 const TOAST_MS = 6000;
@@ -52,6 +52,15 @@ export function useDownloads(onError: (message: string) => void) {
       watchDownloads((update) => {
         if (update.state === "started") askToNotify();
         setToastId(update.id);
+
+        // The store has recorded the finished file by the time the next frame runs.
+        if (update.state === "finished" && opensWhenFinished(update.filename)) {
+          requestAnimationFrame(() => {
+            const item = useBrowserStore.getState().data.downloads.find((entry) => entry.id === update.id);
+
+            if (item) openRef.current(item);
+          });
+        }
       }),
     [],
   );
@@ -63,6 +72,9 @@ export function useDownloads(onError: (message: string) => void) {
 
     return () => clearTimeout(timer);
   }, [settled, toastId]);
+
+  const openRef = useRef<(item: DownloadItem) => void>(() => {});
+  openRef.current = open;
 
   function open(item: DownloadItem): void {
     runCommand(
