@@ -10,13 +10,15 @@ import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { pageBehindSearch } from "@/chrome/layout";
+import { SPRING } from "@/chrome/motion";
 import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
@@ -749,6 +751,24 @@ export function BrowserScreen(): JSX.Element {
     }, []),
   );
 
+  // The page steps back behind the search sheet (U4): a card 10 pt in from each side, its top under the status bar,
+  // with round corners, dimmed by the sheet's scrim.
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const pageBehind = overlay === "search" && showPages && hasPage;
+  const behind = useSharedValue(0);
+
+  useEffect(() => {
+    behind.value = withSpring(pageBehind ? 1 : 0, { ...SPRING, overshootClamping: true });
+  }, [pageBehind, behind]);
+
+  const behindStyle = useAnimatedStyle(() => {
+    const scale = interpolate(behind.value, [0, 1], [1, (screenWidth - 2 * pageBehindSearch.sideInset) / screenWidth]);
+    // Scaled about its middle, the page is moved back up so its top edge stays under the status bar.
+    const lift = ((screenHeight - insets.top) * (1 - scale)) / 2;
+
+    return { transform: [{ translateY: -lift }, { scale }], borderRadius: behind.value * pageBehindSearch.cornerRadius };
+  });
+
   const barStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: barHidden.value * (BAR_HEIGHT + insets.bottom + 24) }],
     opacity: 1 - barHidden.value,
@@ -766,7 +786,7 @@ export function BrowserScreen(): JSX.Element {
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false} {...behindSheet}>
         <Wallpaper id={data.preferences.wallpaper} photo={data.preferences.wallpaperPhoto} />
         {ready ? (
-          <View style={[StyleSheet.absoluteFill, { top: insets.top }]} pointerEvents="box-none">
+          <Animated.View style={[StyleSheet.absoluteFill, { top: insets.top, overflow: "hidden" }, behindStyle]} pointerEvents="box-none">
             {mounted.map((id) => {
               const tab = data.tabs.find((entry) => entry.id === id)!;
               const visible = showPages && id === active.id && hasPage;
@@ -830,7 +850,7 @@ export function BrowserScreen(): JSX.Element {
                 />
               );
             })}
-          </View>
+          </Animated.View>
         ) : null}
 
         {tabError && hasPage && showPages ? (
@@ -846,7 +866,7 @@ export function BrowserScreen(): JSX.Element {
           </View>
         ) : null}
 
-        {hasPage && showPages && !fullscreen ? (
+        {hasPage && showPages && !fullscreen && !pageBehind ? (
           <View
             className="absolute inset-x-0 top-0 bg-background"
             style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}

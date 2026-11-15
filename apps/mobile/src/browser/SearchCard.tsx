@@ -4,17 +4,27 @@ import { startListening } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
-import { Pressable, StyleSheet, Text as Span, TextInput, View } from "react-native";
-import Animated, { Extrapolation, FadeIn, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import { ReduceMotion } from "react-native-reanimated";
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text as Span, TextInput, useWindowDimensions, View } from "react-native";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Animated, {
+  Extrapolation,
+  FadeIn,
+  interpolate,
+  ReduceMotion,
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
-import { Surface } from "@/chrome/Surface";
+import { searchSheet, searchSheetHeight, searchSheetRows } from "@/chrome/layout";
 import { Text } from "@/chrome/Text";
-import { iconSize, inputFont, radius, rowHeight, space } from "@/chrome/tokens";
+import { iconSize, inputFont, radius, space } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
@@ -69,7 +79,53 @@ export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: 
   // as selected text raced fast typing: a key pressed before the completion arrived was overwritten and lost.
   const selection = addressSelected ? { start: 0, end: query.length } : undefined;
 
-  const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + space.sm }));
+  // The sheet sits on the keyboard (U4): full width, a fixed height that holds the field and four rows (fewer in
+  // landscape), so it never jumps while typing. It reaches down behind the keyboard, so no gap opens while the
+  // keyboard moves; its rows scroll inside it.
+  const { height: screenHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const event = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const subscription = Keyboard.addListener(event, (shown) => setKeyboardHeight(shown.endCoordinates.height));
+
+    return () => subscription.remove();
+  }, []);
+
+  const rowsInView = keyboardHeight ? searchSheetRows(screenHeight, keyboardHeight, insets.top) : searchSheet.visibleRows;
+  const sheetHeight = searchSheetHeight(rowsInView);
+  const dragged = useSharedValue(0);
+
+  const sheetPosition = useAnimatedStyle(() => ({
+    height: Math.max(keyboard.height.value, insets.bottom) + sheetHeight,
+    transform: [{ translateY: dragged.value }],
+  }));
+
+  // Swiping the sheet down puts it away; the keyboard leaves as the finger lets go.
+  const drag = usePanGesture({
+    activeOffsetY: [-1000, 12],
+    failOffsetX: [-16, 16],
+    onUpdate: (event) => {
+      "worklet";
+      dragged.value = Math.max(0, event.translationY);
+    },
+    onDeactivate: (event) => {
+      "worklet";
+
+      if (!event.canceled && (event.translationY > 80 || event.velocityY > 600)) {
+        scheduleOnRN(dismiss);
+
+        return;
+      }
+
+      dragged.value = withSpring(0, SPRING);
+    },
+  });
+
+  function dismiss(): void {
+    Keyboard.dismiss();
+    onDismiss();
+  }
 
   // The field grows out of the capsule it replaces (A2): the pill widens from the capsule's width to the field's,
   // and what is written in it comes in as it widens.
@@ -137,170 +193,190 @@ export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: 
 
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
-      {/* Dims what's behind, so the card and its suggestions stand clear of a busy page. */}
-      <Animated.View entering={FadeIn.duration(SCRIM_FADE)} className="bg-black/15 dark:bg-black/40" style={StyleSheet.absoluteFill} pointerEvents="none" />
-      <Pressable
-        testID="search-dismiss"
-        accessibilityRole="button"
-        accessibilityLabel={t("search.close")}
-        style={StyleSheet.absoluteFill}
-        onPress={onDismiss}
-      />
-      <Animated.View style={[{ position: "absolute", left: space.edge + insets.left, right: space.edge + insets.right }, cardPosition]}>
-        <Surface radius={radius.panel} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
-          {privately ? <View className="absolute inset-0 bg-neutral-900/95" style={{ borderRadius: radius.panel }} pointerEvents="none" /> : null}
-          <View
-            className="relative"
-            onLayout={(event) => {
-              const width = event.nativeEvent.layout.width;
+      {/* Dims what's behind, so the sheet and its suggestions stand clear of a busy page. */}
+      <Animated.View entering={FadeIn.duration(SCRIM_FADE)} className="bg-black/20 dark:bg-black/45" style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <Pressable testID="search-dismiss" accessibilityRole="button" accessibilityLabel={t("search.close")} style={StyleSheet.absoluteFill} onPress={dismiss} />
+      <Animated.View
+        testID={privately ? "search-card-private" : undefined}
+        className={privately ? "bg-neutral-900" : "bg-background"}
+        style={[
+          {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderTopLeftRadius: searchSheet.cornerRadius,
+            borderTopRightRadius: searchSheet.cornerRadius,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+          sheetPosition,
+        ]}
+      >
+        <View style={{ height: sheetHeight }}>
+          <GestureDetector gesture={drag}>
+            <View style={{ paddingTop: searchSheet.topInset, paddingHorizontal: space.lg }}>
+              <View
+                className="relative"
+                onLayout={(event) => {
+                  const width = event.nativeEvent.layout.width;
 
-              if (width && width !== fieldWidth) setFieldWidth(width);
-            }}
-          >
-            {/* The pill the capsule grows into (A2): it starts as wide as the capsule and widens into the field. */}
-            <Animated.View
-              pointerEvents="none"
-              className={
-                privately
-                  ? "absolute top-0 bottom-0 rounded-full border border-white/10 bg-white/10"
-                  : "absolute top-0 bottom-0 rounded-full border border-black/10 bg-white/60 dark:border-white/10 dark:bg-white/10"
-              }
-              style={pill}
-            />
-            <Animated.View style={contents} className="flex-row items-center pl-4">
-              <View className="flex-1 justify-center" style={{ minWidth: 0 }}>
-                {completion ? (
-                  <Text
-                    testID="address-completion"
-                    numberOfLines={1}
-                    pointerEvents="none"
-                    // The completion is read with the field's own value, not as a second line.
-                    accessibilityElementsHidden
-                    importantForAccessibility="no-hide-descendants"
-                    style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
+                  if (width && width !== fieldWidth) setFieldWidth(width);
+                }}
+              >
+                {/* The pill the capsule grows into (A2): it starts as wide as the capsule and widens into the field. */}
+                <Animated.View
+                  pointerEvents="none"
+                  className={privately ? "absolute top-0 bottom-0 rounded-full bg-white/10" : "absolute top-0 bottom-0 rounded-full bg-default"}
+                  style={pill}
+                />
+                <Animated.View style={[contents, { height: searchSheet.fieldHeight }]} className="flex-row items-center pl-4">
+                  <View className="flex-1 justify-center" style={{ minWidth: 0 }}>
+                    {completion ? (
+                      <Text
+                        testID="address-completion"
+                        numberOfLines={1}
+                        pointerEvents="none"
+                        // The completion is read with the field's own value, not as a second line.
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                        style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: FIELD, lineHeight: FIELD, color: text }]}
+                      >
+                        {/* Spans: they take the line's font and colour from the text around them. */}
+                        <Span style={{ color: "transparent" }}>{query}</Span>
+                        <Span style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Span>
+                      </Text>
+                    ) : null}
+                    <TextInput
+                      ref={input}
+                      testID="address-input"
+                      accessibilityLabel={t("search.placeholder")}
+                      autoFocus
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="web-search"
+                      returnKeyType="go"
+                      placeholder={t("search.placeholder")}
+                      placeholderTextColor={secondary}
+                      keyboardAppearance={privately ? "dark" : "default"}
+                      style={[inputTextStyle, { color: text, height: FIELD }]}
+                      value={query}
+                      selection={selection}
+                      onChangeText={change}
+                      onSubmitEditing={submit}
+                    />
+                  </View>
+                  {query ? (
+                    <Pressable
+                      testID="clear-address"
+                      accessibilityRole="button"
+                      accessibilityLabel={t("search.clear")}
+                      className="h-11 w-11 items-center justify-center"
+                      onPress={() => fill("")}
+                    >
+                      <Icon name="close" color={secondary} size={iconSize.row} />
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    testID="voice-search"
+                    accessibilityRole="button"
+                    accessibilityLabel={listening ? t("search.listening") : t("search.voice")}
+                    accessibilityState={{ disabled: listening }}
+                    disabled={listening}
+                    className="h-11 w-11 items-center justify-center"
+                    onPress={() => void listen()}
                   >
-                    {/* Spans: they take the line's font and colour from the text around them. */}
-                    <Span style={{ color: "transparent" }}>{query}</Span>
-                    <Span style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Span>
-                  </Text>
-                ) : null}
-                <TextInput
-                  ref={input}
-                  testID="address-input"
-                  accessibilityLabel={t("search.placeholder")}
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="web-search"
-                  returnKeyType="go"
-                  placeholder={t("search.placeholder")}
-                  placeholderTextColor={secondary}
-                  keyboardAppearance={privately ? "dark" : "default"}
-                  style={[inputTextStyle, { color: text, height: 46 }]}
-                  value={query}
-                  selection={selection}
-                  onChangeText={change}
-                  onSubmitEditing={submit}
-                />
+                    <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={iconSize.control} />
+                  </Pressable>
+                  <Pressable
+                    testID="private-toggle"
+                    accessibilityRole="switch"
+                    accessibilityLabel={t("search.private")}
+                    accessibilityState={{ checked: privately }}
+                    className="h-11 w-11 items-center justify-center"
+                    onPress={() => setPrivately((on) => !on)}
+                  >
+                    <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
+                  </Pressable>
+                </Animated.View>
               </View>
-              {query ? (
-                <Pressable
-                  testID="clear-address"
-                  accessibilityRole="button"
-                  accessibilityLabel={t("search.clear")}
-                  className="h-11 w-11 items-center justify-center"
-                  onPress={() => fill("")}
-                >
-                  <Icon name="close" color={secondary} size={iconSize.row} />
-                </Pressable>
-              ) : null}
-              <Pressable
-                testID="voice-search"
-                accessibilityRole="button"
-                accessibilityLabel={listening ? t("search.listening") : t("search.voice")}
-                accessibilityState={{ disabled: listening }}
-                disabled={listening}
-                className="h-11 w-11 items-center justify-center"
-                onPress={() => void listen()}
-              >
-                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={iconSize.control} />
-              </Pressable>
-              <Pressable
-                testID="private-toggle"
-                accessibilityRole="switch"
-                accessibilityLabel={t("search.private")}
-                accessibilityState={{ checked: privately }}
-                className="h-11 w-11 items-center justify-center"
-                onPress={() => setPrivately((on) => !on)}
-              >
-                <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
-              </Pressable>
-            </Animated.View>
-          </View>
-          {privately ? (
-            <Text testID="private-notice" accessibilityLiveRegion="polite" variant="footnote" color={secondary} style={{ marginTop: 8, marginLeft: 16 }}>
-              {t("search.privateNotice")}
-            </Text>
-          ) : null}
+            </View>
+          </GestureDetector>
 
-          {query ? null : (
-            <Pressable
-              testID="paste-and-go"
-              accessibilityRole="button"
-              accessibilityLabel={t("search.pasteAndGo")}
-              onPress={() => {
-                void pasteAndGo();
-              }}
-              className="flex-row items-center active:bg-black/5 dark:active:bg-white/10"
-              style={{ marginTop: space.xs, minHeight: 44, gap: space.md, paddingHorizontal: space.md, borderRadius: radius.control }}
-            >
-              <Icon name="copy" color={secondary} size={iconSize.row} />
-              <Text variant="callout" color={text}>
-                {t("search.pasteAndGo")}
+          {/* The rows: four in view, more a scroll away. Taps reach a row while the keyboard stays up. */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ flex: 1, marginTop: searchSheet.rowsTopGap }}
+            contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: searchSheet.bottomInset }}
+          >
+            {privately ? (
+              <Text
+                testID="private-notice"
+                accessibilityLiveRegion="polite"
+                variant="footnote"
+                color={secondary}
+                style={{ marginTop: 2, marginLeft: space.lg }}
+              >
+                {t("search.privateNotice")}
               </Text>
-            </Pressable>
-          )}
+            ) : null}
 
-          {pins.length && !query ? (
-            <View className="flex-row" style={{ marginTop: space.sm, gap: space.sm }}>
-              {pins.map((site, index) => (
-                <PressFeedback
-                  key={site.id}
-                  testID={`pinned-${index}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={site.title || displayUrl(site.url)}
-                  onPress={() => onOpen({ kind: "url", url: site.url })}
-                  className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
-                  style={{ gap: space.sm, paddingVertical: space.md, borderRadius: radius.tile }}
-                >
-                  <SiteIcon url={site.url} size={iconSize.control} bare color={text} />
-                  <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
-                    {site.title || siteName(site.url)}
-                  </Text>
-                </PressFeedback>
-              ))}
-              {Array.from({ length: 4 - pins.length }, (_, index) => (
-                <View key={`empty-${index}`} className="flex-1" />
-              ))}
-            </View>
-          ) : null}
+            {query ? null : (
+              <Pressable
+                testID="paste-and-go"
+                accessibilityRole="button"
+                accessibilityLabel={t("search.pasteAndGo")}
+                onPress={() => {
+                  void pasteAndGo();
+                }}
+                className="flex-row items-center active:bg-black/5 dark:active:bg-white/10"
+                style={{ minHeight: 44, gap: space.md, paddingHorizontal: space.md, borderRadius: radius.control }}
+              >
+                <Icon name="copy" color={secondary} size={iconSize.row} />
+                <Text variant="callout" color={text}>
+                  {t("search.pasteAndGo")}
+                </Text>
+              </Pressable>
+            )}
 
-          {rows.length ? (
-            <View className="mt-1.5">
-              {rows.map((row, index) => (
-                <SuggestionRow
-                  key={`${row.kind}:${row.url}`}
-                  row={row}
-                  index={index}
-                  engine={engine}
-                  colors={privately ? { text, secondary } : undefined}
-                  onOpen={() => onOpen(targetFor(row))}
-                  onFill={fill}
-                />
-              ))}
-            </View>
-          ) : null}
-        </Surface>
+            {pins.length && !query ? (
+              <View className="flex-row" style={{ marginTop: space.xs, marginHorizontal: space.sm, gap: space.sm }}>
+                {pins.map((site, index) => (
+                  <PressFeedback
+                    key={site.id}
+                    testID={`pinned-${index}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={site.title || displayUrl(site.url)}
+                    onPress={() => onOpen({ kind: "url", url: site.url })}
+                    className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
+                    style={{ gap: space.sm, paddingVertical: space.md, borderRadius: radius.tile }}
+                  >
+                    <SiteIcon url={site.url} size={iconSize.control} bare color={text} />
+                    <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
+                      {site.title || siteName(site.url)}
+                    </Text>
+                  </PressFeedback>
+                ))}
+                {Array.from({ length: 4 - pins.length }, (_, index) => (
+                  <View key={`empty-${index}`} className="flex-1" />
+                ))}
+              </View>
+            ) : null}
+
+            {rows.map((row, index) => (
+              <SuggestionRow
+                key={`${row.kind}:${row.url}`}
+                row={row}
+                index={index}
+                engine={engine}
+                colors={privately ? { text, secondary } : undefined}
+                onOpen={() => onOpen(targetFor(row))}
+                onFill={fill}
+              />
+            ))}
+          </ScrollView>
+        </View>
       </Animated.View>
     </View>
   );
@@ -310,6 +386,9 @@ export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: 
 const SCRIM_FADE = 160;
 
 const inputTextStyle = { ...inputFont("headline", "regular"), padding: 0, margin: 0 } as const;
+
+/** The field's text line: the field less a hair, so its text sits in the middle. */
+const FIELD = searchSheet.fieldHeight - 2;
 
 function rowText(row: Row, engine: SearchEngine, t: Translate) {
   switch (row.kind) {
@@ -362,7 +441,7 @@ function SuggestionRow({
       }}
       onPress={onOpen}
       className="flex-row items-center gap-3 pl-2 active:bg-black/5 dark:active:bg-white/10"
-      style={{ minHeight: rowHeight, borderRadius: radius.tile }}
+      style={{ minHeight: searchSheet.rowHeight, borderRadius: radius.tile }}
     >
       <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={iconSize.row} />}</View>
       <View className="flex-1 py-1.5">
