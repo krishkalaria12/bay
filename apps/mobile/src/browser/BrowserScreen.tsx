@@ -31,6 +31,7 @@ import { Lifecycle } from "@/effect/ports/lifecycle";
 import { useCommand } from "@/effect/react";
 import { useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
+import type { PageBlocking } from "@/panels/PageMenu";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
@@ -39,7 +40,7 @@ import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
-import { useBlockerStatus, type BlockerStatus } from "@/privacy/contentBlocking";
+import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privacy/contentBlocking";
 import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
@@ -663,13 +664,41 @@ export function BrowserScreen(): JSX.Element {
   // What this site (B12) keeps instead of the globals: a per-site zoom, auto Reader and desktop mode.
   const siteSetting = siteSettingFor(data.preferences.siteSettings, active.url);
   const pausedEntry = blockingPausedHosts.find((entry) => host === entry || host.endsWith(`.${entry}`));
-  const blocking = !blockContent ? "off" : pausedEntry ? "paused" : "on";
+  const restoredSites = useRestoredSites((state) => state.hosts);
+  const restored = Boolean(host) && restoredSites.includes(host);
+  const blocking: PageBlocking = !blockContent ? "off" : pausedEntry ? "paused" : restored ? "restored" : "on";
+
+  // A site shown without blocking for one visit (C2) gets its blocking back once the tab is somewhere else.
+  useEffect(() => {
+    const hosts = useRestoredSites.getState().hosts;
+
+    if (hosts.length && !hosts.includes(host)) useRestoredSites.setState({ hosts: [] });
+  }, [host]);
 
   function toggleBlocking(): void {
     if (!host) return;
-    dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
+
+    if (restored) useRestoredSites.setState({ hosts: [] });
+    else dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
     // The change applies to new loads; reload so this page shows it.
     run((tab) => tab.reload());
+  }
+
+  // "Page broken?" (C2): the page again without blocking, and the question whether that fixed it. Yes keeps blocking
+  // off for the site; otherwise it comes back when the tab leaves.
+  function restoreOriginal(): void {
+    if (!host) return;
+    const site = host;
+
+    useRestoredSites.setState({ hosts: [site] });
+    run((tab) => tab.reload());
+    toast.show(t("toast.restoredBlocking"), {
+      label: t("toast.keepBlockingOff"),
+      onPress: () => {
+        dispatch({ type: "pause-blocking", host: site, paused: true });
+        useRestoredSites.setState({ hosts: [] });
+      },
+    });
   }
 
   // Site settings (B12) are written whole: the store keeps an entry only while some value differs from the globals.
@@ -1077,6 +1106,12 @@ export function BrowserScreen(): JSX.Element {
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
         isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
+        blockedCount={null}
+        onRestore={restoreOriginal}
+        zoom={siteSetting.textSize ?? data.preferences.textSize}
+        onZoom={(textSize) => changeSiteSetting({ textSize: textSize === data.preferences.textSize ? null : textSize })}
+        desktop={siteSetting.desktopMode}
+        onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
         readerActive={reading.reader}
         onReader={reading.openReader}
         onHideElements={reading.startPicking}

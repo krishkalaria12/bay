@@ -391,6 +391,14 @@ export const panels = {
   "settings.exportTabs": "Export open tabs",
   "settings.exportTabs.one": "Share the address of 1 tab",
   "settings.exportTabs.count": "Share the addresses of {count} tabs",
+  "pageMenu.pinToStart": "Pin to start page",
+  "pageMenu.archiveTab": "Archive this tab",
+  "pageMenu.displayOptions": "Display options",
+  "pageMenu.siteSettings": "Site settings",
+  "pageMenu.blockedOne": "1 ad or tracker blocked",
+  "pageMenu.blockedCount": "{count} ads and trackers blocked",
+  "pageMenu.blocking.restored": "Off on this page until you leave the site",
+  "pageMenu.restore": "Page broken? Reload it without blocking",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

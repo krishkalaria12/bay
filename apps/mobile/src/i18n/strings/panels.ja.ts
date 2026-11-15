@@ -386,4 +386,12 @@ export const panelsJa: PanelStrings = {
   "settings.exportTabs": "開いているタブを書き出す",
   "settings.exportTabs.one": "1 個のタブのアドレスを共有",
   "settings.exportTabs.count": "{count} 個のタブのアドレスを共有",
+  "pageMenu.pinToStart": "スタートページに固定",
+  "pageMenu.archiveTab": "このタブをアーカイブ",
+  "pageMenu.displayOptions": "表示オプション",
+  "pageMenu.siteSettings": "サイトの設定",
+  "pageMenu.blockedOne": "広告・トラッカーを 1 件ブロック",
+  "pageMenu.blockedCount": "広告・トラッカーを {count} 件ブロック",
+  "pageMenu.blocking.restored": "サイトを離れるまでこのページではオフ",
+  "pageMenu.restore": "ページが崩れたら？ ブロックせずに再読み込み",
 };

@@ -386,4 +386,12 @@ export const panelsPtBR: PanelStrings = {
   "settings.exportTabs": "Exportar abas abertas",
   "settings.exportTabs.one": "Compartilhar o endereço de 1 aba",
   "settings.exportTabs.count": "Compartilhar os endereços de {count} abas",
+  "pageMenu.pinToStart": "Fixar na página inicial",
+  "pageMenu.archiveTab": "Arquivar esta aba",
+  "pageMenu.displayOptions": "Opções de exibição",
+  "pageMenu.siteSettings": "Ajustes do site",
+  "pageMenu.blockedOne": "1 anúncio ou rastreador bloqueado",
+  "pageMenu.blockedCount": "{count} anúncios e rastreadores bloqueados",
+  "pageMenu.blocking.restored": "Desligado nesta página até você sair do site",
+  "pageMenu.restore": "Página quebrada? Recarregue sem bloqueio",
 };

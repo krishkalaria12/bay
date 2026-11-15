@@ -141,4 +141,6 @@ export const browserHi: BrowserStrings = {
   "lock.prompt": "निजी टैब अनलॉक करें",
   "tabs.position": "{count} में से टैब {index}",
   "tabs.privatePosition": "{count} में से निजी टैब {index}",
+  "toast.restoredBlocking": "पेज वैसा दिखाया जा रहा है जैसा साइट ने बनाया। क्या ठीक हुआ?",
+  "toast.keepBlockingOff": "यहाँ बंद रखें",
 };

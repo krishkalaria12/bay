@@ -141,4 +141,6 @@ export const browserPtBR: BrowserStrings = {
   "lock.prompt": "Desbloquear abas privadas",
   "tabs.position": "Aba {index} de {count}",
   "tabs.privatePosition": "Aba privada {index} de {count}",
+  "toast.restoredBlocking": "Mostrando a página como o site a fez. Resolveu?",
+  "toast.keepBlockingOff": "Manter desligado aqui",
 };

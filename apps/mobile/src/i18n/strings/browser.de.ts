@@ -141,4 +141,6 @@ export const browserDe: BrowserStrings = {
   "lock.prompt": "Private Tabs entsperren",
   "tabs.position": "Tab {index} von {count}",
   "tabs.privatePosition": "Privater Tab {index} von {count}",
+  "toast.restoredBlocking": "Die Seite wird gezeigt, wie die Website sie gemacht hat. Hat das geholfen?",
+  "toast.keepBlockingOff": "Hier aus lassen",
 };

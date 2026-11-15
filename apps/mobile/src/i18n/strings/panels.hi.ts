@@ -385,4 +385,12 @@ export const panelsHi: PanelStrings = {
   "settings.exportTabs": "खुले टैब एक्सपोर्ट करें",
   "settings.exportTabs.one": "1 टैब का पता शेयर करें",
   "settings.exportTabs.count": "{count} टैब के पते शेयर करें",
+  "pageMenu.pinToStart": "स्टार्ट पेज पर पिन करें",
+  "pageMenu.archiveTab": "यह टैब आर्काइव करें",
+  "pageMenu.displayOptions": "दिखावट के विकल्प",
+  "pageMenu.siteSettings": "साइट सेटिंग",
+  "pageMenu.blockedOne": "1 विज्ञापन या ट्रैकर ब्लॉक किया",
+  "pageMenu.blockedCount": "{count} विज्ञापन और ट्रैकर ब्लॉक किए",
+  "pageMenu.blocking.restored": "साइट छोड़ने तक इस पेज पर बंद",
+  "pageMenu.restore": "पेज टूटा है? बिना ब्लॉक किए फिर लोड करें",
 };

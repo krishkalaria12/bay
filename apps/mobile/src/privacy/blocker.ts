@@ -19,7 +19,7 @@ import { Engine, type EngineError } from "../effect/ports/engine.ts";
 import { Files, type FileError } from "../effect/ports/files.ts";
 import { Http } from "../effect/ports/http.ts";
 import type { BrowserData } from "../store/types.ts";
-import { useBlockerStatus, type BlockerStatus } from "./contentBlocking.ts";
+import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "./contentBlocking.ts";
 import { ENGINE_RULES, FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, type ListValidators } from "./filterLists.ts";
 
 /** Where the lists live, in the app's documents. */
@@ -272,14 +272,30 @@ export class Blocker extends Context.Service<
           const pausing = yield* FiberHandle.makeRuntime<never>();
 
           let enabled: boolean | undefined;
-          let paused: readonly string[] | undefined;
+          let saved: readonly string[] = [];
+          let paused: string | undefined;
+
+          // The sites saved as paused, and the ones shown without blocking for this visit, go to the engine as one list.
+          const syncPaused = (): void => {
+            const hosts = [...new Set([...saved, ...useRestoredSites.getState().hosts])];
+            const key = hosts.join(" ");
+
+            if (key === paused) return;
+            paused = key;
+            pausing(pause(hosts));
+          };
+
+          yield* Effect.acquireRelease(
+            Effect.sync(() => useRestoredSites.subscribe(syncPaused)),
+            (unsubscribe) => Effect.sync(unsubscribe),
+          );
 
           const sync = (data: BrowserData): void => {
             const { blockContent, blockingPausedHosts } = data.preferences;
 
-            if (blockingPausedHosts !== paused) {
-              paused = blockingPausedHosts;
-              pausing(pause(blockingPausedHosts));
+            if (blockingPausedHosts !== saved) {
+              saved = blockingPausedHosts;
+              syncPaused();
             }
 
             if (blockContent !== enabled) {

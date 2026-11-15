@@ -141,4 +141,6 @@ export const browserEs: BrowserStrings = {
   "lock.prompt": "Desbloquear pestañas privadas",
   "tabs.position": "Pestaña {index} de {count}",
   "tabs.privatePosition": "Pestaña privada {index} de {count}",
+  "toast.restoredBlocking": "Mostrando la página tal como la hizo el sitio. ¿Se arregló?",
+  "toast.keepBlockingOff": "Dejarlo desactivado aquí",
 };

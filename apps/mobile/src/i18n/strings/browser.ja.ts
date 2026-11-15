@@ -141,4 +141,6 @@ export const browserJa: BrowserStrings = {
   "lock.prompt": "プライベートタブのロックを解除",
   "tabs.position": "{count}個中{index}番目のタブ",
   "tabs.privatePosition": "{count}個中{index}番目のプライベートタブ",
+  "toast.restoredBlocking": "サイト本来のページを表示しています。直りましたか？",
+  "toast.keepBlockingOff": "このサイトではオフにする",
 };

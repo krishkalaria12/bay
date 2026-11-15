@@ -386,4 +386,12 @@ export const panelsEs: PanelStrings = {
   "settings.exportTabs": "Exportar pestañas abiertas",
   "settings.exportTabs.one": "Compartir la dirección de 1 pestaña",
   "settings.exportTabs.count": "Compartir las direcciones de {count} pestañas",
+  "pageMenu.pinToStart": "Fijar en la página de inicio",
+  "pageMenu.archiveTab": "Archivar esta pestaña",
+  "pageMenu.displayOptions": "Opciones de visualización",
+  "pageMenu.siteSettings": "Ajustes del sitio",
+  "pageMenu.blockedOne": "1 anuncio o rastreador bloqueado",
+  "pageMenu.blockedCount": "{count} anuncios y rastreadores bloqueados",
+  "pageMenu.blocking.restored": "Desactivado en esta página hasta que salgas del sitio",
+  "pageMenu.restore": "¿La página falla? Recárgala sin bloqueo",
 };

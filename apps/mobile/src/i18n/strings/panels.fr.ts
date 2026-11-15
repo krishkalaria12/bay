@@ -386,4 +386,12 @@ export const panelsFr: PanelStrings = {
   "settings.exportTabs": "Exporter les onglets ouverts",
   "settings.exportTabs.one": "Partager l'adresse d'1 onglet",
   "settings.exportTabs.count": "Partager les adresses de {count} onglets",
+  "pageMenu.pinToStart": "Épingler à la page d'accueil",
+  "pageMenu.archiveTab": "Archiver cet onglet",
+  "pageMenu.displayOptions": "Options d'affichage",
+  "pageMenu.siteSettings": "Réglages du site",
+  "pageMenu.blockedOne": "1 publicité ou traqueur bloqué",
+  "pageMenu.blockedCount": "{count} publicités et traqueurs bloqués",
+  "pageMenu.blocking.restored": "Désactivé sur cette page jusqu'à ce que vous quittiez le site",
+  "pageMenu.restore": "Page cassée ? La recharger sans blocage",
 };

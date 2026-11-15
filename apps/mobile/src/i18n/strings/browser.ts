@@ -145,6 +145,8 @@ export const browser = {
   // Where a card sits in the tab switcher, read out with it (TabSwitcher.tsx).
   "tabs.position": "Tab {index} of {count}",
   "tabs.privatePosition": "Private tab {index} of {count}",
+  "toast.restoredBlocking": "Showing the page as the site made it. Did that fix it?",
+  "toast.keepBlockingOff": "Keep it off here",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

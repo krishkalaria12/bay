@@ -386,4 +386,12 @@ export const panelsDe: PanelStrings = {
   "settings.exportTabs": "Offene Tabs exportieren",
   "settings.exportTabs.one": "Die Adresse von 1 Tab teilen",
   "settings.exportTabs.count": "Die Adressen von {count} Tabs teilen",
+  "pageMenu.pinToStart": "An Startseite anheften",
+  "pageMenu.archiveTab": "Diesen Tab archivieren",
+  "pageMenu.displayOptions": "Anzeige",
+  "pageMenu.siteSettings": "Website-Einstellungen",
+  "pageMenu.blockedOne": "1 Werbung oder Tracker blockiert",
+  "pageMenu.blockedCount": "{count} Werbungen und Tracker blockiert",
+  "pageMenu.blocking.restored": "Auf dieser Seite aus, bis du die Website verlässt",
+  "pageMenu.restore": "Seite kaputt? Ohne Blockieren neu laden",
 };

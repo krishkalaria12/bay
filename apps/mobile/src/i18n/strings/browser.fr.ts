@@ -141,4 +141,6 @@ export const browserFr: BrowserStrings = {
   "lock.prompt": "Déverrouiller les onglets privés",
   "tabs.position": "Onglet {index} sur {count}",
   "tabs.privatePosition": "Onglet privé {index} sur {count}",
+  "toast.restoredBlocking": "La page s'affiche telle que le site l'a faite. Est-ce réglé ?",
+  "toast.keepBlockingOff": "Le laisser désactivé ici",
 };
