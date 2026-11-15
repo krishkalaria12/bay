@@ -19,7 +19,10 @@
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
         "UIBackgroundModes": ["audio"],
-        "NSLocationWhenInUseUsageDescription": "Bay shares your location with sites you allow."
+        "NSLocationWhenInUseUsageDescription": "Bay shares your location with sites you allow.",
+        // The import sheet lists the browsers on the phone by asking whether each one's URL scheme opens
+        // (src/import/browsers.ts); iOS answers only for the schemes named here.
+        "LSApplicationQueriesSchemes": ["googlechrome", "firefox", "microsoft-edge-https", "brave", "ddgQuickLink"]
       }
     },
     "android": {

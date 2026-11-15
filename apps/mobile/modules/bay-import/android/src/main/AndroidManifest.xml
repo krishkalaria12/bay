@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The import sheet lists the other browsers on the phone (Android 11+ hides other apps without a query). -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
+</manifest>
