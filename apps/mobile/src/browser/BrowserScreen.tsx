@@ -473,6 +473,12 @@ export function BrowserScreen(): JSX.Element {
     const command = bayCommand(incomingUrl);
 
     if (command) {
+      // A widget or quick action opens search over whatever is up: a sheet left open goes first.
+      if (command === "search" || command === "voice") {
+        setPanel(null);
+        setLink(null);
+      }
+
       if (command === "search") search(false);
       else if (command === "voice") {
         // The widget's microphone (C7): the search card, already listening.
