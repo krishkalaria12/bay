@@ -36,7 +36,7 @@ namespace {
 // A JSON array of strings, as Java passes lists.
 std::vector<std::string> StringList(const std::string& json) {
   std::vector<std::string> items;
-  std::optional<base::Value> parsed = base::JSONReader::Read(json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (parsed && parsed->is_list()) {
     for (const base::Value& item : parsed->GetList()) {
       if (item.is_string()) {
