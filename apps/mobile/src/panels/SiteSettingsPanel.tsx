@@ -48,13 +48,6 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
     if (props.visible) setZoom(false);
   }, [props.visible]);
 
-  function act(action: () => void): () => void {
-    return () => {
-      props.onClose();
-      action();
-    };
-  }
-
   if (zoom) {
     return (
       <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setZoom(false)} title={t("site.zoom")} testID="site-settings" height="60%">
@@ -115,7 +108,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
           detail={props.textSize === null ? t("site.zoom.follows", { size: props.globalTextSize }) : t("site.zoom.onSite", { size: props.textSize })}
           value={props.textSize === null ? undefined : `${props.textSize}%`}
           chevron
-          onPress={act(() => setZoom(true))}
+          onPress={() => setZoom(true)}
         />
         <ActionRow
           testID="site-reader"
