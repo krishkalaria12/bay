@@ -1578,20 +1578,21 @@
                 <td class="id">B2</td>
                 <th scope="row">Import from other browsers <span class="kind">Feature</span> <span class="st part">Partly done</span></th>
                 <td>
-                  A phone's browsers keep their data to themselves, so Settings → Import from another browser lists the browsers on the phone (Android asks
-                  the system; iOS asks each one's URL scheme, with Safari always there) and walks through how each hands its data over: Safari's export
-                  (Settings → Apps → Safari → Export), Google Takeout for Chrome, a bookmarks HTML file for the rest, or a pasted list of tabs (Arc Search).
+                  A phone's browsers keep their data to themselves, so Settings → Import from another browser lists the browsers on the phone (Android asks the
+                  system; iOS asks each one's URL scheme, with Safari always there) and walks through how each hands its data over: Safari's export (Settings →
+                  Apps → Safari → Export), Google Takeout for Chrome, a bookmarks HTML file for the rest, or a pasted list of tabs (Arc Search).
                   <code>modules/bay-import</code> unpacks the file natively (ZIP64 included) and only bookmark pages and history files come out; passwords and
                   cards stay in the archive. Shared TypeScript (<code>src/import</code>) reads them; the review imports bookmarks into a folder named for the
                   browser, favorites onto the start page and history (the newest 1,000 pages). Passwords aren't imported: Bay fills them from the phone's
                   password manager (B20), which already has Chrome's. Bookmarks landed with it: a tree in the browsing state, a Bookmarks sheet (folders,
-                  search, remove), Bookmark in the page menu and bookmarks in the address bar's suggestions. See <a href="#arc">Arc mobile</a>.
-                  <br /><strong>Known gaps:</strong> Android is built but untested (no engine on this Mac while <code>android-engine.yml</code> runs; the
-                  browser list, the picker and unzip need a run on the emulator). iOS can only see browsers whose URL schemes are listed in
-                  <code>app.json</code> (Chrome, Firefox, Edge, Brave, DuckDuckGo); Opera and Arc Search aren't detected there and go through Another browser
-                  or Paste. Bookmarks can't be renamed, moved or reordered yet, and the tree is capped at 5,000 nodes. Firefox and Chrome on a phone can't
-                  export bookmarks themselves, so their users need Takeout or a computer. The Takeout and Safari steps are written from their documented
-                  flows and still need a check on a real phone.
+                  search, remove), Bookmark in the page menu and bookmarks in the address bar's suggestions. See <a href="#arc">Arc mobile</a>. <br /><strong
+                    >Known gaps:</strong
+                  >
+                  Android is built but untested (no engine on this Mac while <code>android-engine.yml</code> runs; the browser list, the picker and unzip need a
+                  run on the emulator). iOS can only see browsers whose URL schemes are listed in <code>app.json</code> (Chrome, Firefox, Edge, Brave,
+                  DuckDuckGo); Opera and Arc Search aren't detected there and go through Another browser or Paste. Bookmarks can't be renamed, moved or
+                  reordered yet, and the tree is capped at 5,000 nodes. Firefox and Chrome on a phone can't export bookmarks themselves, so their users need
+                  Takeout or a computer. The Takeout and Safari steps are written from their documented flows and still need a check on a real phone.
                 </td>
                 <td>Arc, Desktop</td>
                 <td><span class="tag api">Shared + 2 native</span></td>
