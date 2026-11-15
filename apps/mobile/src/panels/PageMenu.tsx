@@ -171,36 +171,44 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         testID="page-menu"
         height="80%"
       >
-        <Group>
-          <ActionRow
-            testID="page-pin"
-            icon={props.isPinned ? "unpin" : "pin"}
-            label={props.isPinned ? t("pageMenu.unpin") : t("pageMenu.pinToStart")}
-            onPress={act(props.onPin)}
-          />
-          <ActionRow testID="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
-          <ActionRow testID="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} />
-          <ActionRow
-            testID="page-hide-elements"
-            icon="hide"
-            label={t("pageMenu.hideElements")}
-            detail={t("pageMenu.hideElements.detail")}
-            onPress={act(props.onHideElements)}
-          />
-          <ActionRow testID="page-inspect" icon="inspect" label={t("pageMenu.inspect")} detail={t("pageMenu.inspect.detail")} onPress={act(props.onInspect)} />
-          <ActionRow
-            testID="page-markdown"
-            icon="markdown"
-            label={t("pageMenu.markdown")}
-            detail={t("pageMenu.markdown.detail")}
-            onPress={act(props.onCopyMarkdown)}
-          />
-        </Group>
-        <Group>
-          <ActionRow testID="page-history" icon="history" label={t("pageMenu.history")} chevron onPress={act(props.onHistory)} />
-          <ActionRow testID="page-downloads" icon="download" label={t("pageMenu.downloads")} chevron onPress={act(props.onDownloads)} />
-          <ActionRow testID="page-close-tab" icon="archive" label={t("pageMenu.archiveTab")} onPress={act(props.onCloseTab)} />
-        </Group>
+        <View style={{ gap: space.lg }}>
+          <Group>
+            <ActionRow
+              testID="page-pin"
+              icon={props.isPinned ? "unpin" : "pin"}
+              label={props.isPinned ? t("pageMenu.unpin") : t("pageMenu.pinToStart")}
+              onPress={act(props.onPin)}
+            />
+            <ActionRow testID="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
+            <ActionRow testID="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} />
+            <ActionRow
+              testID="page-hide-elements"
+              icon="hide"
+              label={t("pageMenu.hideElements")}
+              detail={t("pageMenu.hideElements.detail")}
+              onPress={act(props.onHideElements)}
+            />
+            <ActionRow
+              testID="page-inspect"
+              icon="inspect"
+              label={t("pageMenu.inspect")}
+              detail={t("pageMenu.inspect.detail")}
+              onPress={act(props.onInspect)}
+            />
+            <ActionRow
+              testID="page-markdown"
+              icon="markdown"
+              label={t("pageMenu.markdown")}
+              detail={t("pageMenu.markdown.detail")}
+              onPress={act(props.onCopyMarkdown)}
+            />
+          </Group>
+          <Group>
+            <ActionRow testID="page-history" icon="history" label={t("pageMenu.history")} chevron onPress={act(props.onHistory)} />
+            <ActionRow testID="page-downloads" icon="download" label={t("pageMenu.downloads")} chevron onPress={act(props.onDownloads)} />
+            <ActionRow testID="page-close-tab" icon="archive" label={t("pageMenu.archiveTab")} onPress={act(props.onCloseTab)} />
+          </Group>
+        </View>
       </PanelSheet>
     );
   }
