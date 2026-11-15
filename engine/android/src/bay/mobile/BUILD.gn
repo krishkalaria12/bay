@@ -205,21 +205,57 @@ jinja_template("manifest") {
   variables = [ "library_name=bay_engine" ]
 }
 
-# Classes the app supplies from its own Gradle dependencies, so the APK has one copy of each.
+# Classes the app supplies from its own Gradle dependencies, so the APK has one copy of each. _COROUTINE is
+# kotlinx-coroutines-core's, org/intellij the JetBrains annotations'; the checker and jspecify annotations are only
+# annotations, which the runtime skips when their classes are missing.
 _app_provided_classes = [
+  "_COROUTINE/*",
   "androidx/*",
   "com/google/*",
   "javax/*",
   "kotlin/*",
   "kotlinx/*",
+  "org/checkerframework/*",
+  "org/intellij/*",
   "org/jetbrains/*",
+  "org/jspecify/*",
+]
+
+# The dependency jars' own metadata, which differs from jar to jar and would collide when they merge into one
+# classes.jar: manifests, version and Kotlin module files, signatures, licences, Java module descriptors, consumer
+# ProGuard rules, coroutines' debug probes and the service registrations of the libraries the app supplies.
+# Chromium's own META-INF/services files (@ServiceImpl) stay, for ServiceLoaderUtil.
+_dependency_metadata = [
+  "*module-info.class",
+  "DebugProbesKt.bin",
+  "META-INF/*.DSA",
+  "META-INF/*.EC",
+  "META-INF/*.RSA",
+  "META-INF/*.SF",
+  "META-INF/*.kotlin_module",
+  "META-INF/*.version",
+  "META-INF/DEPENDENCIES",
+  "META-INF/INDEX.LIST",
+  "META-INF/LICENSE*",
+  "META-INF/MANIFEST.MF",
+  "META-INF/NOTICE*",
+  "META-INF/com.android.tools/*",
+  "META-INF/maven/*",
+  "META-INF/proguard/*",
+  "META-INF/services/androidx.*",
+  "META-INF/services/com.google.*",
+  "META-INF/services/javax.*",
+  "META-INF/services/kotlin.*",
+  "META-INF/services/kotlinx.*",
+  "META-INF/services/org.jetbrains.*",
+  "META-INF/versions/*",
 ]
 
 dist_aar("aar_base") {
   output = "$root_out_dir/bay_engine_base.aar"
   android_manifest = "$target_gen_dir/manifest/AndroidManifest.xml"
   native_libraries = [ "$root_out_dir/libbay_engine.so" ]
-  jar_excluded_patterns = _app_provided_classes
+  jar_excluded_patterns = _app_provided_classes + _dependency_metadata
   deps = [
     ":java",
     ":jni_registration_java",
