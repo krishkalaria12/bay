@@ -147,18 +147,18 @@ class PageToolsHost : public js_injection::WebMessageHost {
 
  private:
   bool AnswerCosmetic(const std::u16string& text) {
-    std::optional<base::Value> parsed = base::JSONReader::Read(base::UTF16ToUTF8(text));
+    std::optional<base::Value> parsed = base::JSONReader::Read(base::UTF16ToUTF8(text), base::JSON_PARSE_RFC);
     if (!parsed || !parsed->is_dict()) {
       return false;
     }
-    const base::Value::Dict& request = parsed->GetDict();
+    const base::DictValue& request = parsed->GetDict();
     const std::string* kind = request.FindString("kind");
     if (!kind || *kind != "cosmetic") {
       return false;
     }
     const std::string* url = request.FindString("url");
-    const base::Value::List* classes = request.FindList("classes");
-    const base::Value::List* ids = request.FindList("ids");
+    const base::ListValue* classes = request.FindList("classes");
+    const base::ListValue* ids = request.FindList("ids");
     if (!url || !classes || !ids) {
       return true;
     }
@@ -166,7 +166,7 @@ class PageToolsHost : public js_injection::WebMessageHost {
         *url, base::WriteJson(*classes).value_or("[]"), base::WriteJson(*ids).value_or("[]"),
         request.FindBool("first").value_or(false));
     if (!css.empty()) {
-      base::Value::Dict reply;
+      base::DictValue reply;
       reply.Set("kind", "cosmetic");
       reply.Set("css", css);
       proxy_->PostWebMessage(base::UTF8ToUTF16(base::WriteJson(reply).value_or("{}")));
@@ -324,7 +324,7 @@ void BayTab::OnPageToolsMessage(const std::u16string& message) {
 
 std::string BayTab::SaveState() {
   content::NavigationController& controller = web_contents_->GetController();
-  base::Value::List entries;
+  base::ListValue entries;
   int current = -1;
   for (int i = 0; i < controller.GetEntryCount(); ++i) {
     content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
@@ -335,7 +335,7 @@ std::string BayTab::SaveState() {
     if (i <= controller.GetCurrentEntryIndex()) {
       current = static_cast<int>(entries.size());
     }
-    base::Value::Dict saved;
+    base::DictValue saved;
     saved.Set("url", entry->GetURL().spec());
     saved.Set("title", entry->GetTitle());
     saved.Set("state", base::Base64Encode(entry->GetPageState().ToEncodedData()));
@@ -345,7 +345,7 @@ std::string BayTab::SaveState() {
   if (entries.empty() || current < 0) {
     return std::string();
   }
-  base::Value::Dict state;
+  base::DictValue state;
   state.Set("version", kStateVersion);
   state.Set("index", current);
   state.Set("entries", std::move(entries));
@@ -354,12 +354,12 @@ std::string BayTab::SaveState() {
 
 bool BayTab::RestoreState(const std::string& state) {
   content::NavigationController& controller = web_contents_->GetController();
-  std::optional<base::Value> parsed = base::JSONReader::Read(state);
-  const base::Value::Dict* saved = parsed ? parsed->GetIfDict() : nullptr;
+  std::optional<base::Value> parsed = base::JSONReader::Read(state, base::JSON_PARSE_RFC);
+  const base::DictValue* saved = parsed ? parsed->GetIfDict() : nullptr;
   if (!saved || saved->FindInt("version") != kStateVersion || !controller.IsInitialBlankNavigation()) {
     return false;
   }
-  const base::Value::List* list = saved->FindList("entries");
+  const base::ListValue* list = saved->FindList("entries");
   const int index = saved->FindInt("index").value_or(-1);
   if (!list || index < 0 || index >= static_cast<int>(list->size())) {
     return false;
@@ -367,7 +367,7 @@ bool BayTab::RestoreState(const std::string& state) {
   std::unique_ptr<content::NavigationEntryRestoreContext> context = content::NavigationEntryRestoreContext::Create();
   std::vector<std::unique_ptr<content::NavigationEntry>> entries;
   for (const base::Value& item : *list) {
-    const base::Value::Dict* fields = item.GetIfDict();
+    const base::DictValue* fields = item.GetIfDict();
     const std::string* url = fields ? fields->FindString("url") : nullptr;
     const std::string* encoded = fields ? fields->FindString("state") : nullptr;
     std::string page_state;
@@ -665,10 +665,10 @@ void BayTab::AnswerFileChooser(int request_id, const std::string& files_json) {
   pending_file_choosers_.erase(it);
 
   std::vector<blink::mojom::FileChooserFileInfoPtr> files;
-  std::optional<base::Value> parsed = base::JSONReader::Read(files_json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(files_json, base::JSON_PARSE_RFC);
   if (parsed && parsed->is_list()) {
     for (const base::Value& item : parsed->GetList()) {
-      const base::Value::Dict* file = item.GetIfDict();
+      const base::DictValue* file = item.GetIfDict();
       const std::string* uri = file ? file->FindString("uri") : nullptr;
       if (!uri) {
         continue;

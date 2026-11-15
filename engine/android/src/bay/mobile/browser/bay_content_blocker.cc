@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -38,7 +39,7 @@ struct Engine {
   ~Engine() { bay_blocker_free(blocker); }
   Engine(const Engine&) = delete;
   Engine& operator=(const Engine&) = delete;
-  BayBlocker* const blocker;
+  const raw_ptr<BayBlocker> blocker;
 };
 
 // What the callbacks read on any thread: replaced whole (never changed in place) under the lock.
@@ -280,7 +281,7 @@ char* RequestHeaderNames(const char* url, const char* source, const char* top, c
   for (const std::shared_ptr<Engine>& engine : EnginesFor(top, url)) {
     char* json = bay_blocker_request_header_names(engine->blocker, url, source ? source : "", type ? type : "other",
                                                   method ? method : "GET");
-    std::optional<base::Value> parsed = base::JSONReader::Read(json ? json : "[]");
+    std::optional<base::Value> parsed = base::JSONReader::Read(json ? json : "[]", base::JSON_PARSE_RFC);
     bay_string_free(json);
     if (parsed && parsed->is_list()) {
       for (const base::Value& name : parsed->GetList()) {
@@ -293,7 +294,7 @@ char* RequestHeaderNames(const char* url, const char* source, const char* top, c
   if (names.empty()) {
     return nullptr;
   }
-  base::Value::List list;
+  base::ListValue list;
   for (const std::string& name : names) {
     list.Append(name);
   }
@@ -492,7 +493,7 @@ void BayContentBlocker::SetPausedHosts(std::vector<std::string> hosts) {
 void BayContentBlocker::SetSiteGroups(const std::string& json) {
   auto live = std::make_shared<Live>(*CurrentLive());
   live->groups_off.clear();
-  std::optional<base::Value> parsed = base::JSONReader::Read(json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (parsed && parsed->is_dict()) {
     for (const auto [host, value] : parsed->GetDict()) {
       if (!value.is_list()) {
@@ -541,13 +542,13 @@ std::string BayContentBlocker::CosmeticCss(const std::string& page_url,
   };
   for (const std::shared_ptr<Engine>& engine : EnginesFor(page_url.c_str(), page_url.c_str())) {
     char* page_json = bay_blocker_cosmetic(engine->blocker, page_url.c_str());
-    std::optional<base::Value> page = base::JSONReader::Read(page_json ? page_json : "{}");
+    std::optional<base::Value> page = base::JSONReader::Read(page_json ? page_json : "{}", base::JSON_PARSE_RFC);
     bay_string_free(page_json);
     if (!page || !page->is_dict()) {
       continue;
     }
     if (site_rules) {
-      if (const base::Value::List* hide = page->GetDict().FindList("hide")) {
+      if (const base::ListValue* hide = page->GetDict().FindList("hide")) {
         for (const base::Value& selector : *hide) {
           add(selector);
         }
@@ -557,14 +558,14 @@ std::string BayContentBlocker::CosmeticCss(const std::string& page_url,
     if (generic_hide || (classes_json == "[]" && ids_json == "[]")) {
       continue;
     }
-    base::Value::Dict query;
-    query.Set("classes", base::JSONReader::Read(classes_json).value_or(base::Value(base::Value::List())));
-    query.Set("ids", base::JSONReader::Read(ids_json).value_or(base::Value(base::Value::List())));
-    if (const base::Value::List* exceptions = page->GetDict().FindList("exceptions")) {
+    base::DictValue query;
+    query.Set("classes", base::JSONReader::Read(classes_json, base::JSON_PARSE_RFC).value_or(base::Value(base::ListValue())));
+    query.Set("ids", base::JSONReader::Read(ids_json, base::JSON_PARSE_RFC).value_or(base::Value(base::ListValue())));
+    if (const base::ListValue* exceptions = page->GetDict().FindList("exceptions")) {
       query.Set("exceptions", exceptions->Clone());
     }
     char* generic = bay_blocker_hidden_selectors(engine->blocker, base::WriteJson(query).value_or("{}").c_str());
-    std::optional<base::Value> found = base::JSONReader::Read(generic ? generic : "[]");
+    std::optional<base::Value> found = base::JSONReader::Read(generic ? generic : "[]", base::JSON_PARSE_RFC);
     bay_string_free(generic);
     if (found && found->is_list()) {
       for (const base::Value& selector : found->GetList()) {
