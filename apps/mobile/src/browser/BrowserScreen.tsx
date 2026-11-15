@@ -1243,6 +1243,8 @@ export function BrowserScreen(): JSX.Element {
           else if (!reader && reading.reader) reading.closeReader();
         }}
         onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
+        blocking={blocking}
+        onToggleBlocking={toggleBlocking}
       />
       <ArchivePanel
         visible={panel === "archive"}

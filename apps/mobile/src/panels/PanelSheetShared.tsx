@@ -254,9 +254,12 @@ export function ActionRow({
   chevron = false,
   toggle,
   leading,
+  tint,
 }: {
   testID: string;
   icon?: IconName;
+  /** Draws the icon white in a square of this colour, as Arc Search's and Cra's settings do (U6). */
+  tint?: string;
   /** Drawn where the icon goes, `iconSize.control` wide: an app's own icon, say. */
   leading?: ReactNode;
   label: string;
@@ -305,6 +308,10 @@ export function ActionRow({
       {leading ? (
         <View className="items-center justify-center" style={{ width: iconSize.control, height: iconSize.control }}>
           {leading}
+        </View>
+      ) : icon && tint ? (
+        <View className="items-center justify-center" style={{ width: TINT_SQUARE, height: TINT_SQUARE, borderRadius: 8, backgroundColor: tint }}>
+          <Icon name={icon} color="#FFFFFF" size={iconSize.small} />
         </View>
       ) : icon ? (
         <Icon name={icon} color={destructive ? danger : foreground} size={iconSize.control} />
@@ -373,6 +380,9 @@ export function SheetIconButton({
 /** A row's side padding inside a group, and the space between its icon and its text. */
 const ROW_INSET = space.lg;
 const ROW_GAP = 14;
+
+/** The coloured square a tinted row's icon sits in. */
+const TINT_SQUARE = 29;
 
 /**
  * A section's heading: small, quiet, and lined up with what follows it. Over a group it steps in to the rows' inset;

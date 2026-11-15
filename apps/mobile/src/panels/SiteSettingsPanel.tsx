@@ -3,7 +3,7 @@ import { View } from "react-native";
 
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { radius } from "@/chrome/tokens";
+import { radius, rowTint } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
@@ -24,6 +24,9 @@ export interface SiteSettingsPanelProps {
   onTextSize: (textSize: number | null) => void;
   onReader: (reader: boolean) => void;
   onDesktop: (desktop: boolean) => void;
+  /** Ad and tracker blocking here (U6): its switch sits with the site's other choices, as in Cra's Site Settings. */
+  blocking: "on" | "paused" | "restored" | "off";
+  onToggleBlocking: () => void;
 }
 
 /** Per-site settings (B12): what this host keeps instead of the global choices. */
@@ -59,10 +62,32 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
       height="60%"
       header={<SiteHeader url={props.url} />}
     >
+      {props.blocking === "off" ? null : (
+        <View className="mb-3">
+          <Group>
+            <ActionRow
+              testID="site-blocking"
+              icon="shield"
+              tint={rowTint.blocking}
+              label={t("pageMenu.blocking")}
+              detail={
+                props.blocking === "paused"
+                  ? t("pageMenu.blocking.paused")
+                  : props.blocking === "restored"
+                    ? t("pageMenu.blocking.restored")
+                    : t("pageMenu.blocking.on")
+              }
+              toggle={props.blocking === "on"}
+              onPress={props.onToggleBlocking}
+            />
+          </Group>
+        </View>
+      )}
       <Group>
         <ActionRow
           testID="site-text-size"
           icon="textSize"
+          tint={rowTint.display}
           label={t("site.zoom")}
           detail={props.textSize === null ? t("site.zoom.follows", { size: props.globalTextSize }) : t("site.zoom.onSite", { size: props.textSize })}
           value={props.textSize === null ? undefined : `${props.textSize}%`}
@@ -72,6 +97,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
         <ActionRow
           testID="site-reader"
           icon="reader"
+          tint={rowTint.language}
           label={t("site.reader")}
           detail={t("site.reader.detail")}
           toggle={props.reader}
@@ -80,6 +106,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
         <ActionRow
           testID="site-desktop"
           icon="desktop"
+          tint={rowTint.site}
           label={t("site.desktop")}
           detail={t("site.desktop.detail")}
           toggle={props.desktop}

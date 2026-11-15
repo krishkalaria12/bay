@@ -15,7 +15,7 @@ import { useCommand, useScopedWork } from "@/effect/react";
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { inputFont, radius, space } from "@/chrome/tokens";
+import { inputFont, radius, rowTint, space } from "@/chrome/tokens";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -575,6 +575,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-block-content"
               icon="shield"
+              tint={rowTint.blocking}
               label={t("settings.blockContent")}
               detail={props.blockerDetail}
               toggle={props.blockContent}
@@ -586,6 +587,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-engine"
               icon="search"
+              tint={rowTint.search}
               label={t("settings.searchEngine")}
               value={engineName}
               chevron
@@ -595,6 +597,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-privacy"
               icon="lock"
+              tint={rowTint.privacy}
               label={t("settings.privacy")}
               value={props.pausedHosts.length ? t("settings.paused.count", { count: props.pausedHosts.length }) : undefined}
               chevron
@@ -604,6 +607,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-appearance"
               icon="palette"
+              tint={rowTint.appearance}
               label={t("settings.appearance")}
               value={themeLabel ? t(themeLabel) : undefined}
               chevron
@@ -613,6 +617,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-language"
               icon="translate"
+              tint={rowTint.language}
               label={t("settings.language")}
               value={savedLocale === null ? t("settings.language.system") : LOCALE_NAMES[locale]}
               chevron
@@ -622,6 +627,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-browsing"
               icon="tune"
+              tint={rowTint.browsing}
               label={t("settings.browsing")}
               detail={t("settings.browsing.detail")}
               chevron
@@ -630,10 +636,19 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           <Group label={t("settings.group.data")}>
-            <ActionRow testID="settings-import" icon="import" label={t("settings.import")} chevron disabled={busy} onPress={props.onImport} />
+            <ActionRow
+              testID="settings-import"
+              icon="import"
+              tint={rowTint.import}
+              label={t("settings.import")}
+              chevron
+              disabled={busy}
+              onPress={props.onImport}
+            />
             <ActionRow
               testID="settings-bookmarks"
               icon="bookmark"
+              tint={rowTint.bookmarks}
               label={t("settings.bookmarks")}
               value={count(props.bookmarkCount, t("bookmarks.folderOne"), t("bookmarks.folderCount", { count: props.bookmarkCount }))}
               chevron
@@ -643,6 +658,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-history"
               icon="history"
+              tint={rowTint.history}
               label={t("settings.history")}
               value={count(props.historyCount, t("settings.historyOnePage"), t("settings.historyPages", { count: props.historyCount }))}
               chevron
@@ -652,6 +668,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-downloads"
               icon="download"
+              tint={rowTint.downloads}
               label={t("settings.downloads")}
               value={count(props.downloadCount, t("settings.downloadsOneFile"), t("settings.downloadsFiles", { count: props.downloadCount }))}
               chevron
@@ -662,6 +679,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 testID="settings-export-tabs"
                 icon="share"
+                tint={rowTint.export}
                 label={t("settings.exportTabs")}
                 detail={props.openTabCount === 1 ? t("settings.exportTabs.one") : t("settings.exportTabs.count", { count: props.openTabCount })}
                 disabled={busy}
@@ -672,6 +690,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 testID="clear-data-confirm"
                 icon="delete"
+                tint={rowTint.delete}
                 label={busy ? t("settings.clearingData") : t("settings.clearAllData")}
                 detail={t("settings.clearAllData.detail")}
                 destructive
@@ -682,6 +701,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 testID="settings-clear-data"
                 icon="delete"
+                tint={rowTint.delete}
                 label={t("settings.clearData")}
                 destructive
                 disabled={busy}
@@ -697,6 +717,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-report-problem"
               icon="error"
+              tint={rowTint.help}
               label={t("settings.reportProblem")}
               detail={
                 props.crashCount
@@ -708,7 +729,15 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               disabled={busy}
               onPress={props.onReportProblem}
             />
-            <ActionRow testID="settings-about" icon="info" label={t("settings.about")} chevron disabled={busy} onPress={() => setPage("about")} />
+            <ActionRow
+              testID="settings-about"
+              icon="info"
+              tint={rowTint.about}
+              label={t("settings.about")}
+              chevron
+              disabled={busy}
+              onPress={() => setPage("about")}
+            />
           </Group>
           {busy ? (
             <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-4">
