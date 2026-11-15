@@ -62,7 +62,9 @@ export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
 const builtIn = (id: JsonValue): id is WallpaperId => v.is(v.picklist(WALLPAPERS), id);
 const isFileUri = (uri: JsonValue): uri is string => v.is(v.string(), uri) && uri.startsWith("file://");
 const DAY = 24 * 60 * 60 * 1000;
-const HISTORY_LIMIT = 1000;
+
+/** How many pages the history keeps. */
+export const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
 const DOWNLOAD_LIMIT = 100;
 const FAVICON_LIMIT = 500;

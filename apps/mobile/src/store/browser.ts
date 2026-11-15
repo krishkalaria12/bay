@@ -2,7 +2,11 @@ import { create } from "zustand";
 
 import { t } from "@/i18n";
 
-import { createTab, initialBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
+import { bookmarkDrafts, draftLinkCount } from "@/import/apply";
+import type { ExportContents } from "@/import/exports";
+
+import { BOOKMARKS_ROOT, bookmarkChildren, bookmarkLinks, bookmarkRoom, draftNodes } from "./bookmarks";
+import { createTab, HISTORY_LIMIT, initialBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
 import type { BrowserData } from "./types";
 
 // The store is the state in memory. Reading it from disk, saving it and pruning what it no longer shows belong to the
@@ -22,6 +26,11 @@ interface BrowserStore {
   openTab(url: string, background?: boolean, isPrivate?: boolean): string;
   /** Opens imported links as background tabs, or files them in the archive; returns how many were added. */
   importTabs(tabs: readonly { url: string; title: string }[], target: "tabs" | "archive"): number;
+  /**
+   * Adds what an export held: its bookmarks in a folder named for the browser, its favorites to the start page, its
+   * history to Bay's. Returns how many of each were added; what Bay had already isn't counted again.
+   */
+  importExport(contents: ExportContents, choice: ImportChoice, folderName: string): ImportCounts;
   closeTab(id: string): void;
   restoreTab(id: string): string;
   /** Forget every tab, page and pin; the preferences stay. */
@@ -35,6 +44,20 @@ interface BrowserStore {
   newFolder(name: string): void;
   renameFolder(id: string, name: string): void;
   deleteFolder(id: string): void;
+}
+
+/** Which parts of an export to import. */
+export interface ImportChoice {
+  bookmarks: boolean;
+  favorites: boolean;
+  history: boolean;
+}
+
+/** How much of each part an import added. */
+export interface ImportCounts {
+  bookmarks: number;
+  favorites: number;
+  history: number;
 }
 
 export const useBrowserStore = create<BrowserStore>((set, get) => ({
@@ -66,6 +89,46 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     const after = get().data;
 
     return (target === "tabs" ? after.tabs.length : after.archive.length) - count;
+  },
+  importExport(contents, choice, folderName) {
+    const now = Date.now();
+    const before = get().data;
+    const counts: ImportCounts = { bookmarks: 0, favorites: 0, history: 0 };
+
+    if (choice.bookmarks) {
+      const drafts = bookmarkDrafts(contents.bookmarks, before.bookmarks);
+
+      if (drafts.length) {
+        // A second import from the same browser joins the folder the first one made.
+        const folder = bookmarkChildren(before.bookmarks, BOOKMARKS_ROOT).find((node) => node.kind === "folder" && node.title === folderName);
+
+        const nodes = folder
+          ? draftNodes(drafts, folder.id, newId, now, bookmarkRoom(before.bookmarks))
+          : draftNodes([{ title: folderName, children: drafts, addedAt: now }], BOOKMARKS_ROOT, newId, now, bookmarkRoom(before.bookmarks));
+
+        get().dispatch({ type: "add-bookmarks", nodes });
+        counts.bookmarks = Math.min(draftLinkCount(drafts), bookmarkLinks(get().data.bookmarks).length - bookmarkLinks(before.bookmarks).length);
+      }
+    }
+
+    if (choice.favorites && contents.favorites.length) {
+      const pinned = get().data.pinnedSites.length;
+      const sites = contents.favorites.flatMap((favorite) => (favorite.url ? [{ id: newId(), url: favorite.url, title: favorite.title, favicon: null }] : []));
+
+      get().dispatch({ type: "import-pins", sites });
+      counts.favorites = get().data.pinnedSites.length - pinned;
+    }
+
+    if (choice.history && contents.history.length) {
+      // Only the newest pages can stay: Bay keeps so many.
+      const entries = contents.history.slice(0, HISTORY_LIMIT).map((visit) => ({ ...visit, favicon: null }));
+      const urls = new Set(entries.map((entry) => entry.url));
+
+      get().dispatch({ type: "import-history", entries });
+      counts.history = get().data.history.filter((entry) => urls.has(entry.url)).length;
+    }
+
+    return counts;
   },
   closeTab(id) {
     const tab = get().data.tabs.find((entry) => entry.id === id);

@@ -513,7 +513,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           <Group label={t("settings.group.data")}>
-            <ActionRow testID="settings-import" icon="add" label={t("settings.importTabs")} chevron disabled={busy} onPress={props.onImport} />
+            <ActionRow testID="settings-import" icon="import" label={t("settings.import")} chevron disabled={busy} onPress={props.onImport} />
             <ActionRow
               testID="settings-bookmarks"
               icon="bookmark"

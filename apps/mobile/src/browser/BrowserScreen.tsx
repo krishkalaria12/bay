@@ -119,6 +119,7 @@ export function BrowserScreen(): JSX.Element {
     restoreTab,
     reset,
     importTabs,
+    importExport,
     selectSpace,
     createSpace,
     renameSpace,
@@ -1183,7 +1184,17 @@ export function BrowserScreen(): JSX.Element {
         onRemove={downloads.remove}
         onClear={downloads.clear}
       />
-      <ImportPanel visible={panel === "import"} onClose={() => closePanel("import")} onImport={importLinks} />
+      <ImportPanel
+        visible={panel === "import"}
+        onClose={() => closePanel("import")}
+        onImportTabs={importLinks}
+        onImportExport={(chosen, choice, folderName) => importExport(chosen.contents, choice, folderName)}
+        onOpenPage={(url) => {
+          setOverlay("none");
+          openTab(url);
+        }}
+        onShowBookmarks={() => setPanel("bookmarks")}
+      />
       <LinkMenu
         visible={link !== null}
         onClose={() => setLink(null)}
