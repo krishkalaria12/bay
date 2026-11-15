@@ -113,10 +113,21 @@ shared_library_with_jni("libbay_engine") {
     ":pak",
     "//base",
     "//content/public/app",
+
+    # The native halves of Java the engine's Java dependencies bring in (embedder support's URL utilities and
+    # features, the permissions and WebXR feature maps, variations data), as WebView links them.
+    "//components/embedder_support/android:util",
+    "//components/permissions",
+    "//components/variations:variations_associated_data",
+    "//components/webxr/android:features",
   ]
   configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
   configs += [ "//build/config/android:hide_all_but_jni" ]
   java_targets = [ ":java" ]
+
+  # Like WebView's: the native dependencies bring JNI for Java the engine leaves out (sync, sign-in, policy and so
+  # on), and nothing calls it, so the registration drops those methods.
+  remove_uncalled_jni = true
 }
 
 android_resources("java_resources") {
