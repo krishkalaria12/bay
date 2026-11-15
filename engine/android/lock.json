@@ -21,7 +21,6 @@
     "symbol_level": 0,
     "blink_symbol_level": 0,
     "v8_symbol_level": 0,
-    "optimize_for_size": true,
     "exclude_unwind_tables": true,
     "use_remoteexec": false,
     "use_siso": false,
