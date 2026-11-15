@@ -35,14 +35,15 @@ android {
   namespace 'in.krishkalaria.bay.engine'
   sourceSets {
     main {
-      java.srcDirs += useApiStub ? apiStub : engineRClasses
+      if (useApiStub) java.srcDirs += apiStub
     }
   }
 }
 
 // Chromium's Java refers to R classes such as org.chromium.ui.R, which Chromium only makes when it builds a whole APK.
 // The AAR lists the packages (bay-engine/r-packages.txt) and carries every resource (R.txt) under org.bay.engine.R,
-// which Gradle generates for it; this writes each listed package's R as a view of that one.
+// which Gradle generates for it; this writes each listed package's R as a view of that one. The app compiles them
+// (app.plugin.js), because a library's jars leave every R class out.
 def generateEngineRClasses = tasks.register('generateBayEngineRClasses') {
   enabled = engineAar != null
   if (engineAar != null) inputs.file(engineAar)
@@ -84,7 +85,8 @@ dependencies {
   implementation 'androidx.appcompat:appcompat:1.7.0'
   implementation 'androidx.annotation:annotation:1.9.1'
   if (!useApiStub) {
-    implementation "org.bay.engine:bay-engine:${engineVersion}"
+    // api: the app's MainApplication starts the engine (org.bay.engine.BayEngineApplication).
+    api "org.bay.engine:bay-engine:${engineVersion}"
     // Classes the engine's code uses but leaves to the app (bay-engine/app-classes.txt), at the versions the pinned
     // Chromium builds against or newer.
     implementation 'androidx.collection:collection:1.4.5'
@@ -92,5 +94,12 @@ dependencies {
     implementation 'androidx.fragment:fragment:1.8.5'
     implementation 'androidx.lifecycle:lifecycle-common:2.8.7'
     implementation 'androidx.window:window:1.3.0'
+    // Geolocation, WebOTP's SMS retriever, digital credentials and the Shape Detection API go through Play services.
+    implementation 'com.google.android.gms:play-services-auth-api-phone:18.3.1'
+    implementation 'com.google.android.gms:play-services-identity-credentials:16.0.0-alpha12'
+    implementation 'com.google.android.gms:play-services-location:21.4.0'
+    implementation 'com.google.android.gms:play-services-vision:20.1.3'
+    implementation 'com.google.guava:guava:33.7.1-android'
+    implementation 'com.google.protobuf:protobuf-javalite:4.36.0'
   }
 }
