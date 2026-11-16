@@ -1,9 +1,10 @@
 import * as v from "valibot";
-import { addBookmarks, emptyBookmarks, isBookmarked, parseBookmarks, removeBookmark, removeBookmarksOf } from "./bookmarks.ts";
+import { addBookmarks, bookmarkFolder, BOOKMARKS_ROOT, emptyBookmarks, isBookmarked, parseBookmarks, removeBookmark, removeBookmarksOf } from "./bookmarks.ts";
 import { SIMPLE_PREFERENCE_KEYS, TAB_UPDATE_FIELDS } from "./types.ts";
 import type {
   ArchivedTab,
   BookmarkNode,
+  Bookmarks,
   BrowserData,
   BrowserFolder,
   BrowserPreferences,
@@ -151,6 +152,10 @@ export type BrowserAction =
   | { type: "import-history"; entries: HistoryEntry[] }
   | { type: "import-pins"; sites: PinnedSite[] }
   | { type: "add-bookmarks"; nodes: BookmarkNode[] }
+  /** Sync's tree, whole (src/sync/adapters.ts): it's built from every device's records. */
+  | { type: "replace-bookmarks"; bookmarks: Bookmarks }
+  /** Pages another device visited or removed (src/sync/adapters.ts). */
+  | { type: "sync-history"; entries: HistoryEntry[]; removed: string[] }
   | { type: "remove-bookmark"; id: string }
   | { type: "toggle-bookmark"; bookmark: Extract<BookmarkNode, { kind: "url" }> }
   | { type: "activate-tab"; id: string; now: number }
@@ -244,6 +249,25 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       const bookmarks = addBookmarks(data.bookmarks, action.nodes);
 
       return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
+    }
+
+    case "replace-bookmarks": {
+      // A tree without its root isn't one: the store keeps what it has.
+      if (bookmarkFolder(action.bookmarks, BOOKMARKS_ROOT) === null) return data;
+
+      return { ...data, bookmarks: action.bookmarks };
+    }
+
+    case "sync-history": {
+      const removed = new Set(action.removed);
+      const pages = new Map(data.history.filter((entry) => !removed.has(entry.url)).map((entry) => [entry.url, entry]));
+
+      // Another device's record holds every visit it knows: it replaces the count and the time, never adds to them.
+      for (const entry of action.entries) {
+        if (isWebAddress(entry.url) && isTimestamp(entry.lastVisit)) pages.set(entry.url, entry);
+      }
+
+      return { ...data, history: [...pages.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, HISTORY_LIMIT) };
     }
 
     case "remove-bookmark": {
