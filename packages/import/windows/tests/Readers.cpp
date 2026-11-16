@@ -220,8 +220,101 @@ int main(int argc, char **argv) {
       refused = error.code == "cancelled";
     }
     require(refused, "session import ignored cancellation");
-    std::cout << "CSV, HTML, Chromium/Firefox/Arc readers, encrypted logins, "
-                 "WAL snapshots and "
+
+    // Zen's spaces, in the shapes Zen 1.22 writes (here the session store's
+    // window, which zen-sessions.jsonlz4 shares).
+    auto zen = temporary / "zen-profile";
+    std::filesystem::create_directories(zen);
+    auto zenTab = [](const char *url, const char *space, bool pinned,
+                     bool essential, const char *group, bool empty,
+                     int context, bool loaded) {
+      Json tab = {{"pinned", pinned},         {"zenEssential", essential},
+                  {"zenIsEmpty", empty},      {"userContextId", context},
+                  {"index", 1},               {"entries", Json::array()}};
+      if (loaded)
+        tab["entries"].push_back({{"url", url}, {"title", url}});
+      else
+        tab["userTypedValue"] = url;
+      if (space)
+        tab["zenWorkspace"] = space;
+      if (group)
+        tab["groupId"] = group;
+      return tab;
+    };
+    Json zenWindow = {
+        {"spaces",
+         {{{"uuid", "{home}"}, {"name", "Home"}, {"icon", "\xF0\x9F\x8F\xA0"},
+           {"containerTabId", 0},
+           {"theme", {{"gradientColors", {{{"c", {58, 96, 115}}}}}}}},
+          {{"uuid", "{dev}"}, {"name", "Dev"},
+           {"icon", "chrome://browser/skin/zen-icons/selectable/code.svg"},
+           {"containerTabId", 0}},
+          {{"uuid", "{meet}"}, {"name", "Meetings"}, {"containerTabId", 2}}}},
+        {"folders",
+         {{{"id", "docs"}, {"name", "Docs"}, {"workspaceId", "{dev}"},
+           {"parentId", nullptr}},
+          {{"id", "react"}, {"name", "React"}, {"workspaceId", "{dev}"},
+           {"parentId", "docs"}}}},
+        {"tabs",
+         {zenTab("https://github.com/", nullptr, true, true, nullptr, false, 0,
+                 true),
+          zenTab("https://app.slack.com/", nullptr, true, true, nullptr, false,
+                 0, false),
+          zenTab("https://work.example/", nullptr, true, true, nullptr, false,
+                 2, true),
+          zenTab("https://news.ycombinator.com/", "{home}", true, false,
+                 nullptr, false, 0, true),
+          zenTab("https://developer.mozilla.org/", "{dev}", true, false,
+                 nullptr, false, 0, true),
+          zenTab("about:blank", nullptr, true, false, "docs", true, 0, true),
+          zenTab("https://nodejs.org/", "{dev}", true, false, "docs", false, 0,
+                 true),
+          zenTab("https://react.dev/", "{dev}", true, false, "react", false, 0,
+                 true),
+          zenTab("https://linear.app/", "{dev}", true, false, nullptr, false,
+                 0, false),
+          zenTab("https://example.com/", "{home}", false, false, nullptr,
+                 false, 0, true),
+          zenTab("about:blank", "{home}", false, false, nullptr, true, 0,
+                 true),
+          zenTab("https://meet.google.com/", "{meet}", true, false, nullptr,
+                 false, 0, true)}}};
+    std::ofstream(zen / "sessionstore.js")
+        << Json{{"windows", Json::array({zenWindow})}}.dump();
+    auto spaces = zenSpaces(zen, "Profiles/abc.Default");
+    require(spaces.size() == 3 && spaces[0]["name"] == "Home" &&
+                spaces[0]["profileId"] == "Profiles/abc.Default",
+            "Zen spaces missing");
+    require(spaces[0]["pinned"].size() == 1 &&
+                spaces[0]["pinned"][0]["url"] == "https://news.ycombinator.com/" &&
+                spaces[0]["tabs"].size() == 1 &&
+                spaces[0]["tabs"][0]["url"] == "https://example.com/",
+            "Zen space's pins or tabs wrong (or a placeholder kept)");
+    auto &devPins = spaces[1]["pinned"];
+    require(devPins.size() == 3 && devPins[1]["type"] == "folder" &&
+                devPins[1]["title"] == "Docs" &&
+                devPins[1]["children"].size() == 2 &&
+                devPins[1]["children"][0]["url"] == "https://nodejs.org/" &&
+                devPins[1]["children"][1]["title"] == "React" &&
+                devPins[2]["url"] == "https://linear.app/",
+            "Zen folders, their order or an unloaded pin lost");
+    require(spaces[0]["favorites"].size() == 2 &&
+                spaces[0]["favorites"][1]["url"] == "https://app.slack.com/" &&
+                spaces[2]["favorites"].size() == 1 &&
+                spaces[2]["favorites"][0]["url"] == "https://work.example/",
+            "Zen essentials not by container");
+    require(spaces[0]["emoji"] == "\xF0\x9F\x8F\xA0" &&
+                spaces[0]["color"] == "#3A6073" && !spaces[1].contains("emoji"),
+            "Zen space icon or colour wrong");
+    auto zenOpen = firefoxTabs(zen, std::atomic_bool{false});
+    for (auto &tab : zenOpen["tabs"])
+      require(tab["url"] != "about:blank", "Zen placeholder imported as a tab");
+    std::ofstream(zen / "sessionstore.js")
+        << R"({"windows":[{"tabs":[{"entries":[{"url":"https://a.test/"}],"index":1}]}]})";
+    require(zenSpaces(zen, "p").empty(), "a Firefox session has Zen spaces");
+
+    std::cout << "CSV, HTML, Chromium/Firefox/Arc/Zen readers, encrypted "
+                 "logins, WAL snapshots and "
                  "cancellation passed\n";
     return 0;
   } catch (const std::exception &error) {

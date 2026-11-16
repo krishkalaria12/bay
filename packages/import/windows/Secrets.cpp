@@ -593,23 +593,29 @@ public:
     return reinterpret_cast<T>(f);
   }
   NSS() {
-    for (auto variable :
-         {L"ProgramW6432", L"ProgramFiles", L"ProgramFiles(x86)"}) {
-      wchar_t root[32768]{};
-      auto n = GetEnvironmentVariableW(variable, root, 32768);
-      if (!n || n >= 32768)
-        continue;
-      auto path = Path(root) / L"Mozilla Firefox" / L"nss3.dll";
-      library = LoadLibraryExW(path.c_str(), nullptr,
-                               LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
-                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // Any Firefox-family NSS opens any profile's key4.db: Firefox's, or the
+    // one Zen ships (a Zen user often has no Firefox installed).
+    for (auto folder : {L"Mozilla Firefox", L"Zen Browser", L"Zen"}) {
+      for (auto variable :
+           {L"ProgramW6432", L"ProgramFiles", L"ProgramFiles(x86)"}) {
+        wchar_t root[32768]{};
+        auto n = GetEnvironmentVariableW(variable, root, 32768);
+        if (!n || n >= 32768)
+          continue;
+        auto path = Path(root) / folder / L"nss3.dll";
+        library = LoadLibraryExW(path.c_str(), nullptr,
+                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (library)
+          break;
+      }
       if (library)
         break;
     }
     if (!library)
       throw Failure("unsupported",
-                    "Install Firefox to import encrypted Firefox passwords, or "
-                    "import its password CSV export");
+                    "Install Firefox or Zen to import their encrypted "
+                    "passwords, or import a password CSV export");
     try {
       init = function<decltype(init)>("NSS_Initialize");
       shutdown = function<decltype(shutdown)>("NSS_Shutdown");

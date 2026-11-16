@@ -160,7 +160,8 @@ const ImportFlowContext = createContext<ImportFlow | null>(null);
 
 // Holds the import for the whole of onboarding, so it can carry on behind the other steps and past the last of them.
 export function ImportFlowHost({ windowId, children }: { windowId: string; children: ReactNode }) {
-  const flow = useImportFlow();
+  // A primary password isn't asked for here: the summary says where those passwords come in.
+  const flow = useImportFlow({ askPrimaryPassword: false });
   const background = useOnboarding((s) => s.importInBackground === windowId);
   const onboarding = useOnboarding((s) => s.windowId === windowId);
   const moving = flow.step === "progress";

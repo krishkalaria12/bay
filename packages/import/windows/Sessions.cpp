@@ -1,6 +1,7 @@
 #include "ImportCore.h"
 #include "SQLite.h"
 #include <algorithm>
+#include <cstdio>
 #include <iomanip>
 #include <map>
 #include <set>
@@ -294,7 +295,46 @@ Json chromiumTabs(const Path &profile, const std::atomic_bool &cancelled) {
                                                     {"collapsed", false}});
   return out;
 }
-Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
+namespace {
+// A tab's page: where it is, or for one that never loaded (pinned and essential
+// tabs after a restart), where its pin or its typed address points.
+bool tabPage(const Json &tab, std::string &url, std::string &title) {
+  auto entries = tab.value("entries", Json::array());
+  Json entry;
+  if (!entries.empty()) {
+    int index =
+        std::clamp(tab.value("index", static_cast<int>(entries.size())) - 1, 0,
+                   static_cast<int>(entries.size()) - 1);
+    entry = entries[index];
+  }
+  Json initial;
+  if (tab.contains("_zenPinnedInitialState") &&
+      tab["_zenPinnedInitialState"].is_object())
+    initial = tab["_zenPinnedInitialState"].value("entry", Json::object());
+  auto text = [](const Json &object, const char *key) {
+    return object.is_object() && object.contains(key) && object[key].is_string()
+               ? object[key].get<std::string>()
+               : std::string();
+  };
+  url.clear();
+  for (auto candidate : {text(entry, "url"), text(initial, "url"),
+                         text(tab, "userTypedValue")}) {
+    if (!candidate.empty() && candidate != "about:blank" &&
+        candidate.rfind("about:newtab", 0) != 0) {
+      url = candidate;
+      break;
+    }
+  }
+  if (url.empty())
+    return false;
+  title = text(entry, "title");
+  if (title.empty())
+    title = text(initial, "title");
+  return true;
+}
+
+// The newest session store in a Firefox profile, parsed.
+Json firefoxSession(const Path &profile) {
   Path file;
   std::filesystem::file_time_type newest =
       std::filesystem::file_time_type::min();
@@ -314,33 +354,27 @@ Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
   auto bytes = readBytes(file);
   if (file.extension() == ".jsonlz4")
     bytes = decompressLz4(bytes);
-  auto data = Json::parse(bytes);
+  return Json::parse(bytes);
+}
+} // namespace
+
+Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
+  auto data = firefoxSession(profile);
   Json out = {{"tabs", Json::array()}, {"groups", Json::array()}};
   int windowIndex = 0;
   for (auto &window : data.value("windows", Json::array())) {
     int position = 0;
     for (auto &tab : window.value("tabs", Json::array())) {
       checkCancelled(cancelled);
-      if (tab.value("hidden", false)) {
-        ++position;
-        continue;
-      }
-      auto entries = tab.value("entries", Json::array());
-      if (entries.empty()) {
-        ++position;
-        continue;
-      }
-      int index =
-          std::clamp(tab.value("index", static_cast<int>(entries.size())) - 1,
-                     0, static_cast<int>(entries.size()) - 1);
-      auto nav = entries[index];
-      auto url = nav.value("url", "");
-      if (url.empty()) {
+      // Zen's placeholder for an empty space or folder isn't a page.
+      std::string url, title;
+      if (tab.value("hidden", false) || tab.value("zenIsEmpty", false) ||
+          !tabPage(tab, url, title)) {
         ++position;
         continue;
       }
       Json item = {{"url", url},
-                   {"title", nav.value("title", "")},
+                   {"title", title},
                    {"pinned", tab.value("pinned", false)},
                    {"active", position++ == window.value("selected", 1) - 1},
                    {"windowIndex", windowIndex}};
@@ -361,5 +395,222 @@ Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
     ++windowIndex;
   }
   return out;
+}
+
+namespace {
+// A space's pinned rows as they are built: pages, and folders (by Zen's id)
+// that fill as their tabs come.
+struct Row {
+  std::string folder;
+  Json node;
+  std::vector<Row> rows;
+};
+
+void addRow(std::vector<Row> &rows, Json node,
+            std::vector<std::string>::const_iterator at,
+            std::vector<std::string>::const_iterator end,
+            const std::map<std::string, Json> &folders) {
+  if (at == end) {
+    rows.push_back({"", std::move(node), {}});
+    return;
+  }
+  auto found = std::find_if(rows.begin(), rows.end(),
+                            [&](const Row &row) { return row.folder == *at; });
+  if (found == rows.end()) {
+    auto info = folders.find(*at);
+    auto name = info != folders.end() ? info->second.value("name", "") : "";
+    rows.push_back({*at,
+                    {{"type", "folder"}, {"title", name.empty() ? "Folder" : name}},
+                    {}});
+    found = rows.end() - 1;
+  }
+  addRow(found->rows, std::move(node), at + 1, end, folders);
+}
+
+Json rowNodes(const std::vector<Row> &rows) {
+  Json out = Json::array();
+  for (auto &row : rows) {
+    auto node = row.node;
+    if (!row.folder.empty())
+      node["children"] = rowNodes(row.rows);
+    out.push_back(std::move(node));
+  }
+  return out;
+}
+
+// A Zen space's icon, when it is an emoji rather than one of Zen's symbols.
+bool zenEmoji(const std::string &icon) {
+  return !icon.empty() && icon.size() <= 32 &&
+         static_cast<unsigned char>(icon[0]) >= 0x80 &&
+         icon.find_first_of(":/.") == std::string::npos;
+}
+
+// Zen's gradient: each colour an [r, g, b] in `c`.
+Json zenColors(const Json &space) {
+  Json out = Json::array();
+  auto theme = space.value("theme", Json::object());
+  if (!theme.is_object())
+    return out;
+  for (auto &stop : theme.value("gradientColors", Json::array())) {
+    if (!stop.is_object() || !stop.contains("c"))
+      continue;
+    auto &c = stop["c"];
+    if (c.is_string() && c.get<std::string>().rfind("#", 0) == 0) {
+      out.push_back(c);
+    } else if (c.is_array() && c.size() >= 3 && c[0].is_number() &&
+               c[1].is_number() && c[2].is_number()) {
+      char hex[8];
+      std::snprintf(hex, sizeof hex, "#%02X%02X%02X", c[0].get<int>() & 255,
+                    c[1].get<int>() & 255, c[2].get<int>() & 255);
+      out.push_back(hex);
+    }
+  }
+  return out;
+}
+
+Json zenSpacesIn(const Json &top, const std::string &profileId) {
+  // zen-sessions keeps one set; the session store keeps a set per window.
+  Json windows = top.contains("windows") && top["windows"].is_array()
+                     ? top["windows"]
+                     : Json::array({top});
+  Json spaceList = Json::array();
+  std::vector<Json> folderList, tabs;
+  for (auto &window : windows) {
+    if (!window.is_object())
+      continue;
+    auto spaces = window.value("spaces", Json::array());
+    if (spaceList.empty() && spaces.is_array() && !spaces.empty())
+      spaceList = spaces;
+    for (auto &folder : window.value("folders", Json::array()))
+      folderList.push_back(folder);
+    for (auto &tab : window.value("tabs", Json::array()))
+      tabs.push_back(tab);
+  }
+  if (spaceList.empty())
+    return Json::array();
+
+  std::vector<std::string> order;
+  std::map<std::string, Json> spaces;
+  std::map<std::string, int> containers;
+  for (auto &space : spaceList) {
+    if (!space.is_object() || !space.contains("uuid") ||
+        !space["uuid"].is_string())
+      continue;
+    auto uuid = space["uuid"].get<std::string>();
+    if (spaces.count(uuid))
+      continue;
+    auto name = space.value("name", "");
+    Json out = {{"id", uuid},
+                {"name", name.empty() ? "Space" : name},
+                {"profileId", profileId},
+                {"pinned", Json::array()},
+                {"tabs", Json::array()},
+                {"favorites", Json::array()}};
+    auto colors = zenColors(space);
+    if (!colors.empty()) {
+      out["color"] = colors[0];
+      out["colors"] = colors;
+    }
+    auto icon = space.contains("icon") && space["icon"].is_string()
+                    ? space["icon"].get<std::string>()
+                    : "";
+    if (zenEmoji(icon))
+      out["emoji"] = icon;
+    spaces[uuid] = std::move(out);
+    containers[uuid] = space.value("containerTabId", 0);
+    order.push_back(uuid);
+  }
+  if (order.empty())
+    return Json::array();
+
+  // Folders nest by parentId; a tab names its folder by groupId.
+  std::map<std::string, Json> folders;
+  for (auto &folder : folderList)
+    if (folder.is_object() && folder.contains("id") && folder["id"].is_string())
+      folders[folder["id"].get<std::string>()] = folder;
+  auto chain = [&](std::string id) {
+    std::vector<std::string> out;
+    while (folders.count(id) && out.size() < 8 &&
+           std::find(out.begin(), out.end(), id) == out.end()) {
+      out.insert(out.begin(), id);
+      auto &parent = folders[id]["parentId"];
+      id = parent.is_string() ? parent.get<std::string>() : "";
+    }
+    return out;
+  };
+  auto known = [&](const Json &value) {
+    return value.is_string() && spaces.count(value.get<std::string>())
+               ? value.get<std::string>()
+               : std::string();
+  };
+
+  // Pinned rows per space in Zen's order: a folder takes its first tab's place.
+  std::map<std::string, std::vector<Row>> rows;
+  std::vector<std::pair<Json, int>> essentials;
+  for (auto &tab : tabs) {
+    std::string url, title;
+    if (!tab.is_object() || tab.value("zenIsEmpty", false) ||
+        !tabPage(tab, url, title))
+      continue;
+    bool pinned = tab.value("pinned", false);
+    Json item = {{"url", url},
+                 {"title", title},
+                 {"pinned", false},
+                 {"windowIndex", 0},
+                 {"active", false}};
+    if (tab.contains("lastAccessed") && tab["lastAccessed"].is_number())
+      item["lastActive"] = tab["lastAccessed"];
+    if (tab.value("zenEssential", false)) {
+      item["pinned"] = true;
+      essentials.push_back({std::move(item), tab.value("userContextId", 0)});
+      continue;
+    }
+    auto group = tab.contains("groupId") && tab["groupId"].is_string()
+                     ? tab["groupId"].get<std::string>()
+                     : std::string();
+    auto space = known(tab.value("zenWorkspace", Json()));
+    if (space.empty() && folders.count(group))
+      space = known(folders[group].value("workspaceId", Json()));
+    if (space.empty())
+      space = order.front();
+    if (pinned) {
+      auto path = group.empty() ? std::vector<std::string>() : chain(group);
+      addRow(rows[space],
+             {{"type", "url"}, {"title", title}, {"url", url}},
+             path.cbegin(), path.cend(), folders);
+    } else {
+      spaces[space]["tabs"].push_back(std::move(item));
+    }
+  }
+
+  Json out = Json::array();
+  for (auto &uuid : order) {
+    auto space = spaces[uuid];
+    space["pinned"] = rowNodes(rows[uuid]);
+    for (auto &[tab, container] : essentials)
+      if (container == containers[uuid])
+        space["favorites"].push_back(tab);
+    out.push_back(std::move(space));
+  }
+  return out;
+}
+} // namespace
+
+Json zenSpaces(const Path &profile, const std::string &profileId) {
+  auto sessions = profile / "zen-sessions.jsonlz4";
+  std::error_code error;
+  if (std::filesystem::exists(sessions, error)) {
+    auto found = zenSpacesIn(Json::parse(decompressLz4(readBytes(sessions))),
+                             profileId);
+    if (!found.empty())
+      return found;
+  }
+  try {
+    return zenSpacesIn(firefoxSession(profile), profileId);
+  } catch (const Failure &failure) {
+    if (failure.code == "notFound")
+      return Json::array();
+    throw;
+  }
 }
 } // namespace bay::importer

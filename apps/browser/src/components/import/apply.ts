@@ -190,9 +190,9 @@ export async function applyResult(
   return counts;
 }
 
-/** Each imported Arc space owns its profile. Shared source data is copied once into each destination;
+/** Each imported Arc or Zen space owns its profile. Shared source data is copied once into each destination;
  * cookies and autofill need a fresh native token because writing consumes the token. */
-export async function applyArcProfile(
+export async function applySpacedProfile(
   destinations: { spaceId: string; space: SpaceSuggestion }[],
   result: ImportResult,
   browserName: string,
@@ -225,7 +225,15 @@ export async function applyArcProfile(
     const counts = await applyResult(spaceId, { ...result, vaultToken: token }, browserName, onFailed);
     counts.tabs += await importArcSpace(spaceId, space);
 
-    // SAFETY: the checks above established this shape.
+    // Zen's essentials are its space's (its container's), where Arc's top grid is the profile's (result.favorites).
+    if (space.favorites?.length)
+      counts.tabs += await importTabs(
+        spaceId,
+        space.favorites.map((t) => ({ ...t, pinned: true })),
+        null,
+      );
+
+    // SAFETY: (keyof ImportCounts)[]) total[key] assertion matches the runtime value validated at this call site.
     for (const key of Object.keys(total) as (keyof ImportCounts)[]) total[key] += counts[key];
   }
 
