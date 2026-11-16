@@ -4,6 +4,11 @@ const ownerAttribute = "data-bay-tooltip";
 const controls =
   'button, a[href], input:not([type="hidden"]), textarea, select, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
 
+// The first label waits for the pointer to rest; while one shows, or just after, the next shows at once (as macOS's and
+// Chrome's do), so running along a toolbar reads each button.
+const SHOW_DELAY_MS = 300;
+const WARM_MS = 600;
+
 const bindings = new WeakMap<HTMLElement, TooltipBinding>();
 const managers = new WeakMap<Document, TooltipManager>();
 let nextId = 1;
@@ -68,6 +73,7 @@ class TooltipManager {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private hideTimer: ReturnType<typeof setTimeout> | undefined;
   private overTooltip = false;
+  private warmUntil = 0;
   private removeListeners: (() => void) | undefined;
   private readonly document: Document;
 
@@ -93,8 +99,8 @@ class TooltipManager {
     clearTimeout(this.hideTimer);
     this.pending = binding;
 
-    if (immediate) this.show(binding);
-    else this.timer = setTimeout(() => this.show(binding), 500);
+    if (immediate || this.active || Date.now() < this.warmUntil) this.show(binding);
+    else this.timer = setTimeout(() => this.show(binding), SHOW_DELAY_MS);
   }
   leave(binding: TooltipBinding) {
     if (this.pending === binding) {
@@ -164,6 +170,8 @@ class TooltipManager {
     this.pending = null;
     this.removeListeners?.();
     this.removeListeners = undefined;
+
+    if (this.active) this.warmUntil = Date.now() + WARM_MS;
 
     if (this.target) describe(this.target, this.element.id, false);
     this.target = null;

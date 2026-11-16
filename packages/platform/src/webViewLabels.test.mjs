@@ -107,7 +107,7 @@ test("a tooltip shows after a pause, or at once for the keyboard, and goes with 
   const node = new Node(document);
   setWebTooltip(node, "Reload (Ctrl+R)");
   node.fire("mouseenter");
-  t.mock.timers.tick(499);
+  t.mock.timers.tick(299);
   assert.equal(document.body.mounted, undefined);
   t.mock.timers.tick(1);
   assert.equal(document.body.mounted.textContent, "Reload (Ctrl+R)");
@@ -120,6 +120,33 @@ test("a tooltip shows after a pause, or at once for the keyboard, and goes with 
   setWebTooltip(focused, "Back");
   focused.fire("focusin", { target: focused });
   assert.equal(document.body.mounted.textContent, "Back");
+});
+
+test("while a tooltip shows, or just after, the next one shows at once", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const document = documentWith();
+  const [reload, back, forward] = [new Node(document), new Node(document), new Node(document)];
+  setWebTooltip(reload, "Reload");
+  setWebTooltip(back, "Back");
+  setWebTooltip(forward, "Forward");
+  reload.fire("mouseenter");
+  t.mock.timers.tick(300);
+  assert.equal(document.body.mounted.textContent, "Reload");
+  reload.fire("mouseleave");
+  back.fire("mouseenter");
+  assert.equal(document.body.mounted.textContent, "Back", "from one button to the next");
+  back.fire("mouseleave");
+  t.mock.timers.tick(120);
+  assert.equal(document.body.mounted, null);
+  forward.fire("mouseenter");
+  assert.equal(document.body.mounted.textContent, "Forward", "just after one hid");
+  forward.fire("mouseleave");
+  t.mock.timers.tick(120);
+  t.mock.timers.tick(600);
+  reload.fire("mouseenter");
+  assert.equal(document.body.mounted, null, "a pause cools it");
+  t.mock.timers.tick(300);
+  assert.equal(document.body.mounted.textContent, "Reload");
 });
 
 test("a tooltip names an icon button with no other name, and only that", () => {
