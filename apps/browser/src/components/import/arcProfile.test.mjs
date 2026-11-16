@@ -22,7 +22,7 @@ globalThis.nnTestNativeModules = {
 
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { engineProfile, favoriteTabIds } = await import("../../store/model.ts");
-const { applyArcProfile } = await import("./apply.ts");
+const { applySpacedProfile } = await import("./apply.ts");
 const S = () => useBrowser.getState();
 
 const source = () => ({
@@ -67,7 +67,7 @@ test("Arc spaces receive independent profile data and fresh native tokens, retai
   const dest = destinations();
   let reads = 0;
 
-  const total = await applyArcProfile(dest, source(), "Arc", async () => {
+  const total = await applySpacedProfile(dest, source(), "Arc", async () => {
     reads++;
     tokens.add("second");
 
@@ -110,7 +110,7 @@ test("a later native read failure is reported while its Arc space still receives
   tokens.add("first");
   const failed = [];
   const dest = destinations();
-  await applyArcProfile(
+  await applySpacedProfile(
     dest,
     source(),
     "Arc",

@@ -12,7 +12,7 @@ import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../ui/primitives";
 import { IconGrid } from "../../iconPicker/IconGrid";
 import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
-import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "../../spaces/reorder";
+import { evenly, useSpaceDrag, useSpaceReorder, type SpaceReorder } from "../../spaces/reorder";
 import { openThemeEditor } from "../../spaces/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -76,7 +76,7 @@ export function SpacesPane() {
 function SpaceList() {
   const colors = useFormColors();
   const order = useBrowser((s) => s.spaceOrder);
-  const { reorder, dragging } = useSpaceReorder(PROFILE_ROW_HEIGHT);
+  const { reorder, dragging } = useSpaceReorder(evenly(PROFILE_ROW_HEIGHT));
 
   return (
     <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
