@@ -1,9 +1,9 @@
 import { showMenu, Symbol } from "@bay/desktop";
-import { SyncNative, type FolderInfo } from "@bay/sync";
+import { formatCode, isCode, Joining, normalizeCode, SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
+import { enterRecoveryPhrase, findPhone, letPhoneIn, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
@@ -255,6 +255,134 @@ function ConnectDeviceSheet() {
         }
       >
         <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
+      </Buttons>
+    </Sheet>
+  );
+}
+
+// MARK: Add a Phone
+
+export function showAddPhone() {
+  showSettingsSheet(<AddPhoneSheet />);
+}
+
+const phoneProblem: Record<Exclude<Awaited<ReturnType<typeof findPhone>>, Joining>, string> = {
+  "not-found": "No phone is waiting under that code. Check it, or get a new one on your phone: a code lasts ten minutes.",
+  "not-verified": "That code was answered by something other than your phone. Get a new code on your phone and try again.",
+  taken: "That code has been used. Get a new one on your phone.",
+  locked: "Sync is locked on this Mac. Enter your recovery phrase first.",
+  offline: "Couldn’t reach Bay’s sync. Check your connection and try again.",
+};
+
+// The phone shows a code under Settings › Sync › Join with a Code; it's typed here, both show four digits worked out
+// from the code and the phone's key, and only once they match does this Mac seal the sync key to the phone
+// (packages/sync/src/relay/pairing.ts).
+function AddPhoneSheet() {
+  const theme = useTheme();
+  const colors = useFormColors();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [phone, setPhone] = useState<Joining | null>(null);
+  const [done, setDone] = useState(false);
+  const code = normalizeCode(text);
+
+  const find = async () => {
+    if (busy || !isCode(code)) return;
+    setBusy(true);
+    setError(null);
+    const found = await findPhone(code);
+    setBusy(false);
+
+    if (found instanceof Joining) setPhone(found);
+    else setError(phoneProblem[found]);
+  };
+
+  const letIn = async () => {
+    if (!phone || busy) return;
+    setBusy(true);
+    const ok = await letPhoneIn(phone);
+    setBusy(false);
+
+    if (ok) setDone(true);
+    else setError(phoneProblem.offline);
+  };
+
+  if (done) {
+    return (
+      <Sheet width={420} onClose={closeSettingsSheet}>
+        <Title>Your Phone Is In</Title>
+        <Body>It syncs in a moment. This Mac now syncs through Bay’s relay as well as its folder, so the phone sees the same tabs, bookmarks and history.</Body>
+        <Buttons>
+          <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
+        </Buttons>
+      </Sheet>
+    );
+  }
+
+  if (phone) {
+    return (
+      <Sheet width={420} onClose={closeSettingsSheet}>
+        <Title>Does Your Phone Show These Digits?</Title>
+        <Body>Let the phone in only if it shows the same four digits. If it doesn’t, someone else answered the code: cancel.</Body>
+        <Text
+          style={{
+            marginTop: 16,
+            alignSelf: "center",
+            fontSize: 34,
+            fontWeight: "600",
+            letterSpacing: 6,
+            color: theme.textPrimary,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {phone.digits}
+        </Text>
+        {error ? <Text style={{ marginTop: 10, fontSize: 11.5, lineHeight: 15, color: colors.destructive }}>{error}</Text> : null}
+        <Buttons>
+          <Button title="Cancel" onPress={closeSettingsSheet} />
+          <Button title={busy ? "Letting In…" : "Let In"} kind="primary" disabled={busy} onPress={() => void letIn()} />
+        </Buttons>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet width={420} onClose={closeSettingsSheet}>
+      <Title>Add a Phone</Title>
+      <Body>On your iPhone or Android phone, open Bay › Settings › Sync › Join with a Code, and type the code it shows.</Body>
+      <View
+        style={{
+          marginTop: 14,
+          borderRadius: 7,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          backgroundColor: colors.field,
+          borderWidth: StyleSheet.hairlineWidth * 2,
+          borderColor: error ? colors.destructive : colors.fieldBorder,
+        }}
+      >
+        <TextInput
+          value={isCode(code) ? formatCode(code) : text}
+          onChangeText={(next) => {
+            setText(next);
+            setError(null);
+          }}
+          onSubmitEditing={() => void find()}
+          autoFocus
+          placeholder="ABCD-EFGH"
+          placeholderTextColor={theme.textTertiary}
+          selectionColor={theme.selection}
+          enableFocusRing={false}
+          autoCorrect={false}
+          spellCheck={false}
+          style={{ fontSize: 20, lineHeight: 26, letterSpacing: 2, color: theme.textPrimary, fontFamily: MONO_FONT }}
+        />
+      </View>
+      {error ? <Text style={{ marginTop: 6, fontSize: 11.5, lineHeight: 15, color: colors.destructive }}>{error}</Text> : null}
+      <Buttons>
+        <Button title="Cancel" onPress={closeSettingsSheet} />
+        <Button title={busy ? "Finding…" : "Continue"} kind="primary" disabled={busy || !isCode(code)} onPress={() => void find()} />
       </Buttons>
     </Sheet>
   );

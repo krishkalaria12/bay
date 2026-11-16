@@ -95,6 +95,11 @@ public class SyncModule: Module {
       try self.vault(folder).write(scope: scope, payload: Data(payload.utf8))
     }.runOnQueue(Self.work)
 
+    AsyncFunction("writeAs") { (folder: String, scope: String, id: String, payload: String) throws in
+      guard Base32.isTag(id) else { throw Exception(name: "name", description: "Not a sync file's name.") }
+      try self.vault(folder).write(scope: scope, id: id, payload: Data(payload.utf8))
+    }.runOnQueue(Self.work)
+
     AsyncFunction("read") { (folder: String, scope: String, known: [String]) throws -> [String: Any] in
       let listing = try self.vault(folder).read(scope: scope, skipping: Set(known))
       return [
@@ -112,6 +117,17 @@ public class SyncModule: Module {
     AsyncFunction("deleteChain") { (folder: String) throws in
       try self.vault(folder).deleteChain()
     }.runOnQueue(Self.work)
+
+    // The chain's key for the relay's transport (packages/sync/src/relay), which seals the same files in TypeScript.
+    AsyncFunction("relayKey") { () -> String? in self.state.entropy?.base64EncodedString() }.runOnQueue(Self.work)
+
+    // JavaScript here has no crypto.getRandomValues: keys and codes take their randomness from the system.
+    Function("randomBytes") { (count: Int) -> String in
+      var bytes = Data(count: max(0, min(count, 1024)))
+      let status = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+      precondition(status == errSecSuccess, "SecRandomCopyBytes failed: \(status)")
+      return bytes.base64EncodedString()
+    }
 
     AsyncFunction("sealLocal") { (text: String) throws -> String in
       guard let keys = self.state.keys else { throw Exception(name: "locked", description: "Sync isn't set up on this Mac.") }

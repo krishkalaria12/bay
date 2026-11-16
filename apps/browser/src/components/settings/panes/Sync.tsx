@@ -10,6 +10,7 @@ import {
   DATA_TYPES,
   folderInfo,
   setProfileSynced,
+  setRelaySynced,
   setTypeSynced,
   syncNow,
   turnOnSync,
@@ -19,7 +20,7 @@ import {
 import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
-import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
+import { folderLabel, showAddPhone, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
 import { SyncStopped } from "../../../sync/service";
 
 export function SyncPane() {
@@ -192,6 +193,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   const links = useSync((s) => s.profiles);
   const devices = useSync((s) => s.devices);
   const remoteProfiles = useSync((s) => s.remoteProfiles);
+  const relay = useSync((s) => s.relay);
   const profiles = useSpaces();
   const [, tick] = useState(0);
   useEffect(() => {
@@ -244,6 +246,23 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
           <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 15, color: theme.textSecondary }}>{error}</Text>
         </View>
       ) : null}
+
+      <SectionHeader
+        title="Phones"
+        description="Your iPhone or Android phone syncs through Bay’s relay, which keeps the same encrypted files as your sync folder and can’t read them."
+      />
+      <Group>
+        <Row
+          icon={<Symbol name="iphone" size={15} color={theme.icon} style={{ width: 24, height: 20 }} />}
+          title="Add a Phone"
+          description="Type the code your phone shows, check the digits match, and let it in."
+        >
+          <Button title="Add a Phone…" disabled={locked} onPress={showAddPhone} />
+        </Row>
+        <Row title="Sync Through Bay’s Relay" description={relay ? "On: phones see what this Mac syncs." : "Off: only devices on your sync folder sync."}>
+          <Toggle value={relay} disabled={locked} onChange={setRelaySynced} />
+        </Row>
+      </Group>
 
       <SectionHeader title="Spaces" description="Choose which spaces sync on this Mac. Each syncs on its own." />
       <Group>
