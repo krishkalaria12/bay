@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
+  type SharedValue,
   FadeIn,
   FadeOut,
   useAnimatedStyle,
@@ -12,7 +13,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Defs, LinearGradient, Rect as SvgRect, Stop } from "react-native-svg";
 
 import { Icon } from "@/chrome/Icon";
 import { Text } from "@/chrome/Text";
@@ -28,6 +28,7 @@ import { DRIFT_SITES, hero, LETTERS, MORPH, STAGE, type Rect, type Step } from "
 import { LinkPill, LinksBehind, TabCard } from "./LinksPage";
 import { PrivateAround, PrivateField } from "./PrivatePage";
 import { useRun } from "./run";
+import { WELCOME_ICONS } from "./siteIcons";
 import { useParallax } from "./useTilt";
 
 /** A layer of the drawing that moves with the phone's lean (`depth`, see `useParallax`). */
@@ -267,25 +268,11 @@ const TILE_GAP = 18;
 
 /** Sites drifting by in three rows, the middle one the other way; through the glass letters they show bent. */
 function DriftRows(): JSX.Element {
-  const { colors } = useRun();
-
   return (
     <View style={{ width: STAGE.width, height: 300, overflow: "hidden", opacity: 0.6 }}>
       <DriftRow first={0} period={26} reverse={false} top={10} />
       <DriftRow first={4} period={31} reverse top={108} />
       <DriftRow first={8} period={22} reverse={false} top={206} />
-      {/* The rows fade in and out at the edges, into the ground. */}
-      <Svg width={STAGE.width} height={300} style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="drift-edges" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={colors.ground} stopOpacity={1} />
-            <Stop offset="0.14" stopColor={colors.ground} stopOpacity={0} />
-            <Stop offset="0.86" stopColor={colors.ground} stopOpacity={0} />
-            <Stop offset="1" stopColor={colors.ground} stopOpacity={1} />
-          </LinearGradient>
-        </Defs>
-        <SvgRect x={0} y={0} width={STAGE.width} height={300} fill="url(#drift-edges)" />
-      </Svg>
     </View>
   );
 }
@@ -313,25 +300,58 @@ function DriftRow({ first, period, reverse, top }: { first: number; period: numb
         const site = DRIFT_SITES[(first + (k % 9)) % DRIFT_SITES.length]!;
 
         return (
-          <View
-            key={k}
-            style={{
-              width: TILE,
-              height: TILE,
-              borderRadius: 20,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.tile,
-              shadowColor: "#141C36",
-              shadowOpacity: 0.1,
-              shadowRadius: 9,
-              shadowOffset: { width: 0, height: 6 },
-            }}
-          >
-            <SiteIcon url={`https://${site}`} size={40} />
-          </View>
+          <DriftTile key={k} index={k} progress={progress} span={span} tile={colors.tile}>
+            <SiteIcon url={`https://${site}`} size={40} image={WELCOME_ICONS[site]} />
+          </DriftTile>
         );
       })}
+    </Animated.View>
+  );
+}
+
+/** How far in from each side the tiles fade out, so the rows melt into the ground whatever is drawn behind them. */
+const DRIFT_FADE = STAGE.width * 0.14;
+
+/** One site's tile, fading as it nears either side of the stage. */
+function DriftTile({
+  index,
+  progress,
+  span,
+  tile,
+  children,
+}: {
+  index: number;
+  progress: SharedValue<number>;
+  span: number;
+  tile: string;
+  children: ReactNode;
+}): JSX.Element {
+  const faded = useAnimatedStyle(() => {
+    const middle = index * (TILE + TILE_GAP) - progress.value * span + TILE / 2;
+    const fromEdge = Math.min(middle, STAGE.width - middle);
+
+    return { opacity: Math.max(0, Math.min(1, fromEdge / DRIFT_FADE)) };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: TILE,
+          height: TILE,
+          borderRadius: 20,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: tile,
+          shadowColor: "#141C36",
+          shadowOpacity: 0.1,
+          shadowRadius: 9,
+          shadowOffset: { width: 0, height: 6 },
+        },
+        faded,
+      ]}
+    >
+      {children}
     </Animated.View>
   );
 }
