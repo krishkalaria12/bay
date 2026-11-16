@@ -6,14 +6,18 @@ import Footer from "../components/Footer.astro";
 import Feature from "../components/Feature.astro";
 import Shot from "../components/Shot.astro";
 import Sticky from "../components/Sticky.astro";
-import LiveFigure from "../components/live/LiveFigure";
 import appIcon from "../assets/app-icon.svg?url";
 import heroShot from "../assets/shots/bay-browser-for-mac.webp";
 import spaceStudio from "../assets/shots/bay-spaces-studio.webp";
 import spaceHome from "../assets/shots/bay-spaces-home.webp";
 import spaceLisbon from "../assets/shots/bay-spaces-lisbon.webp";
-import blocker from "../assets/shots/blocker.jpg";
-import commandBar from "../assets/shots/command-bar.jpg";
+import foldersShot from "../assets/shots/bay-folders.webp";
+import peekShot from "../assets/shots/bay-peek.webp";
+import splitShot from "../assets/shots/bay-split-view.webp";
+import cleanUpShot from "../assets/shots/bay-clean-up.webp";
+import privacyShot from "../assets/shots/bay-privacy.webp";
+import commandShot from "../assets/shots/bay-command-bar.webp";
+import importShot from "../assets/shots/bay-import.webp";
 import { faqPage, faqs, heroShotAlt, ids, downloadLink, site } from "../site";
 
 const cards = [
@@ -227,14 +231,11 @@ const schema = [
       </p>
       <p>Folders open right where they are. The tab you’re in stays out when you fold one away.</p>
       <Fragment slot="visual">
-        <LiveFigure
-          client:visible
-          preset="folders"
-          label="A working Bay window with pinned folders in the sidebar"
+        <Shot
+          src={foldersShot}
+          alt="Bay with pinned folders in the sidebar: Launch and Research open, a Reading folder inside Research, Side project folded away"
           note="folders open in place"
-          spot="folder-research"
           noteClass="-bottom-12 left-2 rotate-[-2deg]"
-          bend={0.35}
         />
       </Fragment>
     </Feature>
@@ -247,14 +248,12 @@ const schema = [
       </h2>
       <div class="mt-16 grid gap-x-6 gap-y-16 lg:grid-cols-2">
         <article>
-          <LiveFigure
-            client:visible
-            preset="peek"
-            label="A working Bay window with a link open in Peek over a chat"
+          <Shot
+            src={peekShot}
+            alt="A Wikipedia link open in Peek over the Golden Gate Bridge article, with buttons to close it, keep it or open it beside the page"
             note="any link, over the page"
-            spot="peek"
             noteClass="-top-11 left-[30%] rotate-[-3deg]"
-            bend={-0.2}
+            sizes="(min-width: 1024px) 540px, calc(100vw - 40px)"
           />
           <div class="px-3 pt-5">
             <h3 class="text-[19px] font-bold">Peek at any link</h3>
@@ -265,14 +264,12 @@ const schema = [
           </div>
         </article>
         <article>
-          <LiveFigure
-            client:visible
-            preset="split"
-            label="A working Bay window with two tabs side by side in Split View"
+          <Shot
+            src={splitShot}
+            alt="Split View: Wikipedia's Lisbon and Alfama articles side by side, sharing one row of the sidebar"
             note="one tab, two pages"
-            spot="pairrow"
             noteClass="-top-11 left-2 rotate-[-2deg]"
-            bend={0.25}
+            sizes="(min-width: 1024px) 540px, calc(100vw - 40px)"
           />
           <div class="px-3 pt-5">
             <h3 class="text-[19px] font-bold">Any two, side by side</h3>
@@ -291,17 +288,15 @@ const schema = [
         Bay clears out tabs you haven’t looked at, and you pick when, for each space: twelve hours for work, a week for
         home.
       </p>
-      <p>Everything put away is one search away. Skip ahead a few hours, then press New tab.</p>
+      <p>Pinned and playing tabs stay. Everything put away is one search away, under Recently Cleaned.</p>
       <Fragment slot="visual">
-        <LiveFigure
-          client:visible
-          preset="tidy"
-          tidy
-          label="A working Bay window showing how long since each tab was looked at"
-          note="skip ahead, watch them go"
-          spot="skip"
-          noteClass="-bottom-14 left-0 rotate-[2deg] sm:-left-4"
-          bend={0.3}
+        <Shot
+          src={cleanUpShot}
+          alt="Bay's Settings for a Work space, set to clean up tabs not used in 12 hours"
+          note="a time for each space"
+          noteClass="-bottom-12 left-0 rotate-[2deg] sm:-left-4"
+          sizes="(min-width: 1024px) 520px, calc(100vw - 40px)"
+          class="mx-auto max-w-[520px]"
         />
       </Fragment>
     </Feature>
@@ -332,14 +327,11 @@ const schema = [
       </p>
       <p>Camera, microphone, location and notifications are asked for per site, and remembered the way you answered.</p>
       <Fragment slot="visual">
-        <LiveFigure
-          client:visible
-          preset="privacy"
-          label="A working Bay window on a news page with its ads blocked"
+        <Shot
+          src={privacyShot}
+          alt="Bay's site panel open over a recipe page, with Block Ads and Trackers on and 29 blocked"
           note="click the address, flip the switch"
-          spot="plate"
           noteClass="-top-11 left-2 rotate-[-3deg]"
-          bend={-0.3}
         />
       </Fragment>
     </Feature>
@@ -350,16 +342,13 @@ const schema = [
         One bar for addresses, searches, open tabs and the ones put away. Start typing a tab you already have open and
         Bay takes you to it instead of opening another.
       </p>
-      <p>Go on, type something. Arrow keys and Return work.</p>
+      <p>Return switches to it. ⌘K shows everything else you can do with what’s selected.</p>
       <Fragment slot="visual">
-        <LiveFigure
-          client:visible
-          preset="command"
-          label="A working Bay window with the command bar open"
+        <Shot
+          src={commandShot}
+          alt="Bay's command bar with golden gate br typed: the open Golden Gate Bridge tab comes first, as Switch to Tab, above search suggestions"
           note="type a tab’s name, or anything"
-          spot="omni"
           noteClass="-top-11 right-2 rotate-[2deg]"
-          bend={0.25}
         />
       </Fragment>
     </Feature>
@@ -372,46 +361,16 @@ const schema = [
       </p>
       <p><a href="/switch-from-arc/" class="font-semibold text-ink underline decoration-note-yellow decoration-[3px] underline-offset-4">Switching from Arc, step by step ›</a></p>
       <Fragment slot="visual">
-        <div class="card mx-auto max-w-xl p-6 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.35)] sm:p-8">
-          <p class="text-[20px] font-bold tracking-tight">Import from</p>
-          <div class="mt-4 grid grid-cols-4 gap-2 text-center text-[13px] font-semibold">
-            {
-              ["Chrome", "Safari", "Firefox", "Arc"].map((b, i) => (
-                <span class:list={["rounded-xl border px-2 py-3", i === 0 ? "border-ink bg-ink text-white" : "border-line text-muted"]}>{b}</span>
-              ))
-            }
-          </div>
-          <ul class="mt-6 space-y-3 text-[15px]">
-            {
-              ["Bookmarks", "History", "Passwords"].map((x) => (
-                <li class="flex items-center gap-3">
-                  <span class="grid size-5 place-items-center rounded-md bg-pen text-[12px] font-bold text-white" aria-hidden="true">✓</span>
-                  {x}
-                </li>
-              ))
-            }
-          </ul>
-          <span class="btn mt-7 w-full">Import</span>
-        </div>
+        <Shot
+          src={importShot}
+          alt="Bay's Import from Another Browser window listing Chrome, Arc, Dia, Safari, Firefox and Brave, with their profiles and spaces"
+          note="every browser on your Mac"
+          noteClass="-top-11 right-2 rotate-[2deg]"
+          sizes="(min-width: 1024px) 480px, calc(100vw - 40px)"
+          class="mx-auto max-w-[480px]"
+        />
       </Fragment>
     </Feature>
-
-    <!-- The real thing -->
-    <section class="mx-auto max-w-6xl px-5 py-16 sm:py-24" aria-labelledby="real">
-      <p class="eyebrow">Straight from the app</p>
-      <h2 id="real" class="mt-2 text-[34px] leading-[1.05] font-bold tracking-[-0.03em] sm:text-[44px]">
-        The <span class="marker">real</span> thing.
-      </h2>
-      <p class="mt-3 max-w-xl text-[17px] text-muted">Some of the windows above are drawn for this page. These are Bay itself.</p>
-      <div class="mt-10 grid gap-6 lg:grid-cols-2">
-        <Shot src={blocker} alt="Bay's site panel open over a dictionary page, showing Block Ads and Trackers switched on with 3 blocked on this page">
-          <Sticky color="pink" tilt={-5} class="absolute -bottom-6 -left-3 w-40 p-3.5 text-[21px] leading-tight sm:-left-6">
-            the site panel, for real
-          </Sticky>
-        </Shot>
-        <Shot src={commandBar} alt="Bay's command bar open at the top of the window, reading Search or enter address" />
-      </div>
-    </section>
 
     <!-- Note to self -->
     <div class="px-5 py-12">
