@@ -220,6 +220,16 @@ public final class BayTab extends WebContentsDelegateAndroid {
         return mWebContents.getNavigationController().canGoForward();
     }
 
+    /**
+     * The tab is the one on screen: its page takes the window's compositor from the tab that had it (one compositor
+     * draws a window, see BayTabView).
+     */
+    public void showPage() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeTab == 0) return;
+        mView.showPage();
+    }
+
     /** A hidden tab keeps its page but stops drawing it; a playing one keeps playing. */
     public void setVisible(boolean visible) {
         mView.setPageVisible(visible);
