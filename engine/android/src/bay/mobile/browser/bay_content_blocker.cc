@@ -281,12 +281,14 @@ void BayContentBlocker::SetLists(std::vector<std::string> files,
       base::BindOnce(&Load, std::move(files), std::move(version), std::move(cache_path), std::move(resources_path)),
       base::BindOnce(
           [](base::OnceCallback<void(bool)> done, std::shared_ptr<Engine> engine) {
-            if (engine) {
+            // Said before the engine moves into the live state, which leaves `engine` empty.
+            const bool loaded = engine != nullptr;
+            if (loaded) {
               auto live = std::make_shared<Live>(*CurrentLive());
               live->engine = std::move(engine);
               Publish(std::move(live));
             }
-            std::move(done).Run(engine != nullptr);
+            std::move(done).Run(loaded);
           },
           std::move(done)));
 }
