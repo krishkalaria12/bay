@@ -13,7 +13,7 @@ import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import { emptyCounts, importDiaProfile, openInWebStore, profileColorFor, type ImportCounts, type ExtensionFailure } from "./apply";
 import { DONE_DELAY_MS, ENCRYPTED, KINDS, kindsWithoutUnlock } from "./constants";
 import { importModule } from "./module";
-import { ImportFailure, ImportUnavailable, ImportWorkflow, type Workflow } from "./workflow";
+import { ImportFailure, ImportUnavailable, ImportWorkflow, type LockedProfile, type Workflow } from "./workflow";
 
 // The workflow's answers come from the runtime, so the service stays the only way to the native module.
 const ask = <A, E>(use: (w: Workflow) => Effect.Effect<A, E>): Promise<A> =>
@@ -25,14 +25,18 @@ const ask = <A, E>(use: (w: Workflow) => Effect.Effect<A, E>): Promise<A> =>
     }),
   );
 
-export type Step = "loading" | "choose" | "profiles" | "safari" | "access" | "unlock" | "dia" | "progress" | "done";
+export type Step = "loading" | "choose" | "profiles" | "safari" | "access" | "unlock" | "dia" | "progress" | "primaryPassword" | "done";
 
 export type Status = "pending" | "active" | "done" | "failed";
 
 export type ImportFlow = ReturnType<typeof useImportFlow>;
 
-/** The import window's state and what it does: which browser and data, each step's progress, and the result. */
-export function useImportFlow() {
+/**
+ * The import window's state and what it does: which browser and data, each step's progress, and the result.
+ * `askPrimaryPassword`: a Firefox or Zen profile with a primary password stops at a step that asks for it (the window);
+ * otherwise (onboarding) the import ends with a note saying where to bring those passwords in.
+ */
+export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPassword?: boolean } = {}) {
   const api = importModule();
   const [step, setStep] = useState<Step>("loading");
   const [browsers, setBrowsers] = useState<BrowserSource[]>([]);
@@ -55,6 +59,8 @@ export function useImportFlow() {
   const [diaStatus, setDiaStatus] = useState<DiaAutomationStatus | "checking" | "reading">("checking");
   const [dia, setDia] = useState<DiaTabsResult | null>(null);
   const [asking, setAsking] = useState(false);
+  // Profiles whose passwords wait for their primary password (the primaryPassword step).
+  const [locked, setLocked] = useState<LockedProfile[]>([]);
   const abort = useRef<AbortController | null>(null);
   // The browser the user chose last: an answer about an earlier choice is not shown for this one.
   const choice = useRef(0);
@@ -268,6 +274,16 @@ export function useImportFlow() {
         );
         setFailures(outcome.failures);
         setCounts(outcome.counts);
+
+        if (!outcome.locked?.length) return finish();
+
+        if (askPrimaryPassword) {
+          setLocked(outcome.locked);
+
+          return setStep("primaryPassword");
+        }
+
+        setNotes((n) => [...n, lockedNote(source.name, outcome.locked!)]);
         finish();
       },
       (cause: unknown) => {
@@ -278,6 +294,59 @@ export function useImportFlow() {
         else setError("Couldn't read that browser's data. Try again, or skip the encrypted data.");
       },
     );
+  };
+
+  // The primary password opens the locked profiles' passwords, which go into the Spaces their other data went to.
+  const unlockPrimaryPassword = async (password: string) => {
+    if (!source || !locked.length || !password) return;
+    setError(null);
+    setUnlocking(true);
+    const controller = new AbortController();
+
+    abort.current = controller;
+
+    const result = await ask((w) => w.importLockedPasswords({ source, profiles: locked, primaryPassword: password, signal: controller.signal })).catch(
+      () => null,
+    );
+
+    setUnlocking(false);
+
+    if (!result) return setError(`Couldn't read ${source.name}'s passwords. Try again, or skip them.`);
+    const opened = locked.filter((p) => !result.locked.some((l) => l.id === p.id)).map((p) => p.name);
+
+    if (result.counts.passwords) setCounts((c) => ({ ...c, passwords: c.passwords + result.counts.passwords }));
+
+    setFailures((list) =>
+      list.flatMap((f) => {
+        if (f.kind !== "passwords") return [f];
+
+        // One profile's failure names none.
+        if (!f.profiles.length) return result.locked.length ? [f] : [];
+        const left = f.profiles.filter((name) => !opened.includes(name));
+
+        return left.length ? [{ ...f, profiles: left }] : [];
+      }),
+    );
+
+    if (!result.locked.length) {
+      setStatus((st) => ({ ...st, passwords: "done" }));
+      setLocked([]);
+
+      return setStep("done");
+    }
+
+    setLocked(result.locked);
+    setError(
+      opened.length
+        ? `That opened ${opened.join(", ")}. Enter the primary password of ${result.locked.map((p) => p.name).join(", ")}.`
+        : "That password didn't open them. Check it and try again.",
+    );
+  };
+
+  const skipPrimaryPassword = () => {
+    setLocked([]);
+    setError(null);
+    setStep("done");
   };
 
   const refreshDia = async () => {
@@ -582,6 +651,9 @@ export function useImportFlow() {
       setDiaStatus,
       takeDiaResult,
       setSourceProfiles,
+      locked,
+      unlockPrimaryPassword,
+      skipPrimaryPassword,
     };
 
     return () => void delete g.nnImport;
@@ -623,6 +695,9 @@ export function useImportFlow() {
     unlock,
     skipEncrypted,
     basicStore,
+    locked,
+    unlockPrimaryPassword,
+    skipPrimaryPassword,
     recheckAccess,
     refreshDia,
     allowDia,
@@ -639,6 +714,13 @@ export function useImportFlow() {
     close,
     cancel,
   };
+}
+
+/** Where the passwords of profiles with a primary password come in, when the flow didn't ask for it. */
+export function lockedNote(browser: string, locked: LockedProfile[]): string {
+  const names = locked.map((p) => p.name).join(", ");
+
+  return `${names} ${locked.length === 1 ? "keeps its" : "keep their"} passwords behind ${browser}'s primary password. Import them from ${APP_NAME} › Import from Another Browser.`;
 }
 
 // SAFETY: { code? assertion matches the runtime value validated at this call site.

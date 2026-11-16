@@ -1,10 +1,11 @@
 import { View, isMac } from "@bay/platform";
 import type { DiaTabsResult, ImportKind } from "@bay/import";
+import { useState } from "react";
 import { ActivityIndicator, Image, Text } from "react-native";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { plural } from "../../store/model";
-import { Button, Checkbox } from "../settings/controls";
+import { Button, Checkbox, TextField } from "../settings/controls";
 import { importedSummary } from "./apply";
 import { DIA_NOT_SHARED, KINDS } from "./constants";
 import type { ImportFlow } from "./useImportFlow";
@@ -231,6 +232,42 @@ export function UnlockStep({ flow }: StepProps) {
             : flow.basicStore
               ? "You can continue without unlocking. Passwords and cards that need the keyring will be skipped and reported when the import finishes. Your data stays on this computer."
               : "Your data stays on this computer. If access is denied, you can skip the encrypted data."}
+        </Text>
+      </View>
+      {flow.error && <ErrorText text={flow.error} />}
+    </StepLayout>
+  );
+}
+
+// A Firefox or Zen profile whose saved passwords are encrypted with its primary password: everything else came in.
+export function PrimaryPasswordStep({ flow }: StepProps) {
+  const theme = useTheme();
+  const [password, setPassword] = useState("");
+  const { source } = flow;
+
+  if (!source) return <EmptyStep />;
+  const names = flow.locked.map((p) => p.name).join(", ");
+  const submit = () => void flow.unlockPrimaryPassword(password);
+
+  return (
+    <StepLayout
+      footer={
+        <>
+          <Spacer />
+          <Button title="Skip Passwords" onPress={flow.skipPrimaryPassword} />
+          <Button title={flow.unlocking ? "Importing..." : "Import Passwords"} kind="primary" disabled={flow.unlocking || !password} onPress={submit} />
+        </>
+      }
+    >
+      <Title
+        title={`Enter ${source.name}'s primary password`}
+        subtitle={`Everything else from ${names} is in ${APP_NAME}. Its saved passwords are locked with the primary password you set in ${source.name}.`}
+      />
+      <View style={{ alignItems: "center", marginTop: 10, gap: 14 }}>
+        <Handoff iconPath={source.iconPath} symbol="lock.fill" />
+        <TextField value={password} onChangeText={setPassword} placeholder="Primary password" secure autoFocus onSubmit={submit} style={{ width: 280 }} />
+        <Text style={{ fontSize: 12, lineHeight: 17, textAlign: "center", color: theme.textSecondary, maxWidth: 420 }}>
+          {`It's used once, to open the passwords on this computer, and isn't kept.`}
         </Text>
       </View>
       {flow.error && <ErrorText text={flow.error} />}
