@@ -1,11 +1,11 @@
-"""Bay's launch animation as Lottie: the desktop icon building itself.
+"""Bay's launch animation as Lottie: the icon (Dusk, apps/browser/assets/app-icon.svg) drawing itself.
 
 Run `python3 scripts/splash-animation.py assets/splash/bay.json` after changing it, render its frame 0 at 640 px with a
 transparent background into assets/splash/bay-first-frame.png (the launch screens show it), then rebuild both apps.
 
-The dusk tile settles in, the towers rise from the water, the main cable draws across them, the hangers and the roadway
-follow, then the water catches the light. While Bay loads, the stars twinkle and the glow breathes (the "loop" marker);
-"outro" lifts the whole tile up a touch before the splash fades.
+The paper tile settles in, the sun rises from behind the horizon, then the three lines of water open out from the middle.
+While Bay loads, the sun breathes and the lines shimmer out of step (the "loop" marker); "outro" lifts the whole tile up a
+touch before the splash fades.
 """
 import json
 import sys
@@ -151,121 +151,69 @@ def layer(name, shapes, ks=None, ip=0, mask=None):
     layers.append(entry)
 
 
-STEEL = "#EC6A43"
-SHADE = "#C9502E"
+SUN = [(0, "#F47B4C"), (1, "#E5582F")]
 tile_mask = rounded_square(OFF, OFF, TILE, TILE * 0.235)
 
-# The dusk: sky, water and the glow on the horizon, clipped to the tile.
+
+def box(x, y, w, h):
+    """A plain rectangle in icon space, as a mask path."""
+    corners = [P(x, y), P(x + w, y), P(x + w, y + h), P(x, y + h)]
+    return {"i": [[0, 0]] * 4, "o": [[0, 0]] * 4, "v": corners, "c": True}
+
+
+def sun_gradient():
+    return gradient(SUN, P(512, 300), P(512, 860))
+
+
+# The paper tile, with the hairline edge the icon has (the launch screen is paper too).
 layer(
-    "Dusk",
+    "Paper",
     [
-        # The first shape in a Lottie group draws on top: the water over the sky.
-        {"ty": "gr", "nm": "Water", "it": [rect(0, 690, 1024, 334, 0), gradient([(0, "#C6805A"), (0.08, "#63495A"), (0.5, "#242C46"), (1, "#141B2F")], P(512, 690), P(512, 1024)), group_tr()]},
-        {"ty": "gr", "nm": "Sky", "it": [rect(0, 0, 1024, 1024, 0), gradient([(0, "#151C36"), (0.4, "#3C3358"), (0.74, "#8E5C63"), (1, "#E0925F")], P(512, 0), P(512, 1024)), group_tr()]},
+        {"ty": "gr", "nm": "Edge", "it": [{"ty": "sh", "d": 1, "ks": static(tile_mask)}, stroke("#000000", 4, o=static(8)), group_tr()]},
+        {"ty": "gr", "nm": "Paper", "it": [rect(0, 0, 1024, 1024, 0), gradient([(0, "#FBF7F0"), (1, "#F1EADF")], P(512, 48), P(512, 976)), group_tr()]},
     ],
     mask=tile_mask,
 )
 
-# The glow on the horizon: brightens once the bridge stands, then breathes while Bay loads.
-glow_keys = [(0, 30), (80, 100), (LOOP_START, 100), (LOOP_START + 48, 70), (LOOP_END, 100)]
+# The sun rises from behind the horizon (the mask is the sky above it), then breathes while Bay loads.
+K = 240 * 0.5523
+sun = path([((272, 560), (0, 0), (0, -K)), ((512, 320), (-K, 0), (K, 0)), ((752, 560), (0, -K), (0, 0))], closed=True)
+horizon = P(512, 560)
 layer(
-    "Glow",
+    "Sun",
     [
         {
             "ty": "gr",
-            "nm": "Glow",
+            "nm": "Sun",
             "it": [
-                # Lottie's radial gradients are round: draw a round glow and squash it into the horizon's ellipse.
-                {"ty": "el", "d": 1, "p": static(P(512, 666)), "s": static([round(880 * S, 2), round(880 * S, 2)])},
-                gradient([(0, "#FFDCA6"), (1, "#FFDCA6")], P(512, 666), P(952, 666), kind=2, alphas=[(0, 0.5), (1, 0)]),
-                group_tr(o=anim(glow_keys), p=P(512, 666), a=P(512, 666), s=static([100, round(146 / 440 * 100, 2)])),
+                sun,
+                sun_gradient(),
+                group_tr(
+                    a=horizon,
+                    s=anim([(0, [100, 100]), (LOOP_START, [100, 100]), (LOOP_START + 48, [103, 103]), (LOOP_END, [100, 100])]),
+                )
+                | {"p": anim([(6, [horizon[0], horizon[1] + round(260 * S, 2)]), (60, horizon)])},
             ],
         }
     ],
-    mask=tile_mask,
+    mask=box(0, 0, 1024, 560),
 )
 
-# Stars, twinkling out of step.
-stars = [(238, 182, 2.2, 0.7), (352, 132, 1.6, 0.5), (492, 206, 2.5, 0.8), (628, 146, 1.8, 0.55), (758, 218, 2.2, 0.72), (836, 160, 1.5, 0.45)]
-star_shapes = []
-for n, (x, y, r, a) in enumerate(stars):
-    phase = n * 13
-    keys = [(0, 0), (40 + phase // 2, a * 100), (LOOP_START + phase, a * 100), (LOOP_START + phase + 24, a * 25), (LOOP_START + phase + 48, a * 100)]
-    star_shapes.append({"ty": "gr", "nm": f"Star {n}", "it": [{"ty": "el", "d": 1, "p": static(P(x, y)), "s": static([round(r * 5 * S, 2)] * 2)}, fill("#FFF6E8"), group_tr(o=anim(keys))]})
-layer("Stars", star_shapes)
-
-# The cables: the main span draws itself across, the hangers drop after it.
-cable = cubic(
-    (150, 596),
-    [((246, 512), (246, 344), (328, 258)), ((460, 354), (336, 464), (512, 464)), ((688, 464), (564, 354), (696, 258)), ((778, 344), (778, 512), (874, 596))],
-)
-layer(
-    "Cable",
-    [
-        {
-            "ty": "gr",
-            "nm": "Cable",
-            "it": [cable, {"ty": "tm", "s": static(0), "e": anim([(26, 0), (84, 100)]), "o": static(0), "m": 1}, stroke(STEEL, 12), group_tr()],
-        }
-    ],
-)
-hangers = [(375, 307), (395, 354), (404, 397), (415, 432), (446, 455), (512, 464), (578, 455), (609, 432), (620, 397), (629, 354), (649, 307), (233, 458), (258, 390), (284, 325), (740, 325), (766, 390), (791, 458)]
-layer(
-    "Hangers",
-    [
-        {
-            "ty": "gr",
-            "nm": "Hangers",
-            "it": [line(x, y, x, 596) for x, y in hangers]
-            + [{"ty": "tm", "s": static(0), "e": anim([(52, 0), (92, 100)]), "o": static(0), "m": 1}, stroke(STEEL, 4.5, o=static(90)), group_tr()],
-        }
-    ],
-)
-
-# The roadway, opening out from the middle.
-road_centre = P(512, 596)
-layer(
-    "Road",
-    [{"ty": "gr", "nm": "Road", "it": [rect(94, 589, 836, 14, 7), fill(STEEL), group_tr(p=road_centre, a=road_centre, s=anim([(40, [0, 100]), (76, [100, 100])]))]}],
-)
-
-# The towers, rising out of the water.
-tower_base = P(512, 674)
-towers = []
-for x0 in (282, 650):
-    for dx in (0, 66):
-        towers.append(rect(x0 + dx, 258, 26, 416, 13))
-    for y in (499, 366):
-        towers.append(rect(x0 + 13, y, 66, 14, 7))
-    towers.append(rect(x0 + 13, 242, 66, 18, 9))
-layer(
-    "Towers",
-    [
-        {
-            "ty": "gr",
-            "nm": "Towers",
-            "it": towers
-            + [
-                gradient([(0, "#DB5734"), (0.5, "#F0764C"), (1, "#CE4C2B")], P(282, 0), P(742, 0)),
-                group_tr(p=tower_base, a=tower_base, s=anim([(8, [100, 0]), (50, [100, 100])])),
-            ],
-        }
-    ],
-)
-
-# Piers and the light on the water, once the bridge stands.
-water = [rect(290, 672, 76, 24, 8), rect(658, 672, 76, 24, 8)]
-layer("Piers", [{"ty": "gr", "nm": "Piers", "it": water + [fill(SHADE, 0.8), group_tr(o=anim([(30, 0), (56, 100)]))]}])
-ripples = [(408, 696, 208, 6, 0.26), (344, 730, 336, 4, 0.15), (288, 762, 448, 4, 0.11), (387, 798, 250, 4, 0.09), (316, 838, 392, 4, 0.06)]
-ripple_shapes = []
-for n, (x, y, w, h, a) in enumerate(ripples):
-    start = 70 + n * 5
-    keys = [(start, 0), (start + 22, a * 100), (LOOP_START + n * 10, a * 100), (LOOP_START + n * 10 + 30, a * 45), (LOOP_START + n * 10 + 60, a * 100)]
+# The water: three lines open out from the middle, top first, then shimmer out of step.
+lines = [(232, 648, 560, 1), (332, 740, 360, 0.7), (432, 832, 160, 0.4)]
+line_shapes = []
+for n, (x, y, w, a) in enumerate(lines):
+    start = 46 + n * 10
     centre = P(x + w / 2, y)
-    ripple_shapes.append(
-        {"ty": "gr", "nm": f"Ripple {n}", "it": [rect(x, y, w, h, h / 2), fill("#FFE2C0"), group_tr(o=anim(keys), p=centre, a=centre, s=anim([(start, [40, 100]), (start + 30, [100, 100])]))]}
+    keys = [(0, a * 100), (LOOP_START + n * 12, a * 100), (LOOP_START + n * 12 + 30, a * 55), (LOOP_START + n * 12 + 60, a * 100)]
+    line_shapes.append(
+        {
+            "ty": "gr",
+            "nm": f"Line {n}",
+            "it": [rect(x - 26, y - 26, w + 52, 52, 26), sun_gradient(), group_tr(o=anim(keys), p=centre, a=centre, s=anim([(start, [0, 100]), (start + 34, [100, 100])]))],
+        }
     )
-layer("Water light", ripple_shapes, mask=tile_mask)
+layer("Water", line_shapes)
 
 # The parent: the tile settles in at the start, and lifts at the end.
 settle = {
@@ -298,7 +246,7 @@ animation = {
     "nm": "Bay",
     "ddd": 0,
     "assets": [],
-    # Lottie draws the first layer on top: the bridge over the water over the sky.
+    # Lottie draws the first layer on top: the water and the sun over the paper.
     "layers": [settle] + list(reversed(layers)),
     "markers": [
         {"tm": LOOP_START, "cm": "loop", "dr": LOOP_END - LOOP_START},
