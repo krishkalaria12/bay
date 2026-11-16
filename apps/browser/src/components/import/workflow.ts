@@ -29,12 +29,13 @@ import * as Scope from "effect/Scope";
 import { useBrowser } from "../../store/browserStore";
 import type { SpaceColor } from "../../store/types";
 import {
-  applyArcProfile,
   applyResult,
   applySafari,
+  applySpacedProfile,
   emptyCounts,
   importBookmarks,
   importExtensions,
+  importPasswords,
   profileColorFor,
   type ExtensionFailure,
   type ImportCounts,
@@ -89,7 +90,8 @@ export class ImportEngine extends Context.Service<
   ImportEngine,
   {
     readonly listBrowsers: () => Effect.Effect<BrowserSource[], ImportFailure | ImportUnavailable>;
-    readonly unlockBrowser: (browserId: string) => Effect.Effect<void, ImportFailure | ImportUnavailable>;
+    /** `primaryPassword`: a Firefox or Zen profile's, which its logins are encrypted with. */
+    readonly unlockBrowser: (browserId: string, primaryPassword?: string) => Effect.Effect<void, ImportFailure | ImportUnavailable>;
     readonly isBrowserUnlocked: (browserId: string) => boolean;
     readonly forgetUnlockedKeys: () => void;
     readonly importData: (job: ImportJob) => Effect.Effect<ImportResult, ImportFailure | ImportUnavailable>;
@@ -126,7 +128,8 @@ export class ImportEngine extends Context.Service<
 
       return ImportEngine.of({
         listBrowsers: () => guarded("import.browsers", (api) => api.listBrowsers()),
-        unlockBrowser: (browserId) => guarded("import.unlock", (api) => api.unlockBrowser(browserId)),
+        unlockBrowser: (browserId, primaryPassword) =>
+          guarded("import.unlock", (api) => api.unlockBrowser(browserId, primaryPassword === undefined ? {} : { primaryPassword })),
         isBrowserUnlocked: (browserId) => !!native?.isBrowserUnlocked(browserId),
         forgetUnlockedKeys: () => native?.forgetUnlockedKeys(),
         importData: (job) => guarded("import.data", (api) => api.importData(job.browserId, job.profileId, job.kinds, jobOptions(job))),
@@ -152,6 +155,18 @@ export type ImportOutcome = {
   readonly failures: { kind: ImportKind; profiles: string[] }[];
   readonly notes: string[];
   readonly extensions: ExtensionFailure[];
+  /** Firefox and Zen profiles whose passwords need their primary password, with the Spaces their other data went to. */
+  readonly locked?: LockedProfile[];
+};
+
+export type LockedProfile = { readonly id: string; readonly name: string; readonly spaceIds: string[] };
+
+/** Passwords again for profiles that needed their primary password, into the Spaces they went to. */
+export type PasswordsRequest = {
+  readonly source: BrowserSource;
+  readonly profiles: LockedProfile[];
+  readonly primaryPassword: string;
+  readonly signal: AbortSignal;
 };
 
 /** What the user asked to import. */
@@ -184,6 +199,10 @@ export type Workflow = {
   readonly unlocked: (browserId: string) => Effect.Effect<boolean>;
   /** Imports the chosen data, in the order the app keeps it. */
   readonly import: (request: ImportRequest) => Effect.Effect<ImportOutcome, ImportFailure | ImportUnavailable>;
+  /** Passwords for the profiles an import left locked, with their primary password: how many came, and who's still locked. */
+  readonly importLockedPasswords: (
+    request: PasswordsRequest,
+  ) => Effect.Effect<{ counts: ImportCounts; locked: LockedProfile[] }, ImportFailure | ImportUnavailable>;
   /** Reads Dia's open and pinned web pages. */
   readonly readDiaTabs: () => Effect.Effect<DiaTabsResult, ImportFailure | ImportUnavailable>;
   /** Whether Dia may be asked for its tabs. */
@@ -280,6 +299,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
             const usedDestinations = new Set<string>();
             const extensionFailures: ExtensionFailure[] = [];
             const left: string[] = [];
+            const locked: LockedProfile[] = [];
 
             // Firefox keeps no keychain key: without a primary password its logins open as they are.
             if (request.source.family === "firefox" && requested.includes("passwords") && !engine.isBrowserUnlocked(request.source.id)) {
@@ -324,10 +344,10 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
               };
 
-              // Arc's spaces can share source data; each destination keeps an independent copy.
+              // Arc's and Zen's spaces share their profile's data; each destination keeps an independent copy.
               let extensionDestinations: string[];
 
-              if (isArc && result.spaces.length) {
+              if (result.spaces.length) {
                 const destinations: { spaceId: string; space: SpaceSuggestion }[] = [];
 
                 for (const space of result.spaces) {
@@ -343,7 +363,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
 
                 const applied = yield* Effect.exit(
                   Effect.promise(() =>
-                    applyArcProfile(
+                    applySpacedProfile(
                       destinations,
                       result,
                       request.source.name,
@@ -352,7 +372,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                           browserId: request.source.id,
                           profileId: profile.id,
                           kinds: nativeKinds,
-                          spaceIds: request.spaceIds,
+                          spaceIds: isArc ? request.spaceIds : undefined,
                           signal: request.signal,
                         }),
                       refused,
@@ -393,6 +413,14 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                 add(applied.value);
               }
 
+              // A primary password keeps this profile's logins shut: the window asks for it, then imports them again.
+              if (
+                request.source.family === "firefox" &&
+                result.failed.includes("passwords") &&
+                result.warnings.some((w) => w.kind === "passwords" && w.code === "locked")
+              )
+                locked.push({ id: profile.id, name: result.profile?.name ?? profile.name, spaceIds: extensionDestinations });
+
               if (request.kinds.has("extensions")) {
                 request.onProgress({ kind: "extensions", phase: "start", processed: 0 });
 
@@ -416,6 +444,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
               failures: [...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })),
               notes: left,
               extensions: extensionFailures,
+              locked,
             } satisfies ImportOutcome;
           }),
         );
@@ -481,11 +510,52 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
           return { ...emptyCounts(), bookmarks: count };
         });
 
+      const importLockedPasswords = (request: PasswordsRequest) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* Scope.addFinalizer(
+              yield* Scope.Scope,
+              Effect.sync(() => engine.forgetUnlockedKeys()),
+            );
+            yield* engine.unlockBrowser(request.source.id, request.primaryPassword);
+            const counts = emptyCounts();
+            const still: LockedProfile[] = [];
+
+            for (const profile of request.profiles) {
+              const imported = yield* Effect.exit(
+                engine.importData({ browserId: request.source.id, profileId: profile.id, kinds: ["passwords"], signal: request.signal }),
+              );
+
+              if (Exit.isFailure(imported)) {
+                const refusal = Cause.squash(imported.cause);
+
+                if (refusal instanceof ImportFailure && refusal.code === "cancelled") return yield* Effect.fail(refusal);
+                still.push(profile);
+                continue;
+              }
+
+              const result = imported.value;
+
+              if (result.vaultToken) engine.discardImported(result.vaultToken);
+
+              if (result.failed.includes("passwords")) {
+                still.push(profile);
+                continue;
+              }
+
+              for (const spaceId of profile.spaceIds) counts.passwords += yield* Effect.promise(() => importPasswords(spaceId, result.credentials));
+            }
+
+            return { counts, locked: still };
+          }),
+        );
+
       return ImportWorkflow.of({
         listBrowsers: () => engine.listBrowsers(),
         unlock: (browserId) => engine.unlockBrowser(browserId),
         unlocked: (browserId) => Effect.sync(() => engine.isBrowserUnlocked(browserId)),
         import: importData,
+        importLockedPasswords,
         readDiaTabs,
         waitForDia,
         diaStatus: () => engine.diaAutomationStatus(),
