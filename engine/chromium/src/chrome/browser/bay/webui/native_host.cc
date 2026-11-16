@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_contracts.g.h"
 
+#include <set>
 #include <array>
 #include <cmath>
 #include <optional>
@@ -132,6 +133,7 @@ extern void (*g_bay_document_drag_enter)(content::WebContents* source,
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/surface_embed_connector.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
@@ -2473,6 +2475,15 @@ bool RecordWindowShortcut(BrowserWindowInterface* browser,
   }
   return false;
 }
+namespace {
+bool TypesInDocument(const std::string& command) {
+  static const base::NoDestructor<std::set<std::string>> commands(
+      std::set<std::string>{"focusCommandBar", "newTab", "newTabInGroup",
+                            "findInPage", "findAndReplace", "searchTabs",
+                            "renameTab"});
+  return commands->contains(command);
+}
+}  // namespace
 WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
                                  const input::NativeWebKeyboardEvent& event) {
   if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown)
@@ -2504,10 +2515,16 @@ WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
                           shortcut.command);
       if (shortcut.command.empty())
         return WindowShortcut::kRan;
-      // The command bar types in the document, and a page that holds the
-      // keyboard keeps it until the browser moves it.
-      if (shortcut.command == "focusCommandBar")
+      // A command that opens a field in the document (the command bar, a new
+      // tab's, find, a tab search or rename) takes the keyboard from the page
+      // holding it. Focusing the document alone leaves the keys with its
+      // embedded page, whose WebContents stays the focused one.
+      if (TypesInDocument(shortcut.command)) {
+        auto* page = content::WebContents::FromRenderFrameHost(focused);
+        if (auto* connector = page ? page->GetSurfaceEmbedConnector() : nullptr)
+          connector->ClearFocusOnInnerWebContents();
         document->Focus();
+      }
       host->Emit("BayShell", "onCommand",
                  base::Value(base::DictValue()
                                  .Set("command", shortcut.command)
