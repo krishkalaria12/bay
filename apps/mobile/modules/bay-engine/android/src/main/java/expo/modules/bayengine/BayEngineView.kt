@@ -123,6 +123,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       field = value
       tab?.view?.importantForAccessibility = accessibility()
       if (value) lastActive = this
+      // The tab on screen draws: it takes the window's one compositor from the tab that had it.
+      if (value) tab?.showPage()
       // Leaving the screen is a good moment to save (B6): the tab may be the next one unmounted for memory.
       if (!value) saveState()
     }
@@ -152,6 +154,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
 
   init {
+    live.add(this)
     // A turn later, so the first props (`private` in particular) have applied.
     post {
       if (disposed) return@post
@@ -177,7 +180,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     created.setDesktopMode(desktopMode)
     created.setVisible(!isSuspended)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-    if (isActive) lastActive = this
+    if (isActive) {
+      lastActive = this
+      created.showPage()
+    }
     restoreState()
     val address = pendingLoad ?: pendingInitial?.takeUnless { restoredState }
     pendingLoad = null
@@ -618,7 +624,11 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     hideFullscreen()
     BayFileChooser.cancelPending()
     destroyTab()
-    if (lastActive === this) lastActive = null
+    live.remove(this)
+    // A page shown over the tab (a link's preview) gives the window's compositor back to the tab on screen.
+    val onScreen = live.lastOrNull { it.isActive && it.tab != null }
+    if (lastActive === this) lastActive = onScreen
+    onScreen?.tab?.showPage()
   }
 
   private class PendingPermission(val request: Int, val name: String, val system: Array<String>, val requireAll: Boolean = true)
@@ -626,5 +636,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   companion object {
     /** The page on screen, which saves images from its menu with its own cookies (BayEngineBackend.saveImage). */
     internal var lastActive: BayEngineView? = null
+
+    /** The page views not yet disposed, oldest first. */
+    private val live = LinkedHashSet<BayEngineView>()
   }
 }
