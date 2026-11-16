@@ -20,6 +20,14 @@ If the work can be done through any of the expo libraries, then you can use it.
 - **Settings** is a whole screen (`src/settings`, after Yab's Settings, Apache-2.0), not a sheet: it rises from below over the browser, × on its index and ‹ on a page in one round button, a search field over cards of coloured tiles, and pages with a tile, a name, one line and sections of rows with words under them. Pages push in from the right; ‹, a swipe from the left edge or Android's back goes back, and × or a swipe down on the head closes. `content.ts` says what every page holds as plain rows (tested in `tests/settings.test.ts`), so the search finds a row a page further in. A choice stays on its page with its tick. The browser's own sheets (Bookmarks, History, Downloads, Import) open over Settings and close back to it. Site Settings follows Yab's site card: zoom inline, tinted rows, the connection, and Bay Settings at the foot.
 - Fills: controls and grouped rows use `bg-default`, a translucent tint of the text colour (`global.css`), so they read the same over Liquid Glass and Android's solid sheets. Switches use the accent on both platforms.
 
+## Sync
+
+- Tabs, bookmarks and history sync with the computer through Bay's relay (`apps/sync-relay`, a Cloudflare Worker at `bay-sync.codewithkrish12.workers.dev`; its protocol is in its README). The relay keeps sealed files only: the phone seals and opens them with `@bay/sync`'s TypeScript port of the Mac's crypto (`packages/sync/src/relay`, checked byte for byte against `fixtures/golden.json`).
+- Import only `@bay/sync/src/relay/...` and `@bay/sync/src/...` modules, never the package's index: it loads the desktop's native module.
+- `src/sync`: `engine.ts` runs a cycle (the app scope, then the computer's default profile), `adapters.ts` maps records to the phone's tabs, bookmarks (the computer's bar becomes a folder) and history, `service.ts` is the `PhoneSync` Effect service (key in SecureStore, state in `sync/state.json`, a cycle every 30 s while open and 3 s after a change), `state.ts` the store Settings › Sync reads.
+- Join by the 8-letter code (the computer types it in Settings › Sync › Add a Phone, both check four digits) or by the 24-word recovery phrase.
+- To test without a Mac, a stand-in computer on the real relay can pair, print what the phone wrote and clear its chain; clear any chain you made when done.
+
 ## Both platforms, always
 
 - Test iOS completely: every flow, every screen, every state.
