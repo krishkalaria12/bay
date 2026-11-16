@@ -6,6 +6,7 @@ package org.bay.engine;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.SparseArray;
+import android.view.View;
 import android.view.ViewStructure;
 import android.view.autofill.AutofillValue;
 import android.widget.FrameLayout;
@@ -110,6 +111,16 @@ final class BayTabView extends FrameLayout {
         mWebContents.updateWebContentsVisibility(visible ? Visibility.VISIBLE : Visibility.HIDDEN);
         if (mRenderView != null) mRenderView.setVisibility(visible ? VISIBLE : INVISIBLE);
     }
+
+    /**
+     * The page's SurfaceView asks the window to leave its area transparent, so the compositor skips the window there.
+     * That region is worked out from the views over the page at one layout and can go stale: on some phones (a OnePlus
+     * on Android 15) a band the switcher's views didn't cover stayed transparent, and the page showed through Bay's
+     * sheets and bar there as a white strip. Not asked for, the window is always composited; the page still shows
+     * through the hole the SurfaceView punches wherever Bay draws nothing.
+     */
+    @Override
+    public void requestTransparentRegion(View child) {}
 
     @Override
     protected void onAttachedToWindow() {
