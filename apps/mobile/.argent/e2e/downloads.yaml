@@ -17,8 +17,6 @@ steps:
   - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
-  - swipe: { from: { x: 0.5, y: 0.75 }, direction: up }
-  - scroll-to: { target: { id: settings-downloads } }
   - tap: { id: settings-downloads }
   - await: { visible: { id: downloads-panel }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
@@ -34,6 +32,9 @@ steps:
   - await: { visible: { id: downloads-empty }, timeout: 10000 }
   - tap: { id: downloads-panel-close }
   - await: { hidden: { id: downloads-panel }, timeout: 10000 }
+  # Downloads opened over Settings, which is still there.
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
   # The navigation that became a download isn't an error and doesn't keep loading: the tab is back on the start page.
   # (Checked once Downloads is closed: an open sheet hides what is behind it from the tree.)
   - await: { visible: { id: start-screen }, timeout: 10000 }

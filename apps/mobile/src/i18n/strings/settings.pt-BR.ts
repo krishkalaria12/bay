@@ -1,0 +1,58 @@
+import type { SettingsStrings } from "./settings.ts";
+
+export const settingsPtBR: SettingsStrings = {
+  "settings.search.placeholder": "Buscar",
+  "settings.search.clear": "Limpar busca",
+  "settings.search.empty": "Nenhum ajuste encontrado",
+
+  "settings.page.general": "Geral",
+  "settings.page.search": "Busca",
+  "settings.page.tabs": "Abas",
+  "settings.page.passwords": "Senhas",
+  "settings.page.customEngine": "Buscador personalizado",
+
+  "settings.blurb.general": "Como o Bay abre, quais links ele assume e como você passa de uma página para outra.",
+  "settings.blurb.search": "Com o que o campo de busca pesquisa e o que ele consulta enquanto você digita.",
+  "settings.blurb.appearance": "O visual claro ou escuro do Bay, a página inicial por trás dele e o tamanho das páginas.",
+  "settings.blurb.tabs": "Quando abas paradas vão para o arquivo e quando o Bay começa do zero.",
+  "settings.blurb.privacy": "Anúncios e rastreadores, abas privadas e o que o Bay guarda neste celular.",
+  "settings.blurb.passwords": "Logins que o Bay salvou neste celular, e em nenhum outro lugar.",
+  "settings.blurb.youtube": "Um YouTube mais calmo, com as listas do Brave.",
+  "settings.blurb.about": "Um navegador livre e de código aberto para o seu celular e o seu Mac.",
+  "settings.blurb.defaultBrowser": "O navegador em que os links de outros apps abrem.",
+
+  "settings.keywords.general": "navegador padrão links apps idioma deslizar gestos voltar avançar puxar atualizar teclado início boas-vindas",
+  "settings.keywords.search": "buscador mecanismo google duckduckgo bing personalizado sugestões endereço campo",
+  "settings.keywords.appearance": "tema claro escuro modo fundo foto zoom tamanho texto visual",
+  "settings.keywords.tabs": "arquivo inativas antigas página inicial exportar compartilhar",
+  "settings.keywords.privacy": "anúncios rastreadores bloqueador bloqueio conteúdo amp privado bloquear rosto digital senha limpar dados cookies",
+  "settings.keywords.passwords": "logins entrar senhas chaves salvas contas",
+  "settings.keywords.youtube": "shorts comentários sugestões vídeos",
+  "settings.keywords.about": "versão licenças código fonte créditos privacidade",
+  "settings.keywords.bookmarks": "favoritos salvos",
+  "settings.keywords.history": "histórico visitadas páginas recentes",
+  "settings.keywords.downloads": "downloads arquivos baixados",
+  "settings.keywords.import": "chrome safari firefox brave arc exportar arquivo mudar",
+  "settings.keywords.report": "bug falha erro problema ajuda feedback",
+
+  "settings.search.engineNote": "Digite um endereço para abrir uma página, ou palavras para buscar com {engine}.",
+  "settings.showWelcome.note": "As primeiras páginas do Bay mais uma vez, do nome até o campo de busca. Suas abas ficam como estão.",
+  "settings.passwords.none": "Nenhuma senha salva",
+
+  "settings.default.yes": "Bay",
+  "settings.default.no": "Ainda não",
+  "settings.default.isDefault": "Links de outros apps abrem no Bay, em uma nova aba.",
+  "settings.default.howIos": "Escolha o Bay em Ajustes › Apps › Apps Padrão › App de Navegador, e os links de outros apps abrem aqui em uma nova aba.",
+  "settings.default.howAndroid": "Escolha o Bay como app de navegador do seu celular, e os links de outros apps abrem aqui em uma nova aba.",
+  "settings.default.make": "Tornar o Bay o padrão",
+
+  "site.secure": "A conexão é segura",
+  "site.notSecure": "Não segura",
+  "site.secure.detail": "As páginas daqui viajam criptografadas, e o site provou quem é.",
+  "site.notSecure.detail": "As páginas daqui viajam sem criptografia: não digite uma senha nem um número de cartão.",
+  "site.downloaded": "Baixado aqui",
+  "site.blockingHere": "Bloqueio aqui",
+  "site.bayHere": "Aqui",
+  "site.settings": "Ajustes do Bay",
+  "site.zoom.reset": "Voltar aos {size}% do Bay",
+};

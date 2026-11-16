@@ -80,7 +80,7 @@ steps:
   - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
-  - tap: { id: settings-browsing }
+  - tap: { id: settings-tabs }
   - await: { visible: { id: settings-start-page }, timeout: 10000 }
   - tap: { id: settings-start-page }
   - await: { visible: { id: settings-start-page-never }, timeout: 10000 }
@@ -89,27 +89,36 @@ steps:
   # Never is the default: pick it, so the test starts from a known choice.
   - tap: { id: settings-start-page-never }
   - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
   - await: { text: { in: { id: settings-start-page-value }, equals: "Never" }, timeout: 10000 }
-  # Four hours away: the choice goes back to Browsing, whose row says so.
+  # Four hours away: back in Tabs, the row says so.
   - tap: { id: settings-start-page }
   - await: { visible: { id: settings-start-page-4 }, timeout: 10000 }
   - tap: { id: settings-start-page-4 }
   - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
   - await: { text: { in: { id: settings-start-page-value }, equals: "4 h away" }, timeout: 10000 }
   # It's kept: close Settings and open it again.
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
   - await: { visible: { id: start-screen }, timeout: 10000 }
   - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
-  - tap: { id: settings-browsing }
+  - tap: { id: settings-tabs }
   - await: { text: { in: { id: settings-start-page-value }, equals: "4 h away" }, timeout: 10000 }
   # Never again, so the next run starts as this one did.
   - tap: { id: settings-start-page }
   - await: { visible: { id: settings-start-page-never }, timeout: 10000 }
   - tap: { id: settings-start-page-never }
   - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
   - await: { text: { in: { id: settings-start-page-value }, equals: "Never" }, timeout: 10000 }
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }

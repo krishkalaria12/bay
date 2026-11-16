@@ -70,6 +70,9 @@ steps:
   # The row behind says the same zoom.
   - tap: { id: settings-screen-back }
   - await: { text: { in: { id: settings-text-size-value }, equals: "200%" }, timeout: 10000 }
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
 
@@ -77,8 +80,8 @@ steps:
   - tap: { id: bar-more }
   - await: { visible: { id: page-site-settings }, timeout: 10000 }
   - tap: { id: page-site-settings }
-  - await: { visible: { id: site-text-size }, timeout: 10000 }
-  - await: { text: { in: { id: site-text-size-detail }, contains: "Follows Bay's 200%" }, timeout: 10000 }
+  - await: { visible: { id: site-zoom-value }, timeout: 10000 }
+  - await: { text: { in: { id: site-zoom-value }, contains: "200%" }, timeout: 10000 }
   - tap: { id: site-settings-close }
   - await: { hidden: { id: site-settings }, timeout: 10000 }
 
@@ -103,6 +106,11 @@ steps:
   - tap: { id: text-size-reset }
   - await: { idle: true, timeout: 10000 }
   - await: { text: { in: { id: text-size-value }, equals: "100%" }, timeout: 10000 }
+  # Settings closes from its index: ‹ twice first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-text-size }, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
   # And leave the element picker, still open from the measuring.

@@ -32,7 +32,8 @@ import { Engine } from "@/effect/ports/engine";
 import { Lifecycle } from "@/effect/ports/lifecycle";
 import { useCommand } from "@/effect/react";
 import { useT, type Translate } from "@/i18n";
-import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
+import { ArchivePanel, LinkMenu, PageMenu, SiteSettingsPanel, TabsMenu } from "@/panels";
+import { SettingsScreen } from "@/settings/SettingsScreen";
 import type { PageBlocking } from "@/panels/PageMenu";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
@@ -40,7 +41,6 @@ import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
-import { DefaultBrowserPanel } from "@/panels/SetupPanel";
 import { takeFieldRequest } from "@/onboarding/handoff";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
@@ -73,6 +73,7 @@ import { TabWork } from "./tabWork";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
 import { Toast, useToast } from "./Toast";
+import { downloadsFrom } from "./downloads";
 import { DownloadToast, useDownloads } from "./useDownloads";
 import { useFindInPage } from "./useFindInPage";
 import { useReadingTools } from "./useReadingTools";
@@ -106,7 +107,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "default" | null;
+type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -149,6 +150,8 @@ export function BrowserScreen(): JSX.Element {
   // The search card opened from the widget's microphone starts listening (C7).
   const [searchListening, setSearchListening] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
+  // Settings is a screen of its own (src/settings): the browser's sheets open over it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [link, setLink] = useState<LinkPress | null>(null);
   // Dialogs pages are waiting on (`alert`/`confirm`/`prompt`, I3), in the order they asked; the engine holds each
   // page paused until its answer goes back, so they queue rather than replace each other.
@@ -224,6 +227,7 @@ export function BrowserScreen(): JSX.Element {
     else openTab("");
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
 
     return true;
@@ -459,6 +463,7 @@ export function BrowserScreen(): JSX.Element {
   function openIncomingCommand(command: Exclude<BayCommand, "search" | "voice">): void {
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
 
     if (command === "new-tab") openTab("");
@@ -472,6 +477,7 @@ export function BrowserScreen(): JSX.Element {
       // A widget or quick action opens search over whatever is up: a sheet left open goes first.
       if (command === "search" || command === "voice") {
         setPanel(null);
+        setSettingsOpen(false);
         setLink(null);
       }
 
@@ -490,6 +496,7 @@ export function BrowserScreen(): JSX.Element {
     if (!url) return;
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
 
     const current = useBrowserStore.getState().data;
@@ -1195,7 +1202,10 @@ export function BrowserScreen(): JSX.Element {
                 newTab={overlay === "tabs"}
                 onArchive={() => setPanel("archive")}
                 onSearch={() => search(overlay === "tabs")}
-                onSettings={() => setPanel("settings")}
+                onSettings={() => {
+                  setPanel(null);
+                  setSettingsOpen(true);
+                }}
               />
             )}
           </View>
@@ -1273,7 +1283,10 @@ export function BrowserScreen(): JSX.Element {
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
         onCloseTab={() => archiveTab(active.id)}
-        onSettings={() => setPanel("settings")}
+        onSettings={() => {
+          setPanel(null);
+          setSettingsOpen(true);
+        }}
         onHistory={() => setPanel("history")}
       />
       <TabsMenu
@@ -1336,6 +1349,12 @@ export function BrowserScreen(): JSX.Element {
         swipe={siteSetting.swipe}
         globalSwipe={data.preferences.swipeToNavigate}
         onSwipe={(swipe) => changeSiteSetting({ swipe })}
+        downloadedHere={downloadsFrom(downloads.downloads, active.url)}
+        onDownloads={() => setPanel("downloads")}
+        onSettings={() => {
+          setPanel(null);
+          setSettingsOpen(true);
+        }}
       />
       <ArchivePanel
         visible={panel === "archive"}
@@ -1348,9 +1367,10 @@ export function BrowserScreen(): JSX.Element {
         onRemove={(id) => dispatch({ type: "remove-archived", id })}
         onClear={() => dispatch({ type: "clear-archive" })}
       />
-      <SettingsPanel
-        visible={panel === "settings"}
-        onClose={() => closePanel("settings")}
+      <SettingsScreen
+        visible={settingsOpen}
+        covered={panel !== null}
+        onClose={() => setSettingsOpen(false)}
         engines={SEARCH_ENGINES}
         searchEngineId={engine.id}
         onSearchEngineChange={(id) => dispatch({ type: "search-engine", id })}
@@ -1358,13 +1378,12 @@ export function BrowserScreen(): JSX.Element {
         onCustomEngine={(customUrl) => dispatch({ type: "search-engine", id: CUSTOM_ENGINE_ID, customUrl })}
         openTabCount={data.tabs.filter((tab) => tab.url && !tab.private).length}
         onExportTabs={() => void exportTabs()}
-        onDefaultBrowser={() => setPanel("default")}
         onShowWelcome={() => {
-          setPanel(null);
+          setSettingsOpen(false);
           dispatch({ type: "welcome-again" });
         }}
         onOpenLink={(url) => {
-          setPanel(null);
+          setSettingsOpen(false);
           setOverlay("none");
           openTab(url);
         }}
@@ -1462,7 +1481,6 @@ export function BrowserScreen(): JSX.Element {
         }}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
-      <DefaultBrowserPanel visible={panel === "default"} onClose={() => closePanel("default")} />
 
       {/* The card's picture, grown into the page (A1). It is drawn over everything, and the live page takes over. */}
       {zoom ? (

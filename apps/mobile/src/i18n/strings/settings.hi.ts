@@ -1,0 +1,58 @@
+import type { SettingsStrings } from "./settings.ts";
+
+export const settingsHi: SettingsStrings = {
+  "settings.search.placeholder": "खोजें",
+  "settings.search.clear": "खोज मिटाएँ",
+  "settings.search.empty": "कोई सेटिंग नहीं मिली",
+
+  "settings.page.general": "सामान्य",
+  "settings.page.search": "खोज",
+  "settings.page.tabs": "टैब",
+  "settings.page.passwords": "पासवर्ड",
+  "settings.page.customEngine": "अपना सर्च इंजन",
+
+  "settings.blurb.general": "Bay कैसे खुलता है, कौन-से लिंक लेता है और आप पेजों के बीच कैसे जाते हैं।",
+  "settings.blurb.search": "सर्च फ़ील्ड किससे खोजता है, और आपके लिखते समय क्या पूछता है।",
+  "settings.blurb.appearance": "Bay का हल्का या गहरा रूप, उसके पीछे का स्टार्ट पेज और पेज कितने बड़े दिखें।",
+  "settings.blurb.tabs": "शांत पड़े टैब कब संग्रह में जाएँ, और Bay कब नए सिरे से शुरू हो।",
+  "settings.blurb.privacy": "विज्ञापन और ट्रैकर, निजी टैब और Bay इस फ़ोन पर क्या रखता है।",
+  "settings.blurb.passwords": "Bay ने जो साइन-इन इसी फ़ोन पर सहेजे हैं, और कहीं नहीं।",
+  "settings.blurb.youtube": "Brave की सूचियों से, एक शांत YouTube।",
+  "settings.blurb.about": "आपके फ़ोन और Mac के लिए एक मुफ़्त, ओपन-सोर्स ब्राउज़र।",
+  "settings.blurb.defaultBrowser": "वह ब्राउज़र जिसमें दूसरे ऐप के लिंक खुलते हैं।",
+
+  "settings.keywords.general": "ब्राउज़र डिफ़ॉल्ट लिंक ऐप भाषा स्वाइप जेस्चर पीछे आगे खींचें रीफ़्रेश कीबोर्ड शुरू स्वागत",
+  "settings.keywords.search": "सर्च इंजन google duckduckgo bing अपना सुझाव पता फ़ील्ड",
+  "settings.keywords.appearance": "थीम हल्का गहरा मोड वॉलपेपर बैकग्राउंड फ़ोटो ज़ूम टेक्स्ट आकार रूप",
+  "settings.keywords.tabs": "संग्रह निष्क्रिय पुराने स्टार्ट पेज एक्सपोर्ट शेयर",
+  "settings.keywords.privacy": "विज्ञापन ट्रैकर ब्लॉकर ब्लॉक कंटेंट amp निजी लॉक चेहरा फ़िंगरप्रिंट पासकोड डेटा मिटाएँ कुकी",
+  "settings.keywords.passwords": "लॉगिन साइन इन पासवर्ड पासकी सहेजे खाते",
+  "settings.keywords.youtube": "शॉर्ट्स कमेंट सुझाव वीडियो",
+  "settings.keywords.about": "वर्ज़न लाइसेंस सोर्स कोड श्रेय प्राइवेसी",
+  "settings.keywords.bookmarks": "बुकमार्क पसंदीदा सहेजे",
+  "settings.keywords.history": "इतिहास देखे पेज हाल",
+  "settings.keywords.downloads": "डाउनलोड फ़ाइलें",
+  "settings.keywords.import": "chrome safari firefox brave arc एक्सपोर्ट फ़ाइल लाएँ",
+  "settings.keywords.report": "बग क्रैश गड़बड़ी समस्या मदद राय",
+
+  "settings.search.engineNote": "पेज खोलने के लिए पता लिखें, या {engine} से खोजने के लिए शब्द।",
+  "settings.showWelcome.note": "Bay के पहले पेज एक बार फिर, नाम से सर्च फ़ील्ड तक। आपके टैब जैसे हैं वैसे रहेंगे।",
+  "settings.passwords.none": "कोई सहेजा पासवर्ड नहीं",
+
+  "settings.default.yes": "Bay",
+  "settings.default.no": "अभी नहीं",
+  "settings.default.isDefault": "दूसरे ऐप के लिंक Bay में, नए टैब में खुलते हैं।",
+  "settings.default.howIos": "सेटिंग्स › ऐप्स › डिफ़ॉल्ट ऐप्स › ब्राउज़र ऐप में Bay चुनें, फिर दूसरे ऐप के लिंक यहाँ नए टैब में खुलेंगे।",
+  "settings.default.howAndroid": "अपने फ़ोन के ब्राउज़र ऐप के रूप में Bay चुनें, फिर दूसरे ऐप के लिंक यहाँ नए टैब में खुलेंगे।",
+  "settings.default.make": "Bay को डिफ़ॉल्ट बनाएँ",
+
+  "site.secure": "कनेक्शन सुरक्षित है",
+  "site.notSecure": "सुरक्षित नहीं",
+  "site.secure.detail": "यहाँ के पेज एन्क्रिप्ट होकर आते हैं, और साइट ने अपनी पहचान साबित की है।",
+  "site.notSecure.detail": "यहाँ के पेज बिना एन्क्रिप्शन के आते हैं: कोई पासवर्ड या कार्ड नंबर न लिखें।",
+  "site.downloaded": "यहाँ से डाउनलोड",
+  "site.blockingHere": "यहाँ ब्लॉक करना",
+  "site.bayHere": "यहाँ",
+  "site.settings": "Bay सेटिंग्स",
+  "site.zoom.reset": "Bay के {size}% पर लौटें",
+};
