@@ -186,6 +186,29 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
     if (url) onOpen({ kind: "url", url });
   }
 
+  // Paste and Go shows only while the clipboard holds text. Asking whether it does reads nothing: iOS doesn't ask for
+  // paste permission and Android shows no "pasted" note, so it is checked as the card opens and whenever it changes.
+  const [canPaste, setCanPaste] = useState(false);
+
+  useEffect(() => {
+    let open = true;
+
+    const check = () => {
+      Clipboard.hasStringAsync().then(
+        (has) => open && setCanPaste(has),
+        () => open && setCanPaste(false),
+      );
+    };
+
+    check();
+    const subscription = Clipboard.addClipboardListener(check);
+
+    return () => {
+      open = false;
+      subscription.remove();
+    };
+  }, []);
+
   // Read only when tapped: reading the clipboard as the card opens makes iOS ask for paste permission unprompted.
   async function pasteAndGo(): Promise<void> {
     try {
@@ -333,7 +356,7 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
               </Text>
             ) : null}
 
-            {query ? null : (
+            {query || !canPaste ? null : (
               <Pressable
                 testID="paste-and-go"
                 accessibilityRole="button"
