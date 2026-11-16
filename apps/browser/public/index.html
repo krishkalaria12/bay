@@ -16,6 +16,8 @@
       }
       body {
         font-family: "Bay UI", system-ui, sans-serif;
+        /* The browser's own UI isn't text to select, as on macOS; fields and Text marked selectable still are. */
+        user-select: none;
       }
       #root {
         display: flex;
@@ -25,6 +27,11 @@
       input,
       textarea {
         outline: none;
+      }
+      input,
+      textarea,
+      [contenteditable]:not([contenteditable="false"]) {
+        user-select: text;
       }
     </style>
     <script type="module" src="/bay-native-host.js"></script>
