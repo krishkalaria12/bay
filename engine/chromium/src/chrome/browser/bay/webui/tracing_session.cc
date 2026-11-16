@@ -26,7 +26,38 @@ namespace bay {
 namespace {
 constexpr auto kPollInterval = base::Milliseconds(100);
 constexpr int kStartChecks = 100;
-constexpr int kStopChecks = 300;
+// A full profile can take a slow machine a minute or more to write out.
+constexpr int kStopChecks = 1800;
+
+// Everything performance work reads (apps/browser/scripts/perf/trace.mjs, which
+// records the same list from apps/browser/scripts/perf/traceConfig.mjs): the
+// documents' JavaScript sampled every millisecond with its source, their User
+// Timing measures (packages/platform/src/profiling.ts), native stacks, tasks
+// and IPC in every process, frames from input to the screen, the GPU, Bay's own
+// runtime relay (Bay.*, in "browser") and each process's memory every two
+// seconds. The buffer keeps the latest 256 MB, so a long recording ends with
+// its newest part.
+constexpr char kProfileConfig[] = R"({
+  "record_mode": "record-continuously",
+  "trace_buffer_size_in_kb": 262144,
+  "included_categories": [
+    "toplevel", "toplevel.flow", "base", "browser", "startup", "navigation",
+    "loading", "ipc", "mojom", "input", "latencyInfo", "benchmark", "cc",
+    "viz", "gpu", "graphics.pipeline", "renderer.scheduler",
+    "sequence_manager", "ui", "views", "blink", "blink.user_timing",
+    "blink.console", "blink_gc", "v8", "v8.execute", "devtools.timeline",
+    "disabled-by-default-devtools.timeline",
+    "disabled-by-default-devtools.timeline.frame",
+    "disabled-by-default-devtools.timeline.stack",
+    "disabled-by-default-devtools.target-rundown",
+    "disabled-by-default-devtools.v8-source-rundown",
+    "disabled-by-default-v8.cpu_profiler", "disabled-by-default-v8.gc",
+    "disabled-by-default-cpu_profiler", "disabled-by-default-memory-infra"
+  ],
+  "memory_dump_config": {
+    "triggers": [{"mode": "light", "periodic_interval_ms": 2000}]
+  }
+})";
 
 void DeleteTrace(base::FilePath path) {
   if (!path.empty())
@@ -152,7 +183,7 @@ void TracingSession::Begin(const void* owner, Started reply) {
   started_reply_ = std::move(reply);
   const auto alive = weak_factory_.GetWeakPtr();
   const bool accepted = Controller()->StartTracing(
-      base::trace_event::TraceConfig(),
+      base::trace_event::TraceConfig(kProfileConfig),
       base::BindOnce(&TracingSession::StartedTracing, alive, generation));
   if (!alive)
     return;

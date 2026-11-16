@@ -13,6 +13,7 @@
 #include "base/supports_user_data.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/trace_event.h"
 #include "base/uuid.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/native_host.h"
@@ -141,6 +142,10 @@ class RuntimeConnection final
   }
   void Dispatch(const std::string& request_json,
                 DispatchCallback callback) override {
+    // Bay.* events time the runtime's relay (scripts/perf/trace.mjs): a window's
+    // command, the coordinator's commit and reply, and each window's share.
+    TRACE_EVENT("browser", "Bay.Runtime.Dispatch", "bytes",
+                request_json.size());
     auto request = Parse(request_json, kMaximumRequestBytes);
     if (!runtime_ || !client_.is_bound() || is_coordinator_ ||
         !runtime_->ready_ || !runtime_->coordinator_ || !runtime_->accepted_) {
@@ -182,6 +187,9 @@ class RuntimeConnection final
     if (!window_id.empty())
       request->Set("originWindowId", window_id);
     const auto token = ID();
+    if (const auto* method = command->FindString("method"))
+      TRACE_EVENT_INSTANT("browser", "Bay.Runtime.Command", "method", *method,
+                          "token", token);
     runtime_->Queue(*this, token, *request_id,
                     RuntimeCommandResultKind(*command), std::move(callback));
     runtime_->coordinator_->client_->OnCommand(token,
@@ -194,14 +202,24 @@ class RuntimeConnection final
           Failure("forbidden", "Only the owned coordinator can publish"));
       return;
     }
-    auto commit = Parse(commit_json, kMaximumCommitBytes);
+    TRACE_EVENT("browser", "Bay.Runtime.Publish", "bytes", commit_json.size());
+    std::optional<base::DictValue> commit;
+    {
+      TRACE_EVENT("browser", "Bay.Runtime.ParseCommit");
+      commit = Parse(commit_json, kMaximumCommitBytes);
+    }
     // A recovered coordinator starts a new epoch at revision zero.
     const double next =
         runtime_->accepted_ && runtime_->accepted_->FindString("epoch") &&
                 *runtime_->accepted_->FindString("epoch") == runtime_->epoch_
             ? *RuntimeInteger(*runtime_->accepted_, "revision") + 1
             : 0;
-    if (!commit || !IsRuntimeCommit(*commit, runtime_->epoch_, next)) {
+    bool valid;
+    {
+      TRACE_EVENT("browser", "Bay.Runtime.ValidateCommit");
+      valid = commit && IsRuntimeCommit(*commit, runtime_->epoch_, next);
+    }
+    if (!valid) {
       std::move(callback).Run(Failure(
           "invalid_commit", "Expected the next complete application state"));
       return;
@@ -227,9 +245,19 @@ class RuntimeConnection final
       for (const auto& [id, connection] : runtime_->connections_) {
         if (!connection || connection->is_coordinator_)
           continue;
+        const std::string& client = id;
+        TRACE_EVENT("browser", "Bay.Runtime.SendCommit", "client", client);
         auto projection = runtime_->Snapshot(*connection);
-        if (projection)
-          connection->client_->OnCommit(Json(std::move(*projection)));
+        if (!projection)
+          continue;
+        std::string json;
+        {
+          TRACE_EVENT("browser", "Bay.Runtime.WriteJson");
+          json = Json(std::move(*projection));
+        }
+        TRACE_EVENT_INSTANT("browser", "Bay.Runtime.CommitSent", "client",
+                            client, "bytes", json.size());
+        connection->client_->OnCommit(std::move(json));
       }
     }
     std::move(callback).Run(Success());
@@ -314,6 +342,8 @@ void RuntimeConnection::Resolve(const std::string& token,
         Failure("unknown_command", "Command expired or disconnected"));
     return;
   }
+  TRACE_EVENT("browser", "Bay.Runtime.Resolve", "bytes", reply_json.size(),
+              "token", token);
   auto reply = Parse(reply_json, kMaximumRequestBytes);
   const auto accepted_revision =
       runtime_->accepted_ ? RuntimeInteger(*runtime_->accepted_, "revision")
@@ -508,6 +538,7 @@ void AppRuntime::PageEvent(const std::string& tab_id,
                            int browser_id,
                            const char* event,
                            base::DictValue payload) {
+  TRACE_EVENT("browser", "Bay.Runtime.PageEvent", "event", event);
   if (shutdown_ || !accepted_)
     return;
   auto fact =
@@ -792,6 +823,7 @@ void AppRuntime::Timeout(const std::string& token) {
 }
 std::optional<base::DictValue> AppRuntime::Snapshot(
     RuntimeConnection& connection) const {
+  TRACE_EVENT("browser", "Bay.Runtime.Snapshot");
   if (!ready_ || !accepted_ || !connection.client_.is_bound())
     return std::nullopt;
   if (connection.is_coordinator_)

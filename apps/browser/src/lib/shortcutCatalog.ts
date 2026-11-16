@@ -160,5 +160,11 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
       ["Merge All Windows", "mergeAllWindows"],
     ],
   ),
-  ...group(["Help"], [["Keyboard Shortcuts", "keyboardShortcuts"]]),
+  ...group(
+    ["Help"],
+    [
+      ["Keyboard Shortcuts", "keyboardShortcuts"],
+      ["Record Performance Issue…", "recordPerformanceIssue"],
+    ],
+  ),
 ];

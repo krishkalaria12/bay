@@ -99,6 +99,8 @@ source_set("impl") {
     "permission_prompts.h",
     "profile_data.cc",
     "profile_data.h",
+    "profiling_watch.cc",
+    "profiling_watch.h",
     "shortcut_recorder.cc",
     "shortcut_recorder.h",
     "profile_window.cc",

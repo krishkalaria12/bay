@@ -1,10 +1,13 @@
+// First, so React finds its commit hook as it loads.
+import "./src/web/reactProfiling";
 import type { JsonObject } from "./src/lib/json";
 import { checked } from "./src/lib/checked";
 import "@expo/metro-runtime";
 import "expo";
 import * as v from "valibot";
 import { StyleSheet } from "react-native";
-import { installNativeTransport, getNativeHostInfo, readNativeSnapshot } from "@bay/platform/nativeBridge";
+import { installNativeTransport, getNativeHostInfo, readNativeSnapshot, subscribeNativeEvent } from "@bay/platform/nativeBridge";
+import { setProfiling, span } from "@bay/platform/profiling";
 import { createMojoTransport, type WebNativeBridgeOptions } from "../../packages/platform/src/mojoTransport";
 
 // A hairline is half a point on the Retina Macs the UI is drawn for, and a whole pixel in react-native-web, so every
@@ -23,6 +26,9 @@ declare global {
       }>
     | undefined;
 }
+
+// The bundle's modules have evaluated by now: from navigation start, what loading and running them took.
+const bundleEvaluated = performance.now();
 
 async function start() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
@@ -63,6 +69,9 @@ async function start() {
       ]);
 
       installNativeTransport(await createMojoTransport(options));
+      followProfiling();
+      span("Bay.startup bundle", 0, undefined, bundleEvaluated);
+      span("Bay.startup nativeHost", bundleEvaluated);
     } finally {
       clearTimeout(timeout);
     }
@@ -75,7 +84,12 @@ async function start() {
   }
 
   // The desktop hosts draw the UI in the Inter Bay ships, as macOS draws it in SF Pro.
-  if (getNativeHostInfo().platform !== "macos") await loadBundledFont();
+  if (getNativeHostInfo().platform !== "macos") {
+    const fontStart = performance.now();
+    await loadBundledFont();
+    span("Bay.startup font", fontStart);
+  }
+
   const initializationError = getNativeHostInfo().constants.BayShell?.initializationError;
 
   if (v.is(v.string(), initializationError) && initializationError) throw new Error(initializationError);
@@ -93,6 +107,7 @@ async function start() {
     const ready = globalThis.__bayAppRuntimeReady;
 
     if (!ready) throw new Error("Bay's authenticated runtime bootstrap did not load");
+    const runtimeStart = performance.now();
     const { createAppRuntimeTransport } = await import("@bay/platform/runtimeTransport");
     let runtimeTimer: ReturnType<typeof setTimeout> | undefined;
     let expired = false;
@@ -122,6 +137,8 @@ async function start() {
       unknown
     >({ ...endpoints, expectedRole: role, ...(role === "window" ? { expectedWindowId: checked<string>(windowId) } : undefined) });
 
+    span("Bay.startup runtimeTransport", runtimeStart, { role });
+    const entryStart = performance.now();
     const { startSharedRuntime } = await import("./src/runtime/startup");
 
     const owner = await startSharedRuntime({
@@ -130,6 +147,7 @@ async function start() {
       window: async (transport) => (await import("./src/runtime/windowRuntimeEntry")).startWindowRuntimeEntry(transport, showStartupError),
     });
 
+    span("Bay.startup entry", entryStart, { role });
     addEventListener("pagehide", () => owner.dispose(), { once: true });
     // A test instance whose launcher asked for it (scripts/lib/instance.mjs): a packed bundle isn't __DEV__.
     const isolated = readNativeSnapshot<{ isolatedInstance?: boolean }>("BayApp", "systemInfo")?.isolatedInstance;
@@ -151,6 +169,16 @@ async function start() {
 
   if (!rootTag) throw new Error("The WebUI root element is missing");
   AppRegistry.runApplication("main", { rootTag, initialProps: { windowId } });
+}
+
+const ProfilingEvent = v.object({ type: v.literal("profiling"), active: v.boolean() });
+
+/** The engine says when a trace records the documents' timings (ProfilingWatch); its spans cost nothing otherwise. */
+function followProfiling() {
+  setProfiling(readNativeSnapshot<boolean>("BayShell", "profiling") === true);
+  subscribeNativeEvent("BayShell", "onAppEvent", (event) => {
+    if (v.is(ProfilingEvent, event)) setProfiling(event.active);
+  });
 }
 
 /** Linux has no one system UI face (Cantarell, Noto Sans, DejaVu Sans...), so Bay draws Inter, the nearest to macOS's

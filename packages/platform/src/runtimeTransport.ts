@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { decodeNativeResult, NativeBridgeError } from "./nativeBridge.ts";
 import { checked, isJsonObject, isNumber, isString, type JsonInput, type JsonObject, type JsonValue } from "./json.ts";
+import { sizeOf, span, spanStart } from "./profiling.ts";
 
 export type RuntimeCommit<State> = Readonly<{ epoch: string; revision: number; state: State }>;
 
@@ -349,12 +350,16 @@ export async function createAppRuntimeTransport<State, Command, Value>({
     const onCommit = client.onCommit.addListener((json) =>
       event(() => {
         if (bootstrap!.role !== "window") invalid("Coordinator received a window commit");
+        const decoding = spanStart();
         const commit = commitFrom<State>(fromJSON(json, COMMIT_LIMIT), bootstrap!.epoch);
+        span("Bay.runtime decodeCommit", decoding, { bytes: sizeOf(json), revision: commit.revision });
 
         if (!latestCommit || commit.revision > latestCommit.revision) latestCommit = commit;
+        const delivering = spanStart();
 
         // oxlint-disable-next-line unicorn/no-useless-spread -- Snapshot subscribers so changes during delivery affect the next commit.
         for (const { listener } of [...commitListeners]) listener(commit);
+        span("Bay.runtime deliverCommit", delivering, { revision: commit.revision });
       }),
     );
 
@@ -369,7 +374,9 @@ export async function createAppRuntimeTransport<State, Command, Value>({
 
         if (tokens.has(token) || tokens.size >= 64) invalid("Invalid coordinator command token");
         // Only native dispatch can stamp the originating window's identity.
+        const decoding = spanStart();
         const request = requestFrom<Command>(fromJSON(json, REQUEST_LIMIT), bootstrap!.epoch, true);
+        span("Bay.runtime decodeCommand", decoding, { bytes: sizeOf(json) });
         tokens.add(token);
 
         if (commandListener) commandListener(token, request);
@@ -448,8 +455,12 @@ export async function createAppRuntimeTransport<State, Command, Value>({
           const request = requestFrom<Command>(freezeJSON(input), assigned.epoch);
 
           if (request.clientId !== assigned.clientId) invalid("Browser runtime client identity mismatch");
+          const encoding = spanStart();
           const json = toJSON(request, REQUEST_LIMIT);
+          span("Bay.runtime encodeCommand", encoding, { bytes: sizeOf(json) });
+          const waiting = spanStart();
           const value = await invoke(() => remote.dispatch(json));
+          span("Bay.runtime awaitReply", waiting);
 
           try {
             const reply = object(value);
@@ -487,9 +498,13 @@ export async function createAppRuntimeTransport<State, Command, Value>({
       bootstrap: assigned,
       async publish(commit) {
         active();
+        const encoding = spanStart();
         commitFrom<State>(checked<JsonInput>(commit), assigned.epoch);
         const json = toJSON(commit, COMMIT_LIMIT);
+        span("Bay.runtime encodeCommit", encoding, { bytes: sizeOf(json), revision: commit.revision });
+        const publishing = spanStart();
         await ack(() => remote.publish(json));
+        span("Bay.runtime awaitPublish", publishing, { revision: commit.revision });
       },
       async resolve(token, reply) {
         active();
@@ -512,9 +527,11 @@ export async function createAppRuntimeTransport<State, Command, Value>({
         }
 
         const json = toJSON(reply, REQUEST_LIMIT);
+        const resolving = spanStart();
 
         try {
           await ack(() => remote.resolve(token, json));
+          span("Bay.runtime awaitResolve", resolving, { bytes: sizeOf(json) });
         } finally {
           tokens.delete(token);
         }

@@ -29,6 +29,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/trace_event.h"
 #include "bay/core/nn_devtools_call.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/nn_dispatch.h"
@@ -42,6 +43,7 @@
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/page_menu.h"
 #include "chrome/browser/bay/webui/permission_prompts.h"
+#include "chrome/browser/bay/webui/profiling_watch.h"
 #include "chrome/browser/bay/webui/system_state.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
@@ -346,6 +348,7 @@ base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
   return target->GetWeakPtr();
 }
 void EngineEvent(void*, const char* topic, const char* json) {
+  TRACE_EVENT("browser", "Bay.EngineEvent", "topic", topic ? topic : "");
   // The NN engine guarantees UI-thread delivery. Hosts and Mojo remotes are
   // deliberately UI-thread confined; a background event source must post here.
   auto parsed =
@@ -885,6 +888,16 @@ void NativeHost::InstallCloseHooks() {
       }
     }));
     ContentBlocker::Get().Prepare();
+    // Every document times its work while a trace records it.
+    ProfilingWatch::Get().SetChanged(base::BindRepeating([](bool active) {
+      for (const auto& [owner, host] : Hosts()) {
+        if (host)
+          host->Emit("BayShell", "onAppEvent",
+                     base::Value(base::DictValue()
+                                     .Set("type", "profiling")
+                                     .Set("active", active)));
+      }
+    }));
     // Alt alone shows the active window's hidden sidebar, as macOS's Option.
     WindowKeyWatch::Get().SetAltHoldHandlers(
         base::BindRepeating([] {
@@ -1271,8 +1284,10 @@ base::DictValue NativeHost::Info() const {
           .Set("snapshots",
                base::DictValue()
                    .Set("BayApp", std::move(app))
-                   .Set("BayShell", base::DictValue().Set("documents",
-                                                          std::move(documents)))
+                   .Set("BayShell",
+                        base::DictValue()
+                            .Set("documents", std::move(documents))
+                            .Set("profiling", ProfilingWatch::Get().active()))
                    .Set("BaySystem",
                         base::DictValue()
                             .Set("files", base::DictValue())
@@ -1461,8 +1476,14 @@ void NativeHost::SetClient(
 void NativeHost::Emit(const char* module,
                       const char* event,
                       base::Value payload) {
-  if (client_)
-    client_->OnNativeEvent(module, event, JSON(payload));
+  if (!client_)
+    return;
+  TRACE_EVENT("browser", "Bay.NativeHost.Emit", "module", module, "event",
+              event);
+  std::string json = JSON(payload);
+  TRACE_EVENT_INSTANT("browser", "Bay.NativeHost.EmitSize", "bytes",
+                      json.size());
+  client_->OnNativeEvent(module, event, std::move(json));
 }
 bool NativeHost::EmitDisplayMediaRequest(content::WebContents* contents,
                                          base::DictValue request) {
@@ -1629,6 +1650,9 @@ void NativeHost::Invoke(const std::string& module,
                         const std::string& method,
                         const std::string& args_json,
                         InvokeCallback callback) {
+  // The call's synchronous part; the document times the round trip.
+  TRACE_EVENT("browser", "Bay.NativeHost.Invoke", "module", module, "method",
+              method, "bytes", args_json.size());
   if (!context_.profile()) {
     std::move(callback).Run(Failure("profile_unavailable",
                                     "The host profile is no longer available"));
@@ -2476,6 +2500,8 @@ WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
           content::WebContents::FromRenderFrameHost(focused) == document) {
         return WindowShortcut::kForDocument;
       }
+      TRACE_EVENT_INSTANT("browser", "Bay.WindowShortcut", "command",
+                          shortcut.command);
       if (shortcut.command.empty())
         return WindowShortcut::kRan;
       // The command bar types in the document, and a page that holds the

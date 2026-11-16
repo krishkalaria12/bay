@@ -78,10 +78,14 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
   // menuState only reads, and the projection is the same data, read-only.
   if (command === "showAppMenu")
     // SAFETY: the checks above established this shape.
-    return void showAppMenu(menuState(checked<Parameters<typeof menuState>[0]>(s)), s.settings.shortcuts, (next, nextArg) =>
+    return void showAppMenu(menuState(checked<Parameters<typeof menuState>[0]>(s)), s.settings.shortcuts, (next, nextArg) => {
       // SAFETY: the checks above established this shape.
-      runCommand({ command: next as BrowserCommand, arg: nextArg, windowId: requested }),
-    );
+      const chosen = { command: next as BrowserCommand, arg: nextArg, windowId: requested };
+      runCommand(chosen);
+      // Both of onCommand's listeners, as a key shortcut has (webShortcuts.ts): the app's own commands, such as
+      // Record Performance Issue, are the other's. Loaded already; imported here, it would be a cycle.
+      void import("./appMenuIntegration").then(({ runAppCommand }) => runAppCommand(chosen));
+    });
 
   switch (command) {
     case "undoPinnedFolderMove": {
