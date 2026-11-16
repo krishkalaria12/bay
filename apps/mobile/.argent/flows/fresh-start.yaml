@@ -8,8 +8,14 @@ steps:
       - tool: open-url
         args:
           url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
-  # Bay opens ready to type (C1): once the app has settled, put the search card away to reach the bar.
   - await: { idle: true, timeout: 60000, stableFor: 2000 }
+  # A fresh install opens on the welcome. Skip ends it on the search field, which the next steps put away.
+  - when: { visible: { id: welcome-skip } }
+    steps:
+      - tap: { id: welcome-skip }
+      - await: { hidden: { id: welcome-skip }, timeout: 10000 }
+      - await: { idle: true, timeout: 15000, stableFor: 1500 }
+  # Bay opens ready to type (C1): put the search card away to reach the bar.
   - when: { visible: { id: search-dismiss } }
     steps:
       - tap: { id: search-dismiss }
@@ -32,11 +38,6 @@ steps:
     steps:
       - tap: { id: page-request-cancel }
       - await: { hidden: { id: page-request-cancel }, timeout: 10000 }
-  # A fresh install opens on the welcome; tapping its glass dome lets Bay through.
-  - when: { visible: { id: welcome-start } }
-    steps:
-      - tap: { id: welcome-start }
-      - await: { hidden: { id: welcome-start }, timeout: 10000 }
   - when: { visible: { id: bar-more } }
     steps:
       - tap: { id: bar-more }

@@ -1,4 +1,5 @@
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { HeroUINativeProvider } from "heroui-native";
 import { type JSX } from "react";
@@ -14,6 +15,11 @@ import "../global.css";
 // A crash in a release build says nothing, so Bay keeps what happened (B8). The watch goes on first, so nothing that
 // goes wrong on the way to the first screen is lost.
 installCrashReports();
+
+// The launch screen stays until the tabs are in (src/app/index.tsx), then goes in a blink.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+SplashScreen.setOptions({ duration: 150, fade: true });
 
 // The saved browsing state and language are read before the first screen draws, so the app opens on them. The splash
 // stays up until the store says it is ready. A development build then checks once that Effect behaves under Hermes as

@@ -40,7 +40,8 @@ import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
-import { DefaultBrowserPanel, SetupPanel } from "@/panels/SetupPanel";
+import { DefaultBrowserPanel } from "@/panels/SetupPanel";
+import { takeFieldRequest } from "@/onboarding/handoff";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privacy/contentBlocking";
@@ -105,7 +106,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "setup" | "default" | null;
+type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "default" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -196,17 +197,12 @@ export function BrowserScreen(): JSX.Element {
     Uniwind.setTheme(theme);
   }, [theme]);
 
-  // A fresh install, just through the welcome, is offered the import (desktop's first run has it as a step). Only a
-  // welcome seen in this session counts: Bay reopened later doesn't ask again.
-  const sawWelcome = useRef(ready && !welcomed);
+  // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
   useEffect(() => {
-    if (ready && !welcomed) sawWelcome.current = true;
-    else if (ready && welcomed && sawWelcome.current) {
-      sawWelcome.current = false;
-      // The welcome's last step (C10): import, and the default browser.
-      setPanel("setup");
-    }
-    // The toast and the translation are the screen's own and stay the same; only the welcome's ending asks.
+    if (!ready || !welcomed || !takeFieldRequest()) return;
+    search(false);
+    setLaunchSearch(true);
+    // Only the welcome's ending asks; the handlers it calls stay the screen's own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, welcomed]);
 
@@ -234,7 +230,7 @@ export function BrowserScreen(): JSX.Element {
   };
 
   // Bay opens ready to type (C1): when it starts, and when it comes back to a fresh start page, the search card and
-  // keyboard come up. Not on the run that showed the welcome, which offers the import instead.
+  // keyboard come up. Not on the run that showed the welcome, which ends on the field itself when it's skipped.
   const launched = useRef(false);
 
   useEffect(() => {
@@ -1466,12 +1462,6 @@ export function BrowserScreen(): JSX.Element {
         }}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
-      <SetupPanel
-        visible={panel === "setup"}
-        onClose={() => closePanel("setup")}
-        onImport={() => setPanel("import")}
-        onDefaultBrowser={() => setPanel("default")}
-      />
       <DefaultBrowserPanel visible={panel === "default"} onClose={() => closePanel("default")} />
 
       {/* The card's picture, grown into the page (A1). It is drawn over everything, and the live page takes over. */}

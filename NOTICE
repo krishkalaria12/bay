@@ -24,3 +24,9 @@ Bay builds on and ships third-party software under its own licenses, including:
   packages/desktop/ios/TidyTabsModule.swift, packages/desktop/ios/TidyNamesModule.swift) and the sidebar's squiggle
   follow Cra's TidyTabs, TidyDownloads and SquiggleLayer; the phone app's layout and motion rules
   (apps/mobile/src/chrome/layout.ts) are ported from Cra's CraCore/Mobile
+- Yab (Apache-2.0, Copyright 2026 Serafim Korablev, https://github.com/yetanotherbrowser/yab): the phone app's
+  welcome (apps/mobile/src/onboarding, apps/mobile/modules/bay-welcome) is ported from Yab's first run
+  (Phone/Sources/Welcome) and changed for Bay: React Native in place of SwiftUI, Bay's own pages, words, colours, fonts
+  and icons, and a desktop page in place of Yab's Mac sync. "Yab" and its marks are Serafim Korablev's; Bay is not Yab
+  and isn't endorsed by it
+- Caveat (SIL Open Font License 1.1), the welcome's handwritten notes

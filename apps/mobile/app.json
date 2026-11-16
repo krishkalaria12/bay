@@ -42,16 +42,16 @@
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
       "expo-router",
-      // The launch animation (scripts/splash-animation.py draws it): Bay's icon builds itself natively while the
-      // JavaScript loads, then hands over to the app (src/app/index.tsx hides it).
+      // The launch screen, as Chrome and Brave draw theirs: Bay's icon still on the phone's own light or dark ground,
+      // the app's background colour in each, only until the tabs are loaded (src/app/index.tsx hides it).
       [
-        "react-native-splash-motion",
+        "expo-splash-screen",
         {
-          "source": "./assets/splash/bay.json",
-          "background": "#F4F0E8",
-          "width": 160,
-          "still": "./assets/splash/bay-first-frame.png",
-          "loopMarker": "loop"
+          "image": "./assets/images/bay-mark.png",
+          "imageWidth": 96,
+          "resizeMode": "contain",
+          "backgroundColor": "#F5F5F5",
+          "dark": { "image": "./assets/images/bay-mark.png", "backgroundColor": "#060607" }
         }
       ],
       [

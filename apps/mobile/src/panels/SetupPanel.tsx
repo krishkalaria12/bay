@@ -3,56 +3,9 @@ import { Linking, Platform, View } from "react-native";
 
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { rowTint, space } from "@/chrome/tokens";
+import { space } from "@/chrome/tokens";
 import { useT, type MessageKey } from "@/i18n";
-import { ActionRow, Group, PanelSheet } from "./PanelSheet";
-
-/**
- * The welcome's last step (C10): what makes switching to Bay painless, offered once after the dome opens. Each choice
- * is also in Settings.
- */
-export function SetupPanel({
-  visible,
-  onClose,
-  onImport,
-  onDefaultBrowser,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onImport: () => void;
-  onDefaultBrowser: () => void;
-}): JSX.Element {
-  const t = useT();
-
-  return (
-    <PanelSheet visible={visible} onClose={onClose} title={t("setup.title")} testID="setup-sheet" height="60%">
-      <Text variant="subhead" tone="muted" style={{ marginBottom: space.md }}>
-        {t("setup.body")}
-      </Text>
-      <Group>
-        <ActionRow
-          testID="setup-import"
-          icon="import"
-          tint={rowTint.import}
-          label={t("setup.import")}
-          detail={t("setup.importDetail")}
-          chevron
-          onPress={onImport}
-        />
-        <ActionRow
-          testID="setup-default"
-          icon="link"
-          tint={rowTint.search}
-          label={t("setup.default")}
-          detail={t("setup.defaultDetail")}
-          chevron
-          onPress={onDefaultBrowser}
-        />
-      </Group>
-      <PrimaryButton testID="setup-done" label={t("setup.done")} onPress={onClose} />
-    </PanelSheet>
-  );
-}
+import { PanelSheet } from "./PanelSheet";
 
 /**
  * How to make Bay the default browser (C11), in the phone's own words, with the button that goes there. iOS has no

@@ -148,6 +148,7 @@ const swipeModes: { id: SwipeMode; label: MessageKey }[] = [
 const CREDITS: readonly { name: string; licence: string; url: string; android?: boolean }[] = [
   { name: "Bay", licence: "Apache-2.0", url: "https://github.com/krishkalaria12/bay" },
   { name: "Cra", licence: "MIT · © 2026 Victor Kildahl", url: "https://github.com/VictorKildahl/cra" },
+  { name: "Yab", licence: "Apache-2.0 · © 2026 Serafim Korablev", url: "https://github.com/yetanotherbrowser/yab" },
   { name: "Chromium", licence: "BSD-3-Clause", url: "https://www.chromium.org/", android: true },
   { name: "adblock-rust", licence: "MPL-2.0", url: "https://github.com/brave/adblock-rust" },
   { name: "uBlock Origin", licence: "GPL-3.0", url: "https://github.com/gorhill/uBlock" },
@@ -158,6 +159,7 @@ const CREDITS: readonly { name: string; licence: string; url: string; android?: 
   { name: "HeroUI Native", licence: "MIT", url: "https://github.com/heroui-inc/heroui-native" },
   { name: "Material Symbols", licence: "Apache-2.0", url: "https://github.com/google/material-design-icons", android: true },
   { name: "Inter", licence: "OFL-1.1", url: "https://github.com/rsms/inter", android: true },
+  { name: "Caveat", licence: "OFL-1.1", url: "https://github.com/googlefonts/caveat" },
 ];
 
 const SOURCE_URL = "https://github.com/krishkalaria12/bay";

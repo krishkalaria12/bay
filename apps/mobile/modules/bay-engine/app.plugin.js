@@ -66,6 +66,10 @@ module.exports = function withBayEngine(config) {
 
     if (!permitted.includes(downloadTasks)) mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...permitted, downloadTasks];
 
+    // The welcome asks to be the default browser only where it can be (modules/bay-welcome reads this).
+    if (defaultBrowser) mod.modResults.BayCanBeDefaultBrowser = true;
+    else delete mod.modResults.BayCanBeDefaultBrowser;
+
     return mod;
   });
   config = withEntitlementsPlist(config, (mod) => {
