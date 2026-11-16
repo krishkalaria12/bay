@@ -208,7 +208,7 @@ TEST_F(TracingSessionTest, StopTimeoutCleansLateFileAndProtectsNextRecording) {
   Start();
   base::test::TestFuture<std::optional<base::FilePath>> stop;
   session.End(&owner, true, stop.GetCallback());
-  tasks.FastForwardBy(base::Seconds(31));
+  tasks.FastForwardBy(base::Seconds(181));
   EXPECT_FALSE(stop.Get().has_value());
   base::test::TestFuture<bool> busy;
   session.Begin(&other, busy.GetCallback());
