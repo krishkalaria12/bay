@@ -106,6 +106,9 @@ opaque "$tmp/bleed.png" 180 "$web/public/apple-touch-icon.png"
 emit "$tmp/full.png" 512 "$web/public/icon-512.png"
 cp "$assets/app-icon.png" "$web/src/assets/app-icon.png"
 
+echo "videos: the icon in the release videos' intros"
+cp "$assets/app-icon.png" "$root/apps/videos/public/app-icon.png"
+
 echo "mobile: app icon, Android foreground, the mark for the welcome and the web favicon"
 opaque "$tmp/bleed.png" 1024 "$mobile/icon.png"
 opaque "$tmp/adaptive.png" 1024 "$mobile/adaptive-icon.png"
