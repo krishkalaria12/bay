@@ -61,6 +61,9 @@
         }
       ],
       "expo-status-bar",
+      // Android draws its navigation bar over Bay, see-through: no contrast scrim (a white strip on phones in light
+      // mode, opaque on some), and buttons that follow Bay's own theme (src/app/_layout.tsx).
+      ["expo-navigation-bar", { "enforceContrast": false }],
       [
         "expo-dev-client",
         {

@@ -1,3 +1,4 @@
+import { NavigationBar } from "expo-navigation-bar";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -36,6 +37,7 @@ export default function RootLayout(): JSX.Element | null {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>
         <StatusBar style="auto" />
+        <NavigationBar style="auto" />
         <Stack screenOptions={{ headerShown: false }} />
       </HeroUINativeProvider>
     </GestureHandlerRootView>
