@@ -30,6 +30,9 @@ Json history(const Path &profile, bool firefox, const Options &options,
              int &count);
 Json chromiumTabs(const Path &profile, const std::atomic_bool &cancelled);
 Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled);
+// Zen's spaces (SpaceSuggestion), each with its pins, folders, open tabs and
+// the essentials of its container; empty for a profile without them.
+Json zenSpaces(const Path &profile, const std::string &profileId);
 Json arcSidebar(const Path &file);
 Json extensions(const Path &profile);
 Json chromiumLogins(const Path &profile, const Bytes &key,
