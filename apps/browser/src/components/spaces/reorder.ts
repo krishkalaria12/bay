@@ -1,5 +1,5 @@
 import { hapticTick } from "@bay/desktop";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { PanResponder } from "react-native";
 import { Easing, makeMutable, withTiming, type SharedValue } from "react-native-reanimated";
 import { useBrowser } from "../../store/browserStore";
@@ -14,8 +14,17 @@ const OVERSHOOT = 6;
 
 const settle = (value: SharedValue<number>, toValue: number) => value.set(withTiming(toValue, { duration: 160, easing: Easing.out(Easing.cubic) }));
 
-/** `step`: how far apart the spaces are along the list. */
-function spaceReorder(step: number, setDragging: (id: string | null) => void) {
+/** Each of `count` spaces' centre along a list of them. */
+export type SpaceCentres = (count: number) => number[];
+
+/** Spaces `step` apart along their list. */
+export const evenly =
+  (step: number): SpaceCentres =>
+  (count) =>
+    Array.from({ length: count }, (_, i) => i * step);
+
+/** `centres`: where each space is along the list (evenly spaced rows, or the sidebar's icons among dots). */
+function spaceReorder(centres: SpaceCentres, setDragging: (id: string | null) => void) {
   const offsets = new Map<string, SharedValue<number>>();
   let drag = { id: "", from: 0, to: 0, reorderPending: false };
 
@@ -44,18 +53,21 @@ function spaceReorder(step: number, setDragging: (id: string | null) => void) {
       const { id, from } = drag;
       const ids = useBrowser.getState().spaceOrder;
       const max = ids.length - 1;
-      offsetOf(id).set(Math.max(-from * step - OVERSHOOT, Math.min((max - from) * step + OVERSHOOT, delta)));
-      const to = Math.max(0, Math.min(max, Math.round(from + delta / step)));
+      const at = centres(ids.length);
+      offsetOf(id).set(Math.max(at[0]! - at[from]! - OVERSHOOT, Math.min(at[max]! - at[from]! + OVERSHOOT, delta)));
+      // The place whose centre is nearest where the dragged space is now.
+      const where = at[from]! + delta;
+      const to = at.reduce((best, c, j) => (Math.abs(c - where) < Math.abs(at[best]! - where) ? j : best), 0);
 
       if (to === drag.to) return;
       drag.to = to;
       hapticTick();
 
-      // The spaces between where it was and where it is make room on the side it left.
+      // The spaces between where it was and where it is make room on the side it left, each into its neighbour's place.
       const shift = (j: number) => {
-        if (from < j && j <= to) return -step;
+        if (from < j && j <= to) return at[j - 1]! - at[j]!;
 
-        if (to <= j && j < from) return step;
+        if (to <= j && j < from) return at[j + 1]! - at[j]!;
 
         return 0;
       };
@@ -82,11 +94,13 @@ function spaceReorder(step: number, setDragging: (id: string | null) => void) {
   };
 }
 
-/** A list of spaces' reordering, and the space being dragged. */
-export function useSpaceReorder(step: number) {
+/** A list of spaces' reordering, and the space being dragged. `centres` is read as a drag moves, so it can follow layout. */
+export function useSpaceReorder(centres: SpaceCentres) {
   const order = useBrowser((s) => s.spaceOrder);
   const [dragging, setDragging] = useState<string | null>(null);
-  const [reorder] = useState(() => spaceReorder(step, setDragging));
+  const [reorder] = useState(() => spaceReorder((count) => latest.current(count), setDragging));
+  const latest = useRef(centres);
+  latest.current = centres;
   useLayoutEffect(() => reorder.reordered(), [order, reorder]);
 
   return { reorder, dragging };

@@ -155,7 +155,8 @@ function canDrop(flow: ImportFlow) {
 }
 
 export function ImportStep() {
-  const flow = useImportFlow();
+  // A primary password isn't asked for here: the summary says where those passwords come in.
+  const flow = useImportFlow({ askPrimaryPassword: false });
   const [found] = useState<Leaving[]>(detectBrowsers);
   const [icons, setIcons] = useState<Record<string, string>>({});
   const [chosenId, setChosenId] = useState<string | null>(null);

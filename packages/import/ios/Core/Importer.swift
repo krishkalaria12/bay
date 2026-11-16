@@ -100,10 +100,17 @@ public final class Importer: @unchecked Sendable {
           result.tabGroups = session.groups
           count = session.tabs.count
         case (.tabs, .firefox):
-          let session = try Firefox.loadSession(profile: dir)
-          result.tabs = session.tabs
-          result.tabGroups = session.groups
-          count = session.tabs.count
+          // Zen's spaces come as spaces, each with its pins, folders, tabs and essentials, as Arc's do.
+          if def.id == "zen", let spaces = try ZenSpaces.load(profile: dir, profileId: profileId), !spaces.isEmpty {
+            result.spaces = spaces
+            result.tabs = spaces.flatMap(\.tabs)
+            count = spaces.reduce(0) { $0 + $1.tabs.count + $1.pinned.reduce(0) { $0 + $1.linkCount } + ($1.favorites?.count ?? 0) }
+          } else {
+            let session = try Firefox.loadSession(profile: dir)
+            result.tabs = session.tabs
+            result.tabGroups = session.groups
+            count = session.tabs.count
+          }
 
         case (.spaces, .arc), (.pinnedTabs, .arc), (.tabs, .arc):
           let spaces = try arcSidebar().spaces.filter { $0.profileId == profileId && (options.spaceIds?.contains($0.id) ?? true) }
@@ -137,7 +144,12 @@ public final class Importer: @unchecked Sendable {
           }
         case (.passwords, .firefox):
           guard let password = primaryPassword(browserId) else { throw ImportError.locked("Allow Firefox password import first") }
-          result.credentials = try FirefoxLogins.logins(profile: dir, primaryPassword: password, cancellation: cancellation)
+          do {
+            result.credentials = try FirefoxLogins.logins(profile: dir, primaryPassword: password, cancellation: cancellation)
+          } catch ImportError.locked where !password.isEmpty {
+            // The primary password is one profile's: the others, without one, still open.
+            result.credentials = try FirefoxLogins.logins(profile: dir, primaryPassword: "", cancellation: cancellation)
+          }
           count = result.credentials.count
 
         case (.cookies, .chromium), (.cookies, .arc):
