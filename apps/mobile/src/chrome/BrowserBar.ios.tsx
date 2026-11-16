@@ -1,11 +1,14 @@
 import { Button, HStack, Host, Image, Text } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityIdentifier, accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
 
-import { barButtons, barInsecure, barNewTab, barSite, type BrowserBarProps } from "./BrowserBar.types";
+import { useT } from "@/i18n";
+
+import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
+import { LoadProgress } from "./LoadProgress";
 import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
@@ -15,14 +18,15 @@ const PRIVATE_TINT = "#18181B";
 
 // iOS: Liquid Glass buttons, a wide search capsule between two round ones.
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
-  const [left, search, right] = barButtons(props);
+  const t = useT();
+  const [left, search, right] = barButtons(props, t);
   const site = barSite(props);
   const insecure = barInsecure(props);
   const onSearch = useStableCallback(search.onPress);
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
 
   return (
-    <View className="flex-row items-center justify-center gap-4">
+    <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
         <GlassIconButton
           id={left.id}
@@ -43,12 +47,13 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
               ...(prominentTint ? [buttonStyle("glassProminent"), tint(prominentTint)] : [buttonStyle("glass")]),
               controlSize("large"),
               accessibilityLabel(search.label),
+              accessibilityIdentifier(search.id),
             ]}
           >
             {barNewTab(props) ? (
               <HStack spacing={6} modifiers={[frame({ width: 136, height: 20 })]}>
                 <Image systemName="plus" size={15} />
-                <Text modifiers={[font({ size: 15, weight: "medium" })]}>New tab</Text>
+                <Text modifiers={[font({ size: 15, weight: "medium" })]}>{t("bar.newTab")}</Text>
               </HStack>
             ) : site ? (
               // A fixed height keeps the host on one line, truncated.
@@ -57,10 +62,12 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
                 <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail")]}>{site}</Text>
               </HStack>
             ) : (
-              <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
+              <Image systemName="magnifyingglass" modifiers={[font({ size: 17, weight: "medium" }), frame({ width: 92, height: 20 })]} />
             )}
           </Button>
         </Host>
+        {/* The load's progress runs along the capsule's edge (A6). */}
+        <LoadProgress progress={barProgress(props)} loading={barLoading(props)} />
       </Animated.View>
       <GlassIconButton
         id={right.id}

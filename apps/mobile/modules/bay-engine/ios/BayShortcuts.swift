@@ -5,14 +5,16 @@
 import ExpoModulesCore
 import UIKit
 
-@objc public final class BayShortcuts: BaseExpoAppDelegateSubscriber {
+@objc public final class BayShortcuts: BaseExpoAppDelegateSubscriber, ExpoAppDelegateSubscriberProtocol {
   private static let actions: [String: String] = [
     "new-tab": "bay://new-tab",
     "private-tab": "bay://private-tab",
     "search": "bay://search",
   ]
 
-  @objc public override func application(
+  // A subscriber answers the app delegate's optional methods; the delegate itself is a plain UIResponder, so there
+  // is nothing here to override.
+  @objc public func application(
     _: UIApplication,
     performActionFor shortcutItem: UIApplicationShortcutItem,
     completionHandler: @escaping (Bool) -> Void

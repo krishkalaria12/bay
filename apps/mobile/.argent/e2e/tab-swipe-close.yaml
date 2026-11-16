@@ -1,0 +1,48 @@
+# Swipe up to close: in the tab switcher, a card flicked up closes its tab into the archive, and the archive restores
+# it. (tabs-roundtrip closes a tab with the card's close button.) The pages are .argent/pages/start.html and
+# second.html, served by Metro (which both devices reach at 127.0.0.1:8081), so their titles never change.
+steps:
+  - run: ../flows/fresh-start
+
+  # Two tabs: the first page, then a second one opened from the switcher.
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "127.0.0.1:8081/assets/.argent/pages/start.html" }
+  - await: { visible: { id: bar-tabs }, timeout: 30000 }
+  - await: { hidden: { id: page-progress }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-0 }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-search }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "127.0.0.1:8081/assets/.argent/pages/second.html" }
+  - await: { visible: { id: bar-tabs }, timeout: 30000 }
+  - await: { hidden: { id: page-progress }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # The switcher opens on the tab in front, the second one.
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-1 }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { text: { in: { id: tab-switcher-count }, equals: "2 tabs" }, timeout: 10000 }
+  - await: { text: { in: { id: tab-card-1 }, contains: "Bay second tab test" }, timeout: 10000 }
+
+  # Flick the card up: it leaves, and the switcher counts one tab.
+  - swipe: { from: { id: tab-card-1 }, direction: up }
+  - await: { hidden: { id: tab-card-1 }, timeout: 10000 }
+  - await: { text: { in: { id: tab-switcher-count }, equals: "1 tab" }, timeout: 10000 }
+  - await: { text: { in: { id: tab-card-0 }, contains: "Bay start page test" }, timeout: 10000 }
+
+  # The closed tab is in the archive, and restoring it opens the page again.
+  - tap: { id: bar-archive }
+  - await: { visible: { id: archive-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { visible: { text: "Bay second tab test", within: { id: archive-screen } }, timeout: 10000 }
+  - tap: { text: "Bay second tab test", within: { id: archive-screen } }
+  - await: { visible: { id: bar-more }, timeout: 15000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/second.html" }, timeout: 10000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }

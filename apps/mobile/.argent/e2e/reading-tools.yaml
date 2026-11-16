@@ -13,7 +13,8 @@ steps:
 
   # Reader opens, changes text size and theme, and exits.
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, contains: "iana.org/help/example-domains" }, timeout: 10000 }
+  # The address is one line and Android's tree can hold it ellipsized, so match its start.
+  - await: { text: { in: { id: page-menu-url }, contains: "iana.org/help/" }, timeout: 10000 }
   - tap: { id: page-reader }
   - await: { visible: { id: reader-exit }, timeout: 20000 }
   - await: { idle: true, timeout: 15000 }

@@ -42,7 +42,8 @@ export type IconName =
   | "textSize"
   | "palette"
   | "tune"
-  | "visibility";
+  | "visibility"
+  | "tick";
 
 export interface IconProps {
   name: IconName;

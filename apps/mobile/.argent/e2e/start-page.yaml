@@ -1,0 +1,107 @@
+# Start page: a page visited and archived comes back under the recent pages, pinning it moves it to the pins, both
+# open it again, a long press unpins it (with Undo), and the "Start page after" setting keeps its choice.
+# The page is .argent/pages/start.html, served by Metro (which both devices reach at 127.0.0.1:8081), so its title
+# never changes. Coming back to a fresh start page after hours away can't be waited out in a test, so the setting is
+# proved by its row, before and after the sheet closes.
+steps:
+  - run: ../flows/fresh-start
+
+  # Visit the page, then archive its tab: the start page lists it under the recent pages.
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "127.0.0.1:8081/assets/.argent/pages/start.html" }
+  - await: { visible: { id: bar-more }, timeout: 30000 }
+  - await: { hidden: { id: page-progress }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-close-tab }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-close-tab }
+  - await: { visible: { id: start-page }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { text: { in: { id: start-recent-0 }, contains: "Bay start page test" }, timeout: 10000 }
+
+  # The recent page opens again.
+  - tap: { id: start-recent-0 }
+  - await: { visible: { id: bar-more }, timeout: 15000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/start.html" }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Pin it from the page menu; the tile turns into Unpin.
+  - tap: { id: page-pin }
+  - await: { text: { in: { id: toast }, contains: "Pinned" }, timeout: 10000 }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-pin }, contains: "Unpin" }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-close-tab }
+
+  # Back on the start page, the site is a pin and has left the recent pages.
+  - await: { visible: { id: start-page }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { text: { in: { id: start-pin-0 }, contains: "Bay start page test" }, timeout: 10000 }
+  - assert: { hidden: { id: start-recent-0 } }
+
+  # The pin opens it.
+  - tap: { id: start-pin-0 }
+  - await: { visible: { id: bar-more }, timeout: 15000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/start.html" }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-close-tab }
+  - await: { visible: { id: start-pin-0 }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # A long press unpins it, and the toast's Undo puts the pin back.
+  - long-press: { id: start-pin-0 }
+  - await: { text: { in: { id: toast }, contains: "Unpinned" }, timeout: 10000 }
+  - await: { hidden: { id: start-pin-0 }, timeout: 10000 }
+  - tap: { id: toast-action }
+  - await: { text: { in: { id: start-pin-0 }, contains: "Bay start page test" }, timeout: 10000 }
+  # Unpinned for good, the site is a recent page again.
+  - await: { hidden: { id: toast }, timeout: 15000 }
+  - long-press: { id: start-pin-0 }
+  - await: { hidden: { id: start-pin-0 }, timeout: 10000 }
+  - await: { text: { in: { id: start-recent-0 }, contains: "Bay start page test" }, timeout: 10000 }
+
+  # When the start page comes back: never, after an hour, four or twelve hours away. The row says which.
+  - await: { hidden: { id: toast }, timeout: 15000 }
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: settings-browsing }
+  - await: { visible: { id: settings-start-page }, timeout: 10000 }
+  - tap: { id: settings-start-page }
+  - await: { visible: { id: settings-start-page-never }, timeout: 10000 }
+  - await: { visible: { id: settings-start-page-1 }, timeout: 10000 }
+  - await: { visible: { id: settings-start-page-12 }, timeout: 10000 }
+  # Never is the default: pick it, so the test starts from a known choice.
+  - tap: { id: settings-start-page-never }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-start-page-value }, equals: "Never" }, timeout: 10000 }
+  # Four hours away: the choice goes back to Browsing, whose row says so.
+  - tap: { id: settings-start-page }
+  - await: { visible: { id: settings-start-page-4 }, timeout: 10000 }
+  - tap: { id: settings-start-page-4 }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-start-page-value }, equals: "4 h away" }, timeout: 10000 }
+  # It's kept: close Settings and open it again.
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
+  - await: { visible: { id: start-screen }, timeout: 10000 }
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: settings-browsing }
+  - await: { text: { in: { id: settings-start-page-value }, equals: "4 h away" }, timeout: 10000 }
+  # Never again, so the next run starts as this one did.
+  - tap: { id: settings-start-page }
+  - await: { visible: { id: settings-start-page-never }, timeout: 10000 }
+  - tap: { id: settings-start-page-never }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-start-page-value }, equals: "Never" }, timeout: 10000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }

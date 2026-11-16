@@ -27,6 +27,8 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     var observation: NSKeyValueObservation?
     /// True once a failed download has been resumed from its resumeData; a second failure is final.
     var resumed = false
+    /// The web view the download came from: WebKit continues a download through it.
+    weak var webView: WKWebView?
     /// The download's BGContinuedProcessingTask on iOS 26, once the system starts it.
     var task: AnyObject?
   }
@@ -49,17 +51,22 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads", isDirectory: true)
   }
 
-  func track(_ download: WKDownload, url: URL?, isPrivate: Bool) {
+  func track(_ download: WKDownload, url: URL?, isPrivate: Bool, webView: WKWebView) {
     download.delegate = self
     askToNotify()
     let id = UUID().uuidString
     let filename = Self.cleanFilename(url?.lastPathComponent ?? "")
-    entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: filename)
+    entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: filename, webView: webView)
     downloads[id] = download
     holdBackgroundTime()
     startContinuedProcessing(id: id, title: Self.systemTitle(filename, isPrivate: isPrivate))
     // The toast shows at once; WebKit names the file when the response arrives (decideDestination).
     report(download, state: "started", received: 0, total: 0, waiting: "Starting…")
+    observe(download)
+  }
+
+  /// Reports how far the download has come, at most four times a second.
+  private func observe(_ download: WKDownload) {
     var lastSent: CFTimeInterval = 0
     entries[ObjectIdentifier(download)]?.observation = download.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
       // KVO fires for every chunk received; report progress at most four times a second. The delegate reports the
@@ -68,6 +75,19 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
       guard now - lastSent >= 0.25 else { return }
       lastSent = now
       DispatchQueue.main.async { self?.report(download, state: "progress", received: progress.completedUnitCount, total: progress.totalUnitCount) }
+    }
+  }
+
+  /// The download failed but left resume data: WebKit carries on through the web view it came from, and the download
+  /// it hands back continues into the file the old one had.
+  private func resume(_ download: WKDownload, resumeData: Data, entry: Entry) {
+    guard let webView = entry.webView else { return }
+    webView.resumeDownload(fromResumeData: resumeData) { [weak self] resumed in
+      guard let self else { return }
+      resumed.delegate = self
+      self.entries[ObjectIdentifier(resumed)] = entry
+      self.downloads[entry.id] = resumed
+      self.observe(resumed)
     }
   }
 
@@ -116,9 +136,10 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     let cancelled = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     // A dropped connection leaves resume data: continue the same file once, in place, instead of starting over.
     // The partial file stays (deleting it would lose what resume continues from).
-    if !cancelled, let resumeData, entries[ObjectIdentifier(download)]?.resumed == false {
-      entries[ObjectIdentifier(download)]?.resumed = true
-      download.resume(using: resumeData)
+    if !cancelled, let resumeData, var entry = entries[ObjectIdentifier(download)], !entry.resumed {
+      entry.resumed = true
+      entries[ObjectIdentifier(download)] = entry
+      resume(download, resumeData: resumeData, entry: entry)
       return
     }
     let entry = entries[ObjectIdentifier(download)]

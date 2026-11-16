@@ -1,9 +1,12 @@
-import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { View } from "react-native";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { announce } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 
 export interface ToastAction {
   label: string;
@@ -35,18 +38,23 @@ export function useToast() {
 }
 
 export function Toast({ text, action, onDone, testID = "toast" }: { text: string; action?: ToastAction; onDone?: () => void; testID?: string }): JSX.Element {
-  const foreground = useThemeColor("foreground");
-  const accent = useThemeColor("accent");
+  // A toast appears where focus isn't, so it reads itself out; one with an action says the action too.
+  useEffect(() => {
+    announce(action ? `${text}. ${action.label}` : text);
+  }, [text, action]);
 
   return (
     <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutDown.duration(150)}>
-      <Surface radius={22} style={{ paddingLeft: 16, paddingRight: action ? 6 : 16, paddingVertical: action ? 6 : 12 }}>
+      <Surface
+        radius={radius.card}
+        style={{ paddingLeft: space.lg, paddingRight: action ? space.xs + 2 : space.lg, paddingVertical: action ? space.xs + 2 : space.md }}
+      >
         <View className="flex-row items-center gap-2">
-          <Text testID={testID} accessibilityRole="alert" numberOfLines={2} className="flex-1" style={{ color: foreground, fontSize: 15 }}>
+          <Text testID={testID} accessibilityRole="alert" numberOfLines={2} className="flex-1" variant="callout">
             {text}
           </Text>
           {action ? (
-            <Pressable
+            <PressFeedback
               testID={`${testID}-action`}
               accessibilityRole="button"
               accessibilityLabel={action.label}
@@ -54,10 +62,12 @@ export function Toast({ text, action, onDone, testID = "toast" }: { text: string
                 onDone?.();
                 action.onPress();
               }}
-              className="min-h-11 items-center justify-center rounded-full px-4 active:opacity-60"
+              className="min-h-11 items-center justify-center rounded-full px-4"
             >
-              <Text style={{ color: accent, fontSize: 15, fontWeight: "600" }}>{action.label}</Text>
-            </Pressable>
+              <Text variant="callout" weight="semibold" tone="accent">
+                {action.label}
+              </Text>
+            </PressFeedback>
           ) : null}
         </View>
       </Surface>

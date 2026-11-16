@@ -6,3 +6,19 @@
 /* End-user path: heroui-native lives in the project's node_modules, one
    level up from this src/global.css file. */
 @source '../node_modules/heroui-native/lib';
+
+/* Bay's fills: controls and grouped rows sit on a translucent tint of the text colour rather than an opaque grey, so they
+   read the same over iOS's Liquid Glass (whatever is behind it) and over Android's solid sheets. */
+@layer theme {
+  :root {
+    @variant light {
+      --default: oklch(21% 0.006 286 / 0.06);
+      --surface: oklch(100% 0 0);
+    }
+
+    @variant dark {
+      --default: oklch(100% 0 0 / 0.08);
+      --surface: oklch(19% 0.005 286);
+    }
+  }
+}

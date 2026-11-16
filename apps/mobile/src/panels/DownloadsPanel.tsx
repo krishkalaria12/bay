@@ -1,12 +1,15 @@
 import { useBottomSheetScrollableCreator } from "@gorhom/bottom-sheet";
 import { LegendList } from "@legendapp/list/react-native";
-import { Typography } from "heroui-native";
+
 import { useEffect, useState, type JSX } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PillButton } from "@/chrome/PillButton";
+import { Text } from "@/chrome/Text";
+import { formatNumber, useT, type Translate } from "@/i18n";
+import { INTERRUPTED_DOWNLOAD } from "@/store/model";
 import type { DownloadItem } from "@/store/types";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
@@ -25,9 +28,10 @@ export interface DownloadsPanelProps {
 export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, onRemove, onClear }: DownloadsPanelProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const t = useT();
 
   return (
-    <PanelSheet visible={visible} onClose={onClose} title="Downloads" testID="downloads-panel" height="70%" listMode>
+    <PanelSheet visible={visible} onClose={onClose} title={t("downloads.title")} testID="downloads-panel" height="70%" listMode>
       {downloads.length ? (
         <LegendList
           data={downloads}
@@ -37,30 +41,36 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
           renderScrollComponent={Scrollable}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
           ListFooterComponent={
-            downloads.some((item) => item.state !== "downloading") ? <ActionRow testID="downloads-clear" label="Clear list" onPress={onClear} /> : null
+            downloads.some((item) => item.state !== "downloading") ? (
+              <ActionRow testID="downloads-clear" label={t("downloads.clearList")} onPress={onClear} />
+            ) : null
           }
           renderItem={({ item, index }) => (
             <View className="flex-row items-center gap-2 border-b border-foreground/5">
               <Pressable
                 testID={`download-${index}`}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.filename}, ${downloadStatus(item)}`}
+                accessibilityLabel={`${item.filename}, ${downloadStatus(item, t)}`}
                 accessibilityState={{ disabled: item.state !== "finished" }}
                 disabled={item.state !== "finished"}
                 onPress={() => onOpen(item)}
                 className="min-h-14 flex-1 justify-center py-2"
               >
-                <Typography numberOfLines={1}>{item.filename}</Typography>
-                <Typography testID={`download-${index}-status`} numberOfLines={1} className="text-sm text-muted">
-                  {downloadStatus(item)}
-                </Typography>
+                <Text numberOfLines={1}>{item.filename}</Text>
+                <Text testID={`download-${index}-status`} numberOfLines={1} variant="subhead" tone="muted">
+                  {downloadStatus(item, t)}
+                </Text>
                 {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
               </Pressable>
               <PillButton
                 compact
                 testID={`download-${index}-${item.state === "downloading" ? "cancel" : "remove"}`}
-                label={item.state === "downloading" ? "Cancel" : "Remove"}
-                accessibilityLabel={item.state === "downloading" ? `Cancel ${item.filename}` : `Remove ${item.filename} from the list`}
+                label={item.state === "downloading" ? t("downloads.cancel") : t("downloads.remove")}
+                accessibilityLabel={
+                  item.state === "downloading"
+                    ? t("downloads.cancelLabel", { filename: item.filename })
+                    : t("downloads.removeLabel", { filename: item.filename })
+                }
                 onPress={() => (item.state === "downloading" ? onCancel(item) : onRemove(item))}
               />
             </View>
@@ -68,9 +78,9 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
           style={{ flex: 1 }}
         />
       ) : (
-        <Typography testID="downloads-empty" className="text-muted">
-          Files you download appear here.
-        </Typography>
+        <Text testID="downloads-empty" tone="muted">
+          {t("downloads.empty")}
+        </Text>
       )}
     </PanelSheet>
   );
@@ -84,7 +94,13 @@ export function DownloadProgress({ item }: { item: DownloadItem }): JSX.Element 
   const fraction = item.total && !item.waiting ? Math.min(1, item.received / item.total) : null;
 
   return (
-    <View testID="download-progress" className="mt-2 h-1 overflow-hidden rounded-full bg-default">
+    // The status line beside it says the percentage in words, so readers skip the bar.
+    <View
+      testID="download-progress"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      className="mt-2 h-1 overflow-hidden rounded-full bg-default"
+    >
       {fraction === null ? <SweepingBar /> : <FillingBar fraction={fraction} />}
     </View>
   );
@@ -119,31 +135,40 @@ function SweepingBar(): JSX.Element {
   );
 }
 
-/** "1.2 MB", "340 KB". */
-export function formatBytes(bytes: number): string {
-  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+const ONE_DECIMAL = { minimumFractionDigits: 1, maximumFractionDigits: 1 } as const;
 
-  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+/** "1.2 MB", "340 KB", with the number written the current language's way. */
+export function formatBytes(bytes: number, t: Translate): string {
+  if (bytes >= 1_000_000_000) return `${formatNumber(bytes / 1_000_000_000, ONE_DECIMAL)} GB`;
 
-  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  if (bytes >= 1_000_000) return `${formatNumber(bytes / 1_000_000, ONE_DECIMAL)} MB`;
 
-  return `${bytes} bytes`;
+  if (bytes >= 1_000) return `${formatNumber(Math.round(bytes / 1_000))} KB`;
+
+  return t("downloads.size.bytes", { size: formatNumber(bytes) });
 }
 
 /** What a download is doing, in a few words. */
-export function downloadStatus(item: DownloadItem): string {
+export function downloadStatus(item: DownloadItem, t: Translate): string {
   switch (item.state) {
     case "downloading":
       if (item.waiting) return item.waiting;
 
-      if (item.total) return `${Math.floor((item.received / item.total) * 100)}% · ${formatBytes(item.received)} of ${formatBytes(item.total)}`;
+      if (item.total) {
+        return t("downloads.status.progress", {
+          percent: formatNumber(Math.floor((item.received / item.total) * 100)),
+          received: formatBytes(item.received, t),
+          total: formatBytes(item.total, t),
+        });
+      }
 
-      return item.received ? `${formatBytes(item.received)} so far` : "Starting…";
+      return item.received ? t("downloads.status.soFar", { size: formatBytes(item.received, t) }) : t("downloads.status.starting");
     case "finished":
-      return formatBytes(item.total || item.received);
+      return formatBytes(item.total || item.received, t);
     case "cancelled":
-      return "Cancelled";
+      return t("downloads.status.cancelled");
     case "failed":
-      return item.error ?? "Failed";
+      // Bay's own note is saved in English; the engine's messages arrive in the device's language already.
+      return item.error === INTERRUPTED_DOWNLOAD ? t("downloads.interrupted") : (item.error ?? t("downloads.status.failed"));
   }
 }

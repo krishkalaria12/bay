@@ -5,6 +5,6 @@ export interface PillButtonProps {
   onPress: () => void;
   /** Kept visible but can't be pressed. */
   disabled?: boolean;
-  /** Less side padding, for rows (Android; iOS sizes the glass capsule to its label). */
+  /** A tighter capsule, for rows: less side padding on Android, the small control size on iOS. */
   compact?: boolean;
 }

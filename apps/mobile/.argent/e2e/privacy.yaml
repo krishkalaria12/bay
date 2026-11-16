@@ -21,16 +21,16 @@ steps:
   - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/?id=1" }, timeout: 20000 }
 
   # Blocking pauses on this site and resumes.
-  - await: { text: { in: { id: page-blocking }, contains: On for this site }, timeout: 10000 }
+  - await: { text: { in: { id: page-blocking-detail }, contains: On for this site }, timeout: 10000 }
   - tap: { id: page-blocking }
-  - await: { text: { in: { id: page-blocking }, contains: Paused on this site }, timeout: 10000 }
+  - await: { text: { in: { id: page-blocking-detail }, contains: Paused on this site }, timeout: 10000 }
   - tap: { id: page-menu-close }
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-blocking }, contains: Paused on this site }, timeout: 10000 }
+  - await: { text: { in: { id: page-blocking-detail }, contains: Paused on this site }, timeout: 10000 }
   - tap: { id: page-blocking }
-  - await: { text: { in: { id: page-blocking }, contains: On for this site }, timeout: 10000 }
+  - await: { text: { in: { id: page-blocking-detail }, contains: On for this site }, timeout: 10000 }
   - tap: { id: page-menu-close }
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }

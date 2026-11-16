@@ -1,0 +1,1262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Bay | Windows and Linux merge + Effect plan</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --foreground: light-dark(#28242b, #ede7ef);
+        --muted-foreground: light-dark(#665e6c, #bcb1c3);
+        --border: light-dark(#d8d0dc, #4b414f);
+        --card: light-dark(#f3eef4, #2b252f);
+        --secondary: light-dark(#ece5ee, #342c39);
+        --primary: light-dark(#69435f, #e1b4d5);
+        --info: light-dark(#2d6175, #9acbdc);
+        --success: light-dark(#245c48, #9fd4bb);
+        --warning: light-dark(#75521c, #e4c68f);
+        --code-background: light-dark(#eee8f0, #302837);
+        --radius: 8px;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.62;
+      }
+      main {
+        max-width: 1080px;
+        margin: auto;
+        padding-bottom: 36px;
+        min-width: 0;
+      }
+      h1 {
+        font-size: clamp(28px, 5vw, 40px);
+        line-height: 1.16;
+        letter-spacing: -0.035em;
+        margin: 12px 0 14px;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 24px;
+        line-height: 1.3;
+        letter-spacing: -0.025em;
+        margin: 38px 0 16px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 18px;
+        line-height: 1.4;
+        margin: 25px 0 8px;
+      }
+      h4 {
+        font-size: 15px;
+        margin: 20px 0 5px;
+      }
+      p {
+        margin: 8px 0 15px;
+        max-width: 86ch;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 72ch;
+      }
+      .meta,
+      .muted,
+      figcaption {
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 19px;
+        margin: 22px 0;
+        font-size: 14px;
+      }
+      a {
+        color: var(--primary);
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 4px;
+      }
+      code {
+        font: 0.86em var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      pre {
+        background: var(--code-background);
+        border-radius: var(--radius);
+        padding: 16px;
+        font: 12px/1.65 var(--font-mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 15px 0;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+        margin: 8px 0 17px;
+      }
+      li {
+        margin: 6px 0;
+        max-width: 92ch;
+      }
+      .note {
+        border-left: 3px solid var(--primary);
+        padding-left: 16px;
+        margin: 22px 0;
+      }
+      .note p:last-child,
+      .panel p:last-child {
+        margin-bottom: 0;
+      }
+      .panel {
+        background: var(--card);
+        border-radius: var(--radius);
+        padding: 16px;
+        margin: 18px 0;
+      }
+      .table-wrap {
+        max-width: 100%;
+        overflow: auto;
+        margin: 16px 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--border);
+        overflow-wrap: anywhere;
+      }
+      thead th {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted-foreground);
+        background: var(--card);
+      }
+      tbody th {
+        font-weight: 600;
+      }
+      th:first-child,
+      td:first-child {
+        padding-left: 4px;
+      }
+      td p {
+        margin: 3px 0 8px;
+      }
+      .step {
+        margin: 21px 0 0;
+        border-top: 1px solid var(--border);
+        padding-top: 17px;
+      }
+      .step h3 {
+        margin-top: 0;
+      }
+      .step-id {
+        color: var(--primary);
+        font: 13px var(--font-mono);
+        display: block;
+        margin-bottom: 5px;
+      }
+      .exit {
+        font-size: 14px;
+        border-left: 2px solid var(--success);
+        padding-left: 13px;
+        margin: 15px 0;
+      }
+      .paths {
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      details {
+        border-top: 1px solid var(--border);
+        margin: 18px 0;
+        padding-top: 13px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+        line-height: 1.45;
+        padding: 3px 0;
+      }
+      summary small {
+        display: block;
+        font-weight: 400;
+        color: var(--muted-foreground);
+        font-size: 13px;
+        margin: 6px 0 0;
+      }
+      details[open] > summary {
+        margin-bottom: 18px;
+      }
+      figure {
+        margin: 24px 0;
+      }
+      .route {
+        display: grid;
+        grid-template-columns: 1fr 38px 1fr 38px 1fr;
+        align-items: center;
+        gap: 7px;
+      }
+      .route-node {
+        padding: 13px 10px;
+        background: var(--card);
+        border-radius: var(--radius);
+        font-size: 14px;
+        min-width: 0;
+      }
+      .route-node strong {
+        display: block;
+        font-size: 15px;
+      }
+      .route-node span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted-foreground);
+        margin-top: 6px;
+      }
+      .arrow {
+        text-align: center;
+        color: var(--primary);
+        font-size: 24px;
+      }
+      figcaption {
+        margin-top: 12px;
+      }
+      .ownership {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin: 18px 0;
+      }
+      .ownership div {
+        border-left: 2px solid var(--border);
+        padding-left: 14px;
+      }
+      .ownership h3 {
+        margin: 0 0 7px;
+        font-size: 16px;
+      }
+      .ownership p {
+        font-size: 14px;
+      }
+      section {
+        scroll-margin-top: 12px;
+      }
+      .conflicts {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 12px;
+      }
+      .conflicts li {
+        break-inside: avoid;
+        margin: 0 0 8px;
+      }
+      .conflicts code {
+        font-size: 11px;
+      }
+      .sources li {
+        font-size: 13px;
+      }
+      .checklist {
+        list-style-type: square;
+      }
+      .sequence {
+        font-size: 14px;
+      }
+      .small {
+        font-size: 14px;
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        margin-top: 30px;
+        padding-top: 16px;
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+      @media (min-width: 581px) {
+        #baseline th:nth-child(2),
+        #baseline td:nth-child(2) {
+          width: 100px;
+        }
+        #baseline td:nth-child(2) code {
+          white-space: nowrap;
+        }
+        th:first-child,
+        td:first-child {
+          width: 23%;
+        }
+      }
+      @media (max-width: 580px) {
+        table,
+        tbody,
+        tr,
+        tbody th,
+        tbody td {
+          display: block;
+          width: 100%;
+        }
+        thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
+        tbody tr {
+          border-bottom: 1px solid var(--border);
+          padding: 13px 0;
+        }
+        tbody th,
+        tbody td,
+        tbody th:first-child {
+          border: 0;
+          padding: 4px 0;
+        }
+        tbody th {
+          font-size: 16px;
+        }
+        tbody td::before {
+          content: attr(data-label);
+          display: block;
+          color: var(--muted-foreground);
+          font-size: 12px;
+          margin: 5px 0 3px;
+        }
+
+        .route {
+          grid-template-columns: 1fr;
+        }
+        .arrow {
+          transform: rotate(90deg);
+          font-size: 20px;
+          line-height: 1;
+        }
+        .ownership {
+          grid-template-columns: 1fr;
+        }
+        .conflicts {
+          columns: 1;
+        }
+        th,
+        td {
+          padding: 10px 7px;
+        }
+        h2 {
+          font-size: 22px;
+        }
+        table {
+          font-size: 13px;
+        }
+        .meta {
+          font-size: 12px;
+        }
+      }
+      @media print {
+        * {
+          color: #222 !important;
+        }
+        main {
+          max-width: none;
+        }
+        a {
+          text-decoration: none;
+        }
+        details > * {
+          display: block !important;
+        }
+        summary {
+          display: block;
+        }
+        nav {
+          display: none;
+        }
+        .step,
+        .panel,
+        .route,
+        thead {
+          break-inside: avoid;
+        }
+        pre {
+          border: 1px solid #ccc;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        .table-wrap {
+          overflow: visible;
+        }
+        .conflicts {
+          columns: 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">Bay desktop / implementation plan / repository snapshot · 12 November 2026</p>
+        <h1>Merge main.<br />Bring Windows and Linux onto Effect.</h1>
+        <p class="lead">
+          Integrate the current desktop and CLI changes, adapt the Effect services to the WebUI coordinator, then finish each platform's native checks.
+        </p>
+        <p class="small">
+          Recommended order: finish the shared integration on <code>feat/windows</code>, carry that tested history into <code>feat/linux</code>, then resolve
+          Linux-specific behavior. Linux already contains the current Windows tip.
+        </p>
+        <nav aria-label="Plan contents">
+          <a href="#baseline">Source snapshot</a><a href="#merge">Merge sequence</a><a href="#effect">Effect design</a><a href="#windows">Windows work</a
+          ><a href="#linux">Linux work</a><a href="#gates">Acceptance</a><a href="#evidence">Evidence</a>
+        </nav>
+      </header>
+      <section id="baseline">
+        <h2>1. Start from the actual branch state</h2>
+        <p>
+          Remote refs were refreshed with <code>git fetch origin</code>. Main already pins <code>effect@4.1.3</code> in the browser and has the desktop
+          services. Its standalone Bun CLI pins <code>effect</code> and <code>@effect/platform-bun</code> to the same release. Both platform branches still use
+          their earlier async orchestration.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>Audited tip</th>
+                <th>What it contributes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th><code>origin/main</code></th>
+                <td data-label="Audited tip"><code>2b4a9ed6</code></td>
+                <td data-label="What it contributes">Effect runtime, workflow services, CLI rewrite, dependency boundary checks, current fixes.</td>
+              </tr>
+              <tr>
+                <th><code>origin/feat/windows</code></th>
+                <td data-label="Audited tip"><code>5910738b</code></td>
+                <td data-label="What it contributes">
+                  Chromium WebUI host, Mojo bridge, authority coordinator, read-only window clients, Windows native services and delivery.
+                </td>
+              </tr>
+              <tr>
+                <th><code>origin/feat/linux</code></th>
+                <td data-label="Audited tip"><code>a4ddcbec</code></td>
+                <td data-label="What it contributes">Contains the Windows tip; adds Linux host, system integration, packaging and the Expo Image work.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small">
+          Local <code>feat/windows</code> is one commit behind its remote. Local <code>feat/linux</code> matches its remote. Recheck these refs before
+          execution. This plan uses the remote tips above.
+        </p>
+        <div class="note">
+          <p>
+            Direct dry-run merges of main into each platform branch report the same <strong>68 conflicted files</strong>. That is a textual conflict count, not
+            the full integration scope. Many newly added Effect services merge without a text conflict while still assuming the old application lifetime.
+          </p>
+        </div>
+        <p class="small">
+          The current checkout is <code>feat/cli-effect</code> and already has a modified <code>packages/chromium/scripts/blocker-resources.sh</code> plus two
+          deleted Safari ZIP fixtures. Implementation must use a clean checkout or preserve those edits explicitly. The blocker script is also a merge conflict.
+        </p>
+      </section>
+      <section id="merge">
+        <h2>2. Resolve the common merge once</h2>
+        <figure aria-label="Recommended branch integration sequence">
+          <div class="route">
+            <div class="route-node"><strong>Main</strong><code>2b4a9ed6</code><span>Existing Effect services + CLI</span></div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="route-node"><strong>Windows</strong><code>feat/windows</code><span>Merge main, adapt shared services, validate</span></div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="route-node"><strong>Linux</strong><code>feat/linux</code><span>Merge the resulting Windows tip, finish Linux adapters</span></div>
+          </div>
+          <figcaption>
+            The second merge brings the same main ancestry into Linux. Confirm it with <code>git merge-base --is-ancestor</code>; a second direct merge of that
+            main tip is unnecessary.
+          </figcaption>
+        </figure>
+        <ol class="sequence">
+          <li>
+            Record branch SHAs, platform capability lists and baseline test results. Preserve sample profiles and collect fresh-start, restore, window-churn and
+            quit traces on each target OS.
+          </li>
+          <li>
+            Fast-forward a clean Windows checkout to <code>origin/feat/windows</code>, then merge the recorded main revision. Resolve by responsibility using
+            the table below. Carry the ownership adaptation through before declaring the merge usable.
+          </li>
+          <li>
+            Finish the shared Effect work and Windows verification. Record the resulting integration SHA, dependency lockfiles, test outputs and native
+            evidence.
+          </li>
+          <li>
+            Update Linux from its remote and merge that exact Windows integration SHA. Preserve Linux's commits, image patches and native methods. Recheck main
+            ancestry and review the Linux delta against the original Linux tip.
+          </li>
+          <li>
+            Finish Linux's adapters and native verification. Re-run the common suites on Linux's final tree, including Windows-related portable checks it still
+            contains.
+          </li>
+        </ol>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Conflict group</th>
+                <th>Resolution rule</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Bootstrap and async workflows</th>
+                <td data-label="Resolution rule">
+                  Retain platform role detection, commands and projections. Bring in main's service behavior; wire it to the authority owner. Remove the
+                  replaced platform timers, listeners and workers after equivalent tests pass.
+                </td>
+              </tr>
+              <tr>
+                <th>State and browser actions</th>
+                <td data-label="Resolution rule">
+                  Keep authority-store injection, read-only clients, window placement and platform commands. Keep main's fixes. Synchronous actions and pure
+                  serialization remain ordinary TypeScript.
+                </td>
+              </tr>
+              <tr>
+                <th>Persistence and quit</th>
+                <td data-label="Resolution rule">
+                  Retain the platform branch's acknowledged asynchronous disk writes, freeze/resume and cancelled-quit handling. Adapt main's persistence
+                  service around that contract.
+                </td>
+              </tr>
+              <tr>
+                <th>CLI</th>
+                <td data-label="Resolution rule">
+                  Retain main's Effect rewrite and interruption fixes. Preserve platform endpoint discovery and standalone bundling fixes. Resolve
+                  <code>cli.ts</code>, <code>endpoint.ts</code> and <code>scriptsStore.ts</code> by behavior.
+                </td>
+              </tr>
+              <tr>
+                <th>Manifests and tooling</th>
+                <td data-label="Resolution rule">
+                  Combine main's exact Effect pin with the platform dependencies, scripts and patches. Preserve standalone CLI exclusion. Regenerate the pnpm
+                  lockfile with pnpm 11.1.3; retain a matching, verified Bun lockfile for the CLI.
+                </td>
+              </tr>
+              <tr>
+                <th>Engine and blocker</th>
+                <td data-label="Resolution rule">
+                  Review both changes to <code>nncore/.../BUILD.gn</code>, <code>nn_navigation_hold.cc</code> and <code>blocker-resources.sh</code>. Preserve
+                  cross-platform build selection, current blocker resources and navigation behavior.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details>
+          <summary>Suggested merge commands<small>Execution notes for a future clean checkout. These merges have not been performed.</small></summary>
+          <pre>
+# After preserving existing edits and refreshing refs:
+git switch feat/windows
+git merge --ff-only origin/feat/windows
+git merge --no-ff 2b4a9ed6
+# Resolve conflicts, finish shared integration, and pass Windows gates.
+# Record the resulting Windows integration SHA.
+
+git switch feat/linux
+git merge --ff-only origin/feat/linux
+git merge --no-ff &lt;validated-windows-integration-sha&gt;
+# Resolve Linux differences and pass Linux gates.
+git merge-base --is-ancestor 2b4a9ed6 HEAD</pre>
+          <p class="small">
+            If main advances during the work, choose a newer recorded baseline and revalidate both branches. Do not silently mix different main revisions into
+            the two acceptance reports.
+          </p>
+        </details>
+      </section>
+      <section id="effect">
+        <h2>3. Adapt the runtime to the coordinator</h2>
+        <p>
+          Main's runtime is a module-level <code>ManagedRuntime</code> shared by windows in one JavaScript instance. Windows and Linux use separate WebUI
+          documents. The new shared owner must be <strong>one app runtime per coordinator epoch</strong>. A renderer importing a command helper must not
+          accidentally start persistence, sync or telemetry.
+        </p>
+        <div class="ownership">
+          <div>
+            <h3>Coordinator owns application work</h3>
+            <p>
+              Writable authority store, persistence, history/bookmarks, sync/import, account polling, app listeners, native reconciliation and service state
+              publication. The coordinator starts and stops their Effect scopes.
+            </p>
+          </div>
+          <div>
+            <h3>Windows own presentation</h3>
+            <p>
+              Read-only projections, input, animation and view-bound native operations. Shared mutations and async service requests travel through the
+              authenticated command transport. Closing one window leaves shared services running.
+            </p>
+          </div>
+        </div>
+        <ol>
+          <li>
+            <strong>Preserve bootstrap ordering.</strong> Install native transport before importing app modules. Keep authenticated role selection and the
+            existing startup path without a local-writer fallback. Restore disk only for a fresh epoch; recover accepted state for a replacement. Keep initial
+            publication and command/close subscriptions ahead of service startup, and native page-fact startup after initial acceptance.
+          </li>
+          <li>
+            <strong>Make runtime creation explicit.</strong> Refactor <code>effect/runtime.ts</code> to expose a runtime factory and keep macOS's existing
+            single-instance entry. Give each coordinator owner a fresh layer memo map. Avoid runtime allocation or native service startup as a module import
+            side effect.
+          </li>
+          <li>
+            <strong>Inject the actual authority store.</strong> Add an app-local context port for <code>BrowserStore</code> and native adapters. Audit main's
+            services for global <code>useBrowser</code> reads and writes. Supply the coordinator store; keep the store package and reducers free of Effect.
+            Include module-level caches, mutable maps and Live/account state in this audit. Prove isolation with two independently constructed authority stores
+            in one test process, rather than repeatedly testing the imported singleton.
+          </li>
+          <li>
+            <strong>Keep command authorization and ordering.</strong> Call programs from <code>runtime/serviceExecutor.ts</code> after existing validation.
+            Preserve epoch/revision checks, duplicate request handling, publication before acknowledgement, private-profile projection and page-fact ownership.
+            UI callers receive serializable results, never Effect values or fibers. Preserve service-state filtering so credentials and private data cannot
+            enter a projection. Disconnected windows remain read-only.
+          </li>
+          <li>
+            <strong>Keep Undo in the originating command.</strong> The authority currently runs initial service reducers synchronously before the first await.
+            Effect execution may defer that work. Retain a synchronous validation/reducer step inside the existing authority queue, then owned async work and an
+            ordered completion. Test Undo attribution and that a slow service command leaves ordinary reducer commands free to run. Avoid a second queue that
+            changes this ordering.
+          </li>
+          <li>
+            <strong>Keep native calls honest.</strong> Map transport rejection, native domain failure, cancellation, missing optional methods and permission
+            denial separately. Reuse the versioned Mojo contracts. Scope subscriptions and timers in the app; keep the raw transports and package APIs as
+            Promise/callback APIs.
+          </li>
+          <li>
+            <strong>Define interruption per operation.</strong> Abort cancellable reads and polls; guard late callbacks with the current epoch and resource
+            identity. A JS interruption does not cancel a native write. Track accepted mutations to settlement before releasing locks or replying to quit. Never
+            retry a non-idempotent mutation blindly. The current native invoke transport has no cancellation signal. Do not claim wrapping it in Effect makes
+            the native operation cancellable.
+          </li>
+          <li>
+            <strong>Close the owner cleanly.</strong> Failed layer acquisition, disconnect and coordinator replacement release already acquired resources. Adapt
+            the current synchronous <code>dispose()</code> hooks to tracked asynchronous finalization where needed. Cancelled quit resumes the existing owner;
+            it must not dispose it. Invalidate the epoch and stop accepting work synchronously, then expose a tracked teardown promise for tests and controlled
+            restarts to await. Page unload cannot guarantee asynchronous finalizers finish.
+          </li>
+        </ol>
+        <div class="note">
+          <p>
+            The highest-risk merge is <code>lib/persistenceService.ts</code> together with <code>lib/shellBridge.ts</code>. Main's synchronous flush cannot
+            replace WebUI's disk-acknowledged flush. Keep session, downloads and Live writes ordered and awaited before the native quit reply, including quit
+            cancellation and stale callbacks.
+          </p>
+        </div>
+        <p class="small">
+          Keep Effect at 4.1.3 for this integration. Only <code>apps/browser</code> and <code>apps/cli</code> depend on it. <code>packages/platform</code>,
+          <code>desktop</code>, <code>chromium</code>, <code>import</code>, <code>sync</code> and <code>core</code> stay Effect-free. The browser uses core
+          Effect only, preserving the macOS Hermes bundle; the CLI alone uses the Bun platform package. Native C++, Swift, Rust and PowerShell retain their
+          existing roles.
+        </p>
+        <details>
+          <summary>
+            Workflow inventory and rewrite responsibilities<small
+              >Use this as the completion ledger on both branches. Service names shown here already exist on main; the authority-store port and runtime factory
+              are proposed changes.</small
+            >
+          </summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Work</th>
+                  <th>Reuse from main</th>
+                  <th>Platform adaptation and required proof</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>Startup and teardown</th>
+                  <td data-label="Reuse from main"><code>effect/runtime.ts</code>, <code>commands.ts</code>, <code>testing.ts</code></td>
+                  <td data-label="Platform adaptation and required proof">
+                    Wire <code>runtime/coordinatorEntry.ts</code> and <code>runtime/services.ts</code>; keep <code>windowRuntimeEntry.ts</code> free of app
+                    startup. Test two clients, partial acquisition failure, recovery and zero owned resources after teardown.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Persistence and profiles</th>
+                  <td data-label="Reuse from main">
+                    <code>lib/persistenceService.ts</code>, <code>historyService.ts</code>, <code>bookmarkService.ts</code>, <code>profileCleanup.ts</code>
+                  </td>
+                  <td data-label="Platform adaptation and required proof">
+                    Inject authority store and native document adapter. Preserve branch serializers, profile isolation and disk acknowledgements. Test write
+                    failure, cancelled quit, live recovery without disk rehydration and private-data removal.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Sync and import</th>
+                  <td data-label="Reuse from main"><code>sync/service.ts</code>, <code>components/import/workflow.ts</code></td>
+                  <td data-label="Platform adaptation and required proof">
+                    Retain portable native engines, credentials and recovery formats. Preserve serialized commits and import cancellation. Test stop during
+                    native mutation, partial profile failure and replay after interruption.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Live, accounts and calendar</th>
+                  <td data-label="Reuse from main"><code>activity/{activityService,connectionService,calendarService}.ts</code></td>
+                  <td data-label="Platform adaptation and required proof">
+                    Replace coordinator watchers and <code>serviceExecutor.ts</code> device-flow bookkeeping with scoped ownership. Preserve platform Google
+                    auth and permission policy. Test disconnect, denied permission and late token or calendar results.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Shell, pages and integrations</th>
+                  <td data-label="Reuse from main">
+                    <code>lib/{shellService,engineTabs,pageLifecycleService,appIntegrationService,notificationService}.ts</code>
+                  </td>
+                  <td data-label="Platform adaptation and required proof">
+                    Preserve accepted-commit reconciliation, offered-page adoption, parked pages, mount leases and local prompts. Test page transfer without
+                    reload, old-epoch rejection and notification activation.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Search, previews and enrichment</th>
+                  <td data-label="Reuse from main">
+                    <code>components/commandBar/searchService.ts</code>, <code>components/site/{previewService,pageWorkService}.ts</code>,
+                    <code>lib/enrichmentService.ts</code>
+                  </td>
+                  <td data-label="Platform adaptation and required proof">
+                    Choose scope by query, tab or page identity. Keep view-bound fetches in their owning renderer when required. Test stale search/preview
+                    results and correct authenticated page context.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Files, downloads, Library and capture</th>
+                  <td data-label="Reuse from main">
+                    <code>lib/{localFileService,downloadWorkService,tidyWorkService}.ts</code>, Library/sharing and capture services
+                  </td>
+                  <td data-label="Platform adaptation and required proof">
+                    Keep authorized dialogs and renderer-owned views local; coordinate durable mutations centrally. Test dismissed dialogs, failed saves,
+                    duplicate triggers and capture completion after view closure.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Extensions, media, settings, Boosts</th>
+                  <td data-label="Reuse from main">Existing extension, media, settings and Boost service layers</td>
+                  <td data-label="Platform adaptation and required proof">
+                    Keep capability checks and native view ownership. Scope discovery/polling and async mutations. Test unsupported methods, denied access,
+                    disconnect and per-profile isolation.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Telemetry, updates and automation</th>
+                  <td data-label="Reuse from main">
+                    <code>telemetry/{service,usageService}.ts</code>, <code>lib/updaterService.ts</code>, CLI automation service
+                  </td>
+                  <td data-label="Platform adaptation and required proof">
+                    One app owner, existing consent checks, platform updater policy and Windows/Linux CLI discovery. Test opt-out, shutdown, updater
+                    cancellation and exactly one automation reply.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small">
+            Audit remaining <code>async</code>, timers, listeners, subscriptions and abort controllers after integration. Record each as migrated workflow,
+            scoped view-local work, pure/synchronous code or raw package boundary. Completion requires removing every superseded owner, rather than leaving two
+            active implementations.
+          </p>
+        </details>
+      </section>
+      <section id="windows">
+        <h2>4. Windows branch work</h2>
+        <p class="paths">Target: <code>feat/windows</code> · shared integration owner first, then Windows native acceptance.</p>
+        <div class="step">
+          <span class="step-id">W1 / merge and contracts</span>
+          <h3>Combine main with the Windows host</h3>
+          <p>
+            Resolve the common conflicts, retain <code>index.web.ts</code> role selection, <code>@bay/platform</code>, web Metro resolution, native contracts,
+            engine call generation and the Windows workflow scripts. Merge the standalone CLI rewrite with Windows endpoint and bundling fixes.
+          </p>
+          <p class="exit">
+            Exit: manifests and lockfiles agree; native contract generation is current; desktop and web type checks pass. New Effect imports resolve in both the
+            macOS and WebUI bundles.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">W2 / ownership and durable writes</span>
+          <h3>Attach Effect to the authority lifetime</h3>
+          <p>
+            Implement the runtime factory and authority-store port. Move <code>startCoordinatorServices</code>, service commands, sync, extensions, telemetry
+            and app lifecycle into one supervised owner. Keep service-state projections and async flush/resume/dispose behavior. Confirm window bundles cannot
+            acquire the application runtime through transitive imports.
+          </p>
+          <p class="exit">
+            Exit: a two-window test observes one persistence subscription, sync owner and poller. Window closure leaves them alive; coordinator disposal removes
+            them. Quit waits for writes; cancelling quit resumes saving.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">W3 / workflow conversion</span>
+          <h3>Complete the shared workflow ledger</h3>
+          <p>
+            Apply every inventory row above. Preserve DPAPI/NSS import behavior, explicit guidance for app-bound secrets, native notification routing, Windows
+            file dialogs, default-browser registration and signed updater behavior. Add app-local Effect adapters around the existing native APIs where needed.
+          </p>
+          <p class="paths">
+            Key paths: <code>packages/platform/src/{nativeBridge,mojoTransport,runtimeTransport}.ts</code>, <code>packages/import/windows</code>,
+            <code>packages/sync/windows</code>, <code>engine/chromium/src/chrome/browser/bay/webui</code>.
+          </p>
+          <p class="exit">
+            Exit: no duplicate legacy worker remains; service tests cover typed failure, interruption and late native replies. Renderer actions still pass
+            through the existing command validation.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">W4 / target OS and installer</span>
+          <h3>Prove it in the packaged Windows app</h3>
+          <p>
+            Run Windows checks, build the pinned engine, run native runtime tests and the hosting gate. Verify two-window editing, private isolation, tab
+            transfer, restore, shutdown and recovery. Exercise DPI changes, Snap, IME, accessibility, media/PiP, clipboard, notifications and installer/update
+            cancellation. Keep the compressed installer and runtime resource set.
+          </p>
+          <p class="exit">
+            Exit: record a Windows integration SHA with portable checks, actual Windows build/runtime results and installer evidence. Only then carry this
+            shared integration into Linux.
+          </p>
+        </div>
+        <details>
+          <summary>
+            Windows commands and native gate<small>Reuse the checked-in workflows; environment and engine paths are supplied on the Windows builder.</small>
+          </summary>
+          <pre>
+pnpm test:windows-build
+pnpm test:windows-native
+node packages/platform/scripts/native-contracts.mjs --check
+python scripts/windows/generate-engine-calls.py --check
+pwsh -NoProfile -File scripts/windows/test-updater.ps1
+
+# Windows engine machine, with the pinned VS / SDK toolchain:
+python scripts/windows/engine.py all --root C:\bay-engine --output C:\bay-artifacts
+# Stage/build using scripts/windows/build-app.py and windows-build.yml.
+pwsh -File scripts/windows/smoke.ps1 -AppPath C:\bay-app\Bay.exe -HostingSpike</pre>
+          <p class="small">
+            Build and run <code>chrome/browser/bay/webui:runtime_unittests</code> with the engine configuration. The smoke script checks liveness; the visible
+            hosting acceptance in <code>packaging/windows/hosting-gate.md</code> remains a separate check. Run installer signature, update and rollback tests on
+            Windows.
+          </p>
+        </details>
+      </section>
+      <section id="linux">
+        <h2>5. Linux branch work</h2>
+        <p class="paths">Target: <code>feat/linux</code> · depends on the recorded Windows integration SHA.</p>
+        <div class="step">
+          <span class="step-id">L1 / carry the shared integration</span>
+          <h3>Merge Windows into Linux and retain Linux's delta</h3>
+          <p>
+            Bring in the Windows integration, then review every Linux-only override. Preserve Expo Image and its macOS/native patches, Linux capabilities,
+            engine routing, Nix packaging and the Linux CI fixes. Resolve dependencies with both the image work and Effect present.
+          </p>
+          <p class="exit">
+            Exit: the chosen main SHA is an ancestor; Linux's platform methods and image work remain. Common service suites, web boot, web types and production
+            export pass on the merged Linux tree.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">L2 / native adapters</span>
+          <h3>Bind Linux operations to the same Effect services</h3>
+          <p>
+            Use the shared coordinator runtime and workflow layers. Map Linux-specific method support, failures and permissions at app adapters. Preserve
+            libsecret storage, native import/crypto, autostart/default-browser actions, portal/file dialog behavior and notification activation. A missing
+            service or denied permission must stay distinguishable from success.
+          </p>
+          <p class="paths">
+            Native anchors: <code>webui/{app_services_linux,secret_storage_linux,autostart_linux,sync_ui_linux}.cc</code>, <code>keychain_linux.cc</code>,
+            <code>shell_files.cc</code>, <code>shell_clipboard.cc</code>; portable packages <code>packages/import/linux</code> and
+            <code>packages/sync/linux</code>.
+          </p>
+          <p class="exit">
+            Exit: supported, denied, unavailable and disconnected cases have tests. Account or secret callbacks after disposal cannot write to a new epoch. The
+            full shared workflow ledger is complete on Linux too.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">L3 / compositor and lifecycle</span>
+          <h3>Run the real host on Wayland and X11</h3>
+          <p>
+            Validate SurfaceEmbed with the merged runtime before accepting Linux. Exercise two-window state changes, split/peek pages, tab tear-off and
+            adoption, parked pages, fullscreen/PiP, DevTools, focus, IME, scale changes and clipboard/drag-and-drop. Cover GNOME and KDE where the existing
+            Linux plan requires their different integration paths.
+          </p>
+          <p>
+            Repeat restore, quit/cancel, coordinator replacement, secret-service denial, notification click and file-picker cancellation. Check the Expo Image
+            change on WebUI and the retained macOS host.
+          </p>
+          <p class="exit">
+            Exit: native rendering and input work under both display protocols; epoch and profile ownership hold during window churn. Report failures by tested
+            desktop/session rather than treating one distro boot as general Linux acceptance.
+          </p>
+        </div>
+        <div class="step">
+          <span class="step-id">L4 / build and package</span>
+          <h3>Build and validate Linux distribution artifacts</h3>
+          <p>
+            Use the Linux engine driver and pinned sysroot. Build the app, run import/sync/native tests and validate the existing tar/deb/rpm packaging paths.
+            Check the Nix package separately if shipping it. Verify desktop entry/default-browser integration, sandbox status, shared libraries, locales, codecs
+            and GPU fallbacks from the staged artifact.
+          </p>
+          <p class="exit">
+            Exit: each advertised package has install/launch evidence, session persistence and native smoke results. Unsupported architectures or distributions
+            stay outside the tested claim.
+          </p>
+        </div>
+        <details>
+          <summary>
+            Linux commands and build prerequisites<small
+              >Run on the Linux builder. Follow docs/linux-building.md for dependencies, engine root and packaging arguments.</small
+            >
+          </summary>
+          <pre>
+python scripts/linux/test-import.py --services-only
+bash packages/sync/scripts/check-linux-crypto.sh
+python packages/sync/linux/tests/service-test.py
+python packages/sync/linux/tests/recovery-kit-test.py
+python -m unittest discover -s scripts/linux -p 'test_*.py' -v
+python -m unittest scripts/test_engine_driver.py -v
+python engine/patches/series.py files --platform linux
+
+# After configuring a Linux engine root and host dependencies:
+python3 scripts/engine.py --platform linux prepare
+python3 scripts/engine.py --platform linux build --jobs 2
+# Stage/build with scripts/linux/build-app.py.
+# Package with scripts/linux/release.sh for the selected formats.</pre>
+          <p class="small">
+            The Linux build guide requires a Linux filesystem path without spaces and at least 150 GB free for source, build and packaging. It documents initial
+            x86-64 glibc targets, a separate Nix environment and an unmeasured minimum glibc version. Reuse compatible engine output only after freshness
+            checks; Windows/macOS outputs cannot substitute for a Linux build.
+          </p>
+        </details>
+      </section>
+      <section id="gates">
+        <h2>6. Evidence required before calling either branch done</h2>
+        <details open>
+          <summary>Common automated checks<small>Run on each final branch tree. Native checks supplement these commands.</small></summary>
+          <pre>
+pnpm install --frozen-lockfile
+pnpm fmt:check
+pnpm lint
+pnpm slop
+pnpm typecheck
+pnpm typecheck:web
+pnpm compiler:check
+pnpm shaders:check
+pnpm build:web
+pnpm test:web-boot
+pnpm test
+node --test scripts/tests/test-effect-boundary.mjs
+node --test scripts/tests/test-engine-fresh.mjs
+
+# In apps/cli, using its standalone Bun lockfile:
+bun install --frozen-lockfile
+bun run typecheck
+bun test tests/</pre>
+          <p class="small">
+            Keep main CI plus the platform workflows. Ensure the Effect boundary check runs on the platform PRs too. Run native-contract, engine-call, patch
+            selection, Rust content blocker and platform suites from the existing workflows. Review the final scripts after merge before choosing
+            runner-specific commands.
+          </p>
+        </details>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Acceptance condition</th>
+                <th>Evidence to retain</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>One shared owner</th>
+                <td data-label="Evidence to retain">
+                  Two clients, duplicate startup and disconnect tests; app-runtime import isolation; fresh epoch and partial-acquisition tests. Runtime teardown
+                  releases owned listeners, timers, subscriptions and fibers. Independently constructed authority stores do not share persistence, profile jobs
+                  or mutable service state.
+                </td>
+              </tr>
+              <tr>
+                <th>No stale mutation</th>
+                <td data-label="Evidence to retain">
+                  Fake clock/ports test interruption, late callbacks, old epochs, duplicate commands and native completion. Existing authority/privacy/page-fact
+                  suites still pass. Delayed publication delays the reply; duplicate requests run side effects once; service Undo belongs to the initiating
+                  window.
+                </td>
+              </tr>
+              <tr>
+                <th>Durable state</th>
+                <td data-label="Evidence to retain">
+                  Injected write failure, final flush, cancellation/resume, import/sync commit boundaries and recovery tests. No duplicate hydration of
+                  recovered accepted state.
+                </td>
+              </tr>
+              <tr>
+                <th>Platform behavior preserved</th>
+                <td data-label="Evidence to retain">
+                  Native Windows and Linux builds; real host multi-window and permission checks. macOS production bundle/Hermes and targeted native regression
+                  checks for shared changes.
+                </td>
+              </tr>
+              <tr>
+                <th>Performance checked</th>
+                <td data-label="Evidence to retain">
+                  Compare captured baseline and candidate on the same OS, hardware, profile and build mode. Record startup, restore, window churn, polling and
+                  bundle measurements. Investigate regressions; this plan invents no numerical budget.
+                </td>
+              </tr>
+              <tr>
+                <th>Deliverable complete</th>
+                <td data-label="Evidence to retain">
+                  Final branch SHAs, inventory dispositions, passing checks, native evidence and packaged artifacts. Source-level checks or localhost WebUI boot
+                  do not establish native acceptance.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Retain the existing capability limits and known platform gaps in the acceptance report. The Windows status document lists Task Manager mapping, early
+          startup window adoption, taskbar jump lists and blocker counts as open items. Confirm their current state during baseline capture; this integration
+          must not quietly claim they are finished.
+        </p>
+        <p class="small">
+          Treat packaging readiness separately from publishing. For a later landing on main, follow the repository's nightly release instruction and
+          <code>docs/releasing.md</code>. This plan itself does not merge, commit, push or publish either branch.
+        </p>
+      </section>
+      <section id="evidence">
+        <h2>7. Source anchors and open decisions</h2>
+        <p>
+          The sequence and runtime factory above are recommendations. Branch ancestry, Effect pins, coordinator ownership and the dry-run conflicts are
+          repository observations. No native build, platform QA or performance measurement was performed for this planning document.
+        </p>
+        <ul class="small">
+          <li>
+            Confirm access to Windows and Linux builders and the display sessions needed for native acceptance. This macOS workspace cannot provide those
+            results.
+          </li>
+          <li>Choose which Linux artifact formats and desktop environments will be advertised for this delivery. Test every selected one.</li>
+          <li>
+            Before implementation, decide the failure policy for a final disk flush using the existing host contract. Preserve dirty state and avoid a success
+            reply for an unacknowledged save.
+          </li>
+          <li>
+            Confirm the branch tips again. The dry-run count will change as the branches move, and it does not predict conflicts in the later merge of the
+            completed Windows integration into Linux.
+          </li>
+        </ul>
+        <details>
+          <summary>
+            Repository sources pinned to this audit<small>Links open the exact source revision. The plan remains readable without a network connection.</small>
+          </summary>
+          <ul class="sources">
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/src/effect/runtime.ts"
+                >Main runtime and service composition</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/src/effect/commands.ts"
+                >command boundary</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/src/effect/testing.ts">test adapters</a>
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/src/lib/persistenceService.ts"
+                >Main persistence semantics</a
+              >
+              · <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/src/lib/quit.ts">quit handshake</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/scripts/tests/test-effect-boundary.mjs"
+                >Effect dependency rules</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/browser/package.json">Browser manifest</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/apps/cli/package.json">CLI manifest</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/.github/workflows/ci.yml">main CI</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/2b4a9ed6d09b462cbed7f8faff62ba42b3853407/docs/desktop-effect-plan.html"
+                >earlier desktop Effect plan</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/index.web.ts"
+                >WebUI bootstrap and roles</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/runtime/coordinatorEntry.ts"
+                >coordinator entry</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/runtime/services.ts"
+                >service lifetime</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/runtime/serviceExecutor.ts"
+                >service command executor</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/runtime/windowRuntimeEntry.ts"
+                >read-only window entry</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/runtime/coordinator.ts"
+                >publication and disposal</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/apps/browser/src/lib/persist.ts"
+                >Platform acknowledged persistence</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/packages/platform/src/nativeBridge.ts"
+                >native bridge</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/docs/windows-implementation-status.md"
+                >Windows implementation status</a
+              >
+              · <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/packaging/windows/hosting-gate.md">hosting gate</a>
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/.github/workflows/windows-checks.yml"
+                >Windows checks</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/5910738b2fe1e9165bc141c2ae77329e529f327d/.github/workflows/windows-build.yml"
+                >Windows build</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/a4ddcbec117604efeea9ba311a1f1678e368904a/.github/workflows/linux-checks.yml">Linux checks</a>
+            </li>
+            <li>
+              <a href="https://github.com/krishkalaria12/bay/blob/a4ddcbec117604efeea9ba311a1f1678e368904a/docs/linux-building.md">Linux build guide</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/a4ddcbec117604efeea9ba311a1f1678e368904a/docs/linux-port-plan.html">Linux host plan</a> ·
+              <a href="https://github.com/krishkalaria12/bay/blob/a4ddcbec117604efeea9ba311a1f1678e368904a/docs/linux-windows-parity-plan.html"
+                >Linux parity plan</a
+              >
+              ·
+              <a href="https://github.com/krishkalaria12/bay/blob/a4ddcbec117604efeea9ba311a1f1678e368904a/apps/browser/package.json"
+                >Linux image and web dependencies</a
+              >
+            </li>
+          </ul>
+        </details>
+        <details>
+          <summary>All 68 direct-merge conflict paths<small>The lists are identical for the two audited direct merges with main.</small></summary>
+          <pre>
+git merge-tree --write-tree --name-only --no-messages origin/feat/windows origin/main
+git merge-tree --write-tree --name-only --no-messages origin/feat/linux origin/main</pre>
+          <p class="small">
+            Each command returns a tree object followed by conflict paths and exits 1. The tree-object line is excluded from the count. These commands do not
+            alter the index or working tree.
+          </p>
+          <ol class="conflicts">
+            <li><code>apps/browser/src/activity/activityEngine.ts</code></li>
+            <li><code>apps/browser/src/activity/activityStore.ts</code></li>
+            <li><code>apps/browser/src/activity/calendar.ts</code></li>
+            <li><code>apps/browser/src/activity/googleAuth.ts</code></li>
+            <li><code>apps/browser/src/activity/index.ts</code></li>
+            <li><code>apps/browser/src/activity/meetingAlerts.ts</code></li>
+            <li><code>apps/browser/src/activity/meetingGroups.ts</code></li>
+            <li><code>apps/browser/src/activity/sources.ts</code></li>
+            <li><code>apps/browser/src/components/boosts/editor.ts</code></li>
+            <li><code>apps/browser/src/components/boosts/state.ts</code></li>
+            <li><code>apps/browser/src/components/capture/state.ts</code></li>
+            <li><code>apps/browser/src/components/cli/automationService.test.mjs</code></li>
+            <li><code>apps/browser/src/components/cli/driverControl.ts</code></li>
+            <li><code>apps/browser/src/components/cli/userScripts.ts</code></li>
+            <li><code>apps/browser/src/components/commandBar/useSuggestions.ts</code></li>
+            <li><code>apps/browser/src/components/developer/screenshot.ts</code></li>
+            <li><code>apps/browser/src/components/extensions/actions.ts</code></li>
+            <li><code>apps/browser/src/components/extensions/bridge.ts</code></li>
+            <li><code>apps/browser/src/components/extensions/searchEngines.ts</code></li>
+            <li><code>apps/browser/src/components/import/useImportFlow.ts</code></li>
+            <li><code>apps/browser/src/components/library/sharing.ts</code></li>
+            <li><code>apps/browser/src/components/library/state.ts</code></li>
+            <li><code>apps/browser/src/components/littleBay/access.ts</code></li>
+            <li><code>apps/browser/src/components/littleBay/putAway.ts</code></li>
+            <li><code>apps/browser/src/components/media/SharePicker.tsx</code></li>
+            <li><code>apps/browser/src/components/media/artwork.ts</code></li>
+            <li><code>apps/browser/src/components/media/cast.ts</code></li>
+            <li><code>apps/browser/src/components/media/pip.ts</code></li>
+            <li><code>apps/browser/src/components/pages/ClearDataDialog.tsx</code></li>
+            <li><code>apps/browser/src/components/settings/panes/LittleBaySettings.tsx</code></li>
+            <li><code>apps/browser/src/components/settings/panes/Passwords.tsx</code></li>
+            <li><code>apps/browser/src/components/settings/panes/Shortcuts.tsx</code></li>
+            <li><code>apps/browser/src/components/settings/panes/Sync.tsx</code></li>
+            <li><code>apps/browser/src/components/sidebar/UpdateRow.tsx</code></li>
+            <li><code>apps/browser/src/components/sidebar/sidebarEffects.ts</code></li>
+            <li><code>apps/browser/src/components/site/linkPreview.ts</code></li>
+            <li><code>apps/browser/src/components/site/translateState.ts</code></li>
+            <li><code>apps/browser/src/components/taskManager/TaskManagerWindow.tsx</code></li>
+            <li><code>apps/browser/src/components/window/TabPageCard.tsx</code></li>
+            <li><code>apps/browser/src/lib/appMenuIntegration.ts</code></li>
+            <li><code>apps/browser/src/lib/bookmarks.ts</code></li>
+            <li><code>apps/browser/src/lib/engineTabs.test.mjs</code></li>
+            <li><code>apps/browser/src/lib/engineTabs.ts</code></li>
+            <li><code>apps/browser/src/lib/favicons.ts</code></li>
+            <li><code>apps/browser/src/lib/history.ts</code></li>
+            <li><code>apps/browser/src/lib/localFiles.ts</code></li>
+            <li><code>apps/browser/src/lib/pageEngines.ts</code></li>
+            <li><code>apps/browser/src/lib/persist.ts</code></li>
+            <li><code>apps/browser/src/lib/profileCleanup.ts</code></li>
+            <li><code>apps/browser/src/lib/shellBridge.ts</code></li>
+            <li><code>apps/browser/src/lib/tabLifecycle.ts</code></li>
+            <li><code>apps/browser/src/lib/tabNavigation.ts</code></li>
+            <li><code>apps/browser/src/lib/tidyDownloads.ts</code></li>
+            <li><code>apps/browser/src/lib/tidyTabs.ts</code></li>
+            <li><code>apps/browser/src/lib/webNotifications.ts</code></li>
+            <li><code>apps/browser/src/main.tsx</code></li>
+            <li><code>apps/browser/src/sync/engine.ts</code></li>
+            <li><code>apps/browser/src/telemetry/client.ts</code></li>
+            <li><code>apps/browser/src/telemetry/usage.ts</code></li>
+            <li><code>apps/browser/src/test-native-stub.mjs</code></li>
+            <li><code>apps/cli/src/cli.ts</code></li>
+            <li><code>apps/cli/src/endpoint.ts</code></li>
+            <li><code>apps/cli/src/scriptsStore.ts</code></li>
+            <li><code>engine/nncore/src/bay/core/BUILD.gn</code></li>
+            <li><code>engine/nncore/src/bay/core/nn_navigation_hold.cc</code></li>
+            <li><code>packages/chromium/scripts/blocker-resources.sh</code></li>
+            <li><code>pnpm-lock.yaml</code></li>
+            <li><code>pnpm-workspace.yaml</code></li>
+          </ol>
+        </details>
+      </section>
+      <footer>
+        Planning artifact only. Owners are described by code responsibility; people and dates remain unassigned. Both branches finish with the shared Effect
+        migration and their own native acceptance evidence.
+      </footer>
+    </main>
+  </body>
+</html>
