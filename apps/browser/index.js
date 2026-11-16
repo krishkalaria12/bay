@@ -1,4 +1,6 @@
-// First: the opt-in benchmark probe has to be in place before React's renderer loads.
+// First: Hermes has no TextDecoder, and Effect makes one as it loads.
+import "./src/lib/textDecoder";
+// Then the opt-in benchmark probe, which has to be in place before React's renderer loads.
 import "./src/lib/perfProbe";
 import { LogBox } from "react-native";
 import { nativeApiSkew, startSkewed } from "./src/nativeApi";

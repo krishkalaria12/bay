@@ -208,6 +208,9 @@ public struct SpaceSuggestion: Codable, Equatable, Sendable {
   public var profileId: String
   public var pinned: [BookmarkNode]
   public var tabs: [ImportedTab]
+  // The space's own top grid, when its browser keeps one per space (Zen's essentials, per container); Arc's is the
+  // profile's (ImportResult.favorites).
+  public var favorites: [ImportedTab]? = nil
 }
 
 public struct ProfileSuggestion: Codable, Equatable, Sendable {

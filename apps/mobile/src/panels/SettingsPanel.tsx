@@ -31,6 +31,7 @@ import {
 import { START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
 import type { SimplePreferences, ThemeChoice, WallpaperId } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { APP_ICONS, canChangeAppIcon, currentAppIcon, setAppIcon, type AppIconChoice } from "./appIcons";
 
 export interface SettingsPanelProps {
   visible: boolean;
@@ -325,6 +326,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             ))}
           </Group>
           <Note>{t("settings.appearance.note")}</Note>
+          {canChangeAppIcon ? <AppIconPicker /> : null}
           <Group label={t("settings.group.startPage")}>
             <ActionRow
               testID="settings-wallpaper"
@@ -681,6 +683,60 @@ const pickPhoto = (previous: string | null) =>
   });
 
 /** Three columns of start page previews, then the user's photo. */
+/** The home screen icon, as a card of the six choices (the desktop's Settings › Appearance has the same set). */
+function AppIconPicker(): JSX.Element {
+  const [current, setCurrent] = useState<AppIconChoice>(currentAppIcon);
+  const t = useT();
+
+  const choose = (icon: AppIconChoice) => {
+    if (icon === current) return;
+    const before = current;
+
+    setCurrent(icon);
+    // iOS can refuse (the app in the background, another change still going): show the icon that stayed.
+    setAppIcon(icon).catch(() => setCurrent(before));
+  };
+
+  return (
+    <>
+      <Group label={t("settings.group.appIcon")}>
+        <View className="flex-row flex-wrap" style={{ padding: space.lg, rowGap: space.lg }}>
+          {APP_ICONS.map((icon, index) => {
+            const selected = icon === current;
+
+            return (
+              <PressFeedback
+                key={icon.name ?? "default"}
+                testID={`settings-app-icon-${(icon.name ?? "default").toLowerCase()}`}
+                accessibilityRole="radio"
+                accessibilityLabel={t(icon.label)}
+                accessibilityState={{ selected, checked: selected }}
+                onPress={() => choose(icon)}
+                className="items-center gap-2"
+                style={{ width: "31%", marginRight: index % 3 === 2 ? 0 : "3.5%" }}
+              >
+                <View className={selected ? "border-2 border-accent" : "border-2 border-transparent"} style={{ padding: 3, borderRadius: radius.tile + 5 }}>
+                  <Image
+                    source={icon.image}
+                    resizeMethod="resize"
+                    fadeDuration={0}
+                    accessibilityIgnoresInvertColors
+                    style={{ width: 60, height: 60, borderRadius: radius.tile - 4 }}
+                  />
+                </View>
+                <Text variant="subhead" weight={selected ? "medium" : undefined} tone={selected ? "accent" : "default"}>
+                  {t(icon.label)}
+                </Text>
+              </PressFeedback>
+            );
+          })}
+        </View>
+      </Group>
+      <Note>{t("settings.appIcon.note")}</Note>
+    </>
+  );
+}
+
 function WallpaperPicker({
   value,
   photo,

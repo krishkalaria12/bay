@@ -110,7 +110,7 @@ public enum FirefoxLogins {
       let keyLength = kdf.children[2].integer
       let ivTail = params.children[1].children[1].content
       guard iterations > 0, keyLength == 32 else { throw ImportError.unsupported("Unsupported PBES2 key size") }
-      let k = Data(Insecure.SHA1.hash(data: globalSalt + password))
+      let k = passwordHash(globalSalt + password, saltLength: globalSalt.count)
       let key = pbkdf2SHA256(password: k, salt: salt, rounds: iterations, length: keyLength)
       // NSS stores 14 IV bytes; the DER length prefix supplies the missing two.
       let iv = Data([0x04, 0x0E]) + ivTail
@@ -126,6 +126,18 @@ public enum FirefoxLogins {
       return AES.unpadLeniently(clear, blockSize: kCCBlockSize3DES)
     default:
       throw ImportError.unsupported("Unsupported PBE algorithm \(algo)")
+    }
+  }
+
+  // NSS hashes the global salt and password with the hash as long as the salt (sftkdb_passwordToKey): SHA-1 for the
+  // 20-byte salt every key4.db had, SHA-384 for the 48-byte one NSS now writes when a primary password is set (Zen 1.22,
+  // 2026-11). With SHA-1 alone, the right primary password read as wrong.
+  static func passwordHash(_ data: Data, saltLength: Int) -> Data {
+    switch saltLength {
+    case 32: return Data(SHA256.hash(data: data))
+    case 48: return Data(SHA384.hash(data: data))
+    case 64: return Data(SHA512.hash(data: data))
+    default: return Data(Insecure.SHA1.hash(data: data))
     }
   }
 
