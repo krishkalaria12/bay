@@ -19,7 +19,9 @@ steps:
   - tap: { id: bar-tabs }
   - await: { visible: { id: tab-card-1 }, timeout: 10000 }
 
-  # Back to the first tab.
+  # Back to the first tab. iOS opens the stack on the tab in front, so the first card is off to the left.
+  - scroll-to: { target: { id: tab-card-0 }, direction: left }
+  - await: { idle: true, timeout: 10000 }
   - tap: { id: tab-card-0 }
   - await: { visible: { id: bar-more }, timeout: 10000 }
   - tap: { id: bar-more }
@@ -34,8 +36,9 @@ steps:
   - tap: { id: tab-close-1 }
   - await: { hidden: { id: tab-card-1 }, timeout: 10000 }
   - tap: { id: bar-archive }
-  - await: { visible: { text: "https://example.org/" }, timeout: 10000 }
-  - tap: { text: "https://example.org/" }
+  # The archive shows the page's title with its site below it, so the site tells the two pages apart.
+  - await: { visible: { text: "example.org" }, timeout: 10000 }
+  - tap: { text: "example.org" }
   - await: { visible: { id: bar-more }, timeout: 15000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }

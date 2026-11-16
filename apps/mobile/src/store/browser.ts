@@ -3,6 +3,8 @@ import { File, Paths } from "expo-file-system";
 import { AppState } from "react-native";
 import { create } from "zustand";
 
+import { t } from "@/i18n";
+
 import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
 import type { BrowserData, BrowserRepository } from "./types";
 
@@ -117,7 +119,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   createSpace() {
     const data = get().data;
     const index = data.spaces.length + 1;
-    const space = { id: newId(), name: `Space ${index}`, color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]! };
+    const space = { id: newId(), name: t("space.default", { index }), color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]! };
 
     get().dispatch({ type: "create-space", space, blankTab: createTab(newId(), Date.now(), "", false, space.id) });
   },

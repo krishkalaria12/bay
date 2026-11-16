@@ -5,7 +5,8 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-na
 
 import type { ToggleProps } from "./Toggle.types";
 
-// A flat switch (no Material thumb shadow or ripple). The row around it handles the tap.
+// A flat switch (no Material thumb shadow or ripple). The row around it handles the tap and tells TalkBack it is a
+// switch and whether it is on (ActionRow), so the drawing stays out of the reader.
 export function Toggle({ value, disabled }: ToggleProps): JSX.Element {
   const accent = useThemeColor("accent");
   const on = useSharedValue(value ? 1 : 0);
@@ -17,6 +18,8 @@ export function Toggle({ value, disabled }: ToggleProps): JSX.Element {
   return (
     <View
       pointerEvents="none"
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
       className="bg-foreground/20"
       style={[{ width: 44, height: 26, borderRadius: 13, padding: 3, opacity: disabled ? 0.4 : 1 }, value && { backgroundColor: accent }]}
     >

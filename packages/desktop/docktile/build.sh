@@ -28,7 +28,7 @@ if [ "$stale" = 1 ]; then
     # A loadable bundle (MH_BUNDLE), like Xcode's "Bundle" product type.
     xcrun swiftc -O -parse-as-library -module-name "$name" -target "$arch-apple-macos$min_os" \
       -sdk "$(xcrun --sdk macosx --show-sdk-path)" -Xlinker -bundle -emit-executable \
-      -framework AppKit -framework CoreImage -o "$out" "${sources[@]}"
+      -framework AppKit -o "$out" "${sources[@]}"
     slices+=("$out")
   done
   xcrun lipo -create "${slices[@]}" -output "$binary"

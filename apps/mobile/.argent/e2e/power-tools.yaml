@@ -16,6 +16,10 @@ steps:
   - await: { text: { in: { id: page-menu-url }, contains: "iana.org/help/example-domains" }, timeout: 10000 }
   - tap: { id: page-find }
   - await: { visible: { id: find-input }, timeout: 10000 }
+  # iOS: keys typed while the keyboard is still rising under the find bar get dropped ("dmain"), so let it settle.
+  - when: { platform: ios }
+    steps:
+      - await: { idle: true, timeout: 15000 }
   - type: { into: { id: find-input }, text: "domain" }
   - await: { text: { in: { id: find-count }, contains: "1 of" }, timeout: 10000 }
   - tap: { id: find-next }

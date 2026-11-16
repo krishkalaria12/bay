@@ -19,13 +19,22 @@ final class BayVoice: NSObject {
         promise.resolve(nil)
         return
       }
-      AVAudioSession.sharedInstance().requestRecordPermission { recordStatus in
-        guard recordStatus == .granted else {
+      requestMicrophone { granted in
+        guard granted else {
           promise.resolve(nil)
           return
         }
         start(promise: promise)
       }
+    }
+  }
+
+  /// Whether the microphone may be recorded: iOS 17 asks through AVAudioApplication, before that through the session.
+  private static func requestMicrophone(_ done: @escaping (Bool) -> Void) {
+    if #available(iOS 17, *) {
+      AVAudioApplication.requestRecordPermission(completionHandler: done)
+    } else {
+      AVAudioSession.sharedInstance().requestRecordPermission(done)
     }
   }
 
@@ -40,20 +49,20 @@ final class BayVoice: NSObject {
 
     guard
       let recognizer = SFSpeechRecognizer(locale: .current),
-      recognizer.isAvailable,
-      let currentRequest = SFSpeechAudioBufferRecognitionRequest(),
-      let engine = AVAudioEngine()
+      recognizer.isAvailable
     else {
       busy = false
       promise.resolve(nil)
       return
     }
 
+    let currentRequest = SFSpeechAudioBufferRecognitionRequest()
+    let engine = AVAudioEngine()
     let session = AVAudioSession.sharedInstance()
 
     do {
       try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
-      try session.setActive(true, options: .notifyOthersOnAudioInterruption)
+      try session.setActive(true, options: .notifyOthersOnDeactivation)
     } catch {
       busy = false
       promise.resolve(nil)
@@ -64,10 +73,8 @@ final class BayVoice: NSObject {
     recognitionRequest?.shouldReportPartialResults = true
 
     // Where iOS supports it, recognition never leaves the device; nothing audible arrives from abroad.
-    if #available(iOS 17, *) {
-      if SFSpeechRecognizer.supportsOnDeviceRecognition {
-        recognitionRequest?.requiresOnDeviceRecognition = true
-      }
+    if #available(iOS 17, *), recognizer.supportsOnDeviceRecognition {
+      recognitionRequest?.requiresOnDeviceRecognition = true
     }
 
     let inputNode = engine.inputNode

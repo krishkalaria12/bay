@@ -4,13 +4,14 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import type { CapsuleStyle } from "@/chrome/BrowserBar.types";
+import { press } from "@/chrome/haptics";
+import { SPRING } from "@/chrome/motion";
 
 const DISTANCE = 64;
 const VELOCITY = 600;
 
 /** How far the capsule slides out, and in from the other side, when the tab changes. */
 const SLIDE = 56;
-const SPRING = { damping: 18, stiffness: 240, mass: 0.8 };
 
 /** Two tabs on the same site show the same capsule, so nothing changes to wait for: slide in after this long. */
 const ENTER_FALLBACK_MS = 250;
@@ -63,6 +64,8 @@ export function TabSwipe({
   function switched(step: 1 | -1, from: number): void {
     if (entering.current) clearTimeout(entering.current.timer);
     entering.current = { from, timer: setTimeout(enter, ENTER_FALLBACK_MS) };
+    // The switcher snapping onto a card answers the swipe (A3).
+    press();
     onSwipe(step);
   }
 

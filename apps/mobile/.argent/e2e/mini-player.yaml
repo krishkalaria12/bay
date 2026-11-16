@@ -46,12 +46,9 @@ steps:
   - await: { idle: true, stableFor: 2000, timeout: 15000 }
   - await: { hidden: { id: mini-player }, timeout: 1000 }
 
-  # Archive the tab: a media file left open reloads at the next launch, and while its controls spin, reading
-  # Android's tree times out.
-  - tap: { id: tab-card-0 }
-  - await: { visible: { id: bar-more }, timeout: 10000 }
-  - tap: { id: bar-more }
-  - await: { visible: { id: page-close-tab }, timeout: 10000 }
-  - await: { idle: true, timeout: 15000 }
-  - tap: { id: page-close-tab }
-  - await: { visible: { id: start-screen }, timeout: 10000 }
+  # Archive the tab from the switcher: a media file left open reloads at the next launch, and with its page on screen
+  # (even paused) reading Android's tree can time out, so the page isn't brought back to close it.
+  # Closing the only tab leaves an empty new tab in its place.
+  - await: { text: { in: { id: tab-card-0 }, contains: "SoundHelix" }, timeout: 10000 }
+  - tap: { id: tab-close-0 }
+  - await: { text: { in: { id: tab-card-0 }, contains: "New tab" }, timeout: 10000 }

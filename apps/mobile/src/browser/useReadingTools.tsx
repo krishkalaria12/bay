@@ -2,17 +2,23 @@ import { hostOf } from "@bay/core/src/input.ts";
 import { runPageScript, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, Text, useColorScheme, View } from "react-native";
+import { Platform, useColorScheme, View } from "react-native";
 import { useThemeColor } from "heroui-native";
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
+import { useT } from "@/i18n";
 import { Toast } from "./Toast";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
 import { MARKDOWN_SCRIPT } from "@/pagescripts/markdown";
 import { PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT, type PickedElement } from "@/pagescripts/picker";
 import { CLOSE_READER_SCRIPT, openReaderScript, updateReaderScript, type ReaderSettings } from "@/pagescripts/reader";
 import { InspectPanel } from "@/panels/InspectPanel";
+import { useSheetOpen } from "@/panels/openSheets";
 import { ReaderPanel } from "@/panels/ReaderPanel";
 import { useBrowserStore } from "@/store/browser";
 import { siteSettingFor } from "@/store/model";
@@ -30,6 +36,7 @@ const pickedMessageSchema = v.object({
 
 export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoading: boolean, blocked: boolean, fail: (cause: unknown) => void) {
   const { data, dispatch } = useBrowserStore();
+  const t = useT();
   const [readerTab, setReaderTab] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -77,13 +84,13 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   }, [notice]);
 
   async function script<T>(source: string): Promise<T> {
-    if (blocked) throw new Error("Unlock private tabs first.");
+    if (blocked) throw new Error(t("notice.unlockFirst"));
 
-    if (!view) throw new Error("The page isn't ready.");
+    if (!view) throw new Error(t("notice.pageNotReady"));
     const version = context.current;
     const result = await runPageScript<T>(view, source);
 
-    if (context.current !== version) throw new Error("The page changed.");
+    if (context.current !== version) throw new Error(t("notice.pageChanged"));
 
     return result;
   }
@@ -128,7 +135,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
 
   function parent(): void {
     task(async () => {
-      if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
+      if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice(t("notice.noParent"));
     });
   }
 
@@ -237,7 +244,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     showHidden: () => setRules([]),
     openReader: () =>
       task(async () => {
-        if (!(await turnReaderOn(true))) setNotice("No article found on this page.");
+        if (!(await turnReaderOn(true))) setNotice(t("notice.noArticle"));
       }),
     /** Left from the site's panel (B12): Reader goes off even when this site asked for it. */
     closeReader: () =>
@@ -250,7 +257,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       task(async () => {
         const result = await script<{ markdown: string }>(MARKDOWN_SCRIPT);
         await Clipboard.setStringAsync(result.markdown);
-        setNotice("Markdown copied.");
+        setNotice(t("notice.markdownCopied"));
       }),
     startPicking: () => startPicking("hide"),
     startInspecting: () => startPicking("inspect"),
@@ -278,24 +285,24 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
             task(async () => {
               if (!inspected) return;
               await Clipboard.setStringAsync(inspected.agent);
-              setNotice("Copied for a coding agent.");
+              setNotice(t("notice.copiedForAgent"));
             })
           }
         />
         {picking && pickMode === "inspect" ? (
-          <PickerCard testID="inspect-instructions" icon="inspect" picked={picked} hint="Tap an element to inspect it.">
-            {picked ? <ToolButton id="inspect-parent-pick" label="Parent" icon="up" onPress={parent} /> : null}
-            {picked ? <ToolButton id="inspect-open" label="Details" primary onPress={inspect} /> : null}
-            <ToolButton id="inspect-done" label="Done" onPress={() => task(endPicking)} />
+          <PickerCard testID="inspect-instructions" icon="inspect" picked={picked} hint={t("picker.inspectHint")}>
+            {picked ? <ToolButton id="inspect-parent-pick" label={t("picker.parent")} icon="up" onPress={parent} /> : null}
+            {picked ? <ToolButton id="inspect-open" label={t("picker.details")} primary onPress={inspect} /> : null}
+            <ToolButton id="inspect-done" label={t("picker.done")} onPress={() => task(endPicking)} />
           </PickerCard>
         ) : null}
         {picking && pickMode === "hide" ? (
-          <PickerCard testID="hide-instructions" icon="hide" picked={picked} hint="Tap an element to hide it.">
-            {picked ? <ToolButton id="hide-parent" label="Parent" icon="up" onPress={parent} /> : null}
+          <PickerCard testID="hide-instructions" icon="hide" picked={picked} hint={t("picker.hideHint")}>
+            {picked ? <ToolButton id="hide-parent" label={t("picker.parent")} icon="up" onPress={parent} /> : null}
             {picked ? (
               <ToolButton
                 id="hide-zap"
-                label="Hide"
+                label={t("picker.hide")}
                 primary
                 onPress={() => {
                   setRules([...new Set([...rules, picked.selector])]);
@@ -304,11 +311,11 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
               />
             ) : (
               <>
-                <ToolButton id="hide-undo" label="Undo" disabled={!rules.length} onPress={() => setRules(rules.slice(0, -1))} />
-                <ToolButton id="hide-reset" label="Reset site" disabled={!rules.length} onPress={() => setRules([])} />
+                <ToolButton id="hide-undo" label={t("picker.undo")} disabled={!rules.length} onPress={() => setRules(rules.slice(0, -1))} />
+                <ToolButton id="hide-reset" label={t("picker.resetSite")} disabled={!rules.length} onPress={() => setRules([])} />
               </>
             )}
-            <ToolButton id="hide-done" label="Done" onPress={() => task(endPicking)} />
+            <ToolButton id="hide-done" label={t("picker.done")} onPress={() => task(endPicking)} />
           </PickerCard>
         ) : null}
         {notice ? <Toast key={notice} text={notice} testID="reading-notice" /> : null}
@@ -331,29 +338,32 @@ function PickerCard({
   hint: string;
   children: ReactNode;
 }) {
-  const foreground = useThemeColor("foreground");
-  const muted = useThemeColor("muted");
   const accent = useThemeColor("accent");
+  const t = useT();
+  // Behind an open sheet (the inspector's details) the card steps out of screen readers' way, like the bar.
+  const behindSheet = hiddenFromScreenReaders(useSheetOpen());
   // Android's surfaces are translucent; over page text that hurts reading, so this card is solid there.
   const solid = useColorScheme() === "dark" ? "#171717" : "#FFFFFF";
 
   return (
-    <Surface radius={26} style={[{ padding: 14, gap: 12 }, Platform.OS === "android" && { backgroundColor: solid }]}>
-      <View className="flex-row items-center gap-3">
-        <View className="h-10 w-10 items-center justify-center rounded-full bg-accent/15">
-          <Icon name={icon} color={accent} size={20} />
+    <View collapsable={false} {...behindSheet}>
+      <Surface radius={radius.card} style={[{ padding: 14, gap: space.md }, Platform.OS === "android" && { backgroundColor: solid }]}>
+        <View className="flex-row items-center gap-3">
+          <View className="h-10 w-10 items-center justify-center rounded-full bg-accent/15">
+            <Icon name={icon} color={accent} size={20} />
+          </View>
+          <View className="flex-1">
+            <Text testID={testID} numberOfLines={1} accessibilityLiveRegion="polite" variant="callout" weight="medium">
+              {picked ? picked.label : hint}
+            </Text>
+            <Text numberOfLines={1} variant="footnote" tone="muted" style={{ marginTop: 1 }}>
+              {picked ? `${picked.tag} · ${picked.width} × ${picked.height}` : t("picker.linksClosed")}
+            </Text>
+          </View>
         </View>
-        <View className="flex-1">
-          <Text testID={testID} numberOfLines={1} style={{ color: foreground, fontSize: 15.5, fontWeight: "500" }}>
-            {picked ? picked.label : hint}
-          </Text>
-          <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5, marginTop: 1 }}>
-            {picked ? `${picked.tag} · ${picked.width} × ${picked.height}` : "Links don't open while you pick."}
-          </Text>
-        </View>
-      </View>
-      <View className="flex-row gap-2">{children}</View>
-    </Surface>
+        <View className="flex-row gap-2">{children}</View>
+      </Surface>
+    </View>
   );
 }
 
@@ -376,7 +386,7 @@ function ToolButton({
   const accentForeground = useThemeColor("accent-foreground");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -385,16 +395,16 @@ function ToolButton({
       onPress={onPress}
       className={
         primary
-          ? "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-accent px-3 active:opacity-80"
-          : "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-default px-3 active:opacity-70"
+          ? "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-accent px-3"
+          : "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-default px-3"
       }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
       {icon ? <Icon name={icon} color={primary ? accentForeground : foreground} size={18} /> : null}
-      <Text numberOfLines={1} style={{ color: primary ? accentForeground : foreground, fontSize: 15, fontWeight: primary ? "600" : "400" }}>
+      <Text variant="callout" weight={primary ? "semibold" : "regular"} color={primary ? accentForeground : foreground} numberOfLines={1}>
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

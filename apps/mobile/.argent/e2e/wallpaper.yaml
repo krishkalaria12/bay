@@ -1,0 +1,68 @@
+# Wallpaper: the start page's wallpaper is picked under Settings, Appearance, and the row behind says which one is on,
+# also after Settings closes and opens again. Sea mist is the default. The wallpaper only changes colours, so what the
+# test proves is that the choice is kept, shown and taken back. Your photo needs the system photo picker and isn't
+# tried here.
+steps:
+  - run: ../flows/fresh-start
+
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: settings-appearance }
+  - await: { visible: { id: settings-wallpaper }, timeout: 10000 }
+
+  # The picker shows Bay's wallpapers and a tile for a photo.
+  - tap: { id: settings-wallpaper }
+  - await: { visible: { id: settings-wallpaper-bay }, timeout: 10000 }
+  - await: { visible: { id: settings-wallpaper-dusk }, timeout: 10000 }
+  - await: { visible: { id: settings-wallpaper-forest }, timeout: 10000 }
+  - await: { visible: { id: settings-wallpaper-plain }, timeout: 10000 }
+  - await: { visible: { id: settings-wallpaper-photo }, timeout: 10000 }
+  # Sea mist is the default: pick it, so the test starts from a known wallpaper.
+  - tap: { id: settings-wallpaper-bay }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Sea mist" }, timeout: 10000 }
+
+  # Dusk, and the row says so.
+  - tap: { id: settings-wallpaper }
+  - await: { visible: { id: settings-wallpaper-dusk }, timeout: 10000 }
+  - tap: { id: settings-wallpaper-dusk }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Dusk" }, timeout: 10000 }
+
+  # Forest, then Plain (the theme's own background).
+  - tap: { id: settings-wallpaper }
+  - await: { visible: { id: settings-wallpaper-forest }, timeout: 10000 }
+  - tap: { id: settings-wallpaper-forest }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Forest" }, timeout: 10000 }
+  - tap: { id: settings-wallpaper }
+  - await: { visible: { id: settings-wallpaper-plain }, timeout: 10000 }
+  - tap: { id: settings-wallpaper-plain }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Plain" }, timeout: 10000 }
+
+  # The choice is kept: close Settings over the start page and open it again.
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
+  - await: { visible: { id: start-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: settings-appearance }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Plain" }, timeout: 10000 }
+
+  # Sea mist again, so the next run starts as this one did.
+  - tap: { id: settings-wallpaper }
+  - await: { visible: { id: settings-wallpaper-bay }, timeout: 10000 }
+  - tap: { id: settings-wallpaper-bay }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-wallpaper-value }, equals: "Sea mist" }, timeout: 10000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }

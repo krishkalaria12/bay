@@ -1,0 +1,35 @@
+{
+  // The build profiles EAS builds Bay with (B8). A development build is the one the phone loads from Metro; a preview
+  // is the one a tester installs; a production build is the one the stores get.
+  "cli": {
+    "version": ">= 16.0.0",
+    // The version in app.json is the one that ships, so the two stores never disagree about it.
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "simulator": false
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
