@@ -36,8 +36,9 @@ const hero = {
     tabs: [
       ...favorites("default", ["github", "figma", "linear", "notion", "youtube", "wikipedia"]),
       ...studio(),
-      tab("bay", { id: "active" }),
-      tab("wikipedia", { title: "Golden Gate Bridge – Wikipedia", url: "https://en.wikipedia.org/wiki/Golden_Gate_Bridge" }),
+      // Not the site itself: its hero is this shot, so Bay showing it would frame the last capture inside the next.
+      tab("bay"),
+      tab("wikipedia", { id: "active", lastActiveAt: 2, title: "Golden Gate Bridge – Wikipedia", url: "https://en.wikipedia.org/wiki/Golden_Gate_Bridge" }),
       tab("nytimes"),
       tab("airbnb", { title: "Stays in Lisbon – Airbnb" }),
     ],

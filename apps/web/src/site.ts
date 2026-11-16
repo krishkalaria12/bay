@@ -18,7 +18,7 @@ export const site = {
 
 /** The hero's screenshot: public/screenshots has its stable copy, for search engines (scripts/shots). */
 export const heroShotAlt =
-  "The Bay browser for Mac in a violet and pink theme: favorites, a Launch folder of pinned tabs and today's tabs in the sidebar, beside the Bay website";
+  "The Bay browser for Mac in a violet and pink theme: favorites, a Launch folder of pinned tabs and today's tabs in the sidebar, beside Wikipedia's Golden Gate Bridge article";
 
 export const heroShotUrl = `${site.url}/screenshots/bay-browser-for-mac.jpg`;
 
