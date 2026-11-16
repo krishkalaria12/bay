@@ -36,7 +36,6 @@ import {
   HANDOFF_COLORS,
   HANDOFF_DIP,
   HANDOFF_DOTS,
-  HANDOFF_DROP_RADIUS,
   HANDOFF_FALLBACK_COLORS,
   HANDOFF_ICON,
   HANDOFF_SPRING,
@@ -47,8 +46,8 @@ import { continueImportInBackground, nextStep, skipStep, useOnboarding } from ".
 import { Reveal, StepProgress } from "./ui";
 
 // "Where are you coming from?" as a handoff: the card tears in two, the browser you're leaving on the left in its
-// own colours, Bay on the right. Drag the old browser's icon into Bay's (or press Return) and the import runs right
-// here: the left half folds away, Bay's fills the card, and the summary welcomes you in.
+// own colours, Bay on the right. Drag the old browser's icon anywhere onto Bay's side (or press Return) and the import
+// runs right here: the left half folds away, Bay's fills the card, and the summary welcomes you in.
 
 type Phase = "loading" | "empty" | "handoff" | "moving" | "welcome" | "window";
 
@@ -399,7 +398,9 @@ export function ImportStep() {
 
   // The pan responder is made once: these read this render's phase, geometry and flow.
   const canGrab = useEffectEvent(() => phase === "handoff" && !dropping.current);
-  const overBay = useEffectEvent((dx: number, dy: number) => ready && Math.hypot(dx - half, dy) < HANDOFF_DROP_RADIUS);
+  // Anywhere on Bay's side takes it: the icon starts in the middle of the other half, so past the seam its centre is
+  // over Bay's. Only Bay's icon used to, and a drop a little off it sprang back.
+  const overBay = useEffectEvent((dx: number) => ready && half / 2 + dx > half);
   const dropped = useEffectEvent(() => drop(true));
 
   // A click without a drag nudges the icon toward Bay: that's the way it goes.
@@ -431,7 +432,7 @@ export function ImportStep() {
         if (Math.abs(g.dx) + Math.abs(g.dy) > 3) moved = true;
         tx.set(g.dx);
         ty.set(g.dy);
-        const inside = overBay(g.dx, g.dy);
+        const inside = overBay(g.dx);
 
         if (inside === over) return;
         over = inside;
