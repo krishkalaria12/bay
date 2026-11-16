@@ -201,6 +201,17 @@ const compressedDex = `
 android.packaging.dex.useLegacyPackaging = true
 `;
 
+// Android's window extensions (foldable postures; Chromium's DevicePosturePlatformProviderAndroid) come with the system,
+// so androidx.window compiles against them without shipping them. Unseen, R8 couldn't tell that Chromium's listener
+// implements their Consumer, dropped its accept, and the first page load died with an AbstractMethodError. Compiled
+// against here, R8 sees them as the platform's and keeps what implements them.
+const windowExtensions = `
+// Bay's engine: the system's window extensions, for R8 (modules/bay-engine/app.plugin.js).
+dependencies {
+    compileOnly "androidx.window.extensions.core:core:1.0.0"
+}
+`;
+
 // Each edit leaves a file it has already made alone, so prebuilding twice changes nothing.
 const chromiumEngineEdits = {
   projectBuildGradle(gradle) {
@@ -228,6 +239,8 @@ const chromiumEngineEdits = {
     if (!gradle.includes("bayEngineR")) gradle += engineRClasses;
 
     if (!gradle.includes("dex.useLegacyPackaging")) gradle += compressedDex;
+
+    if (!gradle.includes("androidx.window.extensions.core")) gradle += windowExtensions;
 
     return gradle;
   },
