@@ -10,7 +10,6 @@ import { useThemeColor } from "heroui-native";
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
 import { PressFeedback } from "@/chrome/PressFeedback";
-import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
 import { radius, space } from "@/chrome/tokens";
@@ -24,7 +23,7 @@ import { MARKDOWN_SCRIPT } from "@/pagescripts/markdown";
 import { PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT, type PickedElement } from "@/pagescripts/picker";
 import { CLOSE_READER_SCRIPT, openReaderScript, updateReaderScript, type ReaderSettings } from "@/pagescripts/reader";
 import { InspectPanel } from "@/panels/InspectPanel";
-import { useSheetOpen } from "@/panels/openSheets";
+import { BehindSheets } from "@/panels/BehindSheets";
 import { ReaderPanel } from "@/panels/ReaderPanel";
 import { useBrowserStore } from "@/store/browser";
 import { siteSettingFor } from "@/store/model";
@@ -402,13 +401,12 @@ function PickerCard({
 }) {
   const accent = useThemeColor("accent");
   const t = useT();
-  // Behind an open sheet (the inspector's details) the card steps out of screen readers' way, like the bar.
-  const behindSheet = hiddenFromScreenReaders(useSheetOpen());
   // Android's surfaces are translucent; over page text that hurts reading, so this card is solid there.
   const solid = useColorScheme() === "dark" ? "#171717" : "#FFFFFF";
 
+  // Behind an open sheet (the inspector's details) the card steps out of screen readers' way, like the bar.
   return (
-    <View collapsable={false} {...behindSheet}>
+    <BehindSheets>
       <Surface radius={radius.card} style={[{ padding: 14, gap: space.md }, Platform.OS === "android" && { backgroundColor: solid }]}>
         <View className="flex-row items-center gap-3">
           <View className="h-10 w-10 items-center justify-center rounded-full bg-accent/15">
@@ -425,7 +423,7 @@ function PickerCard({
         </View>
         <View className="flex-row gap-2">{children}</View>
       </Surface>
-    </View>
+    </BehindSheets>
   );
 }
 

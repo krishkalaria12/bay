@@ -22,7 +22,6 @@ import { tick } from "@/chrome/haptics";
 import { opensSwitcher, pageBehindSearch, switcherProgress } from "@/chrome/layout";
 import { SPRING } from "@/chrome/motion";
 import { Icon } from "@/chrome/Icon";
-import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
 import { iconSize, space } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
@@ -39,7 +38,7 @@ import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
-import { useSheetOpen } from "@/panels/openSheets";
+import { BehindSheets } from "@/panels/BehindSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { takeFieldRequest } from "@/onboarding/handoff";
 import { youtubeSelectors } from "@/pagescripts/youtube";
@@ -117,7 +116,6 @@ export function BrowserScreen(): JSX.Element {
   const muted = useThemeColor("muted");
   // An open sheet is modal for screen readers: the browser behind it steps out of their way. Toasts stay, since they
   // answer what was done in the sheet.
-  const behindSheet = hiddenFromScreenReaders(useSheetOpen());
 
   const {
     ready,
@@ -920,7 +918,7 @@ export function BrowserScreen(): JSX.Element {
 
   return (
     <View className="flex-1 bg-background">
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false} {...behindSheet}>
+      <BehindSheets style={StyleSheet.absoluteFill} pointerEvents="box-none">
         <Wallpaper id={data.preferences.wallpaper} photo={data.preferences.wallpaperPhoto} />
         {ready ? (
           <Animated.View style={[StyleSheet.absoluteFill, { top: insets.top, overflow: "hidden" }, behindStyle]} pointerEvents="box-none">
@@ -1096,7 +1094,7 @@ export function BrowserScreen(): JSX.Element {
         {find.open && overlay === "none" && hasPage ? (
           <FindBar query={find.query} count={find.count} index={find.index} onChange={find.change} onStep={find.step} onDone={find.done} />
         ) : null}
-      </View>
+      </BehindSheets>
 
       {overlay !== "search" && !find.open && !fullscreen ? (
         <Animated.View
@@ -1114,7 +1112,7 @@ export function BrowserScreen(): JSX.Element {
         >
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
           {player ? (
-            <View collapsable={false} {...behindSheet}>
+            <BehindSheets>
               <MiniPlayer
                 title={player.title}
                 site={hostOf(player.tab.url)}
@@ -1129,7 +1127,7 @@ export function BrowserScreen(): JSX.Element {
                 onPictureInPicture={() => media.pictureInPicture(player.tab.id)}
                 onClose={() => media.stop(player.tab.id)}
               />
-            </View>
+            </BehindSheets>
           ) : null}
           {downloads.toast && !(locked && downloads.toast.private) ? (
             <DownloadToast
@@ -1152,7 +1150,7 @@ export function BrowserScreen(): JSX.Element {
               onDone={() => tipSeen(tip)}
             />
           ) : null}
-          <View collapsable={false} {...behindSheet}>
+          <BehindSheets>
             {tip ? <TipRing target={tip === "blocking" ? "more" : "capsule"} /> : null}
             {hasPage && showPages ? (
               <GestureDetector gesture={dragUp}>
@@ -1208,7 +1206,7 @@ export function BrowserScreen(): JSX.Element {
                 }}
               />
             )}
-          </View>
+          </BehindSheets>
         </Animated.View>
       ) : null}
 
