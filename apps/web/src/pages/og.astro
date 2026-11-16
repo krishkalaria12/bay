@@ -3,14 +3,14 @@
 import { Image } from "astro:assets";
 import Layout from "../layouts/Layout.astro";
 import { StillWindow } from "../components/live/Still";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg?url";
 ---
 
 <Layout title="Bay social card" noindex>
   <div class="relative flex h-[630px] w-[1200px] overflow-hidden bg-paper">
     <div class="flex w-[520px] shrink-0 flex-col justify-center pl-[72px]">
       <div class="flex items-center gap-3 text-[30px] font-bold tracking-tight">
-        <Image src={appIcon} alt="" width={52} height={52} class="size-[52px]" />
+        <img src={appIcon} alt="" width="52" height="52" class="size-[52px]" />
         Bay
       </div>
       <p class="mt-8 text-[56px] leading-[1.02] font-bold tracking-[-0.04em]">

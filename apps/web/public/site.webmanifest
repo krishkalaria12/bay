@@ -2,8 +2,8 @@
   "name": "Bay",
   "short_name": "Bay",
   "icons": [
-    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/apple-touch-icon.png?v=dusk", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-512.png?v=dusk", "sizes": "512x512", "type": "image/png" }
   ],
   "theme_color": "#edeef1",
   "background_color": "#edeef1",

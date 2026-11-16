@@ -7,7 +7,7 @@ import Feature from "../components/Feature.astro";
 import Shot from "../components/Shot.astro";
 import Sticky from "../components/Sticky.astro";
 import LiveFigure from "../components/live/LiveFigure";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg?url";
 import heroShot from "../assets/shots/bay-browser-for-mac.webp";
 import spaceStudio from "../assets/shots/bay-spaces-studio.webp";
 import spaceHome from "../assets/shots/bay-spaces-home.webp";
@@ -445,7 +445,7 @@ const schema = [
 
     <!-- Closing -->
     <section id="download" class="mx-auto max-w-6xl px-5 pt-10 pb-24 text-center">
-      <Image src={appIcon} alt="Bay app icon" width={112} height={112} class="mx-auto size-28" />
+      <img src={appIcon} alt="Bay app icon" width="112" height="112" class="mx-auto size-28" loading="lazy" />
       <h2 class="mt-6 text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
         Your spaces have a new <span class="marker">home</span>.
       </h2>
