@@ -61,6 +61,7 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   video: "play.rectangle",
   minus: "minus",
   globe: "globe",
+  sync: "arrow.triangle.2.circlepath",
 };
 
 // An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them, and

@@ -33,6 +33,9 @@ import { holdSheetOpen } from "@/panels/openSheets";
 import type { SimplePreferences, WallpaperId } from "@/store/types";
 
 import { CustomEngine, TextSize, WallpaperPicker } from "./bodies";
+import { SyncJoin, SyncPhrase } from "./syncBodies";
+import { PhoneSync } from "@/sync/service";
+import { useSyncStore } from "@/sync/state";
 import {
   DRAWN_PAGES,
   ENTRIES,
@@ -679,6 +682,10 @@ function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => v
       return <WallpaperPicker value={props.wallpaper} photo={props.wallpaperPhoto} onChange={props.onWallpaperChange} />;
     case "textSize":
       return <TextSize value={props.preferences.textSize} onChange={(textSize) => props.onPreferencesChange({ textSize })} />;
+    case "syncJoin":
+      return <SyncJoin back={back} />;
+    case "syncPhrase":
+      return <SyncPhrase back={back} />;
     default:
       return null;
   }
@@ -720,6 +727,24 @@ function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => v
   const saved = useSavedLocale();
   const device = useDeviceLocale();
   const [defaultBrowser, refreshDefault] = useDefaultBrowser();
+
+  // Sync with the other devices: what it says, its "ago"s moved on each minute, and its actions on the runtime.
+  const syncView = useSyncStore();
+  const [now, setNow] = useState(Date.now);
+  const syncCommand = useCommand<void, never>();
+
+  const runSync = (action: (sync: PhoneSync["Service"]) => Effect.Effect<void>) =>
+    syncCommand.run(
+      Effect.gen(function* () {
+        yield* action(yield* PhoneSync);
+      }),
+    );
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   // Saved logins (B20), read when Settings opens and again after one is forgotten.
   const { run: runLogins, result: loginsResult } = useScopedWork<readonly SavedLogin[]>("logins");
@@ -790,6 +815,14 @@ function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => v
     },
     showWelcome: props.onShowWelcome,
     openLink: props.onOpenLink,
+    sync: {
+      view: syncView,
+      now,
+      syncNow: () => runSync((sync) => sync.syncNow),
+      setType: (type, on) => runSync((sync) => sync.setType(type, on)),
+      leave: () => runSync((sync) => sync.leave),
+      openTab: props.onOpenLink,
+    },
   };
 }
 

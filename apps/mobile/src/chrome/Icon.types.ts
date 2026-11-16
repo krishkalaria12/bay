@@ -53,7 +53,8 @@ export type IconName =
   | "key"
   | "video"
   | "minus"
-  | "globe";
+  | "globe"
+  | "sync";
 
 export interface IconProps {
   name: IconName;
