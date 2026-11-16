@@ -1,4 +1,3 @@
-import { getAppIconName, setAlternateAppIcon, supportsAlternateIcons } from "expo-alternate-app-icons";
 import { useState } from "react";
 import type { ImageSourcePropType } from "react-native";
 
@@ -24,18 +23,33 @@ export const APP_ICONS: readonly AppIconChoice[] = [
   { name: "Bridge", label: "settings.appIcons.bridge", image: require("../../assets/images/app-icons/bridge.png") },
 ];
 
-export const canChangeAppIcon = supportsAlternateIcons;
+type AlternateIcons = typeof import("expo-alternate-app-icons");
+
+/**
+ * The native module, required when first used and null where this build hasn't got it (a dev client built before it
+ * was added), so Settings still opens without the picker instead of the app failing to start.
+ */
+const alternateIcons = ((): AlternateIcons | null => {
+  try {
+    // SAFETY: the require names the module its type is taken from.
+    return require("expo-alternate-app-icons") as AlternateIcons;
+  } catch {
+    return null;
+  }
+})();
+
+export const canChangeAppIcon = alternateIcons?.supportsAlternateIcons ?? false;
 
 /** The icon on the home screen now; an alternate this build doesn't know reads as the default. */
 export function currentAppIcon(): AppIconChoice {
-  const name = getAppIconName();
+  const name = alternateIcons?.getAppIconName() ?? null;
 
   return APP_ICONS.find((icon) => icon.name === name) ?? APP_ICONS[0]!;
 }
 
 /** Puts `icon` on the home screen. iOS confirms with its own alert; Android swaps the launcher entry. */
 export async function setAppIcon(icon: AppIconChoice): Promise<void> {
-  await setAlternateAppIcon(icon.name);
+  await alternateIcons?.setAlternateAppIcon(icon.name);
 }
 
 /** The home screen icon and a way to change it, or null where the phone can't. */
