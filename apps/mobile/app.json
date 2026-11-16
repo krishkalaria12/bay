@@ -39,6 +39,39 @@
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
       "expo-router",
+      // The icons people can switch to in Settings › Appearance (src/panels/appIcons.ts); scripts/make-icon.sh at the repo
+      // root draws them. Android launches through an activity alias per icon, so the browser's link filters stay on
+      // MainActivity.
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Navy",
+            "ios": "./assets/images/app-icons/navy.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/navy-adaptive.png", "backgroundColor": "#141831" }
+          },
+          {
+            "name": "Coral",
+            "ios": "./assets/images/app-icons/coral.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/coral-adaptive.png", "backgroundColor": "#D9482A" }
+          },
+          {
+            "name": "Noir",
+            "ios": "./assets/images/app-icons/noir.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/noir-adaptive.png", "backgroundColor": "#050505" }
+          },
+          {
+            "name": "Cobalt",
+            "ios": "./assets/images/app-icons/cobalt.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/cobalt-adaptive.png", "backgroundColor": "#14286B" }
+          },
+          {
+            "name": "Bridge",
+            "ios": "./assets/images/app-icons/bridge.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/bridge-adaptive.png", "backgroundColor": "#151C36" }
+          }
+        ]
+      ],
       // The launch animation (scripts/splash-animation.py draws it): Bay's icon builds itself natively while the
       // JavaScript loads, then hands over to the app (src/app/index.tsx hides it).
       [
