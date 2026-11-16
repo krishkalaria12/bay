@@ -78,6 +78,8 @@ std::vector<Browser> browsers() {
                            true});
     definitions.push_back(
         {"firefox", "Firefox", roaming / "Mozilla/Firefox", true});
+    // Zen keeps its profiles.ini beside Firefox's, in its own folder.
+    definitions.push_back({"zen", "Zen", roaming / "zen", true, false, "zen"});
   }
   if (!local.empty()) {
     std::error_code error;
@@ -429,14 +431,34 @@ Json import(const Json &args) {
           }
         }
       } else if (kind == "tabs") {
-        auto tabs = browser.firefox ? firefoxTabs(path, *cancelled)
-                                    : chromiumTabs(path, *cancelled);
-        result["tabs"] = tabs["tabs"];
-        result["tabGroups"] = tabs["groups"];
+        // Zen's spaces come as spaces, each with its pins, folders, tabs and
+        // essentials, as Arc's do.
+        auto spaces = browser.productId == "zen" ? zenSpaces(path, profileId)
+                                                 : Json::array();
+        if (!spaces.empty()) {
+          result["spaces"] = spaces;
+          result["tabs"] = Json::array();
+          for (auto &space : spaces)
+            for (auto &tab : space["tabs"])
+              result["tabs"].push_back(tab);
+        } else {
+          auto tabs = browser.firefox ? firefoxTabs(path, *cancelled)
+                                      : chromiumTabs(path, *cancelled);
+          result["tabs"] = tabs["tabs"];
+          result["tabGroups"] = tabs["groups"];
+        }
       } else if (kind == "passwords") {
-        if (browser.firefox)
-          result["credentials"] = firefoxLogins(path, primary, *cancelled);
-        else {
+        if (browser.firefox) {
+          try {
+            result["credentials"] = firefoxLogins(path, primary, *cancelled);
+          } catch (const Failure &error) {
+            // The primary password is one profile's: the others, without
+            // one, still open.
+            if (error.code != "locked" || primary.empty())
+              throw;
+            result["credentials"] = firefoxLogins(path, "", *cancelled);
+          }
+        } else {
           int blocked = 0;
           result["credentials"] = chromiumLogins(path,
 #if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
