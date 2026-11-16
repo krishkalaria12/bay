@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { DEFAULT_SETTINGS } from "../store/settings";
 import { checked } from "../lib/checked";
 import { isJsonObject, type JsonInput, type JsonObject, type JsonValue } from "../lib/json";
+import { span, spanStart, timed } from "@bay/platform/profiling";
 import type { BrowserCommand, BrowserCommit, CommandReply, CommandRequest } from "./authority";
 import type { BrowserProjection } from "./projection";
 
@@ -306,7 +307,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     let commit: BrowserCommit;
 
     try {
-      commit = decodeBrowserCommit(checked<JsonInput>(input), current);
+      commit = timed("Bay.client decodeCommit", () => decodeBrowserCommit(checked<JsonInput>(input), current));
     } catch {
       fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit"));
 
@@ -335,7 +336,8 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     }
 
     install(commit);
-    notify();
+    // The window's store takes the commit here, and its subscribers run.
+    timed("Bay.client applyCommit", notify, { revision: commit.revision });
     settle();
   }
 
@@ -413,7 +415,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         invalid();
 
       if (!validateBrowserCommandResult(command.request.command, reply.value)) invalid();
-      const commit = decodeBrowserCommit(checked<JsonInput>(reply.commit), current);
+      const commit = timed("Bay.client decodeReply", () => decodeBrowserCommit(checked<JsonInput>(reply.commit), current));
 
       // SAFETY: the checks above established this shape.
 
@@ -444,14 +446,22 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
 
     if (!Number.isSafeInteger(++nextRequestId)) throw new BrowserClientError("invalid_protocol", "browser request sequence is exhausted");
     const request: CommandRequest = Object.freeze({ epoch: current!.epoch, clientId, requestId: nextRequestId, command });
+    // A command's whole time, as its caller waits for it: sent, run by the coordinator, and its commit applied here.
+    const started = spanStart();
 
     return new Promise<BrowserCommandValue<C>>((resolve, reject) => {
       const item: Pending = {
         request,
         baseRevision: current!.revision,
-        // SAFETY: the runtime answers with the command's own value, which the reply's validation checked.
-        resolve: (value) => resolve(value as BrowserCommandValue<C>),
-        reject,
+        resolve: (value) => {
+          span(`Bay.command ${command.method}`, started);
+          // SAFETY: the runtime answers with the command's own value, which the reply's validation checked.
+          resolve(value as BrowserCommandValue<C>);
+        },
+        reject: (error) => {
+          span(`Bay.command ${command.method}`, started, { failed: true });
+          reject(error);
+        },
       };
 
       pending.set(request.requestId, item);

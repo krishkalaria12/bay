@@ -33,4 +33,11 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
 // first window came 27 ms sooner; opening a tab took 14% less, closing one 16% less, and the bytecode is 250 KB smaller.
 config.transformer.getTransformOptions = async () => ({ transform: { experimentalImportSupport: false, inlineRequires: false } });
 
+// Traces of the Chrome-hosted desktop name the functions that ran (scripts/perf/trace.mjs), and its React
+// commits the components that rendered (src/web/reactProfiling.ts): keep names through minification. The web bundle
+// grows 5.6% (5.78 to 6.10 MB, measured 2026-11-16).
+if (process.env.BAY_WEB === "1") {
+  config.transformer.minifierConfig = { ...config.transformer.minifierConfig, keep_fnames: true, keep_classnames: true };
+}
+
 module.exports = config;

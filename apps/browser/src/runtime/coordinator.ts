@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import type { CoordinatorRuntimeTransport, RuntimeResolution } from "@bay/platform/runtimeTransport";
+import { span, spanStart } from "@bay/platform/profiling";
 import { checked } from "../lib/checked";
 import { isJsonObject, type JsonInput, type JsonValue } from "../lib/json";
 import type { BrowserState, BrowserStore } from "../store/browserStore";
@@ -161,6 +162,9 @@ export async function createBrowserCoordinator({
   }
 
   async function handleCommand(token: string, request: CommandRequest, initial: Promise<void>) {
+    // From the command's arrival to its reply's acknowledgment, waits for earlier work included.
+    const started = spanStart();
+
     try {
       await initial;
       active();
@@ -181,6 +185,7 @@ export async function createBrowserCoordinator({
       }
 
       await resolve(token, response);
+      span(`Bay.coordinator ${request.command.method}`, started, { failed: "error" in response });
     } catch (error) {
       if (!disposed) stop(error instanceof Error ? error : new Error(String(error)));
     }

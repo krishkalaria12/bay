@@ -14,7 +14,8 @@
     "./capabilities": "./src/capabilities.ts",
     "./nativeBridge": "./nativeBridge.ts",
     "./webViewHost": "./webViewHost.ts",
-    "./runtimeTransport": "./src/runtimeTransport.ts"
+    "./runtimeTransport": "./src/runtimeTransport.ts",
+    "./profiling": "./src/profiling.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

@@ -2,6 +2,7 @@ import type { JsonValue } from "../lib/json";
 import * as v from "valibot";
 import { checked } from "../lib/checked";
 import { isJsonObject, type JsonInput, type JsonObject } from "../lib/json";
+import { span, spanStart, timed } from "@bay/platform/profiling";
 import { withSidebarUndoWindow } from "../store/sidebarUndo";
 import { createBrowserStore, type BrowserStore } from "../store/browserStore";
 import { createBrowserProjector, type BrowserProjection } from "./projection";
@@ -81,13 +82,14 @@ export function createBrowserAuthority({
     const state = store.getState();
 
     if (state === observed) return;
-    const projection = project(state);
+    const projection = timed("Bay.authority project", () => project(state));
     observed = state;
     commit = Object.freeze({ epoch, revision: commit.revision + 1, state: projection });
     pendingCommits.push(commit);
 
     if (notifying) return;
     notifying = true;
+    const notifyStart = spanStart();
 
     try {
       while (pendingCommits.length) {
@@ -104,6 +106,7 @@ export function createBrowserAuthority({
       }
     } finally {
       notifying = false;
+      span("Bay.authority notify", notifyStart, { revision: commit.revision });
     }
   }
 
@@ -182,7 +185,9 @@ export function createBrowserAuthority({
 
               return enqueue(() => result);
             })
-          : enqueue(() => withSidebarUndoWindow(originWindowId, () => executeBrowserCommand(store, command, effects)));
+          : enqueue(() =>
+              timed(`Bay.reduce ${command.method}`, () => withSidebarUndoWindow(originWindowId, () => executeBrowserCommand(store, command, effects))),
+            );
 
       const reply = action.then(({ commit, value }) => Object.freeze({ clientId, requestId, commit, value }));
       client.replies.set(requestId, { fingerprint, reply });

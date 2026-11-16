@@ -207,7 +207,9 @@ export type AppEvent =
   | { type: "optionHeld"; windowId: string }
   | { type: "optionReleased" }
   | { type: "switcherKey"; key: "escape" | "next" | "previous" }
-  | { type: "switcherMouseUp" };
+  | { type: "switcherMouseUp" }
+  // A trace started or stopped recording the documents' timings (Chrome-hosted desktop).
+  | { type: "profiling"; active: boolean };
 
 type ShellEvents = {
   onCommand: (e: CommandEvent) => void;

@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { checked, isJsonObject, type JsonInput, type JsonValue } from "./json.ts";
+import { sizeOf, span, spanStart } from "./profiling.ts";
 import {
   installNativeTransport,
   NativeBridgeError,
@@ -226,40 +227,52 @@ export async function createMojoTransport({
     removers.push(
       client.onNativeEvent.addListener((module, event, json) => {
         if (disposed || failure) return;
-        let payload: unknown;
+        const start = spanStart();
 
         try {
-          payload = JSON.parse(json);
-        } catch {
-          onProtocolError(new NativeBridgeError("invalid_event", `Invalid native event JSON for ${module}.${event}`));
-
-          return;
+          deliver(module, event, json);
+        } finally {
+          span(`Bay.event ${module}.${event}`, start, { bytes: sizeOf(json) });
         }
-
-        if (
-          module === "BayApp" &&
-          event === "onNotificationResponse" &&
-          (!notificationListeners()?.size || notificationResponses.length || notificationDrainScheduled || drainingNotifications)
-        ) {
-          retainNotification(json, checked<JsonValue>(payload));
-
-          return;
-        }
-
-        if (
-          module === "BayExtensions" &&
-          event === "onInstallPrompt" &&
-          (!installListeners()?.size || installPrompts.length || installDrainScheduled || drainingInstalls)
-        ) {
-          retainInstall(json, checked<JsonValue>(payload));
-
-          return;
-        }
-
-        // oxlint-disable-next-line unicorn/no-useless-spread -- Snapshot subscribers so changes during delivery affect the next event.
-        for (const subscription of [...(listeners.get(module)?.get(event) ?? [])]) subscription.listener(checked<JsonValue>(payload));
       }),
     );
+
+    // An event's payload parsed and handed to its subscribers.
+    function deliver(module: string, event: string, json: string) {
+      let payload: unknown;
+
+      try {
+        payload = JSON.parse(json);
+      } catch {
+        onProtocolError(new NativeBridgeError("invalid_event", `Invalid native event JSON for ${module}.${event}`));
+
+        return;
+      }
+
+      if (
+        module === "BayApp" &&
+        event === "onNotificationResponse" &&
+        (!notificationListeners()?.size || notificationResponses.length || notificationDrainScheduled || drainingNotifications)
+      ) {
+        retainNotification(json, checked<JsonValue>(payload));
+
+        return;
+      }
+
+      if (
+        module === "BayExtensions" &&
+        event === "onInstallPrompt" &&
+        (!installListeners()?.size || installPrompts.length || installDrainScheduled || drainingInstalls)
+      ) {
+        retainInstall(json, checked<JsonValue>(payload));
+
+        return;
+      }
+
+      // oxlint-disable-next-line unicorn/no-useless-spread -- Snapshot subscribers so changes during delivery affect the next event.
+      for (const subscription of [...(listeners.get(module)?.get(event) ?? [])]) subscription.listener(checked<JsonValue>(payload));
+    }
+
     remote.setClient(client.$.bindNewPipeAndPassRemote());
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -293,7 +306,9 @@ export async function createMojoTransport({
       },
       async invoke(module, method, argsJson) {
         active();
+        const start = spanStart();
         const result = await remote.invoke(module, method, argsJson);
+        span(`Bay.native ${module}.${method}`, start, { sent: sizeOf(argsJson), received: sizeOf(result.resultJson) });
         active();
 
         return result.resultJson;
