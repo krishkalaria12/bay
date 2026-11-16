@@ -73,3 +73,6 @@ scripts/.notary.env
 # Rust build output
 packages/adblock/target/
 __pycache__/
+
+# Wrangler's local state (apps/sync-relay).
+.wrangler/

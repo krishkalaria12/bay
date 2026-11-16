@@ -1,0 +1,23 @@
+{
+  "name": "@bay/sync-relay",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Bay's sync relay: a Cloudflare Worker that keeps each sync chain's sealed files, which it can't read, so phones and computers sync without a shared folder",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "valibot": "1.5.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/workers-types": "5.20261101.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.156.1"
+  }
+}
