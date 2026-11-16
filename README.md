@@ -271,17 +271,22 @@ Most are for tests and hidden instances rather than normal use.
 
 ### The icon
 
-The Golden Gate's twin towers and catenary over the bay at dusk. Two sources, both in
+Dusk: the sun going down over the bay, three lines of water under it. The sources are in
 `apps/browser/assets/`:
 
 | File | What it's for |
 |---|---|
-| `app-icon.svg` | The full mark: hangers, two braces per tower, stars and ripples. Used from 64px up and in the app's own UI |
-| `app-icon-small.svg` | The same mark cut heavier — no hangers, one brace, a deeper sag. The full mark turns to mush at 16-32px, which is the size the Finder uses |
+| `app-icon.svg` | Dusk in Paper, the default icon on every platform. Used from 64px up and in the app's own UI |
+| `app-icon-small.svg` | The same mark cut heavier: a bigger sun and two thick lines. Three thin lines blur together at 16-32px, which is the size the Finder and favicons use |
+| `app-icons/*.svg` | The icons people can switch to in Settings › Appearance: Navy, Coral, Noir, Cobalt and Bridge (the Golden Gate, Bay's first icon) |
+| `new-tab-bay.svg` | The mark in one colour, on tabs with no page yet |
 
 `app-icon.png` is the rasterised full mark, used by the onboarding, the check-in banner and the
 task manager. `macos/Bay-macOS/Assets.xcassets/AppIcon.appiconset/` is the macOS set: the small cut
-for the 16 and 32 slots, the full mark from 128 up.
+for the 16 and 32 slots, the full mark from 128 up. The alternates sit beside it as
+`AppIcon<Name>.imageset`, which the app and the Dock tile plug-in read by name. The same script
+writes the website's icons and the mobile app's (full-bleed for iOS, inside the safe zone for
+Android's adaptive icon, one of each per alternate).
 
 Rebuild every PNG from the sources:
 

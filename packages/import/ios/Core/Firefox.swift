@@ -236,12 +236,11 @@ public enum Firefox {
     for (w, window) in windows.enumerated() {
       let selected = (window["selected"] as? Int ?? 1) - 1
       for (position, tab) in (window["tabs"] as? [[String: Any]] ?? []).enumerated() {
-        if tab["hidden"] as? Bool == true { continue }
-        let entries = tab["entries"] as? [[String: Any]] ?? []
-        guard !entries.isEmpty else { continue }
-        let index = min(max((tab["index"] as? Int ?? entries.count) - 1, 0), entries.count - 1)
-        guard let url = entries[index]["url"] as? String, !url.isEmpty else { continue }
-        tabs.append(ImportedTab(url: url, title: entries[index]["title"] as? String ?? "",
+        // Zen's placeholder for an empty space or folder isn't a page.
+        if tab["hidden"] as? Bool == true || tab["zenIsEmpty"] as? Bool == true { continue }
+        // A tab that never loaded (a pin after a restart) has no entries, only where it points.
+        guard let page = ZenSpaces.page(tab) else { continue }
+        tabs.append(ImportedTab(url: page.url, title: page.title,
                                 pinned: tab["pinned"] as? Bool ?? false, groupId: tab["groupId"] as? String,
                                 windowIndex: w, active: position == selected,
                                 lastActive: (tab["lastAccessed"] as? NSNumber)?.doubleValue))

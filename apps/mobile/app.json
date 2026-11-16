@@ -28,7 +28,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#151C36"
+        "backgroundColor": "#F1EADF"
       },
       "predictiveBackGestureEnabled": false,
       "package": "in.krishkalaria.bay.mobile",
@@ -42,6 +42,39 @@
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
       "expo-router",
+      // The icons people can switch to in Settings › Appearance (src/panels/appIcons.ts); scripts/make-icon.sh at the repo
+      // root draws them. Android launches through an activity alias per icon, so the browser's link filters stay on
+      // MainActivity.
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Navy",
+            "ios": "./assets/images/app-icons/navy.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/navy-adaptive.png", "backgroundColor": "#141831" }
+          },
+          {
+            "name": "Coral",
+            "ios": "./assets/images/app-icons/coral.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/coral-adaptive.png", "backgroundColor": "#D9482A" }
+          },
+          {
+            "name": "Noir",
+            "ios": "./assets/images/app-icons/noir.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/noir-adaptive.png", "backgroundColor": "#050505" }
+          },
+          {
+            "name": "Cobalt",
+            "ios": "./assets/images/app-icons/cobalt.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/cobalt-adaptive.png", "backgroundColor": "#14286B" }
+          },
+          {
+            "name": "Bridge",
+            "ios": "./assets/images/app-icons/bridge.png",
+            "android": { "foregroundImage": "./assets/images/app-icons/bridge-adaptive.png", "backgroundColor": "#151C36" }
+          }
+        ]
+      ],
       // The launch screen, as Chrome and Brave draw theirs: Bay's icon still on the phone's own light or dark ground,
       // the app's background colour in each, only until the tabs are loaded (src/app/index.tsx hides it).
       [

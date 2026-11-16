@@ -97,6 +97,8 @@ export type SpaceSuggestion = {
   profileId: string;
   pinned: BookmarkNode[];
   tabs: ImportedTab[];
+  /** The space's own top grid (Zen's essentials, per container); Arc's is the profile's, in ImportResult.favorites. */
+  favorites?: ImportedTab[];
 };
 
 export type ProfileSuggestion = { name: string; color?: string; avatarPath?: string };
