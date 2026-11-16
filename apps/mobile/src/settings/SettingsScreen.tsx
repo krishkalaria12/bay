@@ -32,7 +32,8 @@ import { detectLocale, matchLocale, setLocale, useLocale, useSavedLocale, useT, 
 import { holdSheetOpen } from "@/panels/openSheets";
 import type { SimplePreferences, WallpaperId } from "@/store/types";
 
-import { CustomEngine, TextSize, WallpaperPicker } from "./bodies";
+import { useAppIcon, type AppIconState } from "./appIcons";
+import { AppIconPicker, CustomEngine, TextSize, WallpaperPicker } from "./bodies";
 import { SyncJoin, SyncPhrase } from "./syncBodies";
 import { PhoneSync } from "@/sync/service";
 import { useSyncStore } from "@/sync/state";
@@ -243,7 +244,8 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
     return () => subscription.remove();
   }, [visible, pop, close]);
 
-  const ctx = useSettingsContext(props, () => close());
+  const appIcon = useAppIcon();
+  const ctx = useSettingsContext(props, () => close(), appIcon);
   const counts = { bookmarks: props.bookmarkCount, history: props.historyCount, downloads: props.downloadCount, crashes: props.crashCount };
 
   const actions: Record<IndexAction, () => void> = {
@@ -365,7 +367,7 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
                   onOpenPage={(next) => push([next])}
                   onScroll={(y) => reportScroll(index + 1, y)}
                   onPullClose={close}
-                  body={drawnBody(page, props, pop)}
+                  body={drawnBody(page, props, pop, appIcon)}
                 />
               </Layer>
             ))}
@@ -666,7 +668,7 @@ function PageView({
 }
 
 /** The body a page draws itself, if it draws one. */
-function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => void): ReactNode {
+function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => void, appIcon: AppIconState | null): ReactNode {
   switch (page) {
     case "customEngine":
       return (
@@ -680,6 +682,8 @@ function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => v
       );
     case "wallpaper":
       return <WallpaperPicker value={props.wallpaper} photo={props.wallpaperPhoto} onChange={props.onWallpaperChange} />;
+    case "appIcon":
+      return appIcon ? <AppIconPicker appIcon={appIcon} /> : null;
     case "textSize":
       return <TextSize value={props.preferences.textSize} onChange={(textSize) => props.onPreferencesChange({ textSize })} />;
     case "syncJoin":
@@ -721,7 +725,7 @@ function useDefaultBrowser(): [SettingsContext["defaultBrowser"], () => void] {
 }
 
 /** Everything the pages say and do, from the screen's props and its own state. */
-function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => void): SettingsContext {
+function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => void, appIcon: AppIconState | null): SettingsContext {
   const t = useT();
   const locale = useLocale();
   const saved = useSavedLocale();
@@ -799,6 +803,7 @@ function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => v
     lockPrivateTabs: props.lockPrivateTabs,
     setLockPrivateTabs: props.onLockPrivateTabsChange,
     wallpaperName: t(WALLPAPER_NAMES[props.wallpaper]),
+    appIconName: appIcon ? t(appIcon.current.label) : null,
     language: { saved, current: locale, device },
     setLanguage: setLocale,
     defaultBrowser,

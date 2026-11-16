@@ -66,6 +66,7 @@ type SubPage =
   | "appLinks"
   | "customEngine"
   | "wallpaper"
+  | "appIcon"
   | "textSize"
   | "archive"
   | "startPage"
@@ -89,6 +90,7 @@ export const PAGE_TITLE: Record<SettingsPage, MessageKey> = {
   appLinks: "settings.appLinks",
   customEngine: "settings.page.customEngine",
   wallpaper: "settings.wallpaper",
+  appIcon: "settings.group.appIcon",
   textSize: "settings.pageZoom",
   archive: "settings.archiveInactive",
   startPage: "settings.startPageAfter",
@@ -119,8 +121,8 @@ export function pageTile(page: SettingsPage): Tile | null {
   return null;
 }
 
-/** Pages that draw their own body below their sections (a field, the wallpapers, the zoom's preview). */
-export const DRAWN_PAGES: readonly SettingsPage[] = ["customEngine", "wallpaper", "textSize", "syncJoin", "syncPhrase"];
+/** Pages that draw their own body below their sections (a field, the wallpapers, the app icons, the zoom's preview). */
+export const DRAWN_PAGES: readonly SettingsPage[] = ["customEngine", "wallpaper", "appIcon", "textSize", "syncJoin", "syncPhrase"];
 
 export const ARCHIVE_OPTIONS: readonly { days: number | null; label: MessageKey; short: MessageKey }[] = [
   { days: 0.5, label: "settings.archive.halfDay", short: "settings.archive.halfDayShort" },
@@ -201,6 +203,8 @@ export interface SettingsContext {
   setLockPrivateTabs: (on: boolean) => void;
   /** The wallpaper's name, said on its row. */
   wallpaperName: string;
+  /** The home screen icon's name, said on its row; null where the phone can't change it. */
+  appIconName: string | null;
   /** The language Bay was told to use (null follows the phone), the one it uses, and the phone's. */
   language: { saved: Locale | null; current: Locale; device: Locale };
   setLanguage: (locale: Locale | null) => void;
@@ -413,6 +417,15 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
             opens("textSize", "settings-text-size", t("settings.pageZoom"), "textSize", { icon: "textSize", value: `${prefs.textSize}%` }),
           ],
         },
+        ...(ctx.appIconName === null
+          ? []
+          : [
+              {
+                id: "appIcon",
+                rows: [opens("appIcon", "settings-app-icon", t("settings.group.appIcon"), "appIcon", { icon: "mark", value: ctx.appIconName })],
+                footer: t("settings.appIcon.note"),
+              },
+            ]),
       ];
     case "tabs": {
       const archive = ARCHIVE_OPTIONS.find((option) => option.days === ctx.archiveAfterDays);
@@ -641,6 +654,7 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
       return sync(ctx);
     case "customEngine":
     case "wallpaper":
+    case "appIcon":
     case "textSize":
     case "syncJoin":
     case "syncPhrase":

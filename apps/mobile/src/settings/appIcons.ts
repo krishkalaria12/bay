@@ -1,10 +1,11 @@
 import { getAppIconName, setAlternateAppIcon, supportsAlternateIcons } from "expo-alternate-app-icons";
+import { useState } from "react";
 import type { ImageSourcePropType } from "react-native";
 
 import type { MessageKey } from "@/i18n";
 
 /**
- * The icons Bay can wear on the home screen, the same set as the desktop's (Settings › Appearance there too).
+ * The icons Bay can wear on the home screen, the same set as the desktop's (Settings › Appearance › App icon here, Settings › Appearance there).
  * `name` is the alternate's name in app.json (null is the bundle's own icon, Dusk in Paper); the images are the
  * full-bleed iOS icons scripts/make-icon.sh renders, shown in the picker.
  */
@@ -35,4 +36,28 @@ export function currentAppIcon(): AppIconChoice {
 /** Puts `icon` on the home screen. iOS confirms with its own alert; Android swaps the launcher entry. */
 export async function setAppIcon(icon: AppIconChoice): Promise<void> {
   await setAlternateAppIcon(icon.name);
+}
+
+/** The home screen icon and a way to change it, or null where the phone can't. */
+export interface AppIconState {
+  current: AppIconChoice;
+  choose: (icon: AppIconChoice) => void;
+}
+
+export function useAppIcon(): AppIconState | null {
+  const [current, setCurrent] = useState<AppIconChoice>(() => (canChangeAppIcon ? currentAppIcon() : APP_ICONS[0]!));
+
+  if (!canChangeAppIcon) return null;
+
+  return {
+    current,
+    choose: (icon) => {
+      if (icon === current) return;
+      const before = current;
+
+      setCurrent(icon);
+      // iOS can refuse (the app in the background, another change still going): show the icon that stayed.
+      setAppIcon(icon).catch(() => setCurrent(before));
+    },
+  };
 }

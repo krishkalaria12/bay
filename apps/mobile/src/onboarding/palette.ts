@@ -1,7 +1,7 @@
 import { useColorScheme } from "react-native";
 
 // The first run's colours: Bay's paper and ink, with the icon's evening in it. Yab draws its ground in the system's blue;
-// Bay's comes from its icon instead: the bridge's coral glowing at the top by day, the dusk sky's violet by night.
+// Bay's comes from its icon instead: the setting sun's coral glowing at the top by day, dusk's violet by night.
 
 export interface FirstRunColors {
   /** The ground at the bottom of the screen, and at its top before the glow. */

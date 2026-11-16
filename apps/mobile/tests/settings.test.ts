@@ -40,6 +40,7 @@ function context(overrides: Partial<SettingsContext> = {}): SettingsContext {
     lockPrivateTabs: false,
     setLockPrivateTabs: noop,
     wallpaperName: "Sea mist",
+    appIconName: "Paper",
     language: { saved: null, current: "en", device: "en" },
     setLanguage: noop,
     defaultBrowser: "not",

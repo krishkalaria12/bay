@@ -1,5 +1,5 @@
-// The pages of Settings that draw more than rows: the custom engine's field, the zoom's preview and steps, and the
-// wallpapers. Moved from the earlier sheet as they were.
+// The pages of Settings that draw more than rows: the custom engine's field, the zoom's preview and steps, the
+// wallpapers and the app icons. Moved from the earlier sheet as they were.
 
 import { useThemeColor } from "heroui-native";
 import * as Effect from "effect/Effect";
@@ -19,6 +19,7 @@ import { isCustomSearchUrl, TEXT_SIZE, WALLPAPERS } from "@/store/model";
 import type { WallpaperId } from "@/store/types";
 
 import { Section } from "./SettingsRows";
+import { APP_ICONS, type AppIconState } from "./appIcons";
 
 /** The custom engine's address (C17): saved only once it is https with `%s` where the words go. */
 export function CustomEngine({ initial, onSave }: { initial: string; onSave: (url: string) => void }): JSX.Element {
@@ -263,5 +264,45 @@ export function WallpaperPicker({
         </Text>
       ) : null}
     </>
+  );
+}
+
+/** The home screen icon, three to a row as the wallpapers are: the desktop's set (its Settings › Appearance has it too). */
+export function AppIconPicker({ appIcon }: { appIcon: AppIconState }): JSX.Element {
+  const t = useT();
+
+  return (
+    <View className="mt-1 flex-row flex-wrap" style={{ rowGap: space.lg }}>
+      {APP_ICONS.map((icon, index) => {
+        const selected = icon === appIcon.current;
+        const id = (icon.name ?? "default").toLowerCase();
+
+        return (
+          <PressFeedback
+            key={id}
+            testID={`settings-app-icon-${id}`}
+            accessibilityRole="radio"
+            accessibilityLabel={t(icon.label)}
+            accessibilityState={{ selected, checked: selected }}
+            onPress={() => appIcon.choose(icon)}
+            className="items-center gap-2"
+            style={{ width: "31%", marginRight: index % 3 === 2 ? 0 : "3.5%" }}
+          >
+            <View className={selected ? "border-2 border-accent" : "border-2 border-transparent"} style={{ padding: 3, borderRadius: radius.tile + 5 }}>
+              <Image
+                source={icon.image}
+                resizeMethod="resize"
+                fadeDuration={0}
+                accessibilityIgnoresInvertColors
+                style={{ width: 64, height: 64, borderRadius: radius.tile - 4 }}
+              />
+            </View>
+            <Text variant="subhead" weight={selected ? "medium" : undefined} tone={selected ? "accent" : "default"}>
+              {t(icon.label)}
+            </Text>
+          </PressFeedback>
+        );
+      })}
+    </View>
   );
 }
