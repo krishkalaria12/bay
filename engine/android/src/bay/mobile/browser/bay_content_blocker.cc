@@ -466,7 +466,9 @@ void BayContentBlocker::SetLists(std::vector<std::string> files,
       base::BindOnce(&Load, std::move(files), std::move(version), std::move(cache_path), std::move(resources_path)),
       base::BindOnce(
           [](int generation, base::OnceCallback<void(bool)> done, std::shared_ptr<Engine> engine) {
-            if (engine && generation == CurrentSource().generation) {
+            // Said before the engine moves into the live state, which leaves `engine` empty.
+            const bool loaded = engine != nullptr;
+            if (loaded && generation == CurrentSource().generation) {
               auto live = std::make_shared<Live>(*CurrentLive());
               live->engine = std::move(engine);
               // The group engines were made from the old lists.
@@ -474,7 +476,7 @@ void BayContentBlocker::SetLists(std::vector<std::string> files,
               Publish(std::move(live));
               LoadGroupsIfNeeded();
             }
-            std::move(done).Run(engine != nullptr);
+            std::move(done).Run(loaded);
           },
           generation, std::move(done)));
 }
