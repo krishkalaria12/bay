@@ -204,7 +204,7 @@ export interface BrowserData {
   /** Newest first. */
   downloads: DownloadItem[];
   preferences: BrowserPreferences;
-  /** Each site's icon (host without www.), downloaded once into the app's cache: a file:// URI. */
+  /** Each site's icon (host without www.), downloaded once into the app's documents: a file:// URI. */
   favicons: Record<string, string>;
   /** When Bay last went to the background, for "start page after hours away"; null while it hasn't. */
   leftAt: number | null;
