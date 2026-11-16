@@ -429,6 +429,24 @@ export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "th
   }, true);
 }
 
+const lookChanges = new Map<string, number>();
+
+/**
+ * Shows `look` on the window's space at once, until `update` (the change that makes it the space's) settles. Off macOS
+ * the runtime is another document, a round trip away, and the window would trail a theme being dragged.
+ */
+export function showLookUntil<T>(windowId: string, look: PreviewLook, update: () => Promise<T>): Promise<T> {
+  const change = (lookChanges.get(windowId) ?? 0) + 1;
+  lookChanges.set(windowId, change);
+  setPreviewLook(windowId, look);
+
+  return update().finally(() => {
+    if (lookChanges.get(windowId) !== change) return;
+    lookChanges.delete(windowId);
+    setPreviewLook(windowId, null);
+  });
+}
+
 // Resolves the theme once for everything below it: every window root and every profile page (which
 // sets PageProfileContext) has one, so the hundreds of components that call useTheme read a context
 // instead of each subscribing to the store (each subscription runs on every store update).

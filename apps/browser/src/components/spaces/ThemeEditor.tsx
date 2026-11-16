@@ -18,7 +18,7 @@ import {
   type Harmony,
 } from "../../lib/spaceTheme";
 import { MAX_THEME_COLORS } from "../../lib/constants";
-import { customGrain, hex, SPACE_COLORS, useTheme } from "../../lib/theme";
+import { customGrain, hex, showLookUntil, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
@@ -138,7 +138,11 @@ function ThemeEditor({ request }: { request: Request }) {
         <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
           <ThemeControls
             look={{ color: space.color, theme: space.theme ? { ...space.theme, colors: [...space.theme.colors] } : null, followSite: space.followSite }}
-            onChange={(next) => withSidebarUndoWindow(request.windowId, () => reportBrowserCommand(updateSpace(request.spaceId, next)))}
+            onChange={(next) =>
+              reportBrowserCommand(
+                showLookUntil(request.windowId, next, () => withSidebarUndoWindow(request.windowId, () => updateSpace(request.spaceId, next))),
+              )
+            }
           />
         </View>
       </Surface>

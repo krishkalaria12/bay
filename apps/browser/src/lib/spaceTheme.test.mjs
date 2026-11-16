@@ -203,3 +203,28 @@ test("a page's colour reaches the window's fill without replacing the theme rows
   assert.deepEqual(tinted, own);
   assert.strictEqual(page("#2244AA").windowTint, blue.windowTint);
 });
+
+// The Chrome-hosted desktop's runtime is another document: a theme being dragged showed a round trip late.
+test("a look shows on its window at once, until the last change to it settles", async () => {
+  const { useBrowser } = await import("../store/browserStore.ts");
+  const { themeKey, showLookUntil } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().settings.defaultSpaceId;
+  S().updateSpace(space, { color: "purple", theme: null, followSite: false });
+  const w = S().createWindow({ spaceId: space });
+  const settle = [];
+  const change = (color) => showLookUntil(w, { color, theme: null }, () => new Promise((resolve) => settle.push(resolve)));
+  const first = change("blue");
+  assert.match(themeKey(S(), w, null), /^blue:/);
+  const second = change("green");
+  settle[0]();
+  await first;
+  assert.match(themeKey(S(), w, null), /^green:/, "an earlier change settling leaves the later one shown");
+  S().updateSpace(space, { color: "green" });
+  settle[1]();
+  await second;
+  assert.match(themeKey(S(), w, null), /^green:/);
+  S().updateSpace(space, { color: "purple" });
+  assert.match(themeKey(S(), w, null), /^purple:/, "the store's look shows again");
+});
