@@ -49,7 +49,11 @@ export type IconName =
   | "folder"
   | "import"
   | "info"
-  | "keyboard";
+  | "keyboard"
+  | "key"
+  | "video"
+  | "minus"
+  | "globe";
 
 export interface IconProps {
   name: IconName;

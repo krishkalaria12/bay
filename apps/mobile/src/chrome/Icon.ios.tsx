@@ -57,6 +57,10 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   import: "square.and.arrow.down",
   info: "info.circle",
   keyboard: "keyboard",
+  key: "key",
+  video: "play.rectangle",
+  minus: "minus",
+  globe: "globe",
 };
 
 // An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them, and
