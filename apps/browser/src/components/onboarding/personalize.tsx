@@ -2,7 +2,7 @@ import { Pressable, View } from "@bay/platform";
 import { useEffect } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
-import { SPACE_COLORS } from "../../lib/theme";
+import { showLookUntil, SPACE_COLORS } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { BAY_THEME } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
@@ -34,15 +34,11 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
 
   if (!spaceId || incognito) return null;
 
+  const pick = (look: { color: SpaceColor; theme: SpaceTheme | null }) => reportBrowserCommand(showLookUntil(windowId, look, () => updateSpace(spaceId, look)));
+
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
-      <ColorButton
-        name="Bay"
-        colors={BAY_THEME.colors}
-        size={size}
-        selected={bayTheme}
-        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...BAY_THEME } }))}
-      />
+      <ColorButton name="Bay" colors={BAY_THEME.colors} size={size} selected={bayTheme} onPress={() => pick({ color: "purple", theme: { ...BAY_THEME } })} />
       {COLORS.map((c) => (
         <ColorButton
           key={c}
@@ -50,7 +46,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
           colors={[SPACE_COLORS[c].swatch]}
           size={size}
           selected={!themed && current === c}
-          onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: c, theme: null }))}
+          onPress={() => pick({ color: c, theme: null })}
         />
       ))}
     </View>
