@@ -632,14 +632,14 @@
               <tr>
                 <th><span class="id">D5</span>Networking</th>
                 <td>
-                  The core does its own HTTP: <code>reqwest</code> with <code>rustls</code> on a <code>tokio</code> runtime that the core owns.
-                  <code>rustls-platform-verifier</code> checks certificates against the OS trust store on iOS and Android. Retries and backoff use
-                  <code>backon</code>.
+                  <strong>Revised in N2:</strong> the core declares an async <code>HttpClient</code> foreign trait (method, URL, headers, body in; status and
+                  body out). iOS answers it with <code>URLSession</code>, Android with <code>HttpURLConnection</code>. Everything above that line is Rust: the
+                  relay client, its JSON, retries, pairing, sealing.
                 </td>
                 <td>
-                  One client for relay calls and suggestion fetches, written and tested once with no per-platform HTTP code. VPNs (WARP included) work because
-                  they act below the app. The one thing lost is an explicit Wi-Fi HTTP proxy setting, which is rare on phones. If that matters later, an
-                  <code>HttpClient</code> foreign trait can replace the transport without touching sync.
+                  reqwest 0.13's TLS is rustls on aws-lc, a C library to cross-build for iOS and Android. Its certificate verifier also needs JNI start-up and
+                  an extra Kotlin component on Android. The native clients bring the OS's trust store, proxies and VPN for free and keep a TLS stack out of the
+                  binary. Rust tests answer the trait with an in-memory relay that behaves like <code>apps/sync-relay</code>.
                 </td>
               </tr>
               <tr>
@@ -982,9 +982,7 @@ apps/mobile/                 Expo app, fixes only until cutover (N8)</pre>
               </tr>
               <tr>
                 <th>sync · network</th>
-                <td>
-                  <code>tokio</code> (rt-multi-thread, time), <code>reqwest</code> (rustls, json), <code>rustls-platform-verifier</code>, <code>backon</code>
-                </td>
+                <td><code>async-trait</code> over the apps' <code>HttpClient</code> (D5), <code>pollster</code> in tests</td>
                 <td><code>transport.ts</code> and the Effect retry/backoff policies; the 30 s / 3 s cycle timing stays native</td>
               </tr>
               <tr>
