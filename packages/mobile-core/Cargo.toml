@@ -9,6 +9,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 uniffi = "0.32.2"
+icu_collator = "2.4.0"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

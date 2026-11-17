@@ -1233,7 +1233,7 @@ impl BrowserStore {
 }
 
 #[uniffi::export] fn parse_input(text: String, engines: EngineSet) -&gt; Input;   // from @bay/core input.ts
-#[uniffi::export] fn settings_search(query: String, locale: String) -&gt; Vec&lt;SettingsHit&gt;;</pre>
+#[uniffi::export] fn settings_search(query: &amp;str, ctx: SettingsContext) -&gt; Vec&lt;SettingsMatch&gt;;</pre>
         <p>
           Swift sees <code>BrowserStore.open(dir:legacyJson:)</code>, <code>store.dispatch(action: .closeTab(id:))</code>. Kotlin sees
           <code>BrowserStore.open(dir, legacyJson)</code>, <code>store.dispatch(Action.CloseTab(id))</code>. Errors become Swift <code>Error</code> types and
@@ -1341,7 +1341,11 @@ impl BrowserStore {
             <p class="muted">
               Done so far: strings (<code>i18n</code>); sync, end to end on both apps against the relay; address input, IDN display, the calculator and the
               search field's suggestions (<code>input</code>), with 2,597 calls recorded from <code>@bay/core</code>'s and the Expo app's tests matching
-              (<code>fixtures/input.jsonl</code>). Left: import parsers, the settings tree and search, the first-run flow, and the rest of the browser helpers.
+              (<code>fixtures/input.jsonl</code>); the settings tree and search (<code>settings</code>), every page in seven states and every language matching
+              the Expo pages (<code>fixtures/settings.jsonl</code>, 777 calls, rows' callbacks recorded as the calls they make and returned as
+              <code>SettingsAction</code>s the apps perform; the search's tie-break sorts with ICU's root collation, as Node's <code>localeCompare</code>); the
+              first-run flow (<code>onboarding</code>, with <code>tests/firstRun.test.ts</code> ported). Left: import parsers and the rest of the browser
+              helpers.
             </p>
             <ul>
               <li>

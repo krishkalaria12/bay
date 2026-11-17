@@ -54,7 +54,7 @@ pub fn locales() -> Vec<LocaleInfo> {
         .collect()
 }
 
-fn locale_name(id: &str) -> &'static str {
+pub(crate) fn locale_name(id: &str) -> &'static str {
     match id {
         "es" => "Español",
         "fr" => "Français",

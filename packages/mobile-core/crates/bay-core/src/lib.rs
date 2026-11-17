@@ -7,6 +7,8 @@ uniffi::setup_scaffolding!("bay_core");
 pub mod i18n;
 pub mod input;
 pub mod js;
+pub mod onboarding;
+pub mod settings;
 pub mod store;
 pub mod sync;
 

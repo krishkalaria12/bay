@@ -42,7 +42,8 @@ pub trait SyncObserver: Send + Sync {
     fn changed(&self, view: SyncView);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, uniffi::Enum)]
+#[serde(rename_all = "lowercase")]
 pub enum SyncStatus {
     /// Not syncing: no key on this phone.
     Off,
@@ -65,13 +66,15 @@ pub enum Pairing {
 }
 
 /// What Settings › Sync shows.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncView {
     pub status: SyncStatus,
     pub last_synced_at: Option<i64>,
     pub devices: Vec<SyncedDevice>,
     pub remote_tabs: Vec<RemoteTabs>,
     pub types: SyncTypes,
+    #[serde(skip)]
     pub pairing: Option<Pairing>,
 }
 

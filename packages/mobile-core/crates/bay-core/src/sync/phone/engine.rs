@@ -366,7 +366,8 @@ fn default_profile(app: &ScopeState) -> Option<String> {
 }
 
 /// A device of the chain, as Settings › Sync lists it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncedDevice {
     pub id: String,
     pub name: String,
@@ -409,14 +410,16 @@ pub fn synced_devices(doc: &SyncDoc) -> Vec<SyncedDevice> {
 }
 
 /// A page another device has open.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteTab {
     pub url: String,
     pub title: String,
 }
 
 /// Another device's open tabs, to open here.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteTabs {
     pub device_id: String,
     pub name: String,
