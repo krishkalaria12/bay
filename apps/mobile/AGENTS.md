@@ -36,6 +36,14 @@ If the work can be done through any of the expo libraries, then you can use it.
 - Platform-specific code goes in `Name.ios.tsx` and `Name.android.tsx`; shared code stays in `Name.tsx`. Metro picks the file for each platform, and `tsconfig.json` sets `moduleSuffixes` so `import … from "./Name"` type-checks. Give each pair one shared props type so they can't drift. Example: `src/chrome/StartToolbar.ios.tsx` / `StartToolbar.android.tsx`.
 - Never import `@expo/ui/swift-ui` outside a `.ios.tsx` file.
 
+## Performance
+
+- The React Compiler memoizes every component, but it silently skips a whole component it can't prove safe, and the browser screen skipped renders everything under it. Keep these out of components and hooks: `eslint-disable` comments for `react-hooks` (oxlint doesn't need them; the compiler skips the component), `Effect.gen` generators (move them to a module-level function, or use `Service.use`/`pipe`), writes to a ref during render (use `useEffectEvent` for a handler an effect or listener calls, or assign in `useLayoutEffect`), and a function used before its declaration. Shared values take `.get()`/`.set()`, never `.value`: the compiler reads `.value` paths during render to compare them.
+- Check a change still compiles before committing: run babel-plugin-react-compiler over the file with a `logger` and look for `CompileError` events (a healthcheck that only counts components misses them).
+- Sheets are `quietWhileClosed` (`src/panels/quietWhileClosed.ts`): a closed sheet skips the screen's renders. A sheet's content mounts on its first open and stays.
+- What a page reports many times while it loads (progress, blocked count) goes to `src/store/pageSignals.ts`, read by the one component that shows it, never into the browser screen's state.
+- Profile with Argent's React profiler (`react-profiler-start`/`-stop`/`-analyze`) on a flow replayed with `run-sequence`, and compare runs on the same page: a busy page (BBC) renders far more than a quiet one.
+
 ## Run it
 
 ```sh
