@@ -3,17 +3,16 @@ import {
   accessibilityIdentifier,
   accessibilityLabel,
   buttonStyle,
-  contentShape,
   controlSize,
   font,
   foregroundStyle,
   frame,
   glassEffect,
   padding,
-  shapes,
   tint,
   truncationMode,
 } from "@expo/ui/swift-ui/modifiers";
+import * as swiftUI from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -139,7 +138,11 @@ function SpacesCapsule({
             </Button>
           ))}
           <Button onPress={onNewSpace} modifiers={[buttonStyle("plain"), accessibilityLabel(newSpace.label), accessibilityIdentifier(newSpace.id)]}>
-            <Image systemName="plus" size={15} modifiers={[foregroundStyle("secondary"), frame({ width: 34, height: 34 }), contentShape(shapes.rectangle())]} />
+            <Image
+              systemName="plus"
+              size={15}
+              modifiers={[foregroundStyle("secondary"), frame({ width: 34, height: 34 }), swiftUI.contentShape(swiftUI.shapes.rectangle())]}
+            />
           </Button>
         </HStack>
       </Host>

@@ -323,12 +323,14 @@ function TabCard({
   const t = useT();
   // A locked private tab's title stays hidden from screen readers too.
   const title = hidden ? t("tabs.locked") : tab.title || (tab.url ? displayUrl(tab.url) : t("tabs.newTab"));
+
   const site =
     hidden || !tab.url
       ? title
       : displayUrl(tab.url)
           .replace(/^www\./, "")
           .split("/")[0]!;
+
   const position = t(tab.private ? "tabs.privatePosition" : "tabs.position", { index: index + 1, count });
   const height = Math.round(width * CARD_RATIO);
   const wallpaper = useBrowserStore((state) => state.data.preferences.wallpaper);
