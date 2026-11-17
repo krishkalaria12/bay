@@ -228,7 +228,7 @@ pub enum SettingsAction {
     MakeDefault,
     ExportTabs,
     ForgetLogin {
-        login: SavedLogin,
+        login: LoginSummary,
     },
     /// Clearing all browsing data: ask, go ahead, or keep it.
     AskToClear,
@@ -310,7 +310,7 @@ pub struct SettingsTile {
 
 /// A saved sign-in, as the Passwords page lists it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
-pub struct SavedLogin {
+pub struct LoginSummary {
     pub origin: String,
     pub username: String,
 }
@@ -377,7 +377,7 @@ pub struct SettingsContext {
     pub default_browser: DefaultBrowser,
     pub open_tab_count: u32,
     /// The saved sign-ins; none while they load.
-    pub logins: Option<Vec<SavedLogin>>,
+    pub logins: Option<Vec<LoginSummary>>,
     pub clear_stage: ClearStage,
     pub sync: SyncView,
     /// Now, for "Synced 5 min ago".

@@ -4,6 +4,7 @@
 
 uniffi::setup_scaffolding!("bay_core");
 
+pub mod browser;
 pub mod i18n;
 pub mod imports;
 pub mod input;

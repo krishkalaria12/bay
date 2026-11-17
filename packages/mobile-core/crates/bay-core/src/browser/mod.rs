@@ -1,0 +1,65 @@
+//! The browser screen's pure helpers: the page a link from another app opens and the `bay://` commands, plain words
+//! for a page that failed to load, the saved-logins document, history's day groups, which downloads open themselves,
+//! favicon checks, and which navigation reports run page scripts. The Expo app's `src/browser/{incomingLink,
+//! pageErrors,logins,downloads,favicons,navigationEvents}.ts` and `src/panels/historyGroups.ts`, checked against
+//! `fixtures/browser.jsonl` (`scripts/record-fixtures.mjs browser`) and their ported tests.
+
+mod days;
+mod errors;
+mod icons;
+mod links;
+mod logins;
+mod timing;
+
+pub use days::{DayBounds, DayGroup, DayGroupId, group_by_day};
+pub use errors::{PageErrorId, PageErrorKind, PageErrorText, describe_page_error, page_error_id};
+pub use icons::{KNOWN_LIMIT, SHARP_WIDTH, icon_width, is_image, known_sites_without_icons};
+pub use links::{BayCommand, bay_command, incoming_link, share_link};
+pub use logins::{SavedLogin, format_saved_logins, origin_of, parse_saved_logins};
+pub use timing::{
+    Navigation, NavigationReport, ScriptPlan, ScriptTiming, initial_timing, same_navigation,
+    scripts_for, should_hide,
+};
+
+use std::sync::LazyLock;
+
+use regex::Regex;
+
+use crate::js::{site_host, trim};
+use crate::store::DownloadItem;
+use crate::store::handle::BrowserStore;
+
+static OPENS_ITSELF: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i-u:\.(pkpass|pkpasses|ics))$").unwrap());
+
+/// Files a person downloads to use somewhere else straight away: a Wallet pass and a calendar invitation open in the
+/// phone's own viewer as soon as they arrive, which offers Add to Wallet or Add to Calendar.
+#[uniffi::export]
+pub fn opens_when_finished(filename: &str) -> bool {
+    OPENS_ITSELF.is_match(trim(filename))
+}
+
+/// How many files came from the site a page is on, for its Site Settings. Private ones are never counted there.
+pub fn downloads_from(downloads: &[DownloadItem], page_url: &str) -> u32 {
+    let host = site_host(page_url);
+    if host.is_empty() {
+        return 0;
+    }
+    downloads
+        .iter()
+        .filter(|item| !item.private && site_host(&item.url) == host)
+        .count() as u32
+}
+
+#[uniffi::export]
+impl BrowserStore {
+    /// How many files came from the site a page is on.
+    pub fn downloads_from(&self, page_url: &str) -> u32 {
+        downloads_from(&self.snapshot().downloads, page_url)
+    }
+
+    /// The sites Bay already shows without an icon yet, to fetch theirs.
+    pub fn sites_without_icons(&self) -> Vec<String> {
+        known_sites_without_icons(&self.snapshot(), KNOWN_LIMIT)
+    }
+}

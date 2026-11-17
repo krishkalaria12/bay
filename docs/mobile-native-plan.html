@@ -1346,7 +1346,10 @@ impl BrowserStore {
               <code>SettingsAction</code>s the apps perform; the search's tie-break sorts with ICU's root collation, as Node's <code>localeCompare</code>); the
               first-run flow (<code>onboarding</code>, with <code>tests/firstRun.test.ts</code> ported); the import parsers (<code>imports</code>: bookmarks
               files, Safari's and Takeout's history, merging, drafts, the phone's browsers and shared tab lists), 525 calls from the Expo app's tests and odd
-              files matching (<code>fixtures/import.jsonl</code>). Left: the rest of the browser helpers.
+              files matching (<code>fixtures/import.jsonl</code>). the browser helpers (<code>browser</code>: incoming links and <code>bay://</code> commands,
+              page error words, the saved-logins document, downloads that open themselves, favicon checks, history's day groups from the phone's own day bounds,
+              and the navigation-event timing), 282 calls matching (<code>fixtures/browser.jsonl</code>) and the navigation and history-group suites ported.
+              Left: the link resolver, which needs <code>HttpClient</code> to report redirects, headers and the final address.
             </p>
             <ul>
               <li>

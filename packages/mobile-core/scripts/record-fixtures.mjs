@@ -1,5 +1,5 @@
 // Records what the TypeScript code the core replaces does while the tests run, as fixtures the Rust port must match:
-//   node packages/mobile-core/scripts/record-fixtures.mjs store|input|import
+//   node packages/mobile-core/scripts/record-fixtures.mjs store|input|import|browser
 // A load hook wraps the suite's exported functions; each call's input and output goes to fixtures/<suite>.jsonl once
 // (identical calls are kept once). The Rust tests in crates/bay-core/tests/<suite>_fixtures.rs replay every line.
 import { spawnSync } from "node:child_process";
@@ -61,6 +61,16 @@ const SUITES = {
       "apps/mobile/src/browser/importTabs.ts": ["importedTabs"],
     },
     runs: [{ cwd: "apps/mobile", tests: ["tests/*.test.ts", join(here, "import-scenarios.test.ts")] }],
+  },
+  browser: {
+    wrap: {
+      "apps/mobile/src/browser/incomingLink.ts": ["incomingLink", "shareLink", "bayCommand"],
+      "apps/mobile/src/browser/pageErrors.ts": ["describePageError", "pageErrorId"],
+      "apps/mobile/src/browser/logins.ts": ["parseSavedLogins", "formatSavedLogins", "originOf"],
+      "apps/mobile/src/browser/downloads.ts": ["opensWhenFinished", "downloadsFrom"],
+      "apps/mobile/src/browser/favicons.ts": ["isImage", "iconWidth", "knownSitesWithoutIcons"],
+    },
+    runs: [{ cwd: "apps/mobile", tests: ["tests/*.test.ts", join(here, "browser-scenarios.test.ts")] }],
   },
 };
 

@@ -7,7 +7,7 @@ use regex::Regex;
 use serde::Serialize;
 
 use super::{
-    ClearStage, DefaultBrowser, INDEX, IndexAction, IndexCounts, IndexEntry, RowKind, SavedLogin,
+    ClearStage, DefaultBrowser, INDEX, IndexAction, IndexCounts, IndexEntry, LoginSummary, RowKind,
     SearchEntry, SearchRow, SettingsAction, SettingsContext, SettingsPage, SettingsPlatform,
     SettingsRow, SettingsSection, SettingsTile, Words,
 };
@@ -907,7 +907,7 @@ pub(super) fn sections_in(
                             &format!("saved-login-{}-{}", login.origin, login.username),
                             login.username.clone(),
                             SettingsAction::ForgetLogin {
-                                login: SavedLogin::clone(login),
+                                login: LoginSummary::clone(login),
                             },
                         )
                         .icon("key")
