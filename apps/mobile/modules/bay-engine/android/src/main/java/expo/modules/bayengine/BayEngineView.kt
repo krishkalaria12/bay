@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
+import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -172,6 +173,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       Log.e("BayEngine", "A page view without an activity can't show a page.")
       return
     }
+    // The page draws on a SurfaceView under the window, seen through the hole it punches. The engine's tab view keeps
+    // the SurfaceView from asking for a transparent region (a stale one left a strip over Bay's sheets), and that ask
+    // is also what makes an opaque window translucent: without it the window covers the page in black.
+    activity.window.setFormat(PixelFormat.TRANSLUCENT)
     tabIsPrivate = isPrivate
     val profile = if (tabIsPrivate) BayEngineBackend.acquirePrivateProfile() else BayProfile.normal()
     val created = BayTab(activity, profile, client)
