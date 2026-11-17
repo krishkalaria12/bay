@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde_json::Value;
 
-use super::js;
 use super::types::{BookmarkNode, Bookmarks};
+use crate::js;
 
 /// The folder every bookmark hangs off. It has no title of its own and is never removed.
 pub const BOOKMARKS_ROOT: &str = "bookmarks";
@@ -52,6 +52,33 @@ fn children_mut<'a>(bookmarks: &'a mut Bookmarks, id: &str) -> Option<&'a mut Ve
         Some(BookmarkNode::Folder { children, .. }) => Some(children),
         _ => None,
     }
+}
+
+/// Every link under a folder, in the order a walk from it meets them.
+pub fn bookmark_links(bookmarks: &Bookmarks, folder_id: &str) -> Vec<(String, String)> {
+    let mut links = Vec::new();
+    let mut seen = HashSet::new();
+    fn walk(
+        bookmarks: &Bookmarks,
+        id: &str,
+        links: &mut Vec<(String, String)>,
+        seen: &mut HashSet<String>,
+    ) {
+        if !seen.insert(id.to_owned()) {
+            return;
+        }
+        for child in folder_children(bookmarks, id).into_iter().flatten() {
+            match bookmarks.get(child) {
+                Some(BookmarkNode::Url { url, title, .. }) => {
+                    links.push((url.clone(), title.clone()))
+                }
+                Some(BookmarkNode::Folder { .. }) => walk(bookmarks, child, links, seen),
+                None => {}
+            }
+        }
+    }
+    walk(bookmarks, folder_id, &mut links, &mut seen);
+    links
 }
 
 /// Whether a page is bookmarked anywhere in the tree.

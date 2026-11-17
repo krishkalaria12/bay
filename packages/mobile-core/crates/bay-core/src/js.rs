@@ -1,6 +1,7 @@
-//! JavaScript's string and URL rules, for a port that must give the same answers as the TypeScript store it replaces
-//! (and that the computer's store still uses): `slice` counts UTF-16 units, `trim` takes the BOM too, and `new URL`
-//! follows WHATWG, which the `url` crate implements.
+//! JavaScript's string, number and URL rules, for ports that must give the same answers as the TypeScript they
+//! replace (and that the computer still runs): `slice` counts UTF-16 units, `trim` takes the BOM too, numbers print as
+//! `Number#toString` prints them, `encodeURIComponent` escapes what it escapes, and `new URL` follows WHATWG, which the
+//! `url` crate implements.
 
 use url::Url;
 
@@ -129,9 +130,101 @@ pub fn round(value: f64) -> f64 {
     (value + 0.5).floor()
 }
 
+/// `Number(x).toString()`.
+pub fn number_string(value: f64) -> String {
+    ryu_js::Buffer::new().format(value).to_owned()
+}
+
+/// `Number(value.toPrecision(digits))`: the value rounded to `digits` significant digits.
+pub fn to_precision(value: f64, digits: usize) -> f64 {
+    if !value.is_finite() || value == 0.0 {
+        return value;
+    }
+    format!("{:.*e}", digits.saturating_sub(1), value)
+        .parse()
+        .unwrap_or(value)
+}
+
+/// `value.toExponential()`: the fewest digits that read back as the value, as `d.ddde±x`.
+pub fn to_exponential(value: f64) -> String {
+    let shortest = format!("{value:e}");
+    match shortest.split_once('e') {
+        Some((mantissa, exponent)) => {
+            let sign = if exponent.starts_with('-') { "-" } else { "+" };
+            format!("{mantissa}e{sign}{}", exponent.trim_start_matches('-'))
+        }
+        None => shortest,
+    }
+}
+
+/// `Math.round`: halves go up (toward +∞), as `round` does.
+pub fn math_round(value: f64) -> f64 {
+    round(value)
+}
+
+/// `encodeURIComponent`: everything but letters, digits and `-_.!~*'()` as UTF-8 percent escapes.
+pub fn encode_uri_component(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// `decodeURIComponent`, or `None` where it throws: a `%` without two hex digits, or bytes that aren't UTF-8.
+pub fn decode_uri_component(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = text.get(i + 1..i + 3)?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// The text's length in UTF-16 units, as JavaScript's `length`.
+pub fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+/// JavaScript's string order: by UTF-16 code units.
+pub fn js_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    a.encode_utf16().cmp(b.encode_utf16())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numbers_print_as_javascript_prints_them() {
+        assert_eq!(number_string(0.1 + 0.2), "0.30000000000000004");
+        assert_eq!(number_string(1e21), "1e+21");
+        assert_eq!(number_string(100.0), "100");
+        assert_eq!(number_string(1.5e-7), "1.5e-7");
+        assert_eq!(to_exponential(1.5e21), "1.5e+21");
+        assert_eq!(to_exponential(1e-10), "1e-10");
+        assert_eq!(to_precision(1.0 / 3.0, 12), 0.333333333333);
+    }
+
+    #[test]
+    fn uri_components_encode_and_decode_as_javascript_does() {
+        assert_eq!(encode_uri_component("a b&c/é!"), "a%20b%26c%2F%C3%A9!");
+        assert_eq!(decode_uri_component("a%20b%C3%A9").as_deref(), Some("a bé"));
+        assert_eq!(decode_uri_component("%E0%A4%A"), None);
+        assert_eq!(decode_uri_component("%C3"), None);
+    }
 
     #[test]
     fn slice_counts_utf16_units() {

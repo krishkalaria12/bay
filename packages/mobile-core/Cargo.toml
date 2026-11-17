@@ -15,6 +15,11 @@ serde_json = { version = "1", features = ["preserve_order"] }
 indexmap = { version = "2", features = ["serde"] }
 url = "2"
 aes-gcm = "0.11"
+regex = "1"
+fancy-regex = "0.20"
+unicode-normalization = "0.1"
+ryu-js = "1"
+libm = "0.2"
 hkdf = "0.13"
 hmac = "0.13"
 pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }

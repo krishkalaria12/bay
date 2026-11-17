@@ -1,5 +1,5 @@
 //! Replays what the Expo app's TypeScript store did in its own tests (`fixtures/store.jsonl`, written by
-//! `scripts/record-store-fixtures.mjs`) and checks the Rust port gives the same answers: the same next state, the same
+//! `scripts/record-fixtures.mjs store`) and checks the Rust port gives the same answers: the same next state, the same
 //! "nothing changed", the same repairs of saved state.
 
 use bay_core::store::model::{merge_history, persisted_browser_data};

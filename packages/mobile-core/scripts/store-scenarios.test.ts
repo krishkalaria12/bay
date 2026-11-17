@@ -1,4 +1,4 @@
-// Drives the Expo app's store through what its own tests don't reach, so `record-store-fixtures.mjs` records those
+// Drives the Expo app's store through what its own tests don't reach, so `record-fixtures.mjs store` records those
 // calls too: the actions no test uses, and edge cases in names, emoji, rounding and broken saved documents. Each
 // call only has to run; the Rust port is checked against what it returned.
 import test from "node:test";

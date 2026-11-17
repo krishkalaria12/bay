@@ -6,13 +6,13 @@ use std::collections::{BTreeMap, HashSet};
 use serde_json::{Map, Value};
 
 use super::bookmarks::{BOOKMARKS_ROOT, empty_bookmarks, parse_bookmarks};
-use super::js;
 use super::model::{
     ARCHIVE_LIMIT, DOWNLOAD_LIMIT, FAVICON_LIMIT, INTERRUPTED_DOWNLOAD, PERSONAL_SPACE_ID,
     SPACE_ICON_LENGTH, START_PAGE_HOURS, SiteSettingInput, TEXT_SIZE_MAX, TEXT_SIZE_MIN,
     TEXT_SIZE_STEP, cap_history, personal_space, with_space_emoji,
 };
 use super::types::*;
+use crate::js;
 
 /// Why saved state couldn't be read at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]

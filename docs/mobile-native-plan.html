@@ -1322,7 +1322,7 @@ impl BrowserStore {
                 back as today (D4).
               </li>
               <li>
-                Differential fixtures (done): <code>scripts/record-store-fixtures.mjs</code> wraps the TS model with a Node load hook while the Expo app's whole
+                Differential fixtures (done): <code>scripts/record-fixtures.mjs store</code> wraps the TS model with a Node load hook while the Expo app's whole
                 test suite and <code>scripts/store-scenarios.test.ts</code> run, and writes each distinct call to <code>fixtures/store.jsonl</code>.
                 <code>tests/store_fixtures.rs</code> replays all 446 against the Rust port: same next state, same no-op, same repairs.
               </li>
@@ -1338,6 +1338,11 @@ impl BrowserStore {
             ><span class="pdep">Depends on: N1</span>
           </summary>
           <div class="body">
+            <p class="muted">
+              Done so far: strings (<code>i18n</code>); sync, end to end on both apps against the relay; address input, IDN display, the calculator and the
+              search field's suggestions (<code>input</code>), with 2,597 calls recorded from <code>@bay/core</code>'s and the Expo app's tests matching
+              (<code>fixtures/input.jsonl</code>). Left: import parsers, the settings tree and search, the first-run flow, and the rest of the browser helpers.
+            </p>
             <ul>
               <li>
                 Sync: bytes, keys, sealing, phrase (24 words), pairing (8-letter code, X25519, 4 check digits), transport over <code>reqwest</code>, mirror,

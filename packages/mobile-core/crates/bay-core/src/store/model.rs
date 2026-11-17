@@ -11,12 +11,12 @@ use super::bookmarks::{
     BOOKMARKS_ROOT, add_bookmarks, empty_bookmarks, folder_children, is_bookmarked,
     remove_bookmark, remove_bookmarks_of,
 };
-use super::js;
 use super::parse::{
     parse_preferences, parse_reader_settings, parse_selectors, parse_site_setting_input,
     preferences_json,
 };
 use super::types::*;
+use crate::js;
 
 pub const TEXT_SIZE_MIN: i64 = 80;
 pub const TEXT_SIZE_MAX: i64 = 200;
