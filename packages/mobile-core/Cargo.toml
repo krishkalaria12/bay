@@ -10,6 +10,7 @@ license = "Apache-2.0"
 [workspace.dependencies]
 uniffi = "0.32.2"
 icu_collator = "2.4.0"
+bay-adblock = { path = "../adblock" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -33,6 +34,10 @@ subtle = "2"
 hex = "0.4"
 async-trait = "0.1"
 pollster = "1"
+
+# The blocker's adblock-rust carries one change (packages/adblock/vendor/README.md); patches apply from the root.
+[patch.crates-io]
+adblock = { path = "../adblock/vendor/adblock" }
 
 [profile.release]
 opt-level = "s"

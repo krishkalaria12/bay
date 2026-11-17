@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds the core for iOS into apple/ (git-ignored):
-#   lib/<platform>/libbay_core.a   the static library, per Xcode platform (iphoneos, iphonesimulator)
+#   lib/<platform>/libbay_core.a   the static library, per Xcode platform (iphoneos, iphonesimulator), with the
+#                                  content blocker's C functions (packages/adblock/include) linked in
 #   include/BayCoreFFI/            UniFFI's C header and module map
 #   Sources/BayCore.swift          the generated Swift API
 # Run from Xcode (apps/ios's BayCore target) it builds only the platform being built; run by hand it builds both.
@@ -31,7 +32,7 @@ for platform in $platforms; do
     *) echo "error: build-ios.sh: no Rust target for $platform" >&2; exit 1 ;;
   esac
   rustup target list --installed 2>/dev/null | grep -qx "$target" || rustup target add "$target" >&2
-  cargo build --quiet --locked --profile "$profile" --package bay-core --lib --target "$target"
+  cargo build --quiet --locked --profile "$profile" --package bay-core --lib --features adblock --target "$target"
   place "target/$target/$dir/libbay_core.a" "$out/lib/$platform/libbay_core.a"
 done
 

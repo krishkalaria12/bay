@@ -4,6 +4,10 @@
 
 uniffi::setup_scaffolding!("bay_core");
 
+// The content blocker's C functions (packages/adblock/include/bay_adblock.h) go out in this library on iOS.
+#[cfg(feature = "adblock")]
+pub use bay_adblock::ffi::*;
+
 pub mod browser;
 pub mod i18n;
 pub mod imports;

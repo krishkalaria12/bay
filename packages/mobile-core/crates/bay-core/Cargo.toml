@@ -35,6 +35,11 @@ subtle.workspace = true
 async-trait.workspace = true
 hex.workspace = true
 icu_collator.workspace = true
+bay-adblock = { workspace = true, optional = true }
+
+[features]
+# The content blocker's C functions, linked into this library for iOS (plan D16). Android's engine carries its own.
+adblock = ["dep:bay-adblock"]
 
 [dev-dependencies]
 pollster.workspace = true
