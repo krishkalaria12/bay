@@ -5,12 +5,13 @@ import { useT } from "@/i18n";
 import type { BrowserFolder, BrowserTab, PinKind, PinnedSite } from "@/store/types";
 
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 /**
  * A tab's pinning, from a long press on its card: an Essential, a pinned row, or a row in one of the space's folders,
  * as the desktop's sidebar has them. The way it is pinned now is ticked; choosing it again unpins it.
  */
-export function PinPanel({
+function PinPanelSheet({
   visible,
   onClose,
   tab,
@@ -59,3 +60,5 @@ export function PinPanel({
     </PanelSheet>
   );
 }
+
+export const PinPanel = quietWhileClosed(PinPanelSheet);

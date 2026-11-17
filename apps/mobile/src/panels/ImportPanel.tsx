@@ -19,6 +19,7 @@ import type { ImportChoice, ImportCounts } from "@/store/browser";
 import { HISTORY_LIMIT } from "@/store/model";
 
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface ImportPanelProps {
   visible: boolean;
@@ -56,7 +57,7 @@ const METHOD_DETAIL: Record<PhoneBrowser["method"], MessageKey> = {
  * Takeout for Chrome, a bookmarks file for the rest, or a pasted list of tabs. The chosen file is read on the device;
  * what it held is reviewed before anything is added.
  */
-export function ImportPanel(props: ImportPanelProps): JSX.Element {
+function ImportPanelSheet(props: ImportPanelProps): JSX.Element {
   const t = useT();
   const [step, setStep] = useState<Step>({ kind: "sources" });
   const [browsers, setBrowsers] = useState<PhoneBrowser[]>([]);
@@ -452,3 +453,5 @@ function PasteTabs({ onImport }: { onImport: ImportPanelProps["onImportTabs"] })
     </View>
   );
 }
+
+export const ImportPanel = quietWhileClosed(ImportPanelSheet);

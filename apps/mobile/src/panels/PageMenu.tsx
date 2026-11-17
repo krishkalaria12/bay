@@ -12,6 +12,7 @@ import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet, SheetIconButton } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 /** Ad and tracker blocking on this page: on, paused for the site, off for this visit only (restored), or off in Settings. */
 export type PageBlocking = "on" | "paused" | "restored" | "off";
@@ -141,7 +142,7 @@ function Tile({
   );
 }
 
-export function PageMenu(props: PageMenuProps): JSX.Element {
+function PageMenuSheet(props: PageMenuProps): JSX.Element {
   const t = useT();
   const foreground = useThemeColor("foreground");
   // Rarely used page tools sit one step away, and the display options open in place, so the menu fits.
@@ -436,3 +437,5 @@ function SiteHeader({ title, url, blocking }: { title: string; url: string; bloc
     </View>
   );
 }
+
+export const PageMenu = quietWhileClosed(PageMenuSheet);

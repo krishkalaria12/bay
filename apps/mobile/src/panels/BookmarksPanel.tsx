@@ -14,6 +14,7 @@ import { BOOKMARKS_ROOT, bookmarkChildren, bookmarkFolder, bookmarkLinks, folder
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "@/store/types";
 import { pageTitle, SearchField, siteName, SiteRow } from "./HistoryPanel";
 import { ActionRow, PanelSheet, SheetFitEnd } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 /** How many search matches the list shows. */
 const SHOWN = 200;
@@ -35,7 +36,7 @@ export interface BookmarksPanelProps {
  * The bookmark tree, a folder at a time, in the order it was saved. Search looks through every link, whichever folder
  * it's in. Removing a folder asks first, since it takes everything inside with it.
  */
-export function BookmarksPanel({ visible, onClose, bookmarks, onOpen, onRemove, onImport }: BookmarksPanelProps): JSX.Element {
+function BookmarksPanelSheet({ visible, onClose, bookmarks, onOpen, onRemove, onImport }: BookmarksPanelProps): JSX.Element {
   const t = useT();
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
@@ -247,3 +248,5 @@ function FolderRow(props: {
     </View>
   );
 }
+
+export const BookmarksPanel = quietWhileClosed(BookmarksPanelSheet);

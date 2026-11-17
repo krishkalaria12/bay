@@ -6,6 +6,7 @@ import { radius } from "@/chrome/tokens";
 import { useT, type MessageKey } from "@/i18n";
 import { READER_FONTS, READER_SIZES, READER_THEMES, type ReaderFont, type ReaderSettings, type ReaderThemeId } from "@/pagescripts/reader";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 const FONT_NAMES: Record<ReaderFont, MessageKey> = { serif: "reader.fontSerif", sans: "reader.fontSans", mono: "reader.fontMono" };
 
@@ -19,7 +20,7 @@ const THEME_NAMES: Record<ReaderThemeId, MessageKey> = {
   black: "reader.themeBlack",
 };
 
-export function ReaderPanel({
+function ReaderPanelSheet({
   visible,
   settings,
   onChange,
@@ -123,3 +124,5 @@ function Choice({ id, label, selected, disabled, onPress }: { id: string; label:
     </Pressable>
   );
 }
+
+export const ReaderPanel = quietWhileClosed(ReaderPanelSheet);

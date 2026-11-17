@@ -12,6 +12,7 @@ import { TILE } from "@/settings/content";
 import { SWIPE_MODES, TEXT_SIZE } from "@/store/model";
 import type { SiteBlockGroup, SwipeMode } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface SiteSettingsPanelProps {
   visible: boolean;
@@ -64,7 +65,7 @@ const GROUP_ROWS: { group: SiteBlockGroup; label: MessageKey }[] = [
  * its blocking first, then how Bay behaves here, what was downloaded from it, the connection, and Bay's Settings at the
  * foot.
  */
-export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
+function SiteSettingsPanelSheet(props: SiteSettingsPanelProps): JSX.Element {
   const t = useT();
   // Swipe's choices sit one step away, so the sheet fits without scrolling.
   const [page, setPage] = useState<"main" | "swipe">("main");
@@ -330,3 +331,5 @@ function SiteHeader({ url }: { url: string }): JSX.Element {
     </View>
   );
 }
+
+export const SiteSettingsPanel = quietWhileClosed(SiteSettingsPanelSheet);

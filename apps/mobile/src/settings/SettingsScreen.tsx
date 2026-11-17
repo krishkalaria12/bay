@@ -30,6 +30,7 @@ import type { EngineError } from "@/effect/ports/engine";
 import { useCommand, useScopedWork } from "@/effect/react";
 import { detectLocale, intlTag, matchLocale, setLocale, useLocale, useSavedLocale, useT, type Locale } from "@/i18n";
 import { holdSheetOpen } from "@/panels/openSheets";
+import { quietWhileClosed } from "@/panels/quietWhileClosed";
 import type { SimplePreferences, WallpaperId } from "@/store/types";
 
 import { useAppIcon, type AppIconState } from "./appIcons";
@@ -139,7 +140,7 @@ function scrolledAt(y: number): Scrolled {
 }
 
 /** Mounted while open and while it drops away; a new opening starts on the index. */
-export function SettingsScreen(props: SettingsScreenProps): JSX.Element | null {
+function SettingsScreenSheet(props: SettingsScreenProps): JSX.Element | null {
   const [mounted, setMounted] = useState(props.visible);
 
   if (props.visible && !mounted) setMounted(true);
@@ -836,3 +837,5 @@ const styles = StyleSheet.create({
   headRow: { height: HEAD, flexDirection: "row", alignItems: "center", paddingHorizontal: space.md },
   headTitle: { position: "absolute", left: 64, right: 64, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
 });
+
+export const SettingsScreen = quietWhileClosed(SettingsScreenSheet);

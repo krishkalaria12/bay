@@ -13,6 +13,7 @@ import { INTERRUPTED_DOWNLOAD } from "@/store/model";
 import type { DownloadItem } from "@/store/types";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface DownloadsPanelProps {
   visible: boolean;
@@ -25,7 +26,7 @@ export interface DownloadsPanelProps {
 }
 
 /** Downloads, newest first: tap a finished one to open it. Removing one only takes it off the list. */
-export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, onRemove, onClear }: DownloadsPanelProps): JSX.Element {
+function DownloadsPanelSheet({ visible, onClose, downloads, onOpen, onCancel, onRemove, onClear }: DownloadsPanelProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
   const t = useT();
@@ -172,3 +173,5 @@ export function downloadStatus(item: DownloadItem, t: Translate): string {
       return item.error === INTERRUPTED_DOWNLOAD ? t("downloads.interrupted") : (item.error ?? t("downloads.status.failed"));
   }
 }
+
+export const DownloadsPanel = quietWhileClosed(DownloadsPanelSheet);

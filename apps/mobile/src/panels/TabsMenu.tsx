@@ -8,6 +8,7 @@ import { useT } from "@/i18n";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace } from "@/store/types";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface TabsMenuProps {
   visible: boolean;
@@ -38,7 +39,7 @@ export interface TabsMenuProps {
 type MenuPage = "main" | "move" | "renameSpace" | "renameFolder" | "newFolder";
 
 /** Long-pressing the Tabs button: quick tab actions, spaces (B21) and folders, without opening the switcher. */
-export function TabsMenu(props: TabsMenuProps): JSX.Element {
+function TabsMenuSheet(props: TabsMenuProps): JSX.Element {
   const [page, setPage] = useState<MenuPage>("main");
   const [name, setName] = useState("");
   const foreground = useThemeColor("foreground");
@@ -210,3 +211,5 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
     </PanelSheet>
   );
 }
+
+export const TabsMenu = quietWhileClosed(TabsMenuSheet);

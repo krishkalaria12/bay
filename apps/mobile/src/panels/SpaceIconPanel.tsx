@@ -8,6 +8,7 @@ import { useT } from "@/i18n";
 import { SPACE_EMOJI } from "@/store/model";
 
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 /** How many emoji a row holds. */
 const ACROSS = 7;
@@ -16,7 +17,7 @@ const ACROSS = 7;
  * A space's emoji, from the desktop's set (it syncs as the space's icon there), or none, when the space shows its
  * name's first letter.
  */
-export function SpaceIconPanel({
+function SpaceIconPanelSheet({
   visible,
   onClose,
   name,
@@ -61,3 +62,5 @@ export function SpaceIconPanel({
     </PanelSheet>
   );
 }
+
+export const SpaceIconPanel = quietWhileClosed(SpaceIconPanelSheet);
