@@ -20,9 +20,13 @@ pub fn slice(value: &str, units: usize) -> String {
     out
 }
 
-fn is_js_space(c: char) -> bool {
-    c.is_whitespace() || c == '\u{feff}'
+/// JavaScript's `\s`: Unicode's white space and line ends, and the BOM, but not NEL (U+0085).
+pub fn is_js_space(c: char) -> bool {
+    (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
 }
+
+/// JavaScript's `\s` as a `regex` class item, to put inside brackets: `[{JS_SPACE}]`, `[^<>{JS_SPACE}]`.
+pub const JS_SPACE: &str = r"\x{FEFF}[\s--\x{85}]";
 
 /// `value.trim()`.
 pub fn trim(value: &str) -> &str {
@@ -201,6 +205,45 @@ pub fn utf16_len(text: &str) -> usize {
 /// JavaScript's string order: by UTF-16 code units.
 pub fn js_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
+}
+
+/// `Number(text)`: JavaScript's reading of a string as a number. Spaces around it are dropped, an empty string is 0,
+/// `0x`/`0o`/`0b` prefixes and `Infinity` are read, and anything else that isn't a decimal literal is NaN.
+pub fn string_to_number(text: &str) -> f64 {
+    let text = trim(text);
+    if text.is_empty() {
+        return 0.0;
+    }
+    for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
+        let Some(digits) = text
+            .get(..2)
+            .filter(|start| start.eq_ignore_ascii_case(prefix))
+            .map(|_| &text[2..])
+        else {
+            continue;
+        };
+        if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+            return f64::NAN;
+        }
+        return digits.chars().fold(0.0, |value, c| {
+            value * f64::from(radix) + f64::from(c.to_digit(radix).unwrap_or(0))
+        });
+    }
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if unsigned == "Infinity" {
+        return if text.starts_with('-') {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+    }
+    static DECIMAL: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$").unwrap()
+    });
+    if !DECIMAL.is_match(text) {
+        return f64::NAN;
+    }
+    text.parse().unwrap_or(f64::NAN)
 }
 
 #[cfg(test)]

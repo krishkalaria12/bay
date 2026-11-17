@@ -1344,8 +1344,9 @@ impl BrowserStore {
               (<code>fixtures/input.jsonl</code>); the settings tree and search (<code>settings</code>), every page in seven states and every language matching
               the Expo pages (<code>fixtures/settings.jsonl</code>, 777 calls, rows' callbacks recorded as the calls they make and returned as
               <code>SettingsAction</code>s the apps perform; the search's tie-break sorts with ICU's root collation, as Node's <code>localeCompare</code>); the
-              first-run flow (<code>onboarding</code>, with <code>tests/firstRun.test.ts</code> ported). Left: import parsers and the rest of the browser
-              helpers.
+              first-run flow (<code>onboarding</code>, with <code>tests/firstRun.test.ts</code> ported); the import parsers (<code>imports</code>: bookmarks
+              files, Safari's and Takeout's history, merging, drafts, the phone's browsers and shared tab lists), 525 calls from the Expo app's tests and odd
+              files matching (<code>fixtures/import.jsonl</code>). Left: the rest of the browser helpers.
             </p>
             <ul>
               <li>
