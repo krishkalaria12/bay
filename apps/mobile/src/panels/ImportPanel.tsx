@@ -72,7 +72,6 @@ function ImportPanelSheet(props: ImportPanelProps): JSX.Element {
     setReadError(null);
     looking.run(phoneBrowsers(Platform.OS === "android" ? "android" : "ios"));
     // The command is the component's own and stays the same; only an opening asks again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.visible]);
 
   useEffect(() => {
@@ -105,7 +104,6 @@ function ImportPanelSheet(props: ImportPanelProps): JSX.Element {
 
     if (result._tag === "Failed") setReadError(t("import.error.unreadable"));
     // Only a new result changes the step.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reading.result]);
 
   const nameOf = (browser: PhoneBrowser) => browser.name || t("import.another");

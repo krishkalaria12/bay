@@ -92,7 +92,6 @@ export function TabPage({
       void current.saveState().catch(() => {});
       register(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The page may be mid-navigation; the next finished load applies the rules again.
@@ -106,7 +105,6 @@ export function TabPage({
     const selectors = JSON.parse(selectorsKey) as string[];
 
     if (shouldHide(timing.current, selectors.length > 0)) applyHiddenElements(selectors);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectorsKey]);
 
   const tweaksKey = JSON.stringify(tweaks);
@@ -115,7 +113,8 @@ export function TabPage({
   const ampLeft = useRef(new Set<string>());
   const currentUrl = useRef(tab.url);
 
-  function applyTweaks(url = currentUrl.current): void {
+  function applyTweaks(address?: string): void {
+    const url = address ?? currentUrl.current;
     const current = view.current;
 
     if (!current) return;
@@ -137,7 +136,6 @@ export function TabPage({
     }
 
     applyTweaks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tweaksKey]);
 
   return (

@@ -65,7 +65,6 @@ export function useFindInPage(view: Tab | undefined, pageKey: string) {
       pending.current = null;
     };
     // The work belongs to the page and the query, which these already name.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, query, view]);
 
   const current = result?.query === query ? result : null;

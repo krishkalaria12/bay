@@ -99,8 +99,8 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
   const dragged = useSharedValue(0);
 
   const sheetPosition = useAnimatedStyle(() => ({
-    height: Math.max(keyboard.height.value, insets.bottom) + sheetHeight,
-    transform: [{ translateY: dragged.value }],
+    height: Math.max(keyboard.height.get(), insets.bottom) + sheetHeight,
+    transform: [{ translateY: dragged.get() }],
   }));
 
   // Swiping the sheet down puts it away; the keyboard leaves as the finger lets go.
@@ -109,7 +109,7 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
     failOffsetX: [-16, 16],
     onUpdate: (event) => {
       "worklet";
-      dragged.value = Math.max(0, event.translationY);
+      dragged.set(Math.max(0, event.translationY));
     },
     onDeactivate: (event) => {
       "worklet";
@@ -120,7 +120,7 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
         return;
       }
 
-      dragged.value = withSpring(0, SPRING);
+      dragged.set(withSpring(0, SPRING));
     },
   });
 
@@ -136,15 +136,15 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
   const reduced = useReducedMotion();
 
   useEffect(() => {
-    grown.value = withSpring(1, { ...SPRING, reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System });
+    grown.set(withSpring(1, { ...SPRING, reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System }));
   }, [grown, reduced]);
 
   const pill = useAnimatedStyle(() => ({
-    width: fieldWidth ? interpolate(grown.value, [0, 1], [fieldWidth / 2, fieldWidth]) : fieldWidth,
+    width: fieldWidth ? interpolate(grown.get(), [0, 1], [fieldWidth / 2, fieldWidth]) : fieldWidth,
     alignSelf: "center",
   }));
 
-  const contents = useAnimatedStyle(() => ({ opacity: interpolate(grown.value, [0.25, 1], [0, 1], Extrapolation.CLAMP) }));
+  const contents = useAnimatedStyle(() => ({ opacity: interpolate(grown.get(), [0.25, 1], [0, 1], Extrapolation.CLAMP) }));
 
   function change(next: string): void {
     setAddressSelected(false);
@@ -174,7 +174,6 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
   useEffect(() => {
     if (listenOnOpen) void listen();
     // Once, as the card opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function submit(): void {
@@ -209,16 +208,10 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
     };
   }, []);
 
-  // Read only when tapped: reading the clipboard as the card opens makes iOS ask for paste permission unprompted.
   async function pasteAndGo(): Promise<void> {
-    try {
-      const text = (await Clipboard.getStringAsync()).trim();
-      const url = text ? resolveAddress(text, engine) : null;
+    const url = await clipboardAddress(engine);
 
-      if (url) onOpen({ kind: "url", url });
-    } catch {
-      // No clipboard access: the field still takes a typed or pasted address.
-    }
+    if (url) onOpen({ kind: "url", url });
   }
 
   // The space's Essentials, as on the start page.
@@ -424,6 +417,21 @@ const inputTextStyle = { ...inputFont("headline", "regular"), padding: 0, margin
 
 /** The field's text line: the field less a hair, so its text sits in the middle. */
 const FIELD = searchSheet.fieldHeight - 2;
+
+/**
+ * The clipboard's text as an address to open, or null when it holds none. It is read only when Paste and Go is tapped:
+ * reading it as the card opens makes iOS ask for paste permission unprompted. No access reads as nothing; the field
+ * still takes a typed or pasted address.
+ */
+async function clipboardAddress(engine: SearchEngine): Promise<string | null> {
+  try {
+    const text = (await Clipboard.getStringAsync()).trim();
+
+    return text ? resolveAddress(text, engine) : null;
+  } catch {
+    return null;
+  }
+}
 
 function rowText(row: Row, engine: SearchEngine, t: Translate) {
   switch (row.kind) {

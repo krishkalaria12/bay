@@ -10,7 +10,7 @@ import Constants from "expo-constants";
 import { StatusBar } from "expo-status-bar";
 import * as Effect from "effect/Effect";
 import { useThemeColor } from "heroui-native";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type JSX, type ReactNode } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type JSX, type ReactNode } from "react";
 import { AppState, BackHandler, Keyboard, Platform, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
@@ -162,27 +162,25 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
 
   useEffect(() => {
     if (visible) {
-      pull.value = withSpring(0, SPRING);
-      presence.value = withTiming(1, timing(500, iosCurve, reduced));
+      pull.set(withSpring(0, SPRING));
+      presence.set(withTiming(1, timing(500, iosCurve, reduced)));
 
       return holdSheetOpen();
     }
 
-    presence.value = withTiming(0, timing(300, Easing.bezier(0.4, 0, 0.8, 0.2), reduced), (done) => {
-      if (done) scheduleOnRN(onGone);
-    });
+    presence.set(
+      withTiming(0, timing(300, Easing.bezier(0.4, 0, 0.8, 0.2), reduced), (done) => {
+        if (done) scheduleOnRN(onGone);
+      }),
+    );
   }, [visible, reduced, presence, pull, onGone]);
 
-  const sheet = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - presence.value) * height + pull.value }] }));
-  const dim = useAnimatedStyle(() => ({ opacity: 0.18 * presence.value * (1 - Math.min(pull.value / height, 1)) }));
+  const sheet = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - presence.get()) * height + pull.get() }] }));
+  const dim = useAnimatedStyle(() => ({ opacity: 0.18 * presence.get() * (1 - Math.min(pull.get() / height, 1)) }));
 
   // The pages over the index, and the one a search opened at a row.
   const [stack, setStack] = useState<SettingsPage[]>([]);
   const [focus, setFocus] = useState<{ page: SettingsPage; row: string } | null>(null);
-  const stackRef = useRef(stack);
-  stackRef.current = stack;
-  const coveredRef = useRef(covered);
-  coveredRef.current = covered;
 
   // Which layers the UI thread sees (the index is 0) and how far the page in front is in: 1 in place, 0 off to the right.
   const count = useSharedValue(1);
@@ -194,12 +192,12 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
     const layers = stack.length;
 
     if (layers > shown.current) {
-      count.value = layers + 1;
-      progress.value = 0;
-      progress.value = withTiming(1, timing(420, iosCurve, reduced));
+      count.set(layers + 1);
+      progress.set(0);
+      progress.set(withTiming(1, timing(420, iosCurve, reduced)));
     } else if (layers < shown.current) {
-      count.value = layers + 1;
-      progress.value = 1;
+      count.set(layers + 1);
+      progress.set(1);
     }
 
     shown.current = layers;
@@ -216,34 +214,38 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
   }, []);
 
   const pop = useCallback(() => {
-    if (!stackRef.current.length || popping.current) return;
+    if (!stack.length || popping.current) return;
     popping.current = true;
     Keyboard.dismiss();
-    progress.value = withTiming(0, timing(350, iosCurve, reduced), (done) => {
-      if (done) scheduleOnRN(finishPop);
-    });
-  }, [finishPop, progress, reduced]);
+    progress.set(
+      withTiming(0, timing(350, iosCurve, reduced), (done) => {
+        if (done) scheduleOnRN(finishPop);
+      }),
+    );
+  }, [stack.length, finishPop, progress, reduced]);
 
   const close = useCallback(() => {
     Keyboard.dismiss();
     onClose();
   }, [onClose]);
 
-  // Android's back goes back a page, then closes Settings.
+  // Android's back goes back a page, then closes Settings; a sheet over Settings takes it first.
+  const onBack = useEffectEvent((): boolean => {
+    if (covered) return false;
+
+    if (stack.length) pop();
+    else close();
+
+    return true;
+  });
+
   useEffect(() => {
     if (!visible) return;
 
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (coveredRef.current) return false;
-
-      if (stackRef.current.length) pop();
-      else close();
-
-      return true;
-    });
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => onBack());
 
     return () => subscription.remove();
-  }, [visible, pop, close]);
+  }, [visible]);
 
   const appIcon = useAppIcon();
   const ctx = useSettingsContext(props, () => close(), appIcon);
@@ -293,7 +295,7 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
     failOffsetX: [-16, 16],
     onUpdate: (event) => {
       "worklet";
-      pull.value = Math.max(0, event.translationY);
+      pull.set(Math.max(0, event.translationY));
     },
     onDeactivate: (event) => {
       "worklet";
@@ -304,7 +306,7 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
         return;
       }
 
-      pull.value = withSpring(0, SPRING);
+      pull.set(withSpring(0, SPRING));
     },
   });
 
@@ -318,20 +320,22 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
     failOffsetY: [-15, 15],
     onUpdate: (event) => {
       "worklet";
-      progress.value = Math.min(Math.max(1 - event.translationX / width, 0), 1);
+      progress.set(Math.min(Math.max(1 - event.translationX / width, 0), 1));
     },
     onDeactivate: (event) => {
       "worklet";
 
       if (!event.canceled && (event.translationX > BACK_DISTANCE || event.velocityX > BACK_VELOCITY)) {
-        progress.value = withTiming(0, settle, (done) => {
-          if (done) scheduleOnRN(finishPop);
-        });
+        progress.set(
+          withTiming(0, settle, (done) => {
+            if (done) scheduleOnRN(finishPop);
+          }),
+        );
 
         return;
       }
 
-      progress.value = withTiming(1, settle);
+      progress.set(withTiming(1, settle));
     },
   });
 
@@ -368,7 +372,7 @@ function SettingsLayer(props: SettingsScreenProps & { onGone: () => void }): JSX
                   onOpenPage={(next) => push([next])}
                   onScroll={(y) => reportScroll(index + 1, y)}
                   onPullClose={close}
-                  body={drawnBody(page, props, pop, appIcon)}
+                  body={<DrawnBody page={page} settings={props} back={pop} appIcon={appIcon} />}
                 />
               </Layer>
             ))}
@@ -422,18 +426,18 @@ function Layer({
   children: ReactNode;
 }): JSX.Element {
   const placed = useAnimatedStyle(() => {
-    const depth = count.value - 1 - index;
+    const depth = count.get() - 1 - index;
     // Not yet counted: a page about to come in waits off to the right.
     let x = -width / 3;
 
     if (depth < 0) x = width;
-    else if (depth === 0) x = (1 - progress.value) * width;
-    else if (depth === 1) x = (-width / 3) * progress.value;
+    else if (depth === 0) x = (1 - progress.get()) * width;
+    else if (depth === 1) x = (-width / 3) * progress.get();
 
     return { transform: [{ translateX: x }], opacity: depth >= 2 ? 0 : 1, zIndex: index };
   });
 
-  const shade = useAnimatedStyle(() => ({ opacity: count.value - 1 - index === 1 ? 0.08 * progress.value : 0 }));
+  const shade = useAnimatedStyle(() => ({ opacity: count.get() - 1 - index === 1 ? 0.08 * progress.get() : 0 }));
 
   return (
     <Animated.View
@@ -669,7 +673,17 @@ function PageView({
 }
 
 /** The body a page draws itself, if it draws one. */
-function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => void, appIcon: AppIconState | null): ReactNode {
+function DrawnBody({
+  page,
+  settings: props,
+  back,
+  appIcon,
+}: {
+  page: SettingsPage;
+  settings: SettingsScreenProps;
+  back: () => void;
+  appIcon: AppIconState | null;
+}): ReactNode {
   switch (page) {
     case "customEngine":
       return (
@@ -738,12 +752,7 @@ function useSettingsContext(props: SettingsScreenProps, closeAfterClear: () => v
   const [now, setNow] = useState(Date.now);
   const syncCommand = useCommand<void, never>();
 
-  const runSync = (action: (sync: PhoneSync["Service"]) => Effect.Effect<void>) =>
-    syncCommand.run(
-      Effect.gen(function* () {
-        yield* action(yield* PhoneSync);
-      }),
-    );
+  const runSync = (action: (sync: PhoneSync["Service"]) => Effect.Effect<void>) => syncCommand.run(PhoneSync.use(action));
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);

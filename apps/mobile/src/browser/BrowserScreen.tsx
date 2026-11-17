@@ -8,8 +8,8 @@ import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useIsFocused } from "expo-router";
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -108,6 +108,62 @@ function endTabWork(tabId: string): void {
   );
 }
 
+/**
+ * Joins the app's one lifecycle registration: `onActive` as Bay comes back to the front, and each page's history,
+ * scroll and form text saved as it leaves, since the system may end Bay in the background. A page that can't be saved
+ * reopens from its address, so a failure is only worth a warning.
+ */
+const followLifecycle = (onActive: () => void) =>
+  Effect.gen(function* () {
+    const lifecycle = yield* Lifecycle;
+    const engine = yield* Engine;
+    const diagnostics = yield* Diagnostics;
+    // Each save starts inside the native callback, before Bay is suspended.
+    const run = yield* FiberSet.makeRuntime<never>();
+
+    yield* lifecycle.onChange((state) => {
+      if (state === "active") return onActive();
+
+      for (const view of views.values()) {
+        run(
+          engine
+            .saveState(view)
+            .pipe(
+              Effect.catch((error) =>
+                diagnostics.warn(`Couldn't save a page's state: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`),
+              ),
+            ),
+        );
+      }
+    });
+  });
+
+/** A page visited: its site's icon, and the tab's picture once the page has drawn (a newer visit replaces it). */
+const pageVisited = (tabId: string, view: Tab, url: string) =>
+  Effect.gen(function* () {
+    yield* (yield* Favicons).fetch(view, url);
+    yield* (yield* Snapshots).visited(tabId, view, () => failed.has(tabId));
+  });
+
+/**
+ * Answers a page's sign-in request with the login saved for its origin; with none (or a secure store that can't be
+ * read), `ask` puts the request in front of the user instead.
+ */
+const signInFromStore = (tabId: string, requestId: string, origin: string, ask: () => void) =>
+  Effect.gen(function* () {
+    const logins = yield* Logins;
+    const login = yield* logins.find(origin).pipe(Effect.orElseSucceed(() => null));
+
+    if (!login) return yield* Effect.sync(ask);
+
+    const view = views.get(tabId);
+
+    if (!view) return;
+
+    // The page may have dropped the request on its own; then there is no one left to answer.
+    yield* Effect.tryPromise(() => view.answerPageRequest(requestId, true, undefined, login.username, login.password)).pipe(Effect.ignore);
+  });
+
 type Overlay = "none" | "search" | "tabs";
 
 type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceIcon" | "pin" | null;
@@ -152,6 +208,16 @@ export function BrowserScreen(): JSX.Element {
   const [launchSearch, setLaunchSearch] = useState(false);
   // The search card opened from the widget's microphone starts listening (C7).
   const [searchListening, setSearchListening] = useState(false);
+
+  /** Opens the search card, in a new tab or over this one, private or not. */
+  function search(inNewTab: boolean, privately = false): void {
+    setLaunchSearch(false);
+    setSearchListening(false);
+    setSearchInNewTab(inNewTab);
+    setSearchPrivately(privately);
+    setOverlay("search");
+  }
+
   const [panel, setPanel] = useState<Panel>(null);
   // Settings is a screen of its own (src/settings): the browser's sheets open over it.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -211,97 +277,6 @@ export function BrowserScreen(): JSX.Element {
 
   useEffect(learnAppIcon, []);
 
-  // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
-  useEffect(() => {
-    if (!ready || !welcomed || !takeFieldRequest()) return;
-    search(false);
-    setLaunchSearch(true);
-    // Only the welcome's ending asks; the handlers it calls stay the screen's own.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, welcomed]);
-
-  // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
-  // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
-  // Says whether it put a fresh start page up.
-  const startFresh = useRef<() => boolean>(() => false);
-  startFresh.current = () => {
-    const { data: current } = useBrowserStore.getState();
-
-    if (startPageAfterHours === null || current.leftAt === null) return false;
-
-    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return false;
-
-    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return false;
-    const empty = current.tabs.find((tab) => !tab.url && !tab.private);
-
-    if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
-    else openTab("");
-    setOverlay("none");
-    setPanel(null);
-    setSettingsOpen(false);
-    setLink(null);
-
-    return true;
-  };
-
-  // Bay opens ready to type (C1): when it starts, and when it comes back to a fresh start page, the search card and
-  // keyboard come up. Not on the run that showed the welcome, which ends on the field itself when it's skipped.
-  const launched = useRef(false);
-
-  useEffect(() => {
-    if (!ready || launched.current) return;
-    launched.current = true;
-    const opened = startFresh.current();
-    const { data: current } = useBrowserStore.getState();
-
-    if (!current.preferences.welcomed || !current.preferences.searchOnLaunch) return;
-    const tab = current.tabs.find((entry) => entry.id === current.activeTabId);
-
-    // Over a page, a new search starts a new tab and leaves the page as it was.
-    search(!opened && Boolean(tab?.url));
-    setLaunchSearch(true);
-    // Only the launch asks; the handlers it calls stay the screen's own.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
-  // Leaving the foreground and coming back, heard through the app's one lifecycle registration. The screen joins it
-  // once the saved tabs are in, after the store's own handler, so each change is handled in the order it always was.
-  const { run: runLifecycleWork } = useCommand();
-  useEffect(() => {
-    if (!ready) return;
-
-    runLifecycleWork(
-      Effect.gen(function* () {
-        const lifecycle = yield* Lifecycle;
-        const engine = yield* Engine;
-        const diagnostics = yield* Diagnostics;
-        // Each save starts inside the native callback, before Bay is suspended.
-        const run = yield* FiberSet.makeRuntime<never>();
-
-        yield* lifecycle.onChange((state) => {
-          if (state === "active") {
-            // A fresh start page after a long time away opens ready to type too (C1).
-            if (startFresh.current() && useBrowserStore.getState().data.preferences.searchOnLaunch) search(false);
-
-            return;
-          }
-
-          // The system may end Bay while it is in the background: keep each page's history, scroll and form text. A
-          // page that can't be saved reopens from its address, so a failure is only worth a warning.
-          for (const view of views.values()) {
-            run(
-              engine
-                .saveState(view)
-                .pipe(
-                  Effect.catch((error) =>
-                    diagnostics.warn(`Couldn't save a page's state: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`),
-                  ),
-                ),
-            );
-          }
-        });
-      }),
-    );
-  }, [ready, runLifecycleWork]);
   const blockerStatus = useBlockerStatus((state) => state.status);
 
   // Private tabs lock as soon as Bay leaves the foreground, which also keeps them out of the app switcher.
@@ -319,17 +294,6 @@ export function BrowserScreen(): JSX.Element {
     return () => subscription.remove();
   }, [lockEnabled]);
 
-  // Links from other apps (B9, B14): the default browser hands Bay whole web addresses. The app listens for them and
-  // keeps one that launched Bay until the saved tabs load; the screen opens each as it is handed over, with the
-  // newest of its own handlers.
-  const openIncoming = useRef<(url: string) => void>(() => {});
-  openIncoming.current = openIncomingLink;
-  const { run: listenForLinks } = useCommand<never, never>();
-
-  useEffect(() => {
-    listenForLinks(IncomingLinks.use((incoming) => incoming.receive((url) => openIncoming.current(url))));
-  }, [listenForLinks]);
-
   async function authenticate(): Promise<boolean> {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage: t("lock.prompt") });
 
@@ -338,12 +302,11 @@ export function BrowserScreen(): JSX.Element {
 
   useEffect(() => {
     media.keepOnly(new Set(mountedKey.split(" ")));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mountedKey]);
 
   useEffect(() => {
     setLive(mountedKey.split(" "));
-    barHidden.value = withTiming(0);
+    barHidden.set(withTiming(0));
   }, [mountedKey, barHidden]);
 
   const showToast = toast.show;
@@ -354,7 +317,7 @@ export function BrowserScreen(): JSX.Element {
   // brings it back; otherwise the tap looks like it did nothing.
   const downloadToastKey = downloads.toast ? `${downloads.toast.id} ${downloads.toast.state}` : null;
   useEffect(() => {
-    if (downloadToastKey) barHidden.value = withTiming(0, { duration: 180 });
+    if (downloadToastKey) barHidden.set(withTiming(0, { duration: 180 }));
   }, [downloadToastKey, barHidden]);
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
@@ -366,9 +329,7 @@ export function BrowserScreen(): JSX.Element {
     if (!view) return;
     runCommand(
       { name: "snapshots.capture", resource: tabId },
-      Effect.gen(function* () {
-        yield* (yield* Snapshots).capture(tabId, view, () => failed.has(tabId));
-      }),
+      Snapshots.use((snapshots) => snapshots.capture(tabId, view, () => failed.has(tabId))),
     );
   }
 
@@ -410,13 +371,7 @@ export function BrowserScreen(): JSX.Element {
 
       // The site's icon, and the tab's picture once the page has drawn: a newer visit replaces the picture.
       if (view) {
-        runCommand(
-          { name: "page.visited", resource: tabId },
-          Effect.gen(function* () {
-            yield* (yield* Favicons).fetch(view, state.url);
-            yield* (yield* Snapshots).visited(tabId, view, () => failed.has(tabId));
-          }),
-        );
+        runCommand({ name: "page.visited", resource: tabId }, pageVisited(tabId, view, state.url));
       }
     }
   }
@@ -424,8 +379,8 @@ export function BrowserScreen(): JSX.Element {
   function onScroll(tabId: string, { offsetY, deltaY }: PageScroll): void {
     if (tabId !== active.id || reading.picking) return;
 
-    if (offsetY < 24 || deltaY < -8) barHidden.value = withTiming(0, { duration: 180 });
-    else if (deltaY > 8) barHidden.value = withTiming(1, { duration: 220 });
+    if (offsetY < 24 || deltaY < -8) barHidden.set(withTiming(0, { duration: 180 }));
+    else if (deltaY > 8) barHidden.set(withTiming(1, { duration: 220 }));
   }
 
   function navigate(tabId: string, url: string): void {
@@ -515,14 +470,6 @@ export function BrowserScreen(): JSX.Element {
 
     if (blank && !blank.url) navigate(blank.id, url);
     else openTab(url);
-  }
-
-  function search(inNewTab: boolean, privately = false): void {
-    setLaunchSearch(false);
-    setSearchListening(false);
-    setSearchInNewTab(inNewTab);
-    setSearchPrivately(privately);
-    setOverlay("search");
   }
 
   // The bar swipe moves through tabs in the switcher's order.
@@ -646,26 +593,9 @@ export function BrowserScreen(): JSX.Element {
         runForTab(
           tabId,
           `logins.signIn ${request.id}`,
-          Effect.gen(function* () {
-            const logins = yield* Logins;
-            // A secure store that can't be read asks the user instead.
-            const login = yield* logins.find(origin).pipe(Effect.orElseSucceed(() => null));
-
-            if (!login) {
-              yield* Effect.sync(() =>
-                setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }])),
-              );
-
-              return;
-            }
-
-            const view = views.get(tabId);
-
-            if (!view) return;
-
-            // The page may have dropped the request on its own; then there is no one left to answer.
-            yield* Effect.tryPromise(() => view.answerPageRequest(request.id, true, undefined, login.username, login.password)).pipe(Effect.ignore);
-          }),
+          signInFromStore(tabId, request.id, origin, () =>
+            setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }])),
+          ),
         );
 
         return;
@@ -788,8 +718,7 @@ export function BrowserScreen(): JSX.Element {
   );
 
   // Android Back, newest state each press; registered once while the screen is focused.
-  const backRef = useRef<() => boolean>(() => false);
-  backRef.current = () => {
+  const onBack = useEffectEvent((): boolean => {
     // Back cancels a page's dialog first: the page is paused until Bay answers it.
     if (pageRequests.length) {
       answerPageRequest(false);
@@ -829,16 +758,16 @@ export function BrowserScreen(): JSX.Element {
     }
 
     return false;
-  };
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== "android") return;
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => backRef.current());
+  const focused = useIsFocused();
 
-      return () => subscription.remove();
-    }, []),
-  );
+  useEffect(() => {
+    if (Platform.OS !== "android" || !focused) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => onBack());
+
+    return () => subscription.remove();
+  }, [focused]);
 
   // The page steps back behind the search sheet (U4): a card 10 pt in from each side, its top under the status bar,
   // with round corners, dimmed by the sheet's scrim.
@@ -847,7 +776,7 @@ export function BrowserScreen(): JSX.Element {
   const behind = useSharedValue(0);
 
   useEffect(() => {
-    behind.value = withSpring(pageBehind ? 1 : 0, { ...SPRING, overshootClamping: true });
+    behind.set(withSpring(pageBehind ? 1 : 0, { ...SPRING, overshootClamping: true }));
   }, [pageBehind, behind]);
 
   // Dragging the bar up shrinks the page under the finger towards its card (U5, C6); far enough, it lets go into the
@@ -855,20 +784,20 @@ export function BrowserScreen(): JSX.Element {
   const shrink = useSharedValue(0);
 
   const behindStyle = useAnimatedStyle(() => {
-    const scale = interpolate(behind.value, [0, 1], [1, (screenWidth - 2 * pageBehindSearch.sideInset) / screenWidth]);
+    const scale = interpolate(behind.get(), [0, 1], [1, (screenWidth - 2 * pageBehindSearch.sideInset) / screenWidth]);
     // Scaled about its middle, the page is moved back up so its top edge stays under the status bar.
     const lift = ((screenHeight - insets.top) * (1 - scale)) / 2;
-    const shrunk = interpolate(shrink.value, [0, 1], [1, 0.68]);
+    const shrunk = interpolate(shrink.get(), [0, 1], [1, 0.68]);
 
     return {
-      transform: [{ translateY: -lift - shrink.value * 40 }, { scale: scale * shrunk }],
-      borderRadius: Math.max(behind.value * pageBehindSearch.cornerRadius, shrink.value * 28),
+      transform: [{ translateY: -lift - shrink.get() * 40 }, { scale: scale * shrunk }],
+      borderRadius: Math.max(behind.get() * pageBehindSearch.cornerRadius, shrink.get() * 28),
     };
   });
 
   function openSwitcherFromDrag(): void {
     showTabs();
-    shrink.value = 0;
+    shrink.set(0);
   }
 
   const dragUp = usePanGesture({
@@ -877,7 +806,7 @@ export function BrowserScreen(): JSX.Element {
     failOffsetX: [-14, 14],
     onUpdate: (event) => {
       "worklet";
-      shrink.value = switcherProgress(-event.translationY);
+      shrink.set(switcherProgress(-event.translationY));
     },
     onDeactivate: (event) => {
       "worklet";
@@ -888,13 +817,13 @@ export function BrowserScreen(): JSX.Element {
         return;
       }
 
-      shrink.value = withSpring(0, { ...SPRING, overshootClamping: true });
+      shrink.set(withSpring(0, { ...SPRING, overshootClamping: true }));
     },
   });
 
   const barStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: barHidden.value * (BAR_HEIGHT + insets.bottom + 24) }],
-    opacity: 1 - barHidden.value,
+    transform: [{ translateY: barHidden.get() * (BAR_HEIGHT + insets.bottom + 24) }],
+    opacity: 1 - barHidden.get(),
   }));
 
   // First-run tips (U7): what blocking did on the first page, then the bar's gestures once there is a tab to swipe to.
@@ -958,6 +887,79 @@ export function BrowserScreen(): JSX.Element {
   const tabError = error?.tabId === active.id ? error : null;
   const fullscreen = fullscreenByTab[active.id] ?? false;
   const onPhoto = data.preferences.wallpaper === "photo" && Boolean(data.preferences.wallpaperPhoto);
+
+  // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
+  useEffect(() => {
+    if (!ready || !welcomed || !takeFieldRequest()) return;
+    search(false);
+    setLaunchSearch(true);
+    // Only the welcome's ending asks; the handlers it calls stay the screen's own.
+  }, [ready, welcomed]);
+
+  // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
+  // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
+  // Says whether it put a fresh start page up.
+  const startFresh = useEffectEvent((): boolean => {
+    const { data: current } = useBrowserStore.getState();
+
+    if (startPageAfterHours === null || current.leftAt === null) return false;
+
+    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return false;
+
+    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return false;
+    const empty = current.tabs.find((tab) => !tab.url && !tab.private);
+
+    if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
+    else openTab("");
+    setOverlay("none");
+    setPanel(null);
+    setSettingsOpen(false);
+    setLink(null);
+
+    return true;
+  });
+
+  // Bay opens ready to type (C1): when it starts, and when it comes back to a fresh start page, the search card and
+  // keyboard come up. Not on the run that showed the welcome, which ends on the field itself when it's skipped.
+  const launched = useRef(false);
+
+  useEffect(() => {
+    if (!ready || launched.current) return;
+    launched.current = true;
+    const opened = startFresh();
+    const { data: current } = useBrowserStore.getState();
+
+    if (!current.preferences.welcomed || !current.preferences.searchOnLaunch) return;
+    const tab = current.tabs.find((entry) => entry.id === current.activeTabId);
+
+    // Over a page, a new search starts a new tab and leaves the page as it was.
+    search(!opened && Boolean(tab?.url));
+    setLaunchSearch(true);
+    // Only the launch asks; the handlers it calls stay the screen's own.
+  }, [ready]);
+  // Leaving the foreground and coming back, heard through the app's one lifecycle registration. The screen joins it
+  // once the saved tabs are in, after the store's own handler, so each change is handled in the order it always was.
+  const { run: runLifecycleWork } = useCommand();
+  useEffect(() => {
+    if (!ready) return;
+
+    runLifecycleWork(
+      followLifecycle(() => {
+        // A fresh start page after a long time away opens ready to type too (C1).
+        if (startFresh() && useBrowserStore.getState().data.preferences.searchOnLaunch) search(false);
+      }),
+    );
+  }, [ready, runLifecycleWork]);
+
+  // Links from other apps (B9, B14): the default browser hands Bay whole web addresses. The app listens for them and
+  // keeps one that launched Bay until the saved tabs load; the screen opens each as it is handed over, with the
+  // newest of its own handlers.
+  const openIncoming = useEffectEvent((url: string) => openIncomingLink(url));
+  const { run: listenForLinks } = useCommand<never, never>();
+
+  useEffect(() => {
+    listenForLinks(IncomingLinks.use((incoming) => incoming.receive((url) => openIncoming(url))));
+  }, [listenForLinks]);
 
   return (
     <View className="flex-1 bg-background">

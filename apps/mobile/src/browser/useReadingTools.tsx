@@ -114,7 +114,6 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   const outcome = work.result;
   useEffect(() => {
     if (outcome?._tag === "Failed") fail(outcome.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outcome]);
   useEffect(() => {
     const ids = new Set(data.tabs.filter((tab) => tab.private).map((tab) => tab.id));
@@ -146,46 +145,58 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   }
 
   function endPicking(): ToolWork<void> {
-    return Effect.gen(function* () {
-      yield* script(STOP_PICKER_SCRIPT);
-      setPicking(false);
-      setPicked(null);
-      setInspected(null);
-    });
+    return script(STOP_PICKER_SCRIPT).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          setPicking(false);
+          setPicked(null);
+          setInspected(null);
+        }),
+      ),
+    );
   }
 
   function startPicking(mode: "hide" | "inspect"): void {
     task(
-      Effect.gen(function* () {
-        if (reader) yield* script(CLOSE_READER_SCRIPT);
-        setReaderTab(null);
+      (reader ? script(CLOSE_READER_SCRIPT) : Effect.void).pipe(
+        Effect.andThen(Effect.sync(() => setReaderTab(null))),
         // Left before the picker starts, so a picker the page started as the document went is still stopped.
-        yield* closeWhenLeaving(STOP_PICKER_SCRIPT);
-        yield* script(START_PICKER_SCRIPT);
-        setPickMode(mode);
-        setPicking(true);
-        setPicked(null);
-        setInspected(null);
-      }),
+        Effect.andThen(closeWhenLeaving(STOP_PICKER_SCRIPT)),
+        Effect.andThen(script(START_PICKER_SCRIPT)),
+        Effect.andThen(
+          Effect.sync(() => {
+            setPickMode(mode);
+            setPicking(true);
+            setPicked(null);
+            setInspected(null);
+          }),
+        ),
+      ),
     );
   }
 
   /** Opens the details of the picked element. */
   function inspect(): void {
     task(
-      Effect.gen(function* () {
-        const element = yield* script<InspectedElement | null>(INSPECT_SCRIPT);
-
-        if (element) setInspected(element);
-      }),
+      script<InspectedElement | null>(INSPECT_SCRIPT).pipe(
+        Effect.flatMap((element) =>
+          Effect.sync(() => {
+            if (element) setInspected(element);
+          }),
+        ),
+      ),
     );
   }
 
   function parent(): void {
     task(
-      Effect.gen(function* () {
-        if (!(yield* script<boolean>(PICK_PARENT_SCRIPT))) setNotice(t("notice.noParent"));
-      }),
+      script<boolean>(PICK_PARENT_SCRIPT).pipe(
+        Effect.flatMap((moved) =>
+          Effect.sync(() => {
+            if (!moved) setNotice(t("notice.noParent"));
+          }),
+        ),
+      ),
     );
   }
 
@@ -223,35 +234,43 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
 
   /** Turns Reader on for this page; when it already reads, it only opens (or keeps closed) its settings panel. */
   function turnReaderOn(openSettings: boolean): ToolWork<boolean> {
-    return Effect.gen(function* () {
-      if (reader) {
+    if (reader) {
+      return Effect.sync(() => {
         if (openSettings) setSettingsOpen(true);
 
         return true;
-      }
+      });
+    }
 
-      if (picking) yield* endPicking();
-      yield* closeWhenLeaving(CLOSE_READER_SCRIPT);
+    const tabId = active.id;
 
-      const result = yield* script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
+    return (picking ? endPicking() : Effect.void).pipe(
+      Effect.andThen(closeWhenLeaving(CLOSE_READER_SCRIPT)),
+      Effect.andThen(script<{ ok: boolean }>(openReaderScript(data.preferences.reader))),
+      Effect.flatMap((result) =>
+        Effect.sync(() => {
+          if (!result.ok) return false;
 
-      if (!result.ok) return false;
+          setReaderTab(tabId);
 
-      setReaderTab(active.id);
+          if (openSettings) setSettingsOpen(true);
 
-      if (openSettings) setSettingsOpen(true);
-
-      return true;
-    });
+          return true;
+        }),
+      ),
+    );
   }
 
   function exitReader(): void {
     task(
-      Effect.gen(function* () {
-        yield* script(CLOSE_READER_SCRIPT);
-        setReaderTab(null);
-        setSettingsOpen(false);
-      }),
+      script(CLOSE_READER_SCRIPT).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            setReaderTab(null);
+            setSettingsOpen(false);
+          }),
+        ),
+      ),
     );
   }
 
@@ -269,16 +288,16 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     const tabId = active.id;
     work.run(
       quietly(
-        Effect.gen(function* () {
-          yield* closeWhenLeaving(CLOSE_READER_SCRIPT);
-
-          const result = yield* run<{ ok: boolean }>(view, openReaderScript(data.preferences.reader));
-
-          if (result.ok) setReaderTab(tabId);
-        }),
+        closeWhenLeaving(CLOSE_READER_SCRIPT).pipe(
+          Effect.andThen(run<{ ok: boolean }>(view, openReaderScript(data.preferences.reader))),
+          Effect.flatMap((result) =>
+            Effect.sync(() => {
+              if (result.ok) setReaderTab(tabId);
+            }),
+          ),
+        ),
       ),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.url, reader, isLoading, blocked, view]);
 
   function changeSettings(settings: ReaderSettings): void {
@@ -308,20 +327,22 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     showHidden: () => setRules([]),
     openReader: () =>
       task(
-        Effect.gen(function* () {
-          if (!(yield* turnReaderOn(true))) setNotice(t("notice.noArticle"));
-        }),
+        turnReaderOn(true).pipe(
+          Effect.flatMap((opened) =>
+            Effect.sync(() => {
+              if (!opened) setNotice(t("notice.noArticle"));
+            }),
+          ),
+        ),
       ),
     /** Left from the site's panel (B12): Reader goes off even when this site asked for it. */
     closeReader: exitReader,
     copyMarkdown: () =>
       task(
-        Effect.gen(function* () {
-          const result = yield* script<{ markdown: string }>(MARKDOWN_SCRIPT);
-
-          yield* copyText(result.markdown);
-          setNotice(t("notice.markdownCopied"));
-        }),
+        script<{ markdown: string }>(MARKDOWN_SCRIPT).pipe(
+          Effect.flatMap((result) => copyText(result.markdown)),
+          Effect.andThen(Effect.sync(() => setNotice(t("notice.markdownCopied")))),
+        ),
       ),
     startPicking: () => startPicking("hide"),
     startInspecting: () => startPicking("inspect"),
@@ -339,16 +360,11 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
           title={picked?.label}
           onClose={() => setInspected(null)}
           onParent={parent}
-          onCopy={() =>
-            task(
-              Effect.gen(function* () {
-                if (!inspected) return;
+          onCopy={() => {
+            if (!inspected) return;
 
-                yield* copyText(inspected.agent);
-                setNotice(t("notice.copiedForAgent"));
-              }),
-            )
-          }
+            task(copyText(inspected.agent).pipe(Effect.andThen(Effect.sync(() => setNotice(t("notice.copiedForAgent"))))));
+          }}
         />
         {picking && pickMode === "inspect" ? (
           <PickerCard testID="inspect-instructions" icon="inspect" picked={picked} hint={t("picker.inspectHint")}>

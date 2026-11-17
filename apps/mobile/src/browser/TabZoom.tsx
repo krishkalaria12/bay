@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { Image, StyleSheet, useWindowDimensions } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -31,12 +31,9 @@ export function TabZoom({ snapshot, from, onDone }: TabZoomProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const progress = useSharedValue(0);
   const reduced = useReducedMotion();
-  // The zoom runs once. The caller's handler changes with every render, so it is kept in a ref and reached through a
-  // stable function: a changing handler would start the zoom over, and it would never arrive.
-  const handler = useRef(onDone);
-  const finish = useCallback(() => handler.current(), []);
-
-  handler.current = onDone;
+  // The zoom runs once. The caller's handler changes with every render, so it is reached through an effect event: a
+  // changing handler would start the zoom over, and it would never arrive.
+  const finish = useEffectEvent(() => onDone());
 
   useEffect(() => {
     // The card is its page within five frames, on Arc Search's spring; with reduced motion it is there at once.
@@ -46,8 +43,8 @@ export function TabZoom({ snapshot, from, onDone }: TabZoomProps): JSX.Element {
       if (finished) scheduleOnRN(finish);
     };
 
-    progress.value = reduced ? withTiming(1, { duration: 0 }, done) : withSpring(1, { ...OPEN_SPRING, overshootClamping: true }, done);
-  }, [finish, progress, reduced]);
+    progress.set(reduced ? withTiming(1, { duration: 0 }, done) : withSpring(1, { ...OPEN_SPRING, overshootClamping: true }, done));
+  }, [progress, reduced]);
 
   const style = useAnimatedStyle(() => {
     const at = progress.value;

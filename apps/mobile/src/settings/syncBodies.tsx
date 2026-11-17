@@ -35,22 +35,9 @@ export function SyncJoin({ back }: { back: () => void }): JSX.Element {
   useBackWhenJoined(back);
 
   useEffect(() => {
-    run(
-      Effect.gen(function* () {
-        const sync = yield* PhoneSync;
+    run(PhoneSync.use((sync) => sync.pair));
 
-        yield* sync.pair;
-      }),
-    );
-
-    return () =>
-      run(
-        Effect.gen(function* () {
-          const sync = yield* PhoneSync;
-
-          yield* sync.cancelPairing;
-        }),
-      );
+    return () => run(PhoneSync.use((sync) => sync.cancelPairing));
   }, [run, attempt]);
 
   let words: MessageKey = "sync.code.starting";
@@ -122,15 +109,7 @@ export function SyncPhrase({ back }: { back: () => void }): JSX.Element {
 
   useBackWhenJoined(back);
 
-  const join = () =>
-    run(
-      Effect.gen(function* () {
-        const sync = yield* PhoneSync;
-        const result = yield* sync.joinWithPhrase(text);
-
-        setProblem(result);
-      }),
-    );
+  const join = () => run(PhoneSync.use((sync) => sync.joinWithPhrase(text)).pipe(Effect.flatMap((result) => Effect.sync(() => setProblem(result)))));
 
   return (
     <View style={{ gap: space.section }}>
