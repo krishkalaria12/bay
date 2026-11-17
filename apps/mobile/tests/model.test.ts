@@ -810,7 +810,7 @@ test("a tab's page pins in its space as an Essential or a row, and pinning it th
 
 test("pins saved before spaces had them are the first space's Essentials", () => {
   const read = parseBrowserData(
-    { version: 2, tabs: [], pinnedSites: [{ id: "p", url: "https://a.example/", title: "A", favicon: null }] } as JsonValue,
+    { version: 2, tabs: [], pinnedSites: [{ id: "p", url: "https://a.example/", title: "A", favicon: null }] },
     initialBrowserData(createTab("t", 0)),
   );
 

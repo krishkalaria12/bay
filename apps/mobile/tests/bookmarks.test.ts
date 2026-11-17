@@ -157,6 +157,7 @@ test("imported pins join after the ones already there, once each", () => {
     site: { id: "p", url: "https://a.example/", title: "A", favicon: null, spaceId: "personal", kind: "essential", folderId: null },
     index: 0,
   });
+
   data = reduceBrowserData(data, {
     type: "import-pins",
     sites: [

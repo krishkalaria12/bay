@@ -7,11 +7,16 @@ import type { JsonValue } from "@bay/sync/src/canon.ts";
 import { Clock } from "@bay/sync/src/hlc.ts";
 import { emptyScope, syncScope, visible, type Listing, type ScopeState, type Transport } from "@bay/sync/src/scope.ts";
 
+import * as v from "valibot";
+
 import { SYNC_BAR } from "../src/sync/adapters.ts";
 import { newDoc, remoteTabs, runCycle, syncedDevices, type SyncDoc } from "../src/sync/engine.ts";
 import { BOOKMARKS_ROOT } from "../src/store/bookmarks.ts";
 import { createTab, HISTORY_LIMIT, initialBrowserData, reduceBrowserData, type BrowserAction } from "../src/store/model.ts";
 import type { BrowserData } from "../src/store/types.ts";
+
+/** A pinned page as the computer writes it: its address, its folder, and whether it is a pinned row. */
+const PinValueSchema = v.object({ u: v.string(), g: v.nullable(v.string()), r: v.optional(v.literal(true)) });
 
 const NOW = Date.UTC(2026, 10, 16, 12);
 
@@ -236,9 +241,15 @@ test("the computer's spaces come as spaces, with their Essentials, pinned rows a
   await iphone.cycle();
   await mac.sync();
 
-  const added = [...mac.seen("p:personal", "pin:t:")].find(([, value]) => (value as { u: string }).u === "https://phone.example/");
+  const written = [...mac.seen("p:personal", "pin:t:").values()].flatMap((value) => {
+    const pin = v.safeParse(PinValueSchema, value);
 
-  assert.ok(added);
-  assert.equal((added![1] as { g: string | null }).g, null);
-  assert.equal((added![1] as { r?: true }).r, undefined);
+    return pin.success ? [pin.output] : [];
+  });
+
+  const added = written.find((pin) => pin.u === "https://phone.example/");
+
+  assert.ok(added, "the computer has the phone's pin");
+  assert.equal(added.g, null);
+  assert.equal(added.r, undefined);
 });
