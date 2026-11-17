@@ -12,6 +12,7 @@ pub mod pairing;
 pub mod phone;
 pub mod phrase;
 pub mod scope;
+pub mod service;
 pub mod transport;
 
 #[cfg(test)]

@@ -26,6 +26,8 @@ android {
 dependencies {
     // UniFFI's Kotlin calls the library through JNA.
     api("${libs.jna.get()}@aar")
+    // UniFFI's async calls suspend on coroutines.
+    api(libs.coroutines.android)
     testImplementation(libs.junit)
 }
 

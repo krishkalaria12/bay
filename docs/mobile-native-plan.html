@@ -1711,6 +1711,11 @@ impl BrowserStore {
             <strong>Fractional numbers.</strong> Timestamps, visit counts and byte counts are integers in the core. A saved fractional value (which neither app
             writes) is truncated, where the TS store kept it.
           </li>
+          <li>
+            <strong>Argent reads a stale tree on Android.</strong> On the Compose stand-in screens, <code>describe</code> sometimes returns an older frame (a
+            status that changed, rows that appeared) while the screen shows the new one. It hasn't happened on iOS. Look into it before N4, whose Android e2e
+            flows depend on fresh trees (Compose semantics invalidation, or Argent's <code>android-devtools</code> source).
+          </li>
         </ul>
       </section>
 

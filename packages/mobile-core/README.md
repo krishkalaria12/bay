@@ -9,3 +9,5 @@ Bay mobile's shared Rust core, used by `apps/ios` and `apps/android` through Uni
 - Android builds through `apps/android/core/bindings` (cargo-ndk + UniFFI Kotlin).
 
 Use rustup's cargo (`~/.cargo/bin`). Before committing: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`.
+- `sync/`: phone ↔ computer sync, ported from `packages/sync/src/relay` and the Expo app's `src/sync`. Checked against the Mac's golden vector (`../sync/fixtures/golden.json`), a TypeScript pairing (`fixtures/pairing.json`), a TypeScript-built chain (`fixtures/scope-chain.json`) and the TypeScript phone's run (`fixtures/phone-sync.json`); each has a script in `scripts/` that writes it again.
+- To try sync on a device without a Mac: `node scripts/stand-in-computer.mjs sync` publishes a computer's records on the real relay, `pair <CODE>` lets in the phone showing that code, `phrase` prints the chain's recovery phrase, and `clear` deletes the chain. Always clear when done.

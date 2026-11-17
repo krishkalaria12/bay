@@ -130,6 +130,13 @@ fn save_if_changed(state: &Mutex<State>, file: &Path) -> Result<(), StoreError> 
     Ok(())
 }
 
+impl BrowserStore {
+    /// The whole state, for the core's own readers (sync's adapters).
+    pub(crate) fn snapshot(&self) -> BrowserData {
+        lock(&self.state).data.clone()
+    }
+}
+
 #[uniffi::export]
 impl BrowserStore {
     /// Opens the store on the app's documents directory. `new_tab_id` and `now` make the blank tab a fresh install

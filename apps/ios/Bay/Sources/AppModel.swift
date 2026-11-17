@@ -1,23 +1,41 @@
 import BayCore
 import Foundation
+import UIKit
 
-/// The app's view of the core's browser store: the slices screens read, refreshed whenever the store changes. Every
-/// change goes through `dispatch`; nothing here edits state of its own.
+/// The app's view of the core: the browser store's slices screens read, and sync's view, refreshed whenever either
+/// changes. Every change goes through the core; nothing here edits state of its own.
 @MainActor
 final class AppModel: ObservableObject {
   let store: BrowserStore
+  let sync: PhoneSync
   @Published private(set) var spaces: [BrowserSpace] = []
   @Published private(set) var activeSpaceId = ""
   @Published private(set) var activeTabId = ""
   /// The tabs of the space showing, in list order.
   @Published private(set) var tabs: [BrowserTab] = []
   @Published private(set) var preferences: BrowserPreferences
+  @Published private(set) var syncView: SyncView
 
-  init() {
-    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    store = BrowserStore.open(documentsDir: documents.path, newTabId: UUID().uuidString, now: Self.now())
+  /// How often the phone syncs while Bay is in front, and how long after a change.
+  private static let cycleInterval: UInt64 = 30_000_000_000
+  private static let afterChange: UInt64 = 3_000_000_000
+  private static let pairingPoll: UInt64 = 2_000_000_000
+
+  private var cycles: Task<Void, Never>?
+  private var kick: Task<Void, Never>?
+  private var pairing: Task<Void, Never>?
+
+  init(barTitle: String) {
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+    store = BrowserStore.open(documentsDir: documents, newTabId: UUID().uuidString, now: Self.now())
+    sync = PhoneSync(
+      store: store, http: URLSessionHttp(), secrets: KeychainSecrets(), documentsDir: documents,
+      deviceName: UIDevice.current.name, barTitle: barTitle, relayUrl: nil
+    )
     preferences = store.preferences()
+    syncView = sync.view()
     store.observe(observer: StoreChanges(model: self))
+    sync.observe(observer: SyncChanges(model: self))
     refresh()
   }
 
@@ -36,7 +54,78 @@ final class AppModel: ObservableObject {
     try? store.flush()
   }
 
-  fileprivate func refresh() {
+  // MARK: Sync
+
+  /// Syncs every half minute while Bay is in front.
+  func startSyncing() {
+    cycles?.cancel()
+    cycles = Task { [sync] in
+      while !Task.isCancelled {
+        await sync.syncNow()
+        try? await Task.sleep(nanoseconds: Self.cycleInterval)
+      }
+    }
+  }
+
+  func stopSyncing() {
+    cycles?.cancel()
+    kick?.cancel()
+  }
+
+  func syncNow() {
+    Task { [sync] in await sync.syncNow() }
+  }
+
+  /// Shows a code and asks every two seconds whether a computer has let this phone in.
+  func pair() {
+    pairing?.cancel()
+    pairing = Task { [sync] in
+      var state = await sync.startPairing()
+      while !Task.isCancelled, case .waiting = state {
+        try? await Task.sleep(nanoseconds: Self.pairingPoll)
+        guard let next = await sync.pollPairing() else { return }
+        state = next
+      }
+    }
+  }
+
+  func cancelPairing() {
+    pairing?.cancel()
+    sync.cancelPairing()
+  }
+
+  /// Joins with the recovery phrase; the problem with it when it doesn't read.
+  func join(phrase: String) async -> String? {
+    do {
+      try await sync.joinWithPhrase(text: phrase)
+      return nil
+    } catch {
+      return "\(error)"
+    }
+  }
+
+  func leave() {
+    Task { [sync] in await sync.leave() }
+  }
+
+  // MARK: Changes
+
+  fileprivate func storeChanged() {
+    refresh()
+    // A change to what syncs: a cycle a moment later, once a burst of changes has settled.
+    kick?.cancel()
+    kick = Task { [sync] in
+      try? await Task.sleep(nanoseconds: Self.afterChange)
+      guard !Task.isCancelled else { return }
+      await sync.syncNow()
+    }
+  }
+
+  fileprivate func syncChanged(_ view: SyncView) {
+    syncView = view
+  }
+
+  private func refresh() {
     spaces = store.spaces()
     activeSpaceId = store.activeSpaceId()
     activeTabId = store.activeTabId()
@@ -54,6 +143,18 @@ private final class StoreChanges: StoreObserver, @unchecked Sendable {
   }
 
   func changed(revision _: UInt64) {
-    Task { @MainActor [weak model] in model?.refresh() }
+    Task { @MainActor [weak model] in model?.storeChanged() }
+  }
+}
+
+private final class SyncChanges: SyncObserver, @unchecked Sendable {
+  private weak var model: AppModel?
+
+  init(model: AppModel) {
+    self.model = model
+  }
+
+  func changed(view: SyncView) {
+    Task { @MainActor [weak model] in model?.syncChanged(view) }
   }
 }
