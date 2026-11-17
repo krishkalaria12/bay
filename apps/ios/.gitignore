@@ -1,0 +1,4 @@
+# Written by `tuist generate`
+*.xcodeproj
+*.xcworkspace
+Derived/

@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["crates/bay-core", "crates/uniffi-bindgen"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[workspace.dependencies]
+uniffi = "0.32.2"
+thiserror = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
