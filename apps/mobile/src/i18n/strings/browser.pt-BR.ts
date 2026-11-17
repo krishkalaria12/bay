@@ -35,6 +35,8 @@ export const browserPtBR: BrowserStrings = {
   "tabs.closeLabel": "Fechar {title}",
   "tabs.openLabel": "Abrir {title}",
   "tabs.swipeToClose": "Deslize para cima para fechar",
+  "tabs.clear": "Limpar",
+  "tabs.switchSpace": "Mudar para {name}",
 
   // Mini player.
   "player.playing": "reproduzindo",

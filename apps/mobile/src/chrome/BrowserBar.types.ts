@@ -5,8 +5,27 @@ import type { Translate } from "@/i18n";
 /** The search capsule's motion while the bar is swiped to change tabs (TabSwipe). */
 export type CapsuleStyle = ReturnType<typeof useAnimatedStyle>;
 
-/** Lens's floating bar: archive, search and settings on the start page and tab switcher; tabs, search and more over a page. */
+/** A space as the tab view's bar shows it: a dot in its colour, the one showing larger. */
+export interface BarSpace {
+  id: string;
+  label: string;
+  color: string;
+  active: boolean;
+}
+
+/**
+ * Lens's floating bar: archive, search and settings on the start page; archive, the spaces and a new tab over the tab
+ * view; tabs, search and more over a page.
+ */
 export type BrowserBarProps = (
+  | {
+      mode: "tabs";
+      onArchive: () => void;
+      onNewTab: () => void;
+      spaces: readonly BarSpace[];
+      onSelectSpace: (id: string) => void;
+      onNewSpace: () => void;
+    }
   | {
       mode: "start";
       onArchive: () => void;
@@ -81,7 +100,16 @@ export function barLoading(props: BrowserBarProps): boolean {
 export function barButtons(
   props: BrowserBarProps,
   t: Translate,
-): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
+): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" | "add" }] {
+  if (props.mode === "tabs") {
+    return [
+      { id: "bar-archive", label: t("bar.archive"), icon: "archive", onPress: props.onArchive },
+      { id: "bar-new-space", label: t("tabsMenu.newSpace"), onPress: props.onNewSpace },
+      // The id the capsule had here before, so tests and habits that opened a new tab from the tab view still do.
+      { id: "bar-search", label: t("bar.newTab"), icon: "add", onPress: props.onNewTab },
+    ];
+  }
+
   return props.mode === "start"
     ? [
         { id: "bar-archive", label: t("bar.archive"), icon: "archive", onPress: props.onArchive },

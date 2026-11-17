@@ -5,7 +5,7 @@ import Animated from "react-native-reanimated";
 
 import { useT } from "@/i18n";
 
-import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BarButton, type BarSpace, type BrowserBarProps } from "./BrowserBar.types";
 import { LoadProgress } from "./LoadProgress";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
 import { SwipeUp } from "./SwipeUp";
@@ -71,6 +71,16 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const t = useT();
   const [left, search, right] = barButtons(props, t);
 
+  if (props.mode === "tabs") {
+    return (
+      <View className="flex-row items-center justify-center gap-3">
+        <BarPressable button={left} icon={left.icon} />
+        <SpacesCapsule spaces={props.spaces} onSelect={props.onSelectSpace} newSpace={search} switchLabel={(name) => t("tabs.switchSpace", { name })} />
+        <BarPressable button={right} icon={right.icon} />
+      </View>
+    );
+  }
+
   return (
     <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
@@ -90,6 +100,54 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
         <LoadProgress progress={barProgress(props)} loading={barLoading(props)} />
       </Animated.View>
       <BarPressable button={right} icon={right.icon} privately={props.privately} />
+    </View>
+  );
+}
+
+/** The tab view's spaces between archive and new tab: a dot in each space's colour, the one showing larger. */
+function SpacesCapsule({
+  spaces,
+  onSelect,
+  newSpace,
+  switchLabel,
+}: {
+  spaces: readonly BarSpace[];
+  onSelect: (id: string) => void;
+  newSpace: BarButton;
+  switchLabel: (name: string) => string;
+}): JSX.Element {
+  const muted = useThemeColor("muted");
+
+  return (
+    <View className="h-[52px] flex-row items-center rounded-full border border-black/10 bg-white/90 px-2 dark:border-white/10 dark:bg-neutral-900/90">
+      {spaces.map((entry) => (
+        <Pressable
+          key={entry.id}
+          testID={`bar-space-${entry.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={switchLabel(entry.label)}
+          accessibilityState={{ selected: entry.active }}
+          onPress={() => onSelect(entry.id)}
+          className="h-11 w-9 items-center justify-center"
+        >
+          <View
+            style={
+              entry.active
+                ? { width: 18, height: 18, borderRadius: 6, backgroundColor: entry.color }
+                : { width: 9, height: 9, borderRadius: 4.5, backgroundColor: entry.color, opacity: 0.75 }
+            }
+          />
+        </Pressable>
+      ))}
+      <Pressable
+        testID={newSpace.id}
+        accessibilityRole="button"
+        accessibilityLabel={newSpace.label}
+        onPress={newSpace.onPress}
+        className="h-11 w-9 items-center justify-center"
+      >
+        <MaterialSymbol name="add" color={muted} size={18} />
+      </Pressable>
     </View>
   );
 }

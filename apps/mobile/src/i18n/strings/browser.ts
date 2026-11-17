@@ -36,6 +36,8 @@ export const browser = {
   "tabs.closeLabel": "Close {title}",
   "tabs.openLabel": "Open {title}",
   "tabs.swipeToClose": "Swipe up to close",
+  "tabs.clear": "Clear",
+  "tabs.switchSpace": "Switch to {name}",
 
   // Mini player (MiniPlayer.tsx).
   "player.playing": "playing",

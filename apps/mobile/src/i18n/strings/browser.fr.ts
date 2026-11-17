@@ -35,6 +35,8 @@ export const browserFr: BrowserStrings = {
   "tabs.closeLabel": "Fermer {title}",
   "tabs.openLabel": "Ouvrir {title}",
   "tabs.swipeToClose": "Glissez vers le haut pour fermer",
+  "tabs.clear": "Effacer",
+  "tabs.switchSpace": "Passer à {name}",
 
   // Mini player.
   "player.playing": "en lecture",

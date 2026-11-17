@@ -35,6 +35,8 @@ export const browserJa: BrowserStrings = {
   "tabs.closeLabel": "{title}を閉じる",
   "tabs.openLabel": "{title}を開く",
   "tabs.swipeToClose": "上にスワイプして閉じる",
+  "tabs.clear": "クリア",
+  "tabs.switchSpace": "{name}に切り替え",
 
   // Mini player.
   "player.playing": "再生中",

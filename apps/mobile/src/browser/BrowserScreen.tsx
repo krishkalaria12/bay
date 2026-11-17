@@ -39,6 +39,7 @@ import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { BehindSheets } from "@/panels/BehindSheets";
+import { spaceName } from "@/store/spaceName";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { takeFieldRequest } from "@/onboarding/handoff";
 import { youtubeSelectors } from "@/pagescripts/youtube";
@@ -56,7 +57,7 @@ import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
 import { ON_PHOTO_MUTED, StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
-import { TabSwitcher } from "./TabSwitcher";
+import { SPACE_COLORS, TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
 import { TabZoom, type Frame } from "./TabZoom";
 import { Tip, TipRing } from "./Tip";
@@ -909,6 +910,18 @@ export function BrowserScreen(): JSX.Element {
     return () => clearTimeout(timer);
   }, [tip, tipSeen]);
 
+  // The tab view's space, from its bar or a sideways swipe: the folder filter belongs to the space it was set in.
+  function switchSpace(id: string): void {
+    if (id === data.activeSpaceId) return;
+    setActiveFolderId(null);
+    selectSpace(id);
+  }
+
+  function openSettings(): void {
+    setPanel(null);
+    setSettingsOpen(true);
+  }
+
   const player = media.player;
   // A locked private tab or an error page shows Bay's own screen there, not the page.
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
@@ -1069,15 +1082,16 @@ export function BrowserScreen(): JSX.Element {
               privateLocked={locked}
               spaces={data.spaces}
               activeSpaceId={data.activeSpaceId}
-              onSelectSpace={(id) => {
-                if (id !== data.activeSpaceId) {
-                  setActiveFolderId(null);
-                  selectSpace(id);
-                }
-              }}
+              onSelectSpace={switchSpace}
               folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
               activeFolderId={activeFolderId}
               onSelectFolder={setActiveFolderId}
+              pins={data.pinnedSites}
+              onOpenSite={(url) => {
+                setOverlay("none");
+                openTab(url);
+              }}
+              onSettings={openSettings}
             />
           </View>
         ) : null}
@@ -1194,17 +1208,26 @@ export function BrowserScreen(): JSX.Element {
                   </TabSwipe>
                 </View>
               </GestureDetector>
-            ) : (
+            ) : overlay === "tabs" ? (
               <BrowserBar
-                mode="start"
-                newTab={overlay === "tabs"}
+                mode="tabs"
                 onArchive={() => setPanel("archive")}
-                onSearch={() => search(overlay === "tabs")}
-                onSettings={() => {
-                  setPanel(null);
-                  setSettingsOpen(true);
+                onNewTab={() => search(true)}
+                spaces={data.spaces.map((entry) => ({
+                  id: entry.id,
+                  label: spaceName(entry, t),
+                  color: SPACE_COLORS[entry.color],
+                  active: entry.id === data.activeSpaceId,
+                }))}
+                onSelectSpace={switchSpace}
+                onNewSpace={() => {
+                  tick();
+                  setActiveFolderId(null);
+                  createSpace();
                 }}
               />
+            ) : (
+              <BrowserBar mode="start" onArchive={() => setPanel("archive")} onSearch={() => search(false)} onSettings={openSettings} />
             )}
           </BehindSheets>
         </Animated.View>
