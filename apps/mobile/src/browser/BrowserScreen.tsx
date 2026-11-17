@@ -33,6 +33,7 @@ import { useCommand } from "@/effect/react";
 import { intlTag, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { learnAppIcon } from "@/settings/appIcons";
+import { reportBlocked, reportProgress } from "@/store/pageSignals";
 import { SettingsScreen } from "@/settings/SettingsScreen";
 import type { PageBlocking } from "@/panels/PageMenu";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
@@ -238,8 +239,6 @@ export function BrowserScreen(): JSX.Element {
   const lastTab = useRef<string | null>(null);
   // A card in the switcher, growing into the page it stands for (A1).
   const [zoom, setZoom] = useState<{ tab: BrowserTab; frame: Frame } | null>(null);
-  // What the blocker stopped on each tab's page (C2), where the engine counts it.
-  const [blockedCounts, setBlockedCounts] = useState<Record<string, number>>({});
   // The tab a swipe back past its first page archived (C6), and the tab that showed instead: forward from that one,
   // straight away, brings it back.
   const swipeArchived = useRef<{ id: string; shown: string } | null>(null);
@@ -334,11 +333,12 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function onNavigation(tabId: string, state: NavigationState): void {
-    // Hidden tabs report progress too; the screen only renders when something it shows changes.
+    // Progress goes to the capsule's line alone (pageSignals); the screen only renders when something it shows changes.
+    reportProgress(tabId, state.progress);
     setNavigation((previous) => {
       const before = previous[tabId];
 
-      return before && sameNavigation(before, state, tabId !== active.id) ? previous : { ...previous, [tabId]: state };
+      return before && sameNavigation(before, state, true) ? previous : { ...previous, [tabId]: state };
     });
     const started = state.isLoading && !navigation[tabId]?.isLoading;
 
@@ -988,7 +988,7 @@ export function BrowserScreen(): JSX.Element {
                   swipeToNavigate={siteSettingFor(data.preferences.siteSettings, tab.url).swipe ?? data.preferences.swipeToNavigate}
                   appLinks={data.preferences.appLinks}
                   onSwipeNavigation={(action) => swipePastHistory(id, action)}
-                  onBlockedCount={(count) => setBlockedCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count }))}
+                  onBlockedCount={(count) => reportBlocked(id, count)}
                   pullToRefresh={data.preferences.pullToRefresh}
                   pageColor={pageColors[id] ?? null}
                   onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
@@ -1219,7 +1219,7 @@ export function BrowserScreen(): JSX.Element {
                         insecure={active.url.startsWith("http:")}
                         privately={Boolean(active.private)}
                         // The capsule's edge carries the load's progress (A6).
-                        progress={page.progress}
+                        progressTab={active.id}
                         loading={page.isLoading}
                         onTabs={() => showTabs()}
                         onTabsLongPress={() => {
@@ -1296,7 +1296,7 @@ export function BrowserScreen(): JSX.Element {
         isPinned={essentials.some((site) => site.url === active.url)}
         isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
-        blockedCount={blockedCounts[active.id] ?? null}
+        tabId={active.id}
         onRestore={restoreOriginal}
         zoom={siteSetting.textSize ?? data.preferences.textSize}
         onZoom={(textSize) => changeSiteSetting({ textSize: textSize === data.preferences.textSize ? null : textSize })}

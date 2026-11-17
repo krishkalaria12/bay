@@ -4,14 +4,16 @@ import { StyleSheet } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { usePageSignals } from "@/store/pageSignals";
+
 import { SETTLE, useReducedMotion } from "./motion";
 
 /** How far in from the capsule's ends the line sits, so it stays on the pill's curve. */
 const INSET = 24;
 
 export interface LoadProgressProps {
-  /** How far the page has loaded, from 0 to 1. */
-  progress: number;
+  /** The tab whose load the line follows; it reads how far the page has got itself, so the screen doesn't render. */
+  tabId: string | null;
   /** Whether the page is still loading. */
   loading: boolean;
 }
@@ -19,8 +21,9 @@ export interface LoadProgressProps {
 /**
  * The thin line along the capsule's edge (A6): it fills as the page loads and fades away once the page is there.
  */
-export function LoadProgress({ progress, loading }: LoadProgressProps): JSX.Element | null {
+export function LoadProgress({ tabId, loading }: LoadProgressProps): JSX.Element | null {
   const accent = useThemeColor("accent");
+  const progress = usePageSignals((state) => (tabId === null ? 0 : (state.progress[tabId] ?? 0)));
   const filled = useSharedValue(0);
   const shown = useSharedValue(0);
   // The line stays on the screen until its fade is over, so it never blinks out.

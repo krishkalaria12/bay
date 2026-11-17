@@ -11,6 +11,7 @@ import { iconSize, radius, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
+import { usePageSignals } from "@/store/pageSignals";
 import { ActionRow, Group, PanelSheet, SheetIconButton } from "./PanelSheet";
 import { quietWhileClosed } from "./quietWhileClosed";
 
@@ -28,8 +29,8 @@ export interface PageMenuProps {
   isPinned: boolean;
   isBookmarked: boolean;
   blocking: PageBlocking;
-  /** What the blocker stopped on this page, when the engine counts it (C2); null where it can't. */
-  blockedCount: number | null;
+  /** The tab the page is in, whose blocked count the menu shows as it changes (C2). */
+  tabId: string;
   onToggleBlocking: () => void;
   /** Shows this page without blocking until the tab leaves the site (C2). */
   onRestore: () => void;
@@ -300,7 +301,7 @@ function PageMenuSheet(props: PageMenuProps): JSX.Element {
       {props.blocking === "off" ? null : (
         <BlockingCard
           blocking={props.blocking}
-          blockedCount={props.blockedCount}
+          tabId={props.tabId}
           onToggle={props.onToggleBlocking}
           onRestore={act(props.onRestore)}
           foreground={foreground}
@@ -355,18 +356,20 @@ function ZoomRow({ zoom, onZoom }: { zoom: number; onZoom: (zoom: number) => voi
  */
 function BlockingCard({
   blocking,
-  blockedCount,
+  tabId,
   onToggle,
   onRestore,
   foreground,
 }: {
   blocking: Exclude<PageBlocking, "off">;
-  blockedCount: number | null;
+  tabId: string;
   onToggle: () => void;
   onRestore: () => void;
   foreground: string;
 }): JSX.Element {
   const t = useT();
+  // What the blocker stopped on this page, when the engine counts it; read here, so only this card follows it.
+  const blockedCount = usePageSignals((state) => state.blocked[tabId] ?? null);
   const counted = blocking === "on" && blockedCount !== null && blockedCount > 0;
 
   return (
