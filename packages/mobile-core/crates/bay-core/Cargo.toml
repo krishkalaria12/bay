@@ -14,3 +14,6 @@ crate-type = ["lib", "staticlib", "cdylib"]
 uniffi.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+indexmap.workspace = true
+url.workspace = true

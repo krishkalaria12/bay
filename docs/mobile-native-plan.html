@@ -619,13 +619,14 @@
               <tr>
                 <th><span class="id">D4</span>Persistence</th>
                 <td>
-                  SQLite inside the core (<code>rusqlite</code>, bundled), one database per install, with tables for tabs, spaces, pins, folders, history,
-                  bookmarks, site settings and preferences. On first launch it imports <code>browser.json</code> and <code>sync/state.json</code> (see
-                  <a href="#migration">§9</a>).
+                  <strong>Revised in N1:</strong> the core reads and writes the Expo app's own document, <code>browser.json</code> (version 2), with the same
+                  repair rules, written atomically after the store is still for a moment. SQLite (<code>rusqlite</code>, bundled) comes later, if history and
+                  bookmark search or the save cost ask for it, with a one-time import from the document.
                 </td>
                 <td>
-                  Today the whole JSON file is rewritten after each change. Per-space history (1,000 entries) and bookmark trees fit SQLite better, and SQL
-                  gives search and paging for free. The <code>expo-sqlite</code> registration bug no longer applies.
+                  The first native launch reads the file the Expo app left, with nothing to migrate, and the 446 recorded fixtures prove the port reads and
+                  changes it exactly as the TS store does. In Rust, serializing a few thousand entries off the main thread takes milliseconds, which takes away
+                  the main reason for SQLite.
                 </td>
               </tr>
               <tr>
@@ -1319,12 +1320,13 @@ impl BrowserStore {
                 and their parsers.
               </li>
               <li>
-                SQLite schema plus migrations. Importer from <code>browser.json</code> (uses <code>parseBrowserData</code>'s rules, so a bad file falls back as
-                today).
+                Persistence: the core reads and writes <code>browser.json</code> (version 2) with <code>parseBrowserData</code>'s rules, so a bad file falls
+                back as today (D4).
               </li>
               <li>
-                Differential fixtures: a Node script runs today's reducer over the cases in <code>tests/model.test.ts</code> and writes
-                <code>{start, actions, end}</code> JSON. The Rust tests must reproduce every <code>end</code>.
+                Differential fixtures (done): <code>scripts/record-store-fixtures.mjs</code> wraps the TS model with a Node load hook while the Expo app's whole
+                test suite and <code>scripts/store-scenarios.test.ts</code> run, and writes each distinct call to <code>fixtures/store.jsonl</code>.
+                <code>tests/store_fixtures.rs</code> replays all 446 against the Rust port: same next state, same no-op, same repairs.
               </li>
             </ul>
             <h4>Done when</h4>
@@ -1589,8 +1591,8 @@ impl BrowserStore {
         <p>The native apps keep the same bundle ID and application ID, so they install as an update. On first launch:</p>
         <ol>
           <li>
-            <strong>Browser state:</strong> if <code>browser.json</code> exists in the app's document directory (expo-file-system <code>Paths.document</code>),
-            import it into SQLite and rename it to <code>browser.json.migrated</code>. Delete it one release later.
+            <strong>Browser state:</strong> the core opens <code>browser.json</code> in the app's document directory (expo-file-system
+            <code>Paths.document</code>) as the Expo app left it, and keeps writing the same version-2 document (D4).
           </li>
           <li>
             <strong>Sync state:</strong> import <code>sync/state.json</code> the same way. The sync key is read from where <code>expo-secure-store</code> put
@@ -1701,7 +1703,17 @@ impl BrowserStore {
           </ul>
         </div>
         <h3>Known gaps</h3>
-        <p class="muted">None yet. Add parity gaps here in the commit that finds them.</p>
+        <ul>
+          <li>
+            <strong>Half an emoji.</strong> Where JavaScript's <code>slice</code> cuts a name or emoji between the two halves of a surrogate pair, the TS store
+            keeps the first half. Rust strings can't hold one, so <code>js::slice</code> leaves the pair out. This only happens for a name that reaches its
+            limit on an emoji. The recorder leaves those calls out.
+          </li>
+          <li>
+            <strong>Fractional numbers.</strong> Timestamps, visit counts and byte counts are integers in the core. A saved fractional value (which neither app
+            writes) is truncated, where the TS store kept it.
+          </li>
+        </ul>
       </section>
 
       <section id="sources">
