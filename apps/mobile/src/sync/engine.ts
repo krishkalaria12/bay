@@ -8,7 +8,7 @@ import { emptyScope, syncScope, visible, type Adapter, type ScopeState, type Tra
 import * as v from "valibot";
 
 import type { BrowserAction } from "../store/model.ts";
-import type { BrowserData } from "../store/types.ts";
+import type { BrowserData, BrowserSpace } from "../store/types.ts";
 import {
   bookmarksAdapter,
   deviceAdapter,
@@ -17,6 +17,10 @@ import {
   DeviceTabsSchema,
   HISTORY_WINDOW_MS,
   historyAdapter,
+  phoneColor,
+  pinsAdapter,
+  profilesAdapter,
+  remoteProfiles,
   type DeviceTabs,
 } from "./adapters.ts";
 
@@ -37,6 +41,12 @@ export interface SyncDoc {
   clock: string | null;
   /** The computer's default profile's sync id, once its record has come: its scope is `p:<profile>`. */
   profile: string | null;
+  /**
+   * Each of the phone's spaces and the computer's space it is (space id → the profile's sync id), as the computer
+   * links its own: the first space is the computer's default one, the computer's others come here as spaces, and a
+   * space made here gets a profile of its own.
+   */
+  spaces?: Record<string, string>;
   scopes: Record<string, ScopeState>;
   types: SyncTypes;
   lastSyncedAt: number | null;
@@ -68,6 +78,8 @@ export interface CycleDeps {
   historyLimit: number;
   /** Saves the doc; it runs before each write, so a crash never reuses a batch's number. */
   save: (doc: SyncDoc) => Promise<void>;
+  /** A new profile's sync id, for a space made on the phone. */
+  newSyncId: () => string;
   now?: () => number;
 }
 
@@ -75,17 +87,38 @@ export interface CycleDeps {
 export type CycleResult = { profile: boolean };
 
 function appAdapters(doc: SyncDoc, deps: CycleDeps, retired: boolean): Adapter[] {
-  return [retired ? retiredAdapter("dev:", `dev:${doc.deviceId}`) : deviceAdapter(doc.deviceId, deps.deviceName)];
+  if (retired) return [retiredAdapter("dev:", `dev:${doc.deviceId}`)];
+
+  return [
+    deviceAdapter(doc.deviceId, deps.deviceName),
+    profilesAdapter({
+      links: () => doc.spaces ?? {},
+      spaces: () => deps.data().spaces,
+      change: (changed) => deps.dispatch({ type: "sync-spaces", added: [], changed }),
+    }),
+  ];
 }
 
-function profileAdapters(doc: SyncDoc, deps: CycleDeps, retired: boolean): Adapter[] {
+/** A space's scope: its open tabs and pins; the default profile's also has the bookmarks and history. */
+function spaceAdapters(doc: SyncDoc, deps: CycleDeps, spaceId: string, main: boolean, retired: boolean): Adapter[] {
   if (retired) return [retiredAdapter("tabs:", `tabs:${doc.deviceId}`)];
 
   const adapters: Adapter[] = [];
   const data = deps.data;
 
-  if (doc.types.tabs) adapters.push(deviceTabsAdapter(doc.deviceId, deps.deviceName, () => data().tabs));
-  else adapters.push(retiredAdapter("tabs:", `tabs:${doc.deviceId}`));
+  if (doc.types.tabs) {
+    adapters.push(
+      deviceTabsAdapter(doc.deviceId, deps.deviceName, () => data().tabs.filter((tab) => tab.spaceId === spaceId)),
+      pinsAdapter({
+        ready: deps.ready,
+        pins: () => data().pinnedSites.filter((site) => site.spaceId === spaceId),
+        folders: () => data().folders.filter((folder) => folder.spaceId === spaceId),
+        replace: (pins, folders) => deps.dispatch({ type: "sync-space-pins", spaceId, pins, folders }),
+      }),
+    );
+  } else adapters.push(retiredAdapter("tabs:", `tabs:${doc.deviceId}`));
+
+  if (!main) return adapters;
 
   if (doc.types.bookmarks) {
     adapters.push(
@@ -143,15 +176,17 @@ export async function runCycle(doc: SyncDoc, deps: CycleDeps, retired = false): 
 
   doc.profile ??= defaultProfile(app);
 
-  if (doc.profile) {
-    const scope = `p:${doc.profile}`;
+  if (doc.profile && !retired) linkSpaces(doc, deps, app);
+
+  for (const [spaceId, syncId] of spaceScopes(doc, deps)) {
+    const scope = `p:${syncId}`;
     const state = (doc.scopes[scope] ??= { ...emptyScope(), awaitRemote: true });
 
     await syncScope({
       scope,
       state,
       transport: deps.transport,
-      adapters: profileAdapters(doc, deps, retired),
+      adapters: spaceAdapters(doc, deps, spaceId, syncId === doc.profile, retired),
       clock,
       device: doc.deviceId,
       now,
@@ -164,6 +199,52 @@ export async function runCycle(doc: SyncDoc, deps: CycleDeps, retired = false): 
   await deps.save(doc);
 
   return { profile: doc.profile !== null };
+}
+
+/**
+ * Links the phone's spaces to the computer's: the first to its default space, its others by name or as new spaces
+ * here, and each space made here to a profile of its own, which the computer then offers to add.
+ */
+function linkSpaces(doc: SyncDoc, deps: CycleDeps, app: ScopeState): void {
+  if (!deps.ready()) return;
+
+  const links = (doc.spaces ??= {});
+  const spaces = deps.data().spaces;
+
+  for (const id of Object.keys(links)) if (!spaces.some((space) => space.id === id)) delete links[id];
+
+  const linked = new Set(Object.values(links));
+
+  if (doc.profile && !linked.has(doc.profile) && spaces[0] && !links[spaces[0].id]) {
+    links[spaces[0].id] = doc.profile;
+    linked.add(doc.profile);
+  }
+
+  const added: BrowserSpace[] = [];
+
+  for (const [syncId, record] of remoteProfiles(visible(app, "prof:"))) {
+    if (linked.has(syncId)) continue;
+
+    const named = spaces.find((space) => !links[space.id] && space.name === record.n);
+    const id = named?.id ?? `sync-${syncId}`;
+
+    if (!named) added.push({ id, name: record.n, color: phoneColor(record.c), icon: record.i });
+    links[id] = syncId;
+    linked.add(syncId);
+  }
+
+  if (added.length) deps.dispatch({ type: "sync-spaces", added, changed: [] });
+
+  for (const space of deps.data().spaces) if (!links[space.id]) links[space.id] = deps.newSyncId();
+}
+
+/** The scopes a cycle syncs: each linked space's, and the default profile's before any space is linked to it. */
+function spaceScopes(doc: SyncDoc, deps: CycleDeps): [string, string][] {
+  const pairs = Object.entries(doc.spaces ?? {});
+
+  if (doc.profile && !pairs.some(([, syncId]) => syncId === doc.profile)) pairs.unshift([deps.data().spaces[0]?.id ?? "", doc.profile]);
+
+  return pairs;
 }
 
 /** The computer's default profile's sync id, from its record in the app's scope. */

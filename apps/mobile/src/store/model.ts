@@ -226,6 +226,8 @@ export type BrowserAction =
   | { type: "move-tab"; id: string; spaceId: string; folderId: string | null }
   | { type: "pin-site"; tabId: string; pinId: string; kind: PinKind; folderId?: string | null }
   | { type: "move-pin"; id: string; kind: PinKind; folderId: string | null }
+  | { type: "sync-space-pins"; spaceId: string; pins: PinnedSite[]; folders: BrowserFolder[] }
+  | { type: "sync-spaces"; added: BrowserSpace[]; changed: { id: string; name: string; color: SpaceColor; icon: string | null }[] }
   | { type: "remove-pin"; id: string }
   | { type: "add-pin"; site: PinnedSite; index: number }
   | { type: "remove-history"; url: string }
@@ -604,6 +606,43 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       };
 
       return { ...data, pinnedSites: [...data.pinnedSites.filter((entry) => !same(entry)), site] };
+    }
+
+    case "sync-space-pins": {
+      // The chain's pins for a space take the place of the phone's: they were made from the phone's last time round.
+      if (!data.spaces.some((space) => space.id === action.spaceId)) return data;
+      const favicons = new Map(data.pinnedSites.map((site) => [site.url, site.favicon]));
+      const folders = action.folders.map((folder) => ({ ...folder, spaceId: action.spaceId }));
+      const folderIds = new Set(folders.map((folder) => folder.id));
+
+      const pins = action.pins.map((site) => ({
+        ...site,
+        spaceId: action.spaceId,
+        favicon: site.favicon ?? favicons.get(site.url) ?? null,
+        folderId: site.kind === "row" && site.folderId && folderIds.has(site.folderId) ? site.folderId : null,
+      }));
+
+      return {
+        ...data,
+        pinnedSites: [...data.pinnedSites.filter((site) => site.spaceId !== action.spaceId), ...pins],
+        folders: [...data.folders.filter((folder) => folder.spaceId !== action.spaceId), ...folders],
+      };
+    }
+
+    case "sync-spaces": {
+      // Spaces the computer has come in; ones renamed or given an emoji there change here. The space showing stays.
+      const known = new Set(data.spaces.map((space) => space.id));
+      const changed = new Map(action.changed.map((entry) => [entry.id, entry]));
+
+      const spaces = data.spaces.map((space) => {
+        const change = changed.get(space.id);
+
+        return change
+          ? { ...space, name: change.name.trim().slice(0, 40) || space.name, color: change.color, icon: change.icon?.slice(0, SPACE_ICON_LENGTH) || null }
+          : space;
+      });
+
+      return { ...data, spaces: [...spaces, ...action.added.filter((space) => !known.has(space.id))] };
     }
 
     case "move-pin": {

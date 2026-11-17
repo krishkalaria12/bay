@@ -45,6 +45,7 @@ const DocSchema = v.object({
   deviceId: v.string(),
   clock: v.nullable(v.string()),
   profile: v.nullable(v.string()),
+  spaces: v.optional(v.record(v.string(), v.string())),
   scopes: v.record(v.string(), ScopeSchema),
   types: v.object({ tabs: v.boolean(), bookmarks: v.boolean(), history: v.boolean() }),
   lastSyncedAt: v.nullable(v.number()),
@@ -145,6 +146,7 @@ export class PhoneSync extends Context.Service<
                   barTitle: platform.barTitle,
                   historyLimit: HISTORY_LIMIT,
                   save: (next) => Effect.runPromise(Effect.orDie(save(next))),
+                  newSyncId: () => base32(platform.random(16)),
                 }),
               catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
             }).pipe(
@@ -281,6 +283,7 @@ export class PhoneSync extends Context.Service<
                     barTitle: platform.barTitle,
                     historyLimit: HISTORY_LIMIT,
                     save: async () => undefined,
+                    newSyncId: () => base32(platform.random(16)),
                   },
                   true,
                 ),

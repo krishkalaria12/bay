@@ -7,7 +7,7 @@ import type { Adapter } from "@bay/sync/src/scope.ts";
 import * as v from "valibot";
 
 import { BOOKMARK_LIMIT, BOOKMARKS_ROOT } from "../store/bookmarks.ts";
-import type { Bookmarks, BrowserTab, HistoryEntry } from "../store/types.ts";
+import type { Bookmarks, BrowserFolder, BrowserSpace, BrowserTab, HistoryEntry, PinnedSite, SpaceColor } from "../store/types.ts";
 
 /** How far back history syncs: the computer's HISTORY_WINDOW_MS. */
 export const HISTORY_WINDOW_MS = 90 * 86_400_000;
@@ -341,6 +341,239 @@ export function historyAdapter({
       }
 
       if (change.entries.length || change.removed.length) apply(change);
+    },
+  };
+}
+
+// MARK: Spaces and pins
+
+/** A space as the computer lists it under `prof:` in the app's scope (its ProfileRecord): name, colour, emoji. */
+const ProfileRecordSchema = v.looseObject({
+  n: v.string(),
+  c: v.string(),
+  i: v.nullable(v.string()),
+  d: v.optional(v.literal(true)),
+});
+
+export type ProfileRecord = v.InferOutput<typeof ProfileRecordSchema>;
+
+/** The computer's space colours as the phone's six, and back: a colour the phone doesn't change stays the computer's. */
+const FROM_DESKTOP = new Map<string, SpaceColor>([
+  ["plum", "violet"],
+  ["purple", "violet"],
+  ["blue", "blue"],
+  ["pink", "red"],
+  ["red", "red"],
+  ["orange", "orange"],
+  ["yellow", "orange"],
+  ["green", "green"],
+  ["neutral", "gray"],
+]);
+
+const TO_DESKTOP: Record<SpaceColor, string> = { gray: "neutral", blue: "blue", green: "green", orange: "orange", red: "red", violet: "purple" };
+
+export const phoneColor = (color: string): SpaceColor => FROM_DESKTOP.get(color) ?? "blue";
+
+/** The computer's profiles, as the app's scope lists them: each one's sync id and record. */
+export function remoteProfiles(records: Iterable<[string, JsonValue]>): [string, ProfileRecord][] {
+  return [...records].flatMap<[string, ProfileRecord]>(([key, value]) => {
+    const record = read(ProfileRecordSchema, value);
+
+    return record && key.startsWith("prof:") ? [[key.slice(5), record]] : [];
+  });
+}
+
+/**
+ * The phone's spaces linked to the computer's (`links`, space id → sync id), under `prof:` in the app's scope. A space
+ * renamed or given an emoji on either side changes on the other; the computer's colour is kept unless it changed here.
+ */
+export function profilesAdapter({
+  links,
+  spaces,
+  change,
+}: {
+  links: () => Record<string, string>;
+  spaces: () => readonly BrowserSpace[];
+  change: (changed: { id: string; name: string; color: SpaceColor; icon: string | null }[]) => void;
+}): Adapter {
+  const linked = () =>
+    Object.entries(links()).flatMap(([id, syncId]) =>
+      spaces()
+        .filter((space) => space.id === id)
+        .map((space) => [space, syncId] as const),
+    );
+
+  return {
+    prefix: "prof:",
+    extract: (base) => {
+      const values = new Map<string, JsonValue>();
+
+      for (const [space, syncId] of linked()) {
+        const known = read(ProfileRecordSchema, base(`prof:${syncId}`));
+        const color = known && phoneColor(known.c) === space.color ? known.c : TO_DESKTOP[space.color];
+
+        values.set(`prof:${syncId}`, { ...known, n: space.name, c: color, i: space.icon ?? null });
+      }
+
+      const mine = new Set(values.keys());
+
+      return { values, ignore: (key) => !mine.has(key) };
+    },
+    apply: (visible, changed) => {
+      const updates = linked().flatMap(([space, syncId]) => {
+        const record = read(ProfileRecordSchema, visible.get(`prof:${syncId}`));
+
+        return record && changed.has(`prof:${syncId}`) ? [{ id: space.id, name: record.n, color: phoneColor(record.c), icon: record.i }] : [];
+      });
+
+      if (updates.length) change(updates);
+    },
+  };
+}
+
+/** A pinned page as the computer writes it (its PinValue): `g` its folder, `r` a pinned row, `o` the rows' order. */
+const PinSchema = v.looseObject({
+  g: v.nullable(v.string()),
+  u: v.string(),
+  t: v.nullable(v.string()),
+  i: v.nullable(v.string()),
+  ti: v.string(),
+  pos: v.string(),
+  r: v.optional(v.literal(true)),
+  o: v.optional(v.string()),
+});
+
+/** A pinned page's record without its pinned-row marks, which the phone writes afresh. */
+function withoutRow({ r: _row, o: _order, ...kept }: v.InferOutput<typeof PinSchema>) {
+  return kept;
+}
+
+/** A pinned folder as the computer writes it (its PinGroupValue); `f` a Pinned folder, else a pinned tab group. */
+const PinGroupSchema = v.looseObject({
+  n: v.string(),
+  i: v.nullable(v.string()),
+  c: v.nullable(v.string()),
+  pos: v.string(),
+  f: v.optional(v.literal(true)),
+});
+
+/**
+ * A space's Essentials, pinned rows and Pinned folders, under `pin:` in the space's scope, as the computer's sidebar
+ * keeps them (pinnedAdapter): `pin:t:<id>` a pinned page, `pin:g:<id>` a folder. What the computer keeps that the
+ * phone doesn't show (a custom title or icon, a folder's colour and nesting) is carried over as it was.
+ */
+export function pinsAdapter({
+  ready,
+  pins,
+  folders,
+  replace,
+}: {
+  ready: () => boolean;
+  pins: () => readonly PinnedSite[];
+  folders: () => readonly BrowserFolder[];
+  replace: (pins: PinnedSite[], folders: BrowserFolder[]) => void;
+}): Adapter {
+  const foldersHere = folders;
+
+  return {
+    prefix: "pin:",
+    extract: (base) => {
+      if (!ready()) return null;
+
+      const values = new Map<string, JsonValue>();
+      const pinKnown = (id: string) => read(PinSchema, base(`pin:t:${id}`));
+      const all = pins();
+      const rows = all.filter((site) => site.kind === "row");
+      const rowOrder = assignPositions(rows.map((site) => pinKnown(site.id)?.o));
+      const rowPosition = new Map(rows.map((site, at) => [site.id, rowOrder[at]!]));
+
+      const place = (list: readonly PinnedSite[], group: string | null) => {
+        const positions = assignPositions(list.map((site) => ((pinKnown(site.id)?.g ?? null) === group ? pinKnown(site.id)?.pos : undefined)));
+
+        list.forEach((site, at) => {
+          const known = pinKnown(site.id);
+
+          const value = {
+            ...(known && withoutRow(known)),
+            g: group,
+            u: site.url,
+            t: known?.t ?? null,
+            i: known?.i ?? null,
+            ti: site.title,
+            pos: positions[at]!,
+          };
+
+          values.set(`pin:t:${site.id}`, site.kind === "row" ? { ...value, r: true, o: rowPosition.get(site.id)! } : value);
+        });
+      };
+
+      place(
+        all.filter((site) => site.kind === "essential" || !site.folderId),
+        null,
+      );
+
+      const groups = folders();
+      const groupPositions = assignPositions(groups.map((folder) => read(PinGroupSchema, base(`pin:g:${folder.id}`))?.pos));
+
+      groups.forEach((folder, at) => {
+        const known = read(PinGroupSchema, base(`pin:g:${folder.id}`));
+
+        // A folder made here is a Pinned folder; one from the computer keeps what it was.
+        values.set(
+          `pin:g:${folder.id}`,
+          known ? { ...known, n: folder.name, pos: groupPositions[at]! } : { n: folder.name, i: null, c: null, pos: groupPositions[at]!, f: true },
+        );
+        place(
+          rows.filter((site) => site.folderId === folder.id),
+          folder.id,
+        );
+      });
+
+      return { values };
+    },
+    apply: (visible, _changed, base) => {
+      if (!ready()) return false;
+
+      const groups: [string, v.InferOutput<typeof PinGroupSchema>][] = [];
+      const records: [string, v.InferOutput<typeof PinSchema>][] = [];
+
+      for (const [key, value] of visible) {
+        if (key.startsWith("pin:g:")) {
+          const group = read(PinGroupSchema, value);
+
+          if (group) groups.push([key.slice(6), group]);
+        } else if (key.startsWith("pin:t:")) {
+          const pin = read(PinSchema, value);
+
+          if (pin && /^https?:/i.test(pin.u)) records.push([key.slice(6), pin]);
+        }
+      }
+
+      const byPosition = <T extends { pos: string }>(a: [string, T], b: [string, T]) =>
+        a[1].pos < b[1].pos ? -1 : a[1].pos > b[1].pos ? 1 : a[0] < b[0] ? -1 : 1;
+      const groupIds = new Set(groups.map(([id]) => id));
+      const folders = groups.sort(byPosition).map(([id, group]): BrowserFolder => ({ id, spaceId: "", name: group.n }));
+
+      const site = ([id, pin]: [string, v.InferOutput<typeof PinSchema>]): PinnedSite => {
+        const folderId = pin.g && groupIds.has(pin.g) ? pin.g : null;
+
+        return { id, url: pin.u, title: pin.t || pin.ti, favicon: null, spaceId: "", kind: folderId || pin.r ? "row" : "essential", folderId };
+      };
+
+      const sorted = records.sort(byPosition).map(site);
+      // Rows keep the computer's order across the section (`o`); Essentials and a folder's rows their own.
+      const rowOrder = new Map(records.map(([id, pin]) => [id, pin.o ?? pin.pos]));
+      const essentials = sorted.filter((entry) => entry.kind === "essential");
+      const rows = sorted.filter((entry) => entry.kind === "row").sort((a, b) => (rowOrder.get(a.id)! < rowOrder.get(b.id)! ? -1 : 1));
+
+      // Pins and folders made here that the chain hasn't had yet stay: joining merges the phone's into the computer's.
+      const unsent = pins().filter((entry) => base(`pin:t:${entry.id}`) === undefined && !records.some(([id]) => id === entry.id));
+      const unsentFolders = foldersHere().filter((folder) => base(`pin:g:${folder.id}`) === undefined && !groupIds.has(folder.id));
+
+      replace(
+        [...essentials, ...unsent.filter((entry) => entry.kind === "essential"), ...rows, ...unsent.filter((entry) => entry.kind === "row")],
+        [...folders, ...unsentFolders],
+      );
     },
   };
 }

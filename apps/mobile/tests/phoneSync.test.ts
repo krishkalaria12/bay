@@ -58,18 +58,24 @@ function computer(transport: Transport) {
     app: new Map<string, JsonValue>([
       ["dev:mac", { n: "Krish's MacBook" }],
       ["prof:personal", { n: "Personal", c: "blue", i: null, d: true }],
+      ["prof:work", { n: "Work", c: "purple", i: "💼" }],
     ]),
+    "p:work": new Map<string, JsonValue>([["pin:t:gmail", { g: null, u: "https://mail.example/", t: null, i: null, ti: "Mail", pos: "V" }]]),
     "p:personal": new Map<string, JsonValue>([
       ["tabs:mac", { n: "Krish's MacBook", tabs: [{ u: "https://bay.example/", t: "Bay" }] }],
       ["bm:folder-1", { k: "f", p: "bar", t: "Work", a: 1, pos: "V" }],
       ["bm:link-1", { k: "u", p: "folder-1", t: "Docs", u: "https://docs.example/", a: 2, pos: "V" }],
       ["bm:link-2", { k: "u", p: "other", t: "News", u: "https://news.example/", a: 3, pos: "V" }],
       ["h:https://visited.example/", { t: "Visited", n: 3, vt: [NOW - 60_000] }],
+      ["pin:t:essential-1", { g: null, u: "https://tube.example/", t: null, i: null, ti: "Tube", pos: "V" }],
+      ["pin:g:music", { n: "Music", i: null, c: null, pos: "V", f: true }],
+      ["pin:t:row-1", { g: "music", u: "https://songs.example/", t: "Songs", i: null, ti: "Songs page", pos: "V", r: true, o: "V" }],
+      ["pin:t:row-2", { g: null, u: "https://notes.example/", t: null, i: null, ti: "Notes", pos: "X", r: true, o: "X" }],
     ]),
   } satisfies Record<string, Map<string, JsonValue>>;
 
   const sync = async () => {
-    for (const scope of ["app", "p:personal"] as const) {
+    for (const scope of ["app", "p:personal", "p:work"] as const) {
       const values = records[scope];
 
       await syncScope({
@@ -108,10 +114,13 @@ function phone(transport: Transport) {
       barTitle: () => "Bookmarks bar",
       historyLimit: HISTORY_LIMIT,
       save: async () => undefined,
+      newSyncId: () => "phone-space",
       now: () => NOW,
     });
 
-  return { doc, cycle, data: () => data };
+  const pin = async (tabId: string) => void (data = reduceBrowserData(data, { type: "pin-site", tabId, pinId: "phone-pin", kind: "essential" }));
+
+  return { doc, cycle, data: () => data, pin };
 }
 
 test("a phone and a computer sync devices, tabs, bookmarks and history both ways", async () => {
@@ -175,6 +184,7 @@ test("a phone leaving the chain takes its name and tabs with it", async () => {
       barTitle: () => "Bookmarks bar",
       historyLimit: HISTORY_LIMIT,
       save: async () => undefined,
+      newSyncId: () => "phone-space",
       now: () => NOW,
     },
     true,
@@ -183,4 +193,52 @@ test("a phone leaving the chain takes its name and tabs with it", async () => {
 
   assert.equal(mac.seen("app", "dev:").has("dev:phone"), false);
   assert.equal(mac.seen("p:personal", "tabs:").has("tabs:phone"), false);
+});
+
+test("the computer's spaces come as spaces, with their Essentials, pinned rows and folders, and the phone's pins go back", async () => {
+  const transport = chain();
+  const mac = computer(transport);
+  const iphone = phone(transport);
+
+  await mac.sync();
+  await iphone.cycle();
+  await iphone.cycle();
+
+  const work = iphone.data().spaces.find((space) => space.name === "Work");
+
+  // The computer's second space, with its emoji and its colour as the phone's nearest.
+  assert.deepEqual(work && [work.icon, work.color], ["💼", "violet"]);
+  assert.equal(iphone.doc.spaces?.[work!.id], "work");
+
+  const pins = (spaceId: string) =>
+    iphone
+      .data()
+      .pinnedSites.filter((site) => site.spaceId === spaceId)
+      .map((site) => [site.id, site.kind, site.folderId, site.title]);
+
+  assert.deepEqual(pins("personal"), [
+    ["essential-1", "essential", null, "Tube"],
+    ["row-1", "row", "music", "Songs"],
+    ["row-2", "row", null, "Notes"],
+  ]);
+  assert.deepEqual(
+    iphone
+      .data()
+      .folders.filter((folder) => folder.spaceId === "personal")
+      .map((folder) => folder.name),
+    ["Music"],
+  );
+  assert.deepEqual(pins(work!.id), [["gmail", "essential", null, "Mail"]]);
+
+  // The phone pins its own tab as an Essential: the computer reads it as one, in the shape it writes.
+  iphone.data();
+  await iphone.pin("phone-tab");
+  await iphone.cycle();
+  await mac.sync();
+
+  const added = [...mac.seen("p:personal", "pin:t:")].find(([, value]) => (value as { u: string }).u === "https://phone.example/");
+
+  assert.ok(added);
+  assert.equal((added![1] as { g: string | null }).g, null);
+  assert.equal((added![1] as { r?: true }).r, undefined);
 });
