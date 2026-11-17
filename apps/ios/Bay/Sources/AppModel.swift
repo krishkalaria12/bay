@@ -1,4 +1,5 @@
 import BayCore
+import BayEngine
 import Foundation
 import UIKit
 
@@ -37,6 +38,11 @@ final class AppModel: ObservableObject {
     )
     preferences = store.preferences()
     syncView = sync.view()
+    // Downloads keep reporting after their tab closes, so the store hears them here.
+    Engine.start(
+      downloads: { [store] update in _ = store.dispatch(action: .download(update: update, now: Self.now())) },
+      media: { _ in }
+    )
     store.observe(observer: StoreChanges(model: self))
     sync.observe(observer: SyncChanges(model: self))
     refresh()

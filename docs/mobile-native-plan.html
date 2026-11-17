@@ -1382,6 +1382,13 @@ impl BrowserStore {
             <span class="pid">N3</span><span class="ptitle">Engine hosts without Expo</span><span class="pdep">Depends on: N0 · parallel with N1–N2</span>
           </summary>
           <div class="body">
+            <p class="muted">
+              Done so far: iOS hosts the engine without Expo in the <code>BayEngine</code> framework (<code>EngineView</code> with one
+              <code>EngineEvent</code> stream, and <code>Engine</code> for what views share), and the content blocker's C functions come from the core's own
+              library (D16: <code>bay-core</code>'s <code>adblock</code> feature, on for iOS only, so Android's library doesn't grow). The debug screen ("Engine
+              check") browses, runs a page script and blocks with a test list. Left: Android's <code>:engine</code>, then downloads, background media, voice,
+              shortcuts and the share and widget extensions on devices.
+            </p>
             <div class="lanes">
               <div>
                 <p><span class="lang swift">iOS</span></p>

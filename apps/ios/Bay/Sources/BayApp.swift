@@ -39,6 +39,7 @@ struct BayApp: App {
 private struct StoreCheckView: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var model: AppModel
+  @State private var showsEngine = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -69,12 +70,19 @@ private struct StoreCheckView: View {
       if let resolved = model.resolved {
         Text(verbatim: resolved).font(.footnote).accessibilityIdentifier("resolved-link")
       }
+      Button {
+        showsEngine = true
+      } label: {
+        Text(verbatim: "Engine check")
+      }
+      .accessibilityIdentifier("engine-check")
       Text("Core \(BayCore.version()) · \(strings.locale)")
         .font(.footnote)
         .foregroundStyle(.secondary)
         .accessibilityIdentifier("core-version")
     }
     .padding()
+    .fullScreenCover(isPresented: $showsEngine) { EngineCheckView() }
   }
 }
 
