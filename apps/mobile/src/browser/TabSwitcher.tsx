@@ -48,8 +48,8 @@ export interface TabSwitcherProps {
   /** A long press on a tab's card: its pinning choices. */
   onTabMenu: (tab: BrowserTab) => void;
   onSettings: () => void;
-  /** Opens the space's emoji, to change it. */
-  onChangeIcon: () => void;
+  /** Opens the space's editor: its name, emoji, colour, place and deleting it. */
+  onEditSpace: () => void;
 }
 
 /** A space's colour: its glyph, its dot in the bar and the wash at the top of its page. */
@@ -96,7 +96,7 @@ export function TabSwitcher({
   onUnpin: unpinProp,
   onTabMenu: tabMenuProp,
   onSettings,
-  onChangeIcon,
+  onEditSpace,
 }: TabSwitcherProps): JSX.Element {
   // Handed to every card and pinned row: the screen's handlers change with its data (a tab's new picture is new data), and
   // one stable function each keeps the cards that didn't change from rendering again.
@@ -153,18 +153,21 @@ export function TabSwitcher({
         <Animated.View className="flex-1" style={moving}>
           <ScrollView contentContainerStyle={[gutter, { paddingTop: space.sm, paddingBottom: space.xl, gap: space.lg }]} showsVerticalScrollIndicator={false}>
             <View className="flex-row items-center" style={{ gap: space.sm, minHeight: 44 }}>
+              {/* The space's emoji and name open its editor: name, emoji, colour, place, delete. */}
               <PressFeedback
                 testID="tab-switcher-icon"
                 accessibilityRole="button"
-                accessibilityLabel={t("space.icon.change", { name })}
-                onPress={onChangeIcon}
+                accessibilityLabel={t("space.edit.title", { name })}
+                onPress={onEditSpace}
                 hitSlop={6}
+                className="flex-1 flex-row items-center"
+                style={{ gap: space.sm }}
               >
                 <SpaceGlyph color={color} name={name} icon={current?.icon ?? null} size={30} />
+                <Text testID="tab-switcher-space" accessibilityRole="header" numberOfLines={1} variant="title" weight="bold" className="shrink">
+                  {name}
+                </Text>
               </PressFeedback>
-              <Text testID="tab-switcher-space" accessibilityRole="header" numberOfLines={1} variant="title" weight="bold" className="flex-1">
-                {name}
-              </Text>
               <PressFeedback
                 testID="tab-switcher-settings"
                 accessibilityRole="button"

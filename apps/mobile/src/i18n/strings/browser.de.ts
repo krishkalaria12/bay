@@ -37,6 +37,7 @@ export const browserDe: BrowserStrings = {
   "tabs.swipeToClose": "Zum Schließen nach oben wischen",
   "tabs.clear": "Leeren",
   "tabs.switchSpace": "Zu {name} wechseln",
+  "tabs.scrubSpacesHint": "Halten und wischen, um zwischen Spaces zu wechseln",
   "tabs.pinned": "Angeheftet",
   "pin.unpinHint": "Gedrückt halten zum Lösen",
   "pin.essential": "Zu Essentials hinzufügen",

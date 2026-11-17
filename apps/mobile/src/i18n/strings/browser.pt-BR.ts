@@ -37,6 +37,7 @@ export const browserPtBR: BrowserStrings = {
   "tabs.swipeToClose": "Deslize para cima para fechar",
   "tabs.clear": "Limpar",
   "tabs.switchSpace": "Mudar para {name}",
+  "tabs.scrubSpacesHint": "Toque, segure e deslize para trocar de espaço",
   "tabs.pinned": "Fixadas",
   "pin.unpinHint": "Toque e segure para desafixar",
   "pin.essential": "Adicionar aos Essenciais",

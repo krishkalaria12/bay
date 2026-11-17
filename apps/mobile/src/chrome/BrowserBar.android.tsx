@@ -1,6 +1,6 @@
 import { useThemeColor } from "heroui-native";
-import type { JSX } from "react";
-import { Pressable, View } from "react-native";
+import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
+import { Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { useT } from "@/i18n";
@@ -18,6 +18,7 @@ import {
 } from "./BrowserBar.types";
 import { LoadProgress } from "./LoadProgress";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
+import { SpaceScrub } from "./SpaceScrub";
 import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
 import { Text } from "./Text";
@@ -85,7 +86,13 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
     return (
       <View className="flex-row items-center justify-center gap-3">
         <BarPressable button={left} icon={left.icon} />
-        <SpacesCapsule spaces={props.spaces} onSelect={props.onSelectSpace} newSpace={search} switchLabel={(name) => t("tabs.switchSpace", { name })} />
+        <SpacesCapsule
+          spaces={props.spaces}
+          onSelect={props.onSelectSpace}
+          newSpace={search}
+          switchLabel={(name) => t("tabs.switchSpace", { name })}
+          scrubHint={t("tabs.scrubSpacesHint")}
+        />
         <BarPressable button={right} icon={right.icon} />
       </View>
     );
@@ -114,54 +121,87 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   );
 }
 
-/** The tab view's spaces between archive and new tab: each space's emoji or a dot in its colour, the one showing larger. */
+/** Each space's square in the capsule. */
+const SPACE_SLOT = 36;
+
+/**
+ * The tab view's spaces between archive and new tab: each space's emoji or a dot in its colour, the one showing larger.
+ * More spaces than fit scroll inside the capsule, which never grows past the bar, and the one showing scrolls into
+ * view. Holding them and sliding moves between spaces (SpaceScrub).
+ */
 function SpacesCapsule({
   spaces,
   onSelect,
   newSpace,
   switchLabel,
+  scrubHint,
 }: {
   spaces: readonly BarSpace[];
   onSelect: (id: string) => void;
   newSpace: BarButton;
   switchLabel: (name: string) => string;
+  scrubHint: string;
 }): JSX.Element {
   const muted = useThemeColor("muted");
+  const list = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [area, setArea] = useState({ left: 0, width: 1 });
+  const activeIndex = spaces.findIndex((entry) => entry.active);
+
+  useEffect(() => {
+    if (activeIndex >= 0) list.current?.scrollTo({ x: Math.max(0, (activeIndex - 1) * SPACE_SLOT), animated: true });
+  }, [activeIndex]);
 
   return (
-    <View className="h-[52px] flex-row items-center rounded-full border border-black/10 bg-white/90 px-2 dark:border-white/10 dark:bg-neutral-900/90">
-      {spaces.map((entry) => (
+    <SpaceScrub spaces={spaces} area={area} onSelect={onSelect} style={{ flexShrink: 1, minWidth: 0 }}>
+      <View
+        className="h-[52px] shrink flex-row items-center rounded-full border border-black/10 bg-white/90 px-2 dark:border-white/10 dark:bg-neutral-900/90"
+        style={{ minWidth: 0 }}
+      >
+        <ScrollView
+          ref={list}
+          testID="bar-spaces"
+          onLayout={(event) => setArea({ left: event.nativeEvent.layout.x, width: event.nativeEvent.layout.width })}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, flexShrink: 1 }}
+          contentContainerStyle={{ alignItems: "center" }}
+        >
+          {spaces.map((entry) => (
+            <Pressable
+              key={entry.id}
+              testID={`bar-space-${entry.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={switchLabel(entry.label)}
+              accessibilityHint={scrubHint}
+              accessibilityState={{ selected: entry.active }}
+              onPress={() => onSelect(entry.id)}
+              className="h-11 items-center justify-center"
+              style={{ width: SPACE_SLOT }}
+            >
+              {entry.icon ? (
+                <Text style={{ fontSize: entry.active ? 20 : 15, lineHeight: 24, opacity: entry.active ? 1 : 0.55 }}>{entry.icon}</Text>
+              ) : (
+                <View
+                  style={
+                    entry.active
+                      ? { width: 18, height: 18, borderRadius: 6, backgroundColor: entry.color }
+                      : { width: 9, height: 9, borderRadius: 4.5, backgroundColor: entry.color, opacity: 0.75 }
+                  }
+                />
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
         <Pressable
-          key={entry.id}
-          testID={`bar-space-${entry.id}`}
+          testID={newSpace.id}
           accessibilityRole="button"
-          accessibilityLabel={switchLabel(entry.label)}
-          accessibilityState={{ selected: entry.active }}
-          onPress={() => onSelect(entry.id)}
+          accessibilityLabel={newSpace.label}
+          onPress={newSpace.onPress}
           className="h-11 w-9 items-center justify-center"
         >
-          {entry.icon ? (
-            <Text style={{ fontSize: entry.active ? 20 : 15, lineHeight: 24, opacity: entry.active ? 1 : 0.55 }}>{entry.icon}</Text>
-          ) : (
-            <View
-              style={
-                entry.active
-                  ? { width: 18, height: 18, borderRadius: 6, backgroundColor: entry.color }
-                  : { width: 9, height: 9, borderRadius: 4.5, backgroundColor: entry.color, opacity: 0.75 }
-              }
-            />
-          )}
+          <MaterialSymbol name="add" color={muted} size={18} />
         </Pressable>
-      ))}
-      <Pressable
-        testID={newSpace.id}
-        accessibilityRole="button"
-        accessibilityLabel={newSpace.label}
-        onPress={newSpace.onPress}
-        className="h-11 w-9 items-center justify-center"
-      >
-        <MaterialSymbol name="add" color={muted} size={18} />
-      </Pressable>
-    </View>
+      </View>
+    </SpaceScrub>
   );
 }

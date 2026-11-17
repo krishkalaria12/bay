@@ -37,6 +37,7 @@ export const browserJa: BrowserStrings = {
   "tabs.swipeToClose": "上にスワイプして閉じる",
   "tabs.clear": "クリア",
   "tabs.switchSpace": "{name}に切り替え",
+  "tabs.scrubSpacesHint": "長押ししてスライドするとスペースを切り替えます",
   "tabs.pinned": "ピン留め",
   "pin.unpinHint": "長押しでピン留めを解除",
   "pin.essential": "Essentials に追加",

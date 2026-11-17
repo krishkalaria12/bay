@@ -9,7 +9,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
 import { useIsFocused } from "expo-router";
-import { useCallback, useEffect, useEffectEvent, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,7 +42,7 @@ import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { BehindSheets } from "@/panels/BehindSheets";
 import { PinPanel } from "@/panels/PinPanel";
-import { SpaceIconPanel } from "@/panels/SpaceIconPanel";
+import { SpaceEditPanel } from "@/panels/SpaceEditPanel";
 import { spaceName } from "@/store/spaceName";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { takeFieldRequest } from "@/onboarding/handoff";
@@ -51,7 +51,7 @@ import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privacy/contentBlocking";
 import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
-import { siteSettingFor, type SiteSetting } from "@/store/model";
+import { siteSettingFor, spaceBookmarks, spaceHistory, type SiteSetting } from "@/store/model";
 import type { BrowserTab, PinnedSite } from "@/store/types";
 import { CUSTOM_ENGINE_ID, engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { ClearData, ViewRegistry } from "./clearData";
@@ -99,6 +99,15 @@ const failed = new Set<string>();
  */
 function runForTab(tabId: string, name: string, program: Effect.Effect<void, never, Logins>): void {
   runCommand({ name, resource: tabId }, TabWork.use((work) => work.run(tabId, name, program)).pipe(Effect.flatMap(Fiber.join)));
+}
+
+/**
+ * Deletes a space, then its website data once its pages have gone (as a deleted desktop space's profile goes). The
+ * engine retries nothing: a store a closing page still held stays cleared, and goes with the next clear.
+ */
+function deleteSpaceWithData(deleteSpace: (id: string) => void, id: string): void {
+  deleteSpace(id);
+  runCommand({ name: "space.deleteProfile", resource: id }, Engine.use((engine) => engine.deleteProfile(id)).pipe(Effect.delay("1 second"), Effect.ignore));
 }
 
 /** Ends the work tied to a tab's page. */
@@ -167,7 +176,7 @@ const signInFromStore = (tabId: string, requestId: string, origin: string, ask: 
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceIcon" | "pin" | null;
+type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceEdit" | "pin" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -191,6 +200,8 @@ export function BrowserScreen(): JSX.Element {
     selectSpace,
     createSpace,
     setSpaceIcon,
+    setSpaceColor,
+    moveSpace,
     renameSpace,
     deleteSpace,
     moveTab,
@@ -246,6 +257,9 @@ export function BrowserScreen(): JSX.Element {
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
   const spaceTabs = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
+  // Each space keeps its own history and bookmarks, as each desktop space's profile does.
+  const bookmarks = spaceBookmarks(data, data.activeSpaceId);
+  const history = useMemo(() => spaceHistory({ history: data.history }, data.activeSpaceId), [data.history, data.activeSpaceId]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   // The space's pins (B21, as the desktop's sidebar): its Essentials and pinned rows. A tab showing a pinned page is
   // reached by its pin, so the grid below them holds the rest, and Clear leaves the pinned ones be.
@@ -359,14 +373,16 @@ export function BrowserScreen(): JSX.Element {
     if (failed.has(tabId)) return dispatch({ type: "update-tab", id: tabId, update: { url: state.url } });
     dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : undefined) } });
 
+    const visitedTab = data.tabs.find((tab) => tab.id === tabId);
+
     // Private pages stay out of history.
-    if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
+    if (!visitedTab || visitedTab.private) return;
 
     if (state.title && visited.get(tabId) === state.url) dispatch({ type: "page-title", url: state.url, title: state.title });
 
     if (!state.isLoading && visited.get(tabId) !== state.url) {
       visited.set(tabId, state.url);
-      dispatch({ type: "visit", url: state.url, title: state.title, favicon: null, now: Date.now() });
+      dispatch({ type: "visit", spaceId: visitedTab.spaceId, url: state.url, title: state.title, favicon: null, now: Date.now() });
       const view = views.get(tabId);
 
       // The site's icon, and the tab's picture once the page has drawn: a newer visit replaces the picture.
@@ -706,6 +722,7 @@ export function BrowserScreen(): JSX.Element {
   // remembered about them. The wipe waits for the page views to go before the engine clears what pages kept.
   const wipe = ClearData.use((clearData) =>
     clearData.clear({
+      profiles: useBrowserStore.getState().data.spaces.map((entry) => entry.id),
       reset: () => {
         reset();
         setNavigation({});
@@ -1075,7 +1092,7 @@ export function BrowserScreen(): JSX.Element {
               <View className="w-full" style={{ marginBottom: space.xl, paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
                 <StartPage
                   pins={essentials}
-                  history={data.history}
+                  history={history}
                   onPhoto={onPhoto}
                   onOpen={(url) => open({ kind: "url", url }, false)}
                   onUnpin={(site) => {
@@ -1127,7 +1144,7 @@ export function BrowserScreen(): JSX.Element {
                 setPanel("pin");
               }}
               onSettings={openSettings}
-              onChangeIcon={() => setPanel("spaceIcon")}
+              onEditSpace={() => setPanel("spaceEdit")}
             />
           </View>
         ) : null}
@@ -1294,7 +1311,7 @@ export function BrowserScreen(): JSX.Element {
         canGoForward={page.canGoForward}
         isLoading={page.isLoading}
         isPinned={essentials.some((site) => site.url === active.url)}
-        isBookmarked={isBookmarked(data.bookmarks, active.url)}
+        isBookmarked={isBookmarked(bookmarks, active.url)}
         blocking={blocking}
         tabId={active.id}
         onRestore={restoreOriginal}
@@ -1328,9 +1345,10 @@ export function BrowserScreen(): JSX.Element {
         }}
         onBookmark={() => {
           tick();
-          const bookmarked = isBookmarked(data.bookmarks, active.url);
+          const bookmarked = isBookmarked(bookmarks, active.url);
           dispatch({
             type: "toggle-bookmark",
+            spaceId: data.activeSpaceId,
             bookmark: { kind: "url", id: newId(), parentId: BOOKMARKS_ROOT, title: active.title || active.url, url: active.url, addedAt: Date.now() },
           });
           toast.show(
@@ -1364,8 +1382,7 @@ export function BrowserScreen(): JSX.Element {
           }
         }}
         onNewSpace={createSpace}
-        onRenameSpace={renameSpace}
-        onDeleteSpace={deleteSpace}
+        onEditSpace={() => setPanel("spaceEdit")}
         folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
         activeFolderId={activeFolderId}
         onSelectFolder={setActiveFolderId}
@@ -1432,27 +1449,46 @@ export function BrowserScreen(): JSX.Element {
           closePanel("pin");
         }}
       />
-      <SpaceIconPanel
-        visible={panel === "spaceIcon"}
-        onClose={() => closePanel("spaceIcon")}
+      <SpaceEditPanel
+        visible={panel === "spaceEdit"}
+        onClose={() => closePanel("spaceEdit")}
+        id={activeSpace.id}
         name={spaceName(activeSpace, t)}
+        savedName={spaceName(activeSpace, t)}
         icon={activeSpace.icon ?? null}
-        onPick={(icon) => {
+        color={activeSpace.color}
+        swatches={SPACE_COLORS}
+        index={data.spaces.indexOf(activeSpace)}
+        count={data.spaces.length}
+        onRename={(name) => renameSpace(activeSpace.id, name)}
+        onIcon={(icon) => {
           tick();
           setSpaceIcon(activeSpace.id, icon);
-          closePanel("spaceIcon");
+        }}
+        onColor={(color) => {
+          tick();
+          setSpaceColor(activeSpace.id, color);
+        }}
+        onMove={(by) => {
+          tick();
+          moveSpace(activeSpace.id, by);
+        }}
+        onDelete={() => {
+          closePanel("spaceEdit");
+          setActiveFolderId(null);
+          deleteSpaceWithData(deleteSpace, activeSpace.id);
         }}
       />
       <ArchivePanel
         visible={panel === "archive"}
         onClose={() => closePanel("archive")}
-        items={data.archive}
+        items={data.archive.filter((tab) => tab.spaceId === data.activeSpaceId)}
         onRestore={(id) => {
           restoreTab(id);
           setOverlay("none");
         }}
         onRemove={(id) => dispatch({ type: "remove-archived", id })}
-        onClear={() => dispatch({ type: "clear-archive" })}
+        onClear={() => dispatch({ type: "clear-archive", spaceId: data.activeSpaceId })}
       />
       <SettingsScreen
         visible={settingsOpen}
@@ -1492,9 +1528,9 @@ export function BrowserScreen(): JSX.Element {
         onImport={() => setPanel("import")}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}
-        historyCount={data.history.length}
+        historyCount={history.length}
         onHistory={() => setPanel("history")}
-        bookmarkCount={bookmarkLinks(data.bookmarks).length}
+        bookmarkCount={bookmarkLinks(bookmarks).length}
         onBookmarks={() => setPanel("bookmarks")}
         crashCount={crashReports().length}
         onReportProblem={() => void reportProblem()}
@@ -1502,7 +1538,7 @@ export function BrowserScreen(): JSX.Element {
       <HistoryPanel
         visible={panel === "history"}
         onClose={() => closePanel("history")}
-        history={data.history}
+        history={history}
         onOpen={(url) => {
           setOverlay("none");
 
@@ -1510,13 +1546,13 @@ export function BrowserScreen(): JSX.Element {
           if (hasPage) openTab(url);
           else navigate(active.id, url);
         }}
-        onRemove={(url) => dispatch({ type: "remove-history", url })}
-        onClear={() => dispatch({ type: "clear-history" })}
+        onRemove={(url) => dispatch({ type: "remove-history", spaceId: data.activeSpaceId, url })}
+        onClear={() => dispatch({ type: "clear-history", spaceId: data.activeSpaceId })}
       />
       <BookmarksPanel
         visible={panel === "bookmarks"}
         onClose={() => closePanel("bookmarks")}
-        bookmarks={data.bookmarks}
+        bookmarks={bookmarks}
         onOpen={(url) => {
           setOverlay("none");
 
@@ -1524,7 +1560,7 @@ export function BrowserScreen(): JSX.Element {
           if (hasPage) openTab(url);
           else navigate(active.id, url);
         }}
-        onRemove={(id) => dispatch({ type: "remove-bookmark", id })}
+        onRemove={(id) => dispatch({ type: "remove-bookmark", spaceId: data.activeSpaceId, id })}
         onImport={() => setPanel("import")}
       />
       <DownloadsPanel
