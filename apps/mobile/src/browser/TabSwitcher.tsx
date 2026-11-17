@@ -62,8 +62,9 @@ export const SPACE_COLORS: Record<SpaceColor, string> = {
   violet: "#8B5CF6",
 };
 
-/** Three cards across, as a sidebar of tiles. */
-const COLUMNS = 3;
+/** Two tab cards across, big enough to read the page on each; the Essentials stay three tiles across. */
+const COLUMNS = 2;
+const ESSENTIAL_COLUMNS = 3;
 const GAP = 10;
 
 /** A card is a little taller than wide, like a phone's page shrunk down. */
@@ -114,6 +115,7 @@ export function TabSwitcher({
   const name = current ? spaceName(current, t) : "";
   const inner = width - insets.left - insets.right - 2 * space.gutter;
   const cardWidth = Math.floor((inner - GAP * (COLUMNS - 1)) / COLUMNS);
+  const essentialWidth = Math.floor((inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS);
   const shift = useSharedValue(0);
   const index = spaces.findIndex((entry) => entry.id === activeSpaceId);
 
@@ -193,7 +195,7 @@ export function TabSwitcher({
                     onPress={() => onOpenPin(pin)}
                     onLongPress={() => onUnpin(pin)}
                     className={`items-center justify-center ${pin.url === activeUrl ? "border-2 border-accent bg-default" : "bg-default"}`}
-                    style={{ width: cardWidth, height: 64, borderRadius: radius.tile }}
+                    style={{ width: essentialWidth, height: 64, borderRadius: radius.tile }}
                   >
                     <SiteIcon url={pin.url} size={30} />
                   </PressFeedback>
