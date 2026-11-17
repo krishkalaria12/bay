@@ -14,7 +14,7 @@ export interface BrowserSpace {
   id: string;
   name: string;
   color: SpaceColor;
-  /** An emoji, as the desktop's spaces have; none shows the name's first letter. */
+  /** An emoji, as the desktop's spaces have. Every space wears one; one saved without gets a free one. */
   icon?: string | null;
 }
 
@@ -42,6 +42,8 @@ export interface BrowserTab {
 }
 
 export interface HistoryEntry {
+  /** The space whose history this is: each space keeps its own, as each desktop space's profile does. */
+  spaceId: string;
   url: string;
   title: string;
   favicon: string | null;
@@ -211,7 +213,11 @@ export interface BrowserData {
   activeTabId: string;
   history: HistoryEntry[];
   pinnedSites: PinnedSite[];
-  bookmarks: Bookmarks;
+  /**
+   * Each space's own bookmark tree, by space id, as each desktop space's profile has its own. A space without an entry
+   * has none yet. The personal space's tree is the one that syncs with the computer's default profile.
+   */
+  bookmarks: Record<string, Bookmarks>;
   archive: ArchivedTab[];
   /** Newest first. */
   downloads: DownloadItem[];

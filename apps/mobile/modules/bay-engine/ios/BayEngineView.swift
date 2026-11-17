@@ -73,6 +73,17 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
   }
 
+  /// The space whose website data the page uses (BaySpaceProfiles). A page that has loaded moves to the new space's
+  /// store and opens its address again there, as a tab moved to another desktop space does.
+  var profile = BaySpaceProfiles.personal {
+    didSet {
+      guard profile != oldValue else { return }
+      let address = startedLoading ? webView.url : nil
+      replaceWebView()
+      if let address { webView.load(URLRequest(url: address)) }
+    }
+  }
+
   /// Hidden tabs stay mounted; keep them out of VoiceOver. Leaving the screen is also a good moment to save (B6):
   /// the tab may be the next one unmounted for memory.
   var isActive = true {
@@ -108,16 +119,16 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   required init(appContext: AppContext? = nil) {
-    webView = Self.makeWebView(isPrivate: false, desktopMode: false)
+    webView = Self.makeWebView(isPrivate: false, profile: BaySpaceProfiles.personal, desktopMode: false)
     super.init(appContext: appContext)
     clipsToBounds = true
     refreshControl.addTarget(self, action: #selector(refresh), for: .valueChanged)
     setUpWebView()
   }
 
-  private static func makeWebView(isPrivate: Bool, desktopMode: Bool) -> WKWebView {
+  private static func makeWebView(isPrivate: Bool, profile: String, desktopMode: Bool) -> WKWebView {
     let configuration = WKWebViewConfiguration()
-    if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
+    configuration.websiteDataStore = isPrivate ? BayPrivateBrowsing.dataStore() : BaySpaceProfiles.dataStore(for: profile)
     // Video plays in the page when it asks to (playsinline), as in Safari.
     configuration.allowsInlineMediaPlayback = true
     // Videos can leave the page into picture in picture (B17), as in Safari.
@@ -200,7 +211,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.uiDelegate = nil
     webView.scrollView.delegate = nil
     webView.removeFromSuperview()
-    webView = Self.makeWebView(isPrivate: isPrivate, desktopMode: desktopMode)
+    webView = Self.makeWebView(isPrivate: isPrivate, profile: profile, desktopMode: desktopMode)
     setUpWebView()
     setNeedsLayout()
   }

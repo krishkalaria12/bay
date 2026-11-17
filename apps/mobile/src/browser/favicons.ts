@@ -115,7 +115,7 @@ export function knownSitesWithoutIcons(data: BrowserData, limit = KNOWN_LIMIT): 
     ...data.tabs.filter((tab) => !tab.private).map((tab) => tab.url),
     ...data.pinnedSites.map((pin) => pin.url),
     ...data.archive.map((item) => item.url),
-    ...bookmarkLinks(data.bookmarks).map((link) => link.url),
+    ...Object.values(data.bookmarks).flatMap((tree) => bookmarkLinks(tree).map((link) => link.url)),
     ...history.map((entry) => entry.url),
   ];
 

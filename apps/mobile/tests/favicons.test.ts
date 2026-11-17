@@ -166,7 +166,7 @@ test("the sites Bay shows without an icon: tabs first, then history by last visi
       Effect.gen(function* () {
         const state = yield* BrowserState;
 
-        yield* state.dispatch({ type: "visit", url, title: url, favicon: null, now });
+        yield* state.dispatch({ type: "visit", spaceId: "personal", url, title: url, favicon: null, now });
       }).pipe(Effect.provide(browserState.layer)),
     );
 
@@ -202,8 +202,8 @@ test("a known site without an icon gets its apple-touch-icon, else its favicon.i
         const favicons = yield* Favicons;
         const state = yield* BrowserState;
 
-        yield* state.dispatch({ type: "visit", url: "https://ico.example/", title: "Ico", favicon: null, now: 1 });
-        yield* state.dispatch({ type: "visit", url: "https://bay.example/", title: "Bay", favicon: null, now: 2 });
+        yield* state.dispatch({ type: "visit", spaceId: "personal", url: "https://ico.example/", title: "Ico", favicon: null, now: 1 });
+        yield* state.dispatch({ type: "visit", spaceId: "personal", url: "https://bay.example/", title: "Bay", favicon: null, now: 2 });
         yield* favicons.start;
         browserState.markReady();
         yield* Effect.yieldNow;
@@ -212,7 +212,7 @@ test("a known site without an icon gets its apple-touch-icon, else its favicon.i
         yield* TestClock.adjust("5 seconds");
         yield* Effect.yieldNow;
         // Another visit doesn't ask a site again this launch.
-        yield* state.dispatch({ type: "visit", url: "https://ico.example/again", title: "Ico", favicon: null, now: 3 });
+        yield* state.dispatch({ type: "visit", spaceId: "personal", url: "https://ico.example/again", title: "Ico", favicon: null, now: 3 });
         yield* TestClock.adjust("5 seconds");
       }),
     ).pipe(Effect.provide(layer)),

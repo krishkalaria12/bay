@@ -153,6 +153,7 @@ export function TabPage({
         initialUrl={initialUrl || undefined}
         stateKey={tab.private ? undefined : tab.id}
         private={tab.private ?? false}
+        profile={tab.spaceId}
         active={visible}
         suspended={suspended}
         desktopMode={desktopMode}

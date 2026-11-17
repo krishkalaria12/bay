@@ -49,8 +49,9 @@ test("what an archive left behind says whether passwords or cards stayed in it",
 test("drafts leave out pages bookmarked already or named twice, and folders left empty by that", () => {
   const existing = reduceBrowserData(initialBrowserData(createTab("t", 0)), {
     type: "add-bookmarks",
+    spaceId: "personal",
     nodes: draftNodes([{ title: "B", url: "https://b.example/" }], BOOKMARKS_ROOT, () => "b", 0, BOOKMARK_LIMIT),
-  }).bookmarks;
+  }).bookmarks.personal!;
 
   const root = {
     title: "",

@@ -78,7 +78,7 @@ const builtIn = (id: JsonValue): id is WallpaperId => v.is(v.picklist(WALLPAPERS
 const isFileUri = (uri: JsonValue): uri is string => v.is(v.string(), uri) && uri.startsWith("file://");
 const DAY = 24 * 60 * 60 * 1000;
 
-/** How many pages the history keeps. */
+/** How many pages each space's history keeps. */
 export const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
 const DOWNLOAD_LIMIT = 100;
@@ -93,7 +93,6 @@ export function siteHost(url: string): string {
 
 const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
 
-/** The one space every tab started in: documents saved before spaces existed (v1) land here. */
 /** The emoji a space can wear, the desktop's set (apps/browser/src/store/spaces.ts), in its order. */
 export const SPACE_EMOJI = [
   "🏠",
@@ -136,15 +135,78 @@ export const SPACE_EMOJI = [
 /** Room for one emoji, however many code points it takes (a flag, a skin tone, a joined family). */
 export const SPACE_ICON_LENGTH = 16;
 
-/** A new space's emoji: the first of the set no other space wears, or the first once all are taken. */
+/** A new space's emoji: the first of the set no other space wears, past the house, which is the personal space's. */
 export function unusedSpaceIcon(spaces: readonly Pick<BrowserSpace, "icon">[]): string {
   const used = new Set(spaces.map((space) => space.icon));
 
-  return SPACE_EMOJI.find((emoji) => !used.has(emoji)) ?? SPACE_EMOJI[0];
+  return SPACE_EMOJI.find((emoji, index) => index > 0 && !used.has(emoji)) ?? SPACE_EMOJI[1];
 }
 
+/**
+ * The one space every tab started in: documents saved before spaces existed (v1) land here. Its history and bookmarks
+ * are the ones that sync with the computer's default profile, so it stays when other spaces are deleted.
+ */
 export const PERSONAL_SPACE_ID = "personal";
-export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" };
+export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue", icon: "🏠" };
+
+/**
+ * Every space shows an emoji, as on the desktop: one saved without (older documents, a synced space) gets a free one.
+ * The personal space without one takes the house; a space that took the house by default before it gets another.
+ */
+export function withSpaceEmoji(spaces: readonly BrowserSpace[]): BrowserSpace[] {
+  const house = PERSONAL_SPACE.icon!;
+  const personalBare = spaces.some((space) => space.id === PERSONAL_SPACE_ID && !space.icon);
+
+  const next = spaces.map((space) => {
+    if (!personalBare) return space;
+
+    if (space.id === PERSONAL_SPACE_ID) return { ...space, icon: house };
+
+    return space.icon === house ? { ...space, icon: null } : space;
+  });
+
+  next.forEach((space, index) => {
+    if (!space.icon) next[index] = { ...space, icon: unusedSpaceIcon(next) };
+  });
+
+  return next;
+}
+
+/** A space's bookmark tree; empty while it has none. */
+export function spaceBookmarks(data: Pick<BrowserData, "bookmarks">, spaceId: string): Bookmarks {
+  return data.bookmarks[spaceId] ?? EMPTY_BOOKMARKS;
+}
+
+const EMPTY_BOOKMARKS = emptyBookmarks();
+
+/** A space's history, newest first. */
+export function spaceHistory(data: Pick<BrowserData, "history">, spaceId: string): HistoryEntry[] {
+  return data.history.filter((entry) => entry.spaceId === spaceId);
+}
+
+/** Newest first, one entry per page in each space, and at most HISTORY_LIMIT pages a space. */
+function capHistory(entries: readonly HistoryEntry[]): HistoryEntry[] {
+  const seen = new Set<string>();
+  const counts = new Map<string, number>();
+
+  return [...entries]
+    .sort((a, b) => b.lastVisit - a.lastVisit)
+    .filter((entry) => {
+      const key = `${entry.spaceId} ${entry.url}`;
+      const count = counts.get(entry.spaceId) ?? 0;
+
+      if (seen.has(key) || count >= HISTORY_LIMIT) return false;
+      seen.add(key);
+      counts.set(entry.spaceId, count + 1);
+
+      return true;
+    });
+}
+
+/** Replaces one space's bookmark tree. */
+function withSpaceBookmarks(data: BrowserData, spaceId: string, bookmarks: Bookmarks): BrowserData {
+  return bookmarks === spaceBookmarks(data, spaceId) ? data : { ...data, bookmarks: { ...data.bookmarks, [spaceId]: bookmarks } };
+}
 
 /** The error a download keeps when Bay closed during it; shown in the reader's language when it is read back. */
 export const INTERRUPTED_DOWNLOAD = "Bay closed before it finished.";
@@ -180,7 +242,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     activeTabId: tab.id,
     history: [],
     pinnedSites: [],
-    bookmarks: emptyBookmarks(),
+    bookmarks: { [PERSONAL_SPACE_ID]: emptyBookmarks() },
     archive: [],
     downloads: [],
     favicons: {},
@@ -201,24 +263,26 @@ export type BrowserAction =
   | { type: "import-archive"; tabs: BrowserTab[]; now: number }
   | { type: "import-history"; entries: HistoryEntry[] }
   | { type: "import-pins"; sites: Pick<PinnedSite, "id" | "url" | "title" | "favicon">[] }
-  | { type: "add-bookmarks"; nodes: BookmarkNode[] }
-  /** Sync's tree, whole (src/sync/adapters.ts): it's built from every device's records. */
+  | { type: "add-bookmarks"; spaceId: string; nodes: BookmarkNode[] }
+  /** Sync's tree, whole (src/sync/adapters.ts): it's built from every device's records. It is the personal space's. */
   | { type: "replace-bookmarks"; bookmarks: Bookmarks }
-  /** Pages another device visited or removed (src/sync/adapters.ts). */
-  | { type: "sync-history"; entries: HistoryEntry[]; removed: string[] }
-  | { type: "remove-bookmark"; id: string }
-  | { type: "toggle-bookmark"; bookmark: Extract<BookmarkNode, { kind: "url" }> }
+  /** Pages another device visited or removed (src/sync/adapters.ts), in the personal space's history. */
+  | { type: "sync-history"; entries: Omit<HistoryEntry, "spaceId">[]; removed: string[] }
+  | { type: "remove-bookmark"; spaceId: string; id: string }
+  | { type: "toggle-bookmark"; spaceId: string; bookmark: Extract<BookmarkNode, { kind: "url" }> }
   | { type: "activate-tab"; id: string; now: number }
   | { type: "update-tab"; id: string; update: TabUpdate }
-  | { type: "visit"; url: string; title: string; favicon: string | null; now: number }
+  | { type: "visit"; spaceId: string; url: string; title: string; favicon: string | null; now: number }
   | { type: "page-title"; url: string; title: string }
   | { type: "close-tab"; id: string; now: number; fallback: BrowserTab }
   | { type: "restore-tab"; id: string; restoredId: string; now: number }
   | { type: "create-space"; space: BrowserSpace; blankTab: BrowserTab }
   | { type: "rename-space"; id: string; name: string }
   | { type: "set-space-icon"; id: string; icon: string | null }
+  | { type: "set-space-color"; id: string; color: SpaceColor }
   | { type: "reorder-space"; id: string; to: number }
-  | { type: "delete-space"; id: string }
+  /** Deletes a space with its tabs, pins, folders, history, bookmarks and archive; `blankTab` opens if no tab is left. */
+  | { type: "delete-space"; id: string; blankTab: BrowserTab }
   | { type: "select-space"; id: string; blankTab?: BrowserTab }
   | { type: "new-folder"; folder: BrowserFolder }
   | { type: "rename-folder"; id: string; name: string }
@@ -230,11 +294,13 @@ export type BrowserAction =
   | { type: "sync-spaces"; added: BrowserSpace[]; changed: { id: string; name: string; color: SpaceColor; icon: string | null }[] }
   | { type: "remove-pin"; id: string }
   | { type: "add-pin"; site: PinnedSite; index: number }
-  | { type: "remove-history"; url: string }
-  | { type: "clear-history" }
+  | { type: "remove-history"; spaceId: string; url: string }
+  /** One space's history, or every space's. */
+  | { type: "clear-history"; spaceId?: string }
   | { type: "favicon"; host: string; uri: string | null }
   | { type: "remove-archived"; id: string }
-  | { type: "clear-archive" }
+  /** One space's archive, or every space's. */
+  | { type: "clear-archive"; spaceId?: string }
   | { type: "wallpaper"; id: WallpaperId; photo?: string }
   /** Choosing the custom engine (C17) carries its address; one that isn't https with `%s` is refused. */
   | { type: "search-engine"; id: string; customUrl?: string }
@@ -303,44 +369,42 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "add-bookmarks": {
-      const bookmarks = addBookmarks(data.bookmarks, action.nodes);
+      if (!data.spaces.some((space) => space.id === action.spaceId)) return data;
 
-      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
+      return withSpaceBookmarks(data, action.spaceId, addBookmarks(spaceBookmarks(data, action.spaceId), action.nodes));
     }
 
     case "replace-bookmarks": {
       // A tree without its root isn't one: the store keeps what it has.
       if (bookmarkFolder(action.bookmarks, BOOKMARKS_ROOT) === null) return data;
 
-      return { ...data, bookmarks: action.bookmarks };
+      return { ...data, bookmarks: { ...data.bookmarks, [PERSONAL_SPACE_ID]: action.bookmarks } };
     }
 
     case "sync-history": {
       const removed = new Set(action.removed);
-      const pages = new Map(data.history.filter((entry) => !removed.has(entry.url)).map((entry) => [entry.url, entry]));
+      const own = (entry: HistoryEntry) => entry.spaceId === PERSONAL_SPACE_ID;
+      const pages = new Map(data.history.filter((entry) => own(entry) && !removed.has(entry.url)).map((entry) => [entry.url, entry]));
 
       // Another device's record holds every visit it knows: it replaces the count and the time, never adds to them.
       for (const entry of action.entries) {
-        if (isWebAddress(entry.url) && isTimestamp(entry.lastVisit)) pages.set(entry.url, entry);
+        if (isWebAddress(entry.url) && isTimestamp(entry.lastVisit)) pages.set(entry.url, { ...entry, spaceId: PERSONAL_SPACE_ID });
       }
 
-      return { ...data, history: [...pages.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, HISTORY_LIMIT) };
+      return { ...data, history: capHistory([...data.history.filter((entry) => !own(entry)), ...pages.values()]) };
     }
 
-    case "remove-bookmark": {
-      const bookmarks = removeBookmark(data.bookmarks, action.id);
-
-      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
-    }
+    case "remove-bookmark":
+      return withSpaceBookmarks(data, action.spaceId, removeBookmark(spaceBookmarks(data, action.spaceId), action.id));
 
     case "toggle-bookmark": {
-      // A page bookmarked anywhere is unbookmarked everywhere; otherwise it joins the top of the tree, last.
+      // A page bookmarked anywhere in the space is unbookmarked there; otherwise it joins the top of its tree, last.
       const { url } = action.bookmark;
 
-      if (!isWebAddress(url)) return data;
-      const bookmarks = isBookmarked(data.bookmarks, url) ? removeBookmarksOf(data.bookmarks, url) : addBookmarks(data.bookmarks, [action.bookmark]);
+      if (!isWebAddress(url) || !data.spaces.some((space) => space.id === action.spaceId)) return data;
+      const tree = spaceBookmarks(data, action.spaceId);
 
-      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
+      return withSpaceBookmarks(data, action.spaceId, isBookmarked(tree, url) ? removeBookmarksOf(tree, url) : addBookmarks(tree, [action.bookmark]));
     }
 
     case "activate-tab": {
@@ -368,10 +432,12 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "visit": {
-      if (!isWebAddress(action.url)) return data;
-      const previous = data.history.find((entry) => entry.url === action.url);
+      if (!isWebAddress(action.url) || !data.spaces.some((space) => space.id === action.spaceId)) return data;
+      const same = (entry: HistoryEntry) => entry.spaceId === action.spaceId && entry.url === action.url;
+      const previous = data.history.find(same);
 
       const visit: HistoryEntry = {
+        spaceId: action.spaceId,
         url: action.url,
         title: action.title,
         favicon: action.favicon ?? previous?.favicon ?? null,
@@ -379,16 +445,16 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         lastVisit: action.now,
       };
 
-      return { ...data, history: [visit, ...data.history.filter((entry) => entry.url !== action.url)].slice(0, HISTORY_LIMIT) };
+      return { ...data, history: capHistory([visit, ...data.history.filter((entry) => !same(entry))]) };
     }
 
     case "page-title": {
       // Titles often arrive after the load finishes and the visit is saved.
-      const entry = data.history.find((item) => item.url === action.url);
+      const stale = (item: HistoryEntry) => item.url === action.url && item.title !== action.title;
 
-      if (!entry || !action.title || entry.title === action.title) return data;
+      if (!action.title || !data.history.some(stale)) return data;
 
-      return { ...data, history: data.history.map((item) => (item === entry ? { ...item, title: action.title } : item)) };
+      return { ...data, history: data.history.map((item) => (stale(item) ? { ...item, title: action.title } : item)) };
     }
 
     case "close-tab": {
@@ -466,10 +532,18 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "set-space-icon": {
-      if (!data.spaces.some((space) => space.id === action.id)) return data;
-      const icon = action.icon?.trim().slice(0, SPACE_ICON_LENGTH) || null;
+      // Every space wears an emoji: none isn't a choice.
+      const icon = action.icon?.trim().slice(0, SPACE_ICON_LENGTH);
+
+      if (!icon || !data.spaces.some((space) => space.id === action.id)) return data;
 
       return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, icon } : space)) };
+    }
+
+    case "set-space-color": {
+      if (!SPACE_COLORS.includes(action.color) || !data.spaces.some((space) => space.id === action.id && space.color !== action.color)) return data;
+
+      return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, color: action.color } : space)) };
     }
 
     case "reorder-space": {
@@ -487,25 +561,43 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "delete-space": {
-      const remaining = data.spaces.filter((space) => space.id !== action.id);
+      // As on the desktop, a space goes with everything it kept: its tabs, pins, folders, history, bookmarks and
+      // archive (its sign-ins are the engine's to clear). The personal space syncs, so it stays.
+      const index = data.spaces.findIndex((space) => space.id === action.id);
 
-      if (remaining.length === 0 || !data.spaces.some((space) => space.id === action.id)) return data;
-      const destination = remaining[0]!.id;
-      const activeSpaceId = data.activeSpaceId === action.id ? destination : data.activeSpaceId;
-      const afterTabs = data.tabs.map((tab) => (tab.spaceId === action.id ? { ...tab, spaceId: destination, folderId: null } : tab));
+      if (index < 0 || action.id === PERSONAL_SPACE_ID || data.spaces.length < 2) return data;
+      const spaces = data.spaces.filter((space) => space.id !== action.id);
+      const showing = data.activeSpaceId === action.id;
+      // The space before it in the bar takes the screen, as the desktop's does.
+      const activeSpaceId = showing ? spaces[Math.max(0, index - 1)]!.id : data.activeSpaceId;
+      let tabs = data.tabs.filter((tab) => tab.spaceId !== action.id);
       const activeTabIds = Object.fromEntries(Object.entries(data.activeTabIds).filter(([spaceId]) => spaceId !== action.id));
+      let activeTabId = tabs.some((tab) => tab.id === data.activeTabId) ? data.activeTabId : activeTabIds[activeSpaceId];
+
+      if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
+        activeTabId = tabs.filter((tab) => tab.spaceId === activeSpaceId).at(-1)?.id ?? "";
+      }
+
+      if (!activeTabId) {
+        const blank = { ...action.blankTab, spaceId: activeSpaceId };
+        tabs = [...tabs, blank];
+        activeTabId = blank.id;
+      }
+
+      const { [action.id]: _bookmarks, ...bookmarks } = data.bookmarks;
 
       return {
         ...data,
-        spaces: remaining,
+        spaces,
         folders: data.folders.filter((folder) => folder.spaceId !== action.id),
-        tabs: afterTabs,
-        // Its pins go with its tabs, loose: its folders went.
-        pinnedSites: data.pinnedSites.map((site) => (site.spaceId === action.id ? { ...site, spaceId: destination, folderId: null } : site)),
+        tabs,
+        pinnedSites: data.pinnedSites.filter((site) => site.spaceId !== action.id),
+        history: data.history.filter((entry) => entry.spaceId !== action.id),
+        bookmarks,
+        archive: data.archive.filter((tab) => tab.spaceId !== action.id),
         activeSpaceId,
-        activeTabIds,
-        // The tab the screen is sitting on now lives in the destination space, so the active pointer survives as is.
-        activeTabId: data.activeTabId,
+        activeTabIds: { ...activeTabIds, [activeSpaceId]: activeTabId },
+        activeTabId,
       };
     }
 
@@ -642,7 +734,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
           : space;
       });
 
-      return { ...data, spaces: [...spaces, ...action.added.filter((space) => !known.has(space.id))] };
+      return { ...data, spaces: withSpaceEmoji([...spaces, ...action.added.filter((space) => !known.has(space.id))]) };
     }
 
     case "move-pin": {
@@ -665,11 +757,15 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "remove-history":
-      return { ...data, history: data.history.filter((entry) => entry.url !== action.url) };
+      return { ...data, history: data.history.filter((entry) => !(entry.spaceId === action.spaceId && entry.url === action.url)) };
     case "remove-archived":
       return data.archive.some((tab) => tab.id === action.id) ? { ...data, archive: data.archive.filter((tab) => tab.id !== action.id) } : data;
-    case "clear-archive":
-      return data.archive.length ? { ...data, archive: [] } : data;
+    case "clear-archive": {
+      const archive = action.spaceId === undefined ? [] : data.archive.filter((tab) => tab.spaceId !== action.spaceId);
+
+      return archive.length === data.archive.length ? data : { ...data, archive };
+    }
+
     case "wallpaper": {
       // A new photo replaces the old one; picking a built-in keeps the photo for switching back.
       const photo = action.id === "photo" ? (action.photo ?? data.preferences.wallpaperPhoto) : data.preferences.wallpaperPhoto;
@@ -682,11 +778,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "clear-history": {
-      if (!data.history.length) return data;
-      // Icons stay for sites a tab, the archive or a pin still shows.
-      const shown = new Set([...data.tabs, ...data.archive, ...data.pinnedSites].map((entry) => siteHost(entry.url)));
+      const history = action.spaceId === undefined ? [] : data.history.filter((entry) => entry.spaceId !== action.spaceId);
 
-      return { ...data, history: [], favicons: Object.fromEntries(Object.entries(data.favicons).filter(([host]) => shown.has(host))) };
+      if (history.length === data.history.length) return data;
+      // Icons stay for sites a tab, the archive, a pin or another space's history still shows.
+      const shown = new Set([...data.tabs, ...data.archive, ...data.pinnedSites, ...history].map((entry) => siteHost(entry.url)));
+
+      return { ...data, history, favicons: Object.fromEntries(Object.entries(data.favicons).filter(([host]) => shown.has(host))) };
     }
 
     case "favicon": {
@@ -1015,15 +1113,16 @@ function parseTab(value: JsonValue): BrowserTab | null {
  * later of the two times and its own title (unless it has none). Newest first, up to the limit.
  */
 export function mergeHistory(history: HistoryEntry[], entries: readonly HistoryEntry[]): HistoryEntry[] {
-  const pages = new Map(history.map((entry) => [entry.url, entry]));
+  const keyOf = (entry: HistoryEntry) => `${entry.spaceId} ${entry.url}`;
+  const pages = new Map(history.map((entry) => [keyOf(entry), entry]));
   let changed = false;
 
   for (const entry of entries) {
     if (!isWebAddress(entry.url) || !isTimestamp(entry.lastVisit) || !(entry.visits > 0)) continue;
-    const previous = pages.get(entry.url);
+    const previous = pages.get(keyOf(entry));
     changed = true;
     pages.set(
-      entry.url,
+      keyOf(entry),
       previous
         ? {
             ...previous,
@@ -1036,7 +1135,7 @@ export function mergeHistory(history: HistoryEntry[], entries: readonly HistoryE
     );
   }
 
-  return changed ? [...pages.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, HISTORY_LIMIT) : history;
+  return changed ? capHistory([...pages.values()]) : history;
 }
 
 /** Newest first, one entry per address: archiving a page again replaces its older copy. */
@@ -1082,7 +1181,11 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
       : [],
   );
 
-  const spaces: BrowserSpace[] = savedSpaces.length ? savedSpaces : [{ id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" }];
+  // The personal space is always there: its history and bookmarks are the ones that sync.
+  const spaces = withSpaceEmoji(
+    savedSpaces.some((space) => space.id === PERSONAL_SPACE_ID) ? savedSpaces : [{ ...PERSONAL_SPACE, icon: null }, ...savedSpaces],
+  );
+
   const spaceIds = new Set(spaces.map((space) => space.id));
 
   const savedFolders = (Array.isArray(value.folders) ? value.folders : []).flatMap((entry): BrowserFolder[] =>
@@ -1127,6 +1230,8 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     entry.visits > 0
       ? [
           {
+            // History saved before spaces kept their own is the personal space's.
+            spaceId: v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : PERSONAL_SPACE_ID,
             url: entry.url,
             title: entry.title,
             favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null,
@@ -1157,7 +1262,10 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
   const archive: ArchivedTab[] = (Array.isArray(value.archive) ? value.archive : []).flatMap((entry) => {
     const tab = parseTab(entry);
 
-    return tab?.url && isRecord(entry) && isTimestamp(entry.closedAt) ? [{ ...tab, closedAt: entry.closedAt }] : [];
+    if (!tab?.url || !isRecord(entry) || !isTimestamp(entry.closedAt)) return [];
+    const spaceId = v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : PERSONAL_SPACE_ID;
+
+    return [{ ...tab, spaceId, closedAt: entry.closedAt }];
   });
 
   const downloads: DownloadItem[] = (Array.isArray(value.downloads) ? value.downloads : []).filter(isRecord).flatMap((entry) => {
@@ -1207,14 +1315,12 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     folders: savedFolders,
     tabs: tabs.length ? tabs : fallback.tabs,
     activeTabId: resolvedActiveTabId,
-    history: uniqueBy(history, (entry) => entry.url)
-      .sort((a, b) => b.lastVisit - a.lastVisit)
-      .slice(0, HISTORY_LIMIT),
+    history: capHistory(history),
     // Once per space; a pinned row whose folder went is loose in its space.
     pinnedSites: uniqueBy(pinnedSites, (entry) => `${entry.spaceId} ${entry.url}`).map((entry) =>
       entry.folderId && !savedFolders.some((folder) => folder.id === entry.folderId && folder.spaceId === entry.spaceId) ? { ...entry, folderId: null } : entry,
     ),
-    bookmarks: parseBookmarks(value.bookmarks),
+    bookmarks: parseSpaceBookmarks(value.bookmarks, spaceIds),
     archive: uniqueBy(
       uniqueBy(
         archive.sort((a, b) => b.closedAt - a.closedAt),
@@ -1233,6 +1339,22 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     ),
     leftAt: v.is(v.number(), value.leftAt) && Number.isFinite(value.leftAt) ? value.leftAt : null,
   };
+}
+
+/**
+ * Saved bookmarks: a tree per space. A document from before spaces kept their own holds one tree (its root is
+ * BOOKMARKS_ROOT), which is the personal space's.
+ */
+function parseSpaceBookmarks(value: JsonValue | undefined, spaceIds: ReadonlySet<string>): BrowserData["bookmarks"] {
+  if (value === undefined || !isRecord(value)) return { [PERSONAL_SPACE_ID]: emptyBookmarks() };
+
+  if (isRecord(value[BOOKMARKS_ROOT]) && value[BOOKMARKS_ROOT].kind === "folder") return { [PERSONAL_SPACE_ID]: parseBookmarks(value) };
+
+  const trees = Object.fromEntries(
+    Object.entries(value).flatMap(([spaceId, tree]) => (spaceIds.has(spaceId) && tree !== undefined ? [[spaceId, parseBookmarks(tree)]] : [])),
+  );
+
+  return { [PERSONAL_SPACE_ID]: emptyBookmarks(), ...trees };
 }
 
 const THEME_CHOICES = ["system", "light", "dark"] as const;

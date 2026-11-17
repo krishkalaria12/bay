@@ -7,7 +7,7 @@ import { Clock } from "@bay/sync/src/hlc.ts";
 import { emptyScope, syncScope, visible, type Adapter, type ScopeState, type Transport } from "@bay/sync/src/scope.ts";
 import * as v from "valibot";
 
-import type { BrowserAction } from "../store/model.ts";
+import { PERSONAL_SPACE_ID, spaceBookmarks, spaceHistory, type BrowserAction } from "../store/model.ts";
 import type { BrowserData, BrowserSpace } from "../store/types.ts";
 import {
   bookmarksAdapter,
@@ -124,7 +124,8 @@ function spaceAdapters(doc: SyncDoc, deps: CycleDeps, spaceId: string, main: boo
     adapters.push(
       bookmarksAdapter({
         ready: deps.ready,
-        bookmarks: () => data().bookmarks,
+        // The computer's default profile is the phone's personal space: its bookmarks and history are the ones that sync.
+        bookmarks: () => spaceBookmarks(data(), PERSONAL_SPACE_ID),
         replace: (bookmarks) => deps.dispatch({ type: "replace-bookmarks", bookmarks }),
         barTitle: deps.barTitle,
       }),
@@ -135,7 +136,7 @@ function spaceAdapters(doc: SyncDoc, deps: CycleDeps, spaceId: string, main: boo
     adapters.push(
       historyAdapter({
         ready: deps.ready,
-        history: () => data().history,
+        history: () => spaceHistory(data(), PERSONAL_SPACE_ID),
         limit: deps.historyLimit,
         apply: (change) => deps.dispatch({ type: "sync-history", ...change }),
         now: deps.now,

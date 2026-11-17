@@ -22,7 +22,6 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import org.bay.engine.BayEngine
-import org.bay.engine.BayProfile
 import org.bay.engine.BayTab
 import org.bay.engine.BayTabClient
 import org.json.JSONArray
@@ -118,6 +117,22 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       }
     }
 
+  /**
+   * The space whose profile (cookies, storage, cache) the page uses, as each desktop space has its own. A page that
+   * has loaded moves to the new space's profile and opens its address again there.
+   */
+  var profile = BayEngineBackend.PERSONAL_PROFILE
+    set(value) {
+      if (field == value) return
+      field = value
+      val current = tab ?: return
+      if (tabIsPrivate) return
+      val address = current.url?.takeIf { startedLoading && it.isNotEmpty() }
+      destroyTab()
+      createTab()
+      if (address != null) load(address)
+    }
+
   /** Hidden tabs stay mounted; keep them out of TalkBack. */
   var isActive = true
     set(value) {
@@ -178,8 +193,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     // is also what makes an opaque window translucent: without it the window covers the page in black.
     activity.window.setFormat(PixelFormat.TRANSLUCENT)
     tabIsPrivate = isPrivate
-    val profile = if (tabIsPrivate) BayEngineBackend.acquirePrivateProfile() else BayProfile.normal()
-    val created = BayTab(activity, profile, client)
+    val session = if (tabIsPrivate) BayEngineBackend.acquirePrivateProfile() else BayEngineBackend.profileFor(profile)
+    val created = BayTab(activity, session, client)
     tab = created
     created.view.importantForAccessibility = accessibility()
     created.setDesktopMode(desktopMode)

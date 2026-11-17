@@ -242,7 +242,7 @@ export function bookmarkTree(records: ReadonlyMap<string, BookmarkValue>, barTit
 
 /** History's changes for the store: pages to put in or update, pages to take out. */
 export interface HistoryChange {
-  entries: HistoryEntry[];
+  entries: Omit<HistoryEntry, "spaceId">[];
   removed: string[];
 }
 

@@ -345,6 +345,7 @@ export const fakeEngine = (ledger: ResourceLedger = new ResourceLedger()): FakeE
         Effect.sync(() => {
           cleared += 1;
         }),
+      deleteProfile: () => Effect.void,
       setPrivateSessionActive: (active) =>
         Effect.sync(() => {
           privateSession = active;

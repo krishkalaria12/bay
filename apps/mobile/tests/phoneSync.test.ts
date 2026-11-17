@@ -107,7 +107,7 @@ function phone(transport: Transport) {
   let data: BrowserData = initialBrowserData({ ...createTab("phone-tab", NOW), url: "https://phone.example/", title: "On the phone" });
   const doc: SyncDoc = newDoc("phone");
 
-  data = reduceBrowserData(data, { type: "visit", url: "https://phone.example/", title: "On the phone", favicon: null, now: NOW - 1000 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://phone.example/", title: "On the phone", favicon: null, now: NOW - 1000 });
 
   const cycle = () =>
     runCycle(doc, {
@@ -152,7 +152,7 @@ test("a phone and a computer sync devices, tabs, bookmarks and history both ways
   assert.deepEqual(remoteTabs(iphone.doc), [{ deviceId: "mac", name: "Krish's MacBook", tabs: [{ u: "https://bay.example/", t: "Bay" }] }]);
 
   // Its bar is a folder at the top of the phone's tree; its other bookmarks are the tree.
-  const bookmarks = iphone.data().bookmarks;
+  const bookmarks = iphone.data().bookmarks.personal!;
 
   assert.deepEqual(bookmarks[BOOKMARKS_ROOT]?.kind === "folder" && bookmarks[BOOKMARKS_ROOT].children, [SYNC_BAR, "link-2"]);
   assert.deepEqual(bookmarks[SYNC_BAR]?.kind === "folder" && bookmarks[SYNC_BAR].children, ["folder-1"]);
