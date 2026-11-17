@@ -34,13 +34,18 @@ export interface TabSwitcherProps {
   spaces: readonly BrowserSpace[];
   activeSpaceId: string;
   onSelectSpace: (id: string) => void;
-  /** Folders inside the active space; the active one narrows the grid. */
+  /** The space's Essentials, its tiles along the top, as the desktop's are. */
+  essentials: readonly PinnedSite[];
+  /** The space's pinned rows, loose and in its folders, as the desktop's Pinned section. */
+  rows: readonly PinnedSite[];
   folders: readonly BrowserFolder[];
-  activeFolderId: string | null;
-  onSelectFolder: (id: string | null) => void;
-  /** The pinned sites, as the space's favourites along its top. */
-  pins: readonly PinnedSite[];
-  onOpenSite: (url: string) => void;
+  /** The page on screen, so its pin is marked. */
+  activeUrl: string;
+  onOpenPin: (site: PinnedSite) => void;
+  /** A long press on a pin: it unpins, with a way back. */
+  onUnpin: (site: PinnedSite) => void;
+  /** A long press on a tab's card: its pinning choices. */
+  onTabMenu: (tab: BrowserTab) => void;
   onSettings: () => void;
   /** Opens the space's emoji, to change it. */
   onChangeIcon: () => void;
@@ -82,11 +87,13 @@ export function TabSwitcher({
   spaces,
   activeSpaceId,
   onSelectSpace,
+  essentials,
+  rows,
   folders,
-  activeFolderId,
-  onSelectFolder,
-  pins,
-  onOpenSite,
+  activeUrl,
+  onOpenPin,
+  onUnpin,
+  onTabMenu,
   onSettings,
   onChangeIcon,
 }: TabSwitcherProps): JSX.Element {
@@ -162,16 +169,19 @@ export function TabSwitcher({
               </PressFeedback>
             </View>
 
-            {pins.length ? (
+            {essentials.length ? (
               <View className="flex-row flex-wrap" style={{ gap: GAP }}>
-                {pins.slice(0, COLUMNS * 2).map((pin, at) => (
+                {essentials.map((pin, at) => (
                   <PressFeedback
                     key={pin.id}
-                    testID={`tab-pin-${at}`}
+                    testID={`tab-essential-${at}`}
                     accessibilityRole="button"
                     accessibilityLabel={pin.title || displayUrl(pin.url)}
-                    onPress={() => onOpenSite(pin.url)}
-                    className="items-center justify-center bg-default"
+                    accessibilityHint={t("pin.unpinHint")}
+                    accessibilityState={{ selected: pin.url === activeUrl }}
+                    onPress={() => onOpenPin(pin)}
+                    onLongPress={() => onUnpin(pin)}
+                    className={`items-center justify-center ${pin.url === activeUrl ? "border-2 border-accent bg-default" : "bg-default"}`}
                     style={{ width: cardWidth, height: 64, borderRadius: radius.tile }}
                   >
                     <SiteIcon url={pin.url} size={30} />
@@ -180,41 +190,51 @@ export function TabSwitcher({
               </View>
             ) : null}
 
-            {folders.length ? (
+            {rows.length || folders.length ? (
               <View style={{ gap: 2 }}>
-                <FolderRow testID="folder-chip-all" icon="tabs" label={t("tabs.all")} active={activeFolderId === null} onPress={() => onSelectFolder(null)} />
+                <Text variant="footnote" weight="medium" tone="muted" style={{ marginBottom: space.xs }}>
+                  {t("tabs.pinned")}
+                </Text>
+                {rows
+                  .filter((row) => !row.folderId)
+                  .map((row) => (
+                    <PinRow key={row.id} site={row} active={row.url === activeUrl} onOpen={onOpenPin} onUnpin={onUnpin} />
+                  ))}
                 {folders.map((folder) => (
-                  <FolderRow
+                  <PinFolder
                     key={folder.id}
-                    testID={`folder-chip-${folder.id}`}
-                    icon="folder"
-                    label={folder.name}
-                    active={folder.id === activeFolderId}
-                    onPress={() => onSelectFolder(folder.id)}
+                    folder={folder}
+                    rows={rows.filter((row) => row.folderId === folder.id)}
+                    activeUrl={activeUrl}
+                    onOpen={onOpenPin}
+                    onUnpin={onUnpin}
                   />
                 ))}
               </View>
             ) : null}
 
-            <View className="flex-row items-center" style={{ gap: space.md }}>
-              <Text testID="tab-switcher-count" variant="footnote" weight="medium" tone="muted">
-                {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
-              </Text>
-              <View className="flex-1 bg-foreground/10" style={{ height: StyleSheet.hairlineWidth }} />
-              {tabs.length > 1 ? (
-                <PressFeedback
-                  testID="tab-switcher-archive-all"
-                  accessibilityRole="button"
-                  accessibilityLabel={t("tabs.archiveAllCount", { count: tabs.length })}
-                  onPress={onCloseAll}
-                  hitSlop={8}
-                >
-                  <Text variant="footnote" weight="medium" tone="muted">
-                    {t("tabs.clear")}
-                  </Text>
-                </PressFeedback>
-              ) : null}
-            </View>
+            {/* With every tab pinned, there is no grid to count. */}
+            {tabs.length || !(essentials.length || rows.length) ? (
+              <View className="flex-row items-center" style={{ gap: space.md }}>
+                <Text testID="tab-switcher-count" variant="footnote" weight="medium" tone="muted">
+                  {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
+                </Text>
+                <View className="flex-1 bg-foreground/10" style={{ height: StyleSheet.hairlineWidth }} />
+                {tabs.length > 1 ? (
+                  <PressFeedback
+                    testID="tab-switcher-archive-all"
+                    accessibilityRole="button"
+                    accessibilityLabel={t("tabs.archiveAllCount", { count: tabs.length })}
+                    onPress={onCloseAll}
+                    hitSlop={8}
+                  >
+                    <Text variant="footnote" weight="medium" tone="muted">
+                      {t("tabs.clear")}
+                    </Text>
+                  </PressFeedback>
+                ) : null}
+              </View>
+            ) : null}
 
             <View className="flex-row flex-wrap" style={{ gap: GAP, rowGap: space.lg }}>
               {tabs.map((tab, at) => (
@@ -228,6 +248,7 @@ export function TabSwitcher({
                   hidden={Boolean(tab.private && privateLocked)}
                   onPick={onPick}
                   onClose={onClose}
+                  onMenu={onTabMenu}
                 />
               ))}
             </View>
@@ -283,37 +304,85 @@ export function SpaceGlyph({ color, name, icon, size }: { color: string; name: s
   );
 }
 
-/** A folder in the space, as a row; the one showing is filled in. */
-function FolderRow({
-  testID,
-  icon,
-  label,
+/** A pinned row: its site's icon and name; a tap opens its tab, a long press unpins it. */
+function PinRow({
+  site,
   active,
-  onPress,
+  indent = false,
+  onOpen,
+  onUnpin,
 }: {
-  testID: string;
-  icon: "folder" | "tabs";
-  label: string;
+  site: PinnedSite;
   active: boolean;
-  onPress: () => void;
+  indent?: boolean;
+  onOpen: (site: PinnedSite) => void;
+  onUnpin: (site: PinnedSite) => void;
 }): JSX.Element {
-  const foreground = useThemeColor("foreground");
+  const t = useT();
 
   return (
     <PressFeedback
-      testID={testID}
+      testID={`tab-pinned-${site.id}`}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={site.title || displayUrl(site.url)}
+      accessibilityHint={t("pin.unpinHint")}
       accessibilityState={{ selected: active }}
-      onPress={onPress}
+      onPress={() => onOpen(site)}
+      onLongPress={() => onUnpin(site)}
       className={`flex-row items-center ${active ? "bg-default" : ""}`}
-      style={{ minHeight: 40, gap: space.md, paddingHorizontal: space.sm, borderRadius: radius.control }}
+      style={{ minHeight: 40, gap: space.md, paddingLeft: indent ? space.xl + space.sm : space.sm, paddingRight: space.sm, borderRadius: radius.control }}
     >
-      <Icon name={icon} color={foreground} size={iconSize.small} />
+      <SiteIcon url={site.url} size={20} />
       <Text variant="callout" weight={active ? "semibold" : "regular"} numberOfLines={1} className="flex-1">
-        {label}
+        {site.title || displayUrl(site.url)}
       </Text>
     </PressFeedback>
+  );
+}
+
+/** A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do. */
+function PinFolder({
+  folder,
+  rows,
+  activeUrl,
+  onOpen,
+  onUnpin,
+}: {
+  folder: BrowserFolder;
+  rows: readonly PinnedSite[];
+  activeUrl: string;
+  onOpen: (site: PinnedSite) => void;
+  onUnpin: (site: PinnedSite) => void;
+}): JSX.Element {
+  const foreground = useThemeColor("foreground");
+  const muted = useThemeColor("muted");
+  // A folder holding the page on screen starts open.
+  const [open, setOpen] = useState(() => rows.some((row) => row.url === activeUrl));
+
+  return (
+    <View>
+      <PressFeedback
+        testID={`tab-folder-${folder.id}`}
+        accessibilityRole="button"
+        accessibilityLabel={folder.name}
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((was) => !was)}
+        className="flex-row items-center"
+        style={{ minHeight: 40, gap: space.md, paddingHorizontal: space.sm, borderRadius: radius.control }}
+      >
+        <Icon name="folder" color={foreground} size={iconSize.small} />
+        <Text variant="callout" numberOfLines={1} className="flex-1">
+          {folder.name}
+        </Text>
+        <Text variant="footnote" tone="muted">
+          {rows.length ? String(rows.length) : ""}
+        </Text>
+        <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" color={muted} size={iconSize.inline} />
+        </View>
+      </PressFeedback>
+      {open ? rows.map((row) => <PinRow key={row.id} site={row} active={row.url === activeUrl} indent onOpen={onOpen} onUnpin={onUnpin} />) : null}
+    </View>
   );
 }
 
@@ -332,6 +401,7 @@ function TabCard({
   hidden,
   onPick,
   onClose,
+  onMenu,
 }: {
   tab: BrowserTab;
   index: number;
@@ -342,6 +412,7 @@ function TabCard({
   hidden: boolean;
   onPick: (tab: BrowserTab, frame: Frame) => void;
   onClose: (id: string) => void;
+  onMenu: (tab: BrowserTab) => void;
 }): JSX.Element {
   const muted = useThemeColor("muted");
   const t = useT();
@@ -396,6 +467,8 @@ function TabCard({
           accessibilityValue={{ text: position }}
           accessibilityState={{ selected: active }}
           onPress={pick}
+          // The pinning choices: Essentials, Pinned, a folder.
+          onLongPress={tab.private || hidden || !tab.url ? undefined : () => onMenu(tab)}
           className={tab.private ? "overflow-hidden bg-neutral-900" : "overflow-hidden bg-white dark:bg-neutral-900"}
           style={{ height, borderRadius: radius.tile }}
         >

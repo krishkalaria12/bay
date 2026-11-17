@@ -221,7 +221,8 @@ export function SearchCard({ initialText, engine, data, initialPrivate, listenOn
     }
   }
 
-  const pins = data.pinnedSites.slice(0, 4);
+  // The space's Essentials, as on the start page.
+  const pins = data.pinnedSites.filter((site) => site.spaceId === data.activeSpaceId && site.kind === "essential").slice(0, 4);
 
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">

@@ -59,7 +59,7 @@ test("stale tabs are archived, except the current one and pinned sites", () => {
       page("fresh", "https://fresh.com/", now),
     ],
     activeTabId: "current",
-    pinnedSites: [{ id: "p", url: "https://pinned.com/", title: "Pinned", favicon: null }],
+    pinnedSites: [{ id: "p", url: "https://pinned.com/", title: "Pinned", favicon: null, spaceId: "personal", kind: "essential", folderId: null }],
   };
 
   data = reduceBrowserData(data, { type: "archive-stale", now });
@@ -782,4 +782,40 @@ test("a site can keep its own swipe to navigate", () => {
     update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null },
   });
   assert.equal(data.preferences.siteSettings["maps.example"], undefined);
+});
+
+test("a tab's page pins in its space as an Essential or a row, and pinning it the same way again unpins it", () => {
+  let data = initialBrowserData({ ...page("a", "https://a.example/"), spaceId: "personal" });
+
+  data = reduceBrowserData(data, { type: "new-folder", folder: { id: "f", spaceId: "personal", name: "Reading" } });
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "p", kind: "essential" });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => [site.spaceId, site.kind, site.folderId]),
+    [["personal", "essential", null]],
+  );
+
+  // Pinned another way, it moves rather than pinning twice.
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "q", kind: "row", folderId: "f" });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => [site.id, site.kind, site.folderId]),
+    [["p", "row", "f"]],
+  );
+
+  // Its folder going leaves it pinned, loose.
+  const loose = reduceBrowserData(data, { type: "delete-folder", id: "f" });
+
+  assert.equal(loose.pinnedSites[0]?.folderId, null);
+  assert.deepEqual(reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "r", kind: "row", folderId: "f" }).pinnedSites, []);
+});
+
+test("pins saved before spaces had them are the first space's Essentials", () => {
+  const read = parseBrowserData(
+    { version: 2, tabs: [], pinnedSites: [{ id: "p", url: "https://a.example/", title: "A", favicon: null }] } as JsonValue,
+    initialBrowserData(createTab("t", 0)),
+  );
+
+  assert.deepEqual(
+    read.pinnedSites.map((site) => [site.spaceId, site.kind, site.folderId]),
+    [["personal", "essential", null]],
+  );
 });

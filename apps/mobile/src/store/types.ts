@@ -49,12 +49,22 @@ export interface HistoryEntry {
   lastVisit: number;
 }
 
+/**
+ * A pinned page, as the desktop keeps them in each space: an Essential (a tile above the space's tabs, and on the start
+ * page) or a pinned row (in the space's Pinned section, loose or in one of its folders). It syncs as the desktop's pin.
+ */
 export interface PinnedSite {
   id: string;
   url: string;
   title: string;
   favicon: string | null;
+  spaceId: string;
+  kind: PinKind;
+  /** A pinned row's folder; Essentials have none. */
+  folderId: string | null;
 }
+
+export type PinKind = "essential" | "row";
 
 /**
  * A bookmark or a folder of them: desktop's bookmark node (`apps/browser/src/store/types.ts`), with one tree for the

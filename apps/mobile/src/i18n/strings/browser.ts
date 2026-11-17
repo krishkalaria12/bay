@@ -38,6 +38,13 @@ export const browser = {
   "tabs.swipeToClose": "Swipe up to close",
   "tabs.clear": "Clear",
   "tabs.switchSpace": "Switch to {name}",
+  "tabs.pinned": "Pinned",
+  "pin.unpinHint": "Touch and hold to unpin",
+  "pin.essential": "Add to Essentials",
+  "pin.row": "Pin tab",
+  "pin.into": "Pin in {folder}",
+  "pin.unpin": "Unpin",
+  "pin.close": "Close tab",
 
   // Mini player (MiniPlayer.tsx).
   "player.playing": "playing",

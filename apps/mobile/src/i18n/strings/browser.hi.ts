@@ -37,6 +37,13 @@ export const browserHi: BrowserStrings = {
   "tabs.swipeToClose": "बंद करने के लिए ऊपर स्वाइप करें",
   "tabs.clear": "साफ़ करें",
   "tabs.switchSpace": "{name} पर जाएँ",
+  "tabs.pinned": "पिन किए गए",
+  "pin.unpinHint": "अनपिन करने के लिए दबाकर रखें",
+  "pin.essential": "Essentials में जोड़ें",
+  "pin.row": "टैब पिन करें",
+  "pin.into": "{folder} में पिन करें",
+  "pin.unpin": "अनपिन करें",
+  "pin.close": "टैब बंद करें",
 
   // Mini player.
   "player.playing": "चल रहा है",

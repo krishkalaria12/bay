@@ -39,6 +39,7 @@ import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { BehindSheets } from "@/panels/BehindSheets";
+import { PinPanel } from "@/panels/PinPanel";
 import { SpaceIconPanel } from "@/panels/SpaceIconPanel";
 import { spaceName } from "@/store/spaceName";
 import { PageRequestPanel } from "@/panels/PageRequest";
@@ -49,7 +50,7 @@ import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privac
 import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
-import type { BrowserTab } from "@/store/types";
+import type { BrowserTab, PinnedSite } from "@/store/types";
 import { CUSTOM_ENGINE_ID, engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { ClearData, ViewRegistry } from "./clearData";
 import { Logins } from "./credentials";
@@ -108,7 +109,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceIcon" | null;
+type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceIcon" | "pin" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -180,7 +181,13 @@ export function BrowserScreen(): JSX.Element {
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
   const spaceTabs = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const switcherTabs = spaceTabs.filter((tab) => !activeFolderId || tab.folderId === activeFolderId);
+  // The space's pins (B21, as the desktop's sidebar): its Essentials and pinned rows. A tab showing a pinned page is
+  // reached by its pin, so the grid below them holds the rest, and Clear leaves the pinned ones be.
+  const spacePins = data.pinnedSites.filter((site) => site.spaceId === data.activeSpaceId);
+  const essentials = spacePins.filter((site) => site.kind === "essential");
+  const pinnedUrls = new Set(spacePins.map((site) => site.url));
+  const switcherTabs = spaceTabs.filter((tab) => !tab.url || !pinnedUrls.has(tab.url));
+  const [pinTab, setPinTab] = useState<BrowserTab | null>(null);
   const page = navigation[active.id] ?? { ...blankNavigation, url: active.url, title: active.title };
   const hasPage = Boolean(active.url);
   const engine = engineFor(data.preferences.searchEngineId, data.preferences.customSearchUrl);
@@ -692,7 +699,7 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function archiveAll(): void {
-    const space = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
+    const space = switcherTabs;
     const archived = space.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
 
     for (const tab of space) closeTab(tab.id);
@@ -921,6 +928,22 @@ export function BrowserScreen(): JSX.Element {
     selectSpace(id);
   }
 
+  /** A pin's page: its tab in the space when one is open there, else a new one. */
+  function openPin(site: PinnedSite): void {
+    const open = data.tabs.find((tab) => tab.spaceId === site.spaceId && tab.url === site.url);
+
+    if (open) return activate(open.id);
+    setOverlay("none");
+    openTab(site.url);
+  }
+
+  function unpin(site: PinnedSite): void {
+    const index = data.pinnedSites.indexOf(site);
+    tick();
+    dispatch({ type: "remove-pin", id: site.id });
+    toast.show(t("toast.unpinned"), { label: t("toast.undo"), onPress: () => dispatch({ type: "add-pin", site, index }) });
+  }
+
   function openSettings(): void {
     setPanel(null);
     setSettingsOpen(true);
@@ -1046,7 +1069,7 @@ export function BrowserScreen(): JSX.Element {
             <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + space.xxl }} pointerEvents="box-none">
               <View className="w-full" style={{ marginBottom: space.xl, paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
                 <StartPage
-                  pins={data.pinnedSites}
+                  pins={essentials}
                   history={data.history}
                   onPhoto={onPhoto}
                   onOpen={(url) => open({ kind: "url", url }, false)}
@@ -1087,13 +1110,16 @@ export function BrowserScreen(): JSX.Element {
               spaces={data.spaces}
               activeSpaceId={data.activeSpaceId}
               onSelectSpace={switchSpace}
+              essentials={essentials}
+              rows={spacePins.filter((site) => site.kind === "row")}
               folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
-              activeFolderId={activeFolderId}
-              onSelectFolder={setActiveFolderId}
-              pins={data.pinnedSites}
-              onOpenSite={(url) => {
-                setOverlay("none");
-                openTab(url);
+              activeUrl={active.url}
+              onOpenPin={openPin}
+              onUnpin={unpin}
+              onTabMenu={(tab) => {
+                tick();
+                setPinTab(tab);
+                setPanel("pin");
               }}
               onSettings={openSettings}
               onChangeIcon={() => setPanel("spaceIcon")}
@@ -1262,7 +1288,7 @@ export function BrowserScreen(): JSX.Element {
         canGoBack={page.canGoBack}
         canGoForward={page.canGoForward}
         isLoading={page.isLoading}
-        isPinned={data.pinnedSites.some((site) => site.url === active.url)}
+        isPinned={essentials.some((site) => site.url === active.url)}
         isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
         blockedCount={blockedCounts[active.id] ?? null}
@@ -1291,8 +1317,8 @@ export function BrowserScreen(): JSX.Element {
         onStop={() => run((tab) => tab.stop())}
         onPin={() => {
           tick();
-          const pinned = data.pinnedSites.some((site) => site.url === active.url);
-          dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
+          const pinned = essentials.some((site) => site.url === active.url);
+          dispatch({ type: "pin-site", tabId: active.id, pinId: newId(), kind: "essential" });
           toast.show(pinned ? t("toast.unpinned") : t("toast.pinned"));
         }}
         onBookmark={() => {
@@ -1345,8 +1371,11 @@ export function BrowserScreen(): JSX.Element {
           deleteFolder(id);
         }}
         onMoveTab={(spaceId, folderId) => {
-          moveTab(active.id, spaceId, folderId);
+          moveTab(active.id, spaceId, null);
           setActiveFolderId(folderId);
+
+          // Into a folder: the tab's page is pinned there, as the desktop's Pinned folders hold pinned rows.
+          if (folderId) dispatch({ type: "pin-site", tabId: active.id, pinId: newId(), kind: "row", folderId });
         }}
       />
       <SiteSettingsPanel
@@ -1381,6 +1410,21 @@ export function BrowserScreen(): JSX.Element {
         onSettings={() => {
           setPanel(null);
           setSettingsOpen(true);
+        }}
+      />
+      <PinPanel
+        visible={panel === "pin"}
+        onClose={() => closePanel("pin")}
+        tab={pinTab}
+        pin={pinTab ? (spacePins.find((site) => site.url === pinTab.url) ?? null) : null}
+        folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
+        onPin={(kind, folderId) => {
+          if (pinTab) dispatch({ type: "pin-site", tabId: pinTab.id, pinId: newId(), kind, folderId });
+          closePanel("pin");
+        }}
+        onCloseTab={() => {
+          if (pinTab) archiveTab(pinTab.id);
+          closePanel("pin");
         }}
       />
       <SpaceIconPanel

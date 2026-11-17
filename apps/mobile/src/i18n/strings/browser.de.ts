@@ -37,6 +37,13 @@ export const browserDe: BrowserStrings = {
   "tabs.swipeToClose": "Zum Schließen nach oben wischen",
   "tabs.clear": "Leeren",
   "tabs.switchSpace": "Zu {name} wechseln",
+  "tabs.pinned": "Angeheftet",
+  "pin.unpinHint": "Gedrückt halten zum Lösen",
+  "pin.essential": "Zu Essentials hinzufügen",
+  "pin.row": "Tab anheften",
+  "pin.into": "In {folder} anheften",
+  "pin.unpin": "Lösen",
+  "pin.close": "Tab schließen",
 
   // Mini player.
   "player.playing": "wird abgespielt",

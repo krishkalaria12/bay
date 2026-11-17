@@ -158,6 +158,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   createSpace() {
     const data = get().data;
     const index = data.spaces.length + 1;
+
     const space = {
       id: newId(),
       name: t("space.default", { index }),

@@ -37,6 +37,13 @@ export const browserPtBR: BrowserStrings = {
   "tabs.swipeToClose": "Deslize para cima para fechar",
   "tabs.clear": "Limpar",
   "tabs.switchSpace": "Mudar para {name}",
+  "tabs.pinned": "Fixadas",
+  "pin.unpinHint": "Toque e segure para desafixar",
+  "pin.essential": "Adicionar aos Essenciais",
+  "pin.row": "Fixar aba",
+  "pin.into": "Fixar em {folder}",
+  "pin.unpin": "Desafixar",
+  "pin.close": "Fechar aba",
 
   // Mini player.
   "player.playing": "reproduzindo",

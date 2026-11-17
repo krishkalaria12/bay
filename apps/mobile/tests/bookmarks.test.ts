@@ -152,7 +152,11 @@ test("imported history adds visits to the pages already there and keeps the newe
 });
 
 test("imported pins join after the ones already there, once each", () => {
-  let data = reduceBrowserData(fresh(), { type: "add-pin", site: { id: "p", url: "https://a.example/", title: "A", favicon: null }, index: 0 });
+  let data = reduceBrowserData(fresh(), {
+    type: "add-pin",
+    site: { id: "p", url: "https://a.example/", title: "A", favicon: null, spaceId: "personal", kind: "essential", folderId: null },
+    index: 0,
+  });
   data = reduceBrowserData(data, {
     type: "import-pins",
     sites: [

@@ -14,6 +14,7 @@ import type {
   HistoryEntry,
   JsonObject,
   JsonValue,
+  PinKind,
   PinnedSite,
   SimplePreferences,
   SiteBlockGroup,
@@ -199,7 +200,7 @@ export type BrowserAction =
   | { type: "import-tabs"; tabs: BrowserTab[] }
   | { type: "import-archive"; tabs: BrowserTab[]; now: number }
   | { type: "import-history"; entries: HistoryEntry[] }
-  | { type: "import-pins"; sites: PinnedSite[] }
+  | { type: "import-pins"; sites: Pick<PinnedSite, "id" | "url" | "title" | "favicon">[] }
   | { type: "add-bookmarks"; nodes: BookmarkNode[] }
   /** Sync's tree, whole (src/sync/adapters.ts): it's built from every device's records. */
   | { type: "replace-bookmarks"; bookmarks: Bookmarks }
@@ -223,7 +224,8 @@ export type BrowserAction =
   | { type: "rename-folder"; id: string; name: string }
   | { type: "delete-folder"; id: string }
   | { type: "move-tab"; id: string; spaceId: string; folderId: string | null }
-  | { type: "pin-site"; tabId: string; pinId: string }
+  | { type: "pin-site"; tabId: string; pinId: string; kind: PinKind; folderId?: string | null }
+  | { type: "move-pin"; id: string; kind: PinKind; folderId: string | null }
   | { type: "remove-pin"; id: string }
   | { type: "add-pin"; site: PinnedSite; index: number }
   | { type: "remove-history"; url: string }
@@ -285,14 +287,17 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
 
     case "import-pins": {
       // Pins come after the ones already there; a site pinned already keeps its place.
-      const pinned = new Set(data.pinnedSites.map((site) => site.url));
+      const pinned = new Set(data.pinnedSites.filter((site) => site.spaceId === data.activeSpaceId).map((site) => site.url));
 
       const sites = uniqueBy(
         action.sites.filter((site) => isWebAddress(site.url) && !pinned.has(site.url)),
         (site) => site.url,
       );
 
-      return sites.length ? { ...data, pinnedSites: [...data.pinnedSites, ...sites] } : data;
+      // Another browser's favourites become the current space's Essentials.
+      const placed = sites.map((site): PinnedSite => ({ ...site, spaceId: data.activeSpaceId, kind: "essential", folderId: null }));
+
+      return placed.length ? { ...data, pinnedSites: [...data.pinnedSites, ...placed] } : data;
     }
 
     case "add-bookmarks": {
@@ -493,6 +498,8 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         spaces: remaining,
         folders: data.folders.filter((folder) => folder.spaceId !== action.id),
         tabs: afterTabs,
+        // Its pins go with its tabs, loose: its folders went.
+        pinnedSites: data.pinnedSites.map((site) => (site.spaceId === action.id ? { ...site, spaceId: destination, folderId: null } : site)),
         activeSpaceId,
         activeTabIds,
         // The tab the screen is sitting on now lives in the destination space, so the active pointer survives as is.
@@ -540,6 +547,8 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         ...data,
         folders: data.folders.filter((folder) => folder.id !== action.id),
         tabs: data.tabs.map((tab) => (tab.folderId === action.id ? { ...tab, folderId: null } : tab)),
+        // Its pinned rows stay pinned, loose in the space.
+        pinnedSites: data.pinnedSites.map((site) => (site.folderId === action.id ? { ...site, folderId: null } : site)),
       };
     }
 
@@ -572,23 +581,44 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
 
     case "pin-site": {
+      // Pins a tab's page in its space, or unpins it there when it is pinned already the same way.
       const tab = data.tabs.find((entry) => entry.id === action.tabId);
 
       if (!tab?.url) return data;
-      const existing = data.pinnedSites.some((site) => site.url === tab.url);
+      const folderId = action.kind === "row" && action.folderId && data.folders.some((folder) => folder.id === action.folderId) ? action.folderId : null;
+      const same = (site: PinnedSite) => site.spaceId === tab.spaceId && site.url === tab.url;
+      const existing = data.pinnedSites.find(same);
+
+      if (existing && existing.kind === action.kind && existing.folderId === folderId) {
+        return { ...data, pinnedSites: data.pinnedSites.filter((site) => !same(site)) };
+      }
+
+      const site: PinnedSite = {
+        id: existing?.id ?? action.pinId,
+        url: tab.url,
+        title: tab.title,
+        favicon: tab.favicon,
+        spaceId: tab.spaceId,
+        kind: action.kind,
+        folderId,
+      };
+
+      return { ...data, pinnedSites: [...data.pinnedSites.filter((entry) => !same(entry)), site] };
+    }
+
+    case "move-pin": {
+      const folderId = action.kind === "row" && action.folderId && data.folders.some((folder) => folder.id === action.folderId) ? action.folderId : null;
 
       return {
         ...data,
-        pinnedSites: existing
-          ? data.pinnedSites.filter((site) => site.url !== tab.url)
-          : [...data.pinnedSites, { id: action.pinId, url: tab.url, title: tab.title, favicon: tab.favicon }],
+        pinnedSites: data.pinnedSites.map((site) => (site.id === action.id ? { ...site, kind: action.kind, folderId } : site)),
       };
     }
 
     case "remove-pin":
       return { ...data, pinnedSites: data.pinnedSites.filter((site) => site.id !== action.id) };
     case "add-pin": {
-      if (data.pinnedSites.some((site) => site.url === action.site.url)) return data;
+      if (data.pinnedSites.some((site) => site.spaceId === action.site.spaceId && site.url === action.site.url)) return data;
       const pinnedSites = [...data.pinnedSites];
       pinnedSites.splice(action.index, 0, action.site);
 
@@ -1068,13 +1098,22 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
       : [],
   );
 
-  const pinnedSites: PinnedSite[] = (Array.isArray(value.pinnedSites) ? value.pinnedSites : [])
-    .filter(isRecord)
-    .flatMap((entry) =>
-      v.is(v.string(), entry.id) && entry.id && isWebAddress(entry.url) && v.is(v.string(), entry.title)
-        ? [{ id: entry.id, url: entry.url, title: entry.title, favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null }]
-        : [],
-    );
+  const pinnedSites: PinnedSite[] = (Array.isArray(value.pinnedSites) ? value.pinnedSites : []).filter(isRecord).flatMap((entry) =>
+    v.is(v.string(), entry.id) && entry.id && isWebAddress(entry.url) && v.is(v.string(), entry.title)
+      ? [
+          {
+            id: entry.id,
+            url: entry.url,
+            title: entry.title,
+            favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null,
+            // Pins from before spaces had them were the start page's: they become the first space's Essentials.
+            spaceId: v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : spaces[0]!.id,
+            kind: entry.kind === "row" ? ("row" as const) : ("essential" as const),
+            folderId: entry.kind === "row" && v.is(v.string(), entry.folderId) ? entry.folderId : null,
+          },
+        ]
+      : [],
+  );
 
   const archive: ArchivedTab[] = (Array.isArray(value.archive) ? value.archive : []).flatMap((entry) => {
     const tab = parseTab(entry);
@@ -1132,7 +1171,10 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     history: uniqueBy(history, (entry) => entry.url)
       .sort((a, b) => b.lastVisit - a.lastVisit)
       .slice(0, HISTORY_LIMIT),
-    pinnedSites: uniqueBy(pinnedSites, (entry) => entry.url),
+    // Once per space; a pinned row whose folder went is loose in its space.
+    pinnedSites: uniqueBy(pinnedSites, (entry) => `${entry.spaceId} ${entry.url}`).map((entry) =>
+      entry.folderId && !savedFolders.some((folder) => folder.id === entry.folderId && folder.spaceId === entry.spaceId) ? { ...entry, folderId: null } : entry,
+    ),
     bookmarks: parseBookmarks(value.bookmarks),
     archive: uniqueBy(
       uniqueBy(

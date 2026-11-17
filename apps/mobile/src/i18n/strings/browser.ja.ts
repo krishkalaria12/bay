@@ -37,6 +37,13 @@ export const browserJa: BrowserStrings = {
   "tabs.swipeToClose": "上にスワイプして閉じる",
   "tabs.clear": "クリア",
   "tabs.switchSpace": "{name}に切り替え",
+  "tabs.pinned": "ピン留め",
+  "pin.unpinHint": "長押しでピン留めを解除",
+  "pin.essential": "Essentials に追加",
+  "pin.row": "タブをピン留め",
+  "pin.into": "{folder}にピン留め",
+  "pin.unpin": "ピン留めを解除",
+  "pin.close": "タブを閉じる",
 
   // Mini player.
   "player.playing": "再生中",
