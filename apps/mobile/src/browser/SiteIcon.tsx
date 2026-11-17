@@ -43,6 +43,8 @@ export function SiteIcon({
   };
 
   const saved = icon && broken !== icon ? icon : null;
+  // Drawn from the whole file and scaled on the GPU: Android's "resize" (and "auto", for a file) decodes a smaller
+  // bitmap, rounding down to a power of two that can land under the tile's pixels and blur it. Icons are small files.
   const source = saved ? { uri: saved, width: size, height: size } : image;
 
   if (source && bare) {
@@ -53,7 +55,7 @@ export function SiteIcon({
         importantForAccessibility="no-hide-descendants"
         source={source}
         style={{ width: size, height: size, borderRadius: radius * 0.5 }}
-        resizeMethod="resize"
+        resizeMethod="scale"
         fadeDuration={0}
         onError={saved ? () => forget(saved) : undefined}
       />
@@ -74,7 +76,7 @@ export function SiteIcon({
         <Image
           source={saved ? { uri: saved, width: inner, height: inner } : source}
           style={{ width: inner, height: inner, borderRadius: radius * 0.5 }}
-          resizeMethod="resize"
+          resizeMethod="scale"
           fadeDuration={0}
           onError={saved ? () => forget(saved) : undefined}
         />
