@@ -110,6 +110,10 @@ public final class BayTab {
         throw new UnsupportedOperationException();
     }
 
+    public void showPage() {
+        throw new UnsupportedOperationException();
+    }
+
     public void setVisible(boolean visible) {
         throw new UnsupportedOperationException();
     }
