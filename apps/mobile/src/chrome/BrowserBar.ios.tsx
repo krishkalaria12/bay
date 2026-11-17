@@ -3,12 +3,14 @@ import {
   accessibilityIdentifier,
   accessibilityLabel,
   buttonStyle,
+  contentShape,
   controlSize,
   font,
   foregroundStyle,
   frame,
   glassEffect,
   padding,
+  shapes,
   tint,
   truncationMode,
 } from "@expo/ui/swift-ui/modifiers";
@@ -136,11 +138,8 @@ function SpacesCapsule({
               <Image systemName={entry.active ? "app.fill" : "circle.fill"} size={entry.active ? 18 : 9} modifiers={[foregroundStyle(entry.color)]} />
             </Button>
           ))}
-          <Button
-            onPress={onNewSpace}
-            modifiers={[buttonStyle("plain"), accessibilityLabel(newSpace.label), accessibilityIdentifier(newSpace.id), frame({ width: 34, height: 34 })]}
-          >
-            <Image systemName="plus" size={15} modifiers={[foregroundStyle("secondary")]} />
+          <Button onPress={onNewSpace} modifiers={[buttonStyle("plain"), accessibilityLabel(newSpace.label), accessibilityIdentifier(newSpace.id)]}>
+            <Image systemName="plus" size={15} modifiers={[foregroundStyle("secondary"), frame({ width: 34, height: 34 }), contentShape(shapes.rectangle())]} />
           </Button>
         </HStack>
       </Host>
