@@ -465,7 +465,8 @@ function TabCard({
 
   return (
     <View style={{ width, gap: space.xs, opacity: closing ? 0.4 : 1 }}>
-      <View style={[{ borderRadius: radius.tile }, CARD_LIFT]}>
+      {/* Solid like the card it lifts, so iOS draws the shadow from its shape instead of offscreen every frame. */}
+      <View className={tab.private ? "bg-neutral-900" : "bg-white dark:bg-neutral-900"} style={[{ borderRadius: radius.tile }, CARD_LIFT]}>
         <Pressable
           ref={card}
           testID={`tab-card-${index}`}
