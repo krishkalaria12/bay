@@ -73,11 +73,12 @@ export function PanelSheetShared({
   const foreground = useThemeColor("foreground");
   const reduced = useReducedMotion();
   const t = useT();
-  // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
-  // mounts on open and stays until the sheet finishes animating closed.
-  const [shown, setShown] = useState(visible);
+  // A sheet's content mounts the first time it opens and then stays: opening it again only updates it, which is far
+  // less work than mounting every row each time, and its measured height (so its snap point) holds steady. A closed
+  // sheet doesn't re-render with the browser (quietWhileClosed), so the kept content costs nothing while it waits.
+  const [opened, setOpened] = useState(visible);
 
-  if (visible && !shown) setShown(true);
+  if (visible && !opened) setOpened(true);
 
   // The sheet fits what it holds: it stands as tall as its grabber, its header and its content, up to `height`; longer
   // content scrolls inside it as before. The header and the content are measured; the grabber's area is fixed.
@@ -86,7 +87,7 @@ export function PanelSheetShared({
   const [headerHeight, setHeaderHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const snap = headerHeight && contentHeight ? Math.max(Math.min(GRABBER_AREA + headerHeight + contentHeight + ROUNDING, tallest), SHORTEST_SHEET) : tallest;
-  // A closing sheet unmounts its content, which reports almost no height: keep the open sheet's measure.
+  // Only an open sheet's content is measured: content that changes while the sheet is closed waits for it to open.
   const open = useRef(visible);
 
   useLayoutEffect(() => {
@@ -128,80 +129,69 @@ export function PanelSheetShared({
     [dismissible],
   );
 
-  const onClosed = useCallback(() => setShown(false), []);
-
-  // While the sheet is closed it is handed only values that don't change between the browser's renders, and no body:
-  // the React Compiler keeps the same element, so React skips the whole closed sheet. Every sheet stays mounted (gorhom
-  // drops a sheet asked to open before its first layout), but a dozen closed ones no longer re-render whenever any one
-  // opens or closes, which made opening a sheet take the best part of a second on a phone.
+  // The sheet shell is handed only values that don't change between the browser's renders, so the React Compiler keeps
+  // the same element and React skips it. Every sheet stays mounted (gorhom drops a sheet asked to open before its first
+  // layout), but a dozen closed ones no longer re-render whenever any one opens or closes, which made opening a sheet
+  // take the best part of a second on a phone.
   // Modal for VoiceOver: what sits beside the sheet's content inside the sheet is skipped too.
-  const body =
-    visible || shown ? (
-      <View testID={testID} className="flex-1" accessibilityViewIsModal>
-        <View
-          onLayout={(event) => setHeaderHeight(Math.round(event.nativeEvent.layout.height))}
-          className="flex-row items-center"
-          style={{
-            gap: space.md,
-            paddingLeft: insets.left + space.gutter,
-            paddingRight: insets.right + space.gutter,
-            paddingTop: space.xs,
-            paddingBottom: space.md,
-          }}
-        >
-          <View className="flex-1 flex-row items-center" style={{ gap: space.xs }}>
-            {onBack ? (
-              <View style={{ marginLeft: -space.xs, marginRight: space.xs }}>
-                <SheetIconButton testID={`${testID}-back`} icon="back" label={t("sheet.back")} onPress={onBack} tone="default" />
-              </View>
-            ) : null}
-            {header && !onBack ? (
-              <View className="flex-1">{header}</View>
-            ) : (
-              <BottomSheet.Title accessibilityRole="header" numberOfLines={1} className="flex-1" style={[fontFor("title"), { color: foreground }]}>
-                {title}
-              </BottomSheet.Title>
-            )}
-          </View>
-          <View className={`flex-row ${header && !onBack ? "self-start" : ""}`} style={{ gap: space.sm }}>
-            {accessory}
-            <SheetIconButton testID={`${testID}-close`} icon="close" label={t("sheet.close", { title })} disabled={!dismissible} onPress={onClose} />
-          </View>
-        </View>
-        {listMode ? (
-          <SheetFit.Provider value={fit}>
-            <View ref={room} className="flex-1">
-              {children}
+  const body = opened ? (
+    <View testID={testID} className="flex-1" accessibilityViewIsModal>
+      <View
+        onLayout={(event) => setHeaderHeight(Math.round(event.nativeEvent.layout.height))}
+        className="flex-row items-center"
+        style={{
+          gap: space.md,
+          paddingLeft: insets.left + space.gutter,
+          paddingRight: insets.right + space.gutter,
+          paddingTop: space.xs,
+          paddingBottom: space.md,
+        }}
+      >
+        <View className="flex-1 flex-row items-center" style={{ gap: space.xs }}>
+          {onBack ? (
+            <View style={{ marginLeft: -space.xs, marginRight: space.xs }}>
+              <SheetIconButton testID={`${testID}-back`} icon="back" label={t("sheet.back")} onPress={onBack} tone="default" />
             </View>
-          </SheetFit.Provider>
-        ) : (
-          <View className="flex-1">
-            <BottomSheetScrollView
-              keyboardShouldPersistTaps="handled"
-              onContentSizeChange={(_, measured) => fit.reportContentHeight(Math.round(measured))}
-              contentContainerStyle={{
-                paddingLeft: insets.left + space.gutter,
-                paddingRight: insets.right + space.gutter,
-                paddingBottom: Math.max(insets.bottom, space.gutter) + space.md,
-              }}
-            >
-              {children}
-            </BottomSheetScrollView>
-          </View>
-        )}
+          ) : null}
+          {header && !onBack ? (
+            <View className="flex-1">{header}</View>
+          ) : (
+            <BottomSheet.Title accessibilityRole="header" numberOfLines={1} className="flex-1" style={[fontFor("title"), { color: foreground }]}>
+              {title}
+            </BottomSheet.Title>
+          )}
+        </View>
+        <View className={`flex-row ${header && !onBack ? "self-start" : ""}`} style={{ gap: space.sm }}>
+          {accessory}
+          <SheetIconButton testID={`${testID}-close`} icon="close" label={t("sheet.close", { title })} disabled={!dismissible} onPress={onClose} />
+        </View>
       </View>
-    ) : null;
+      {listMode ? (
+        <SheetFit.Provider value={fit}>
+          <View ref={room} className="flex-1">
+            {children}
+          </View>
+        </SheetFit.Provider>
+      ) : (
+        <View className="flex-1">
+          <BottomSheetScrollView
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={(_, measured) => fit.reportContentHeight(Math.round(measured))}
+            contentContainerStyle={{
+              paddingLeft: insets.left + space.gutter,
+              paddingRight: insets.right + space.gutter,
+              paddingBottom: Math.max(insets.bottom, space.gutter) + space.md,
+            }}
+          >
+            {children}
+          </BottomSheetScrollView>
+        </View>
+      )}
+    </View>
+  ) : null;
 
   return (
-    <SheetShell
-      visible={visible}
-      snap={snap}
-      dismissible={dismissible}
-      reduced={reduced}
-      background={background}
-      onOpenChange={onOpenChange}
-      onClosed={onClosed}
-    >
+    <SheetShell visible={visible} snap={snap} dismissible={dismissible} reduced={reduced} background={background} onOpenChange={onOpenChange}>
       {body}
     </SheetShell>
   );
@@ -215,7 +205,6 @@ function SheetShell({
   reduced,
   background,
   onOpenChange,
-  onClosed,
   children,
 }: {
   visible: boolean;
@@ -224,7 +213,6 @@ function SheetShell({
   reduced: boolean;
   background: PanelSheetProps["background"];
   onOpenChange: (open: boolean) => void;
-  onClosed: () => void;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -249,7 +237,6 @@ function SheetShell({
             mass: SPRING.mass,
             reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System,
           }}
-          onClose={onClosed}
           // HeroUI pads its container on every side; the sheet's own content already keeps the gutter from the sides and
           // the safe area at the bottom, and padded twice every sheet ended in an empty strip, fitted sheets came out
           // short of their content, and rows sat 36 pt in from the sides. Its top padding stays: GRABBER_AREA counts it.
