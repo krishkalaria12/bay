@@ -4,6 +4,7 @@
  * share it.
  */
 import * as v from "valibot";
+import { sliceText } from "./text.ts";
 import type { BookmarkFolder, BookmarkNode, Bookmarks, JsonValue } from "./types.ts";
 
 /** The folder every bookmark hangs off. It has no title of its own and is never removed. */
@@ -80,7 +81,7 @@ export function draftNodes(drafts: readonly BookmarkDraft[], parentId: string, n
   const add = (draft: BookmarkDraft, parent: string): string | null => {
     if (nodes.length >= room) return null;
     const id = newId();
-    const title = draft.title.slice(0, TITLE_LIMIT);
+    const title = sliceText(draft.title, TITLE_LIMIT);
     const addedAt = draft.addedAt ?? now;
 
     if (draft.url !== undefined) {
@@ -201,14 +202,14 @@ export function parseBookmarks(value: JsonValue | undefined): Bookmarks {
     if (!node || node.id !== id || bookmarks[id] || !parent) continue;
     count += 1;
     parent.children.push(id);
-    const title = node.title.slice(0, TITLE_LIMIT);
+    const title = sliceText(node.title, TITLE_LIMIT);
 
     if (node.kind === "url") {
-      bookmarks[id] = { kind: "url", id, parentId, title, url: node.url, addedAt: node.addedAt };
+      bookmarks[id] = { kind: "url", id, parentId, title, url: node.url, addedAt: Math.trunc(node.addedAt) };
       continue;
     }
 
-    bookmarks[id] = { kind: "folder", id, parentId, title, children: [], addedAt: node.addedAt };
+    bookmarks[id] = { kind: "folder", id, parentId, title, children: [], addedAt: Math.trunc(node.addedAt) };
     queue.push(...node.children.map((child) => ({ id: child, parentId: id })));
   }
 

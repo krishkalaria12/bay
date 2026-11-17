@@ -74,17 +74,9 @@ if (process.env.BAY_RECORD_FILE) {
   if (!existsSync(raw)) throw new Error(`no calls recorded (tests exited ${run.status})`);
   const seen = new Set();
   const lines = [];
-  let halves = 0;
 
   for (const line of readFileSync(raw, "utf8").split("\n")) {
     if (!line) continue;
-    // JSON.stringify escapes only lone surrogates: half an emoji, left by slicing a name in UTF-16 units. Rust's
-    // strings can't hold one (js::slice drops the whole pair instead), so those calls aren't comparable.
-
-    if (/\\ud[89a-f][0-9a-f]{2}/i.test(line)) {
-      halves += 1;
-      continue;
-    }
 
     const hash = createHash("sha256").update(line).digest("hex");
 
@@ -98,5 +90,5 @@ if (process.env.BAY_RECORD_FILE) {
   const counts = {};
 
   for (const line of lines) counts[JSON.parse(line).fn] = (counts[JSON.parse(line).fn] ?? 0) + 1;
-  console.log(`tests exited ${run.status}; ${lines.length} distinct calls (${halves} with half an emoji left out)`, counts);
+  console.log(`tests exited ${run.status}; ${lines.length} distinct calls`, counts);
 }

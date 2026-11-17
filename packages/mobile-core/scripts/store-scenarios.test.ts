@@ -65,6 +65,9 @@ test("the actions the app's tests don't use", () => {
     run(data, { type: "set-space-icon", id: "fun", icon });
   }
 
+  run(data, { type: "rename-folder", id: "f1", name: `${"c".repeat(39)}🌱🌱` });
+  run(data, { type: "sync-spaces", added: [], changed: [{ id: "work", name: `${"d".repeat(39)}💼`, color: "green", icon: "🇯🇵🇯🇵🇯🇵🇯🇵🇯🇵" }] });
+
   for (const color of ["violet", "green", "gray"] as const) run(data, { type: "set-space-color", id: "work", color });
   run(data, { type: "set-space-color", id: "nowhere", color: "blue" });
 
@@ -228,7 +231,7 @@ test("saved documents, good and broken", () => {
       activeSpaceId: "s",
       activeTabIds: { s: "t", ghost: "t", personal: "missing" },
       downloads: [
-        { id: "d", filename: "f", state: "downloading", startedAt: 5, received: -1, total: 10 },
+        { id: "d", filename: "f", state: "downloading", startedAt: 5, received: -1, total: 10.7 },
         { id: "d", filename: "g", state: "finished", startedAt: 9 },
       ],
       archive: [
@@ -245,6 +248,34 @@ test("saved documents, good and broken", () => {
     fallback,
   );
   parseBrowserData({ version: 2 }, fallback);
+  // Fractional numbers a document could hold: both stores keep them whole.
+  parseBrowserData(
+    {
+      version: 2,
+      tabs: [{ id: "f", url: "https://f.example/", title: "F", createdAt: 1.9, lastVisit: 2.5 }],
+      history: [{ url: "https://f.example/", title: "F", lastVisit: 7.75, visits: 3.9 }],
+      archive: [{ id: "g", url: "https://g.example/", title: "G", createdAt: 1, lastVisit: 1, closedAt: 3.3 }],
+      downloads: [{ id: "d", filename: "f", state: "finished", startedAt: 5.5, received: 9.9, total: 10.1 }],
+      bookmarks: {
+        bookmarks: { kind: "folder", id: "bookmarks", title: "", children: ["b"], addedAt: 0 },
+        b: { kind: "url", id: "b", title: "B", url: "https://b.example/", addedAt: 4.4 },
+      },
+      leftAt: 12.7,
+    },
+    fallback,
+  );
+  // Names and emoji cut at their limit on an emoji: neither store keeps half of one.
+  parseBrowserData(
+    {
+      version: 2,
+      spaces: [
+        { id: "personal", name: "Me" },
+        { id: "s", name: `${"a".repeat(39)}🏝️`, icon: "👨‍👩‍👧‍👦👨‍👩‍👧‍👦" },
+      ],
+      folders: [{ id: "x", spaceId: "s", name: `${"b".repeat(39)}🎧` }],
+    },
+    fallback,
+  );
 
   for (const broken of [null, [], "text", { version: 3 }, { tabs: [] }]) {
     try {
