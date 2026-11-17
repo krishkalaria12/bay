@@ -39,6 +39,7 @@ import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { BehindSheets } from "@/panels/BehindSheets";
+import { SpaceIconPanel } from "@/panels/SpaceIconPanel";
 import { spaceName } from "@/store/spaceName";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { takeFieldRequest } from "@/onboarding/handoff";
@@ -107,7 +108,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
+type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | "spaceIcon" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -130,6 +131,7 @@ export function BrowserScreen(): JSX.Element {
     importExport,
     selectSpace,
     createSpace,
+    setSpaceIcon,
     renameSpace,
     deleteSpace,
     moveTab,
@@ -911,6 +913,8 @@ export function BrowserScreen(): JSX.Element {
   }, [tip, tipSeen]);
 
   // The tab view's space, from its bar or a sideways swipe: the folder filter belongs to the space it was set in.
+  const activeSpace = data.spaces.find((entry) => entry.id === data.activeSpaceId) ?? data.spaces[0]!;
+
   function switchSpace(id: string): void {
     if (id === data.activeSpaceId) return;
     setActiveFolderId(null);
@@ -1092,6 +1096,7 @@ export function BrowserScreen(): JSX.Element {
                 openTab(url);
               }}
               onSettings={openSettings}
+              onChangeIcon={() => setPanel("spaceIcon")}
             />
           </View>
         ) : null}
@@ -1217,6 +1222,7 @@ export function BrowserScreen(): JSX.Element {
                   id: entry.id,
                   label: spaceName(entry, t),
                   color: SPACE_COLORS[entry.color],
+                  icon: entry.icon ?? null,
                   active: entry.id === data.activeSpaceId,
                 }))}
                 onSelectSpace={switchSpace}
@@ -1375,6 +1381,17 @@ export function BrowserScreen(): JSX.Element {
         onSettings={() => {
           setPanel(null);
           setSettingsOpen(true);
+        }}
+      />
+      <SpaceIconPanel
+        visible={panel === "spaceIcon"}
+        onClose={() => closePanel("spaceIcon")}
+        name={spaceName(activeSpace, t)}
+        icon={activeSpace.icon ?? null}
+        onPick={(icon) => {
+          tick();
+          setSpaceIcon(activeSpace.id, icon);
+          closePanel("spaceIcon");
         }}
       />
       <ArchivePanel

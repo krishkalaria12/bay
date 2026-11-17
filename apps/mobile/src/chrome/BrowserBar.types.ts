@@ -5,11 +5,13 @@ import type { Translate } from "@/i18n";
 /** The search capsule's motion while the bar is swiped to change tabs (TabSwipe). */
 export type CapsuleStyle = ReturnType<typeof useAnimatedStyle>;
 
-/** A space as the tab view's bar shows it: a dot in its colour, the one showing larger. */
+/** A space as the tab view's bar shows it: its emoji or a dot in its colour, the one showing larger. */
 export interface BarSpace {
   id: string;
   label: string;
   color: string;
+  /** The space's emoji, drawn in place of its dot. */
+  icon: string | null;
   active: boolean;
 }
 

@@ -104,7 +104,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   );
 }
 
-/** The tab view's spaces between archive and new tab: a dot in each space's colour, the one showing larger. */
+/** The tab view's spaces between archive and new tab: each space's emoji or a dot in its colour, the one showing larger. */
 function SpacesCapsule({
   spaces,
   onSelect,
@@ -130,13 +130,17 @@ function SpacesCapsule({
           onPress={() => onSelect(entry.id)}
           className="h-11 w-9 items-center justify-center"
         >
-          <View
-            style={
-              entry.active
-                ? { width: 18, height: 18, borderRadius: 6, backgroundColor: entry.color }
-                : { width: 9, height: 9, borderRadius: 4.5, backgroundColor: entry.color, opacity: 0.75 }
-            }
-          />
+          {entry.icon ? (
+            <Text style={{ fontSize: entry.active ? 20 : 15, lineHeight: 24, opacity: entry.active ? 1 : 0.55 }}>{entry.icon}</Text>
+          ) : (
+            <View
+              style={
+                entry.active
+                  ? { width: 18, height: 18, borderRadius: 6, backgroundColor: entry.color }
+                  : { width: 9, height: 9, borderRadius: 4.5, backgroundColor: entry.color, opacity: 0.75 }
+              }
+            />
+          )}
         </Pressable>
       ))}
       <Pressable

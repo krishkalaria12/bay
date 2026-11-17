@@ -93,6 +93,55 @@ export function siteHost(url: string): string {
 const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
 
 /** The one space every tab started in: documents saved before spaces existed (v1) land here. */
+/** The emoji a space can wear, the desktop's set (apps/browser/src/store/spaces.ts), in its order. */
+export const SPACE_EMOJI = [
+  "🏠",
+  "✨",
+  "📁",
+  "🎯",
+  "💡",
+  "🧭",
+  "🛍️",
+  "🛒",
+  "🎁",
+  "🧪",
+  "🔭",
+  "💰",
+  "🧾",
+  "📈",
+  "✈️",
+  "🗺️",
+  "🏝️",
+  "📚",
+  "🎧",
+  "🎨",
+  "🪴",
+  "⌨️",
+  "🤝",
+  "🎓",
+  "🏋️",
+  "🍜",
+  "☕️",
+  "🎮",
+  "🍿",
+  "🚀",
+  "💼",
+  "🌱",
+  "🧠",
+  "📸",
+  "🗃️",
+] as const;
+
+/** Room for one emoji, however many code points it takes (a flag, a skin tone, a joined family). */
+export const SPACE_ICON_LENGTH = 16;
+
+/** A new space's emoji: the first of the set no other space wears, or the first once all are taken. */
+export function unusedSpaceIcon(spaces: readonly Pick<BrowserSpace, "icon">[]): string {
+  const used = new Set(spaces.map((space) => space.icon));
+
+  return SPACE_EMOJI.find((emoji) => !used.has(emoji)) ?? SPACE_EMOJI[0];
+}
+
 export const PERSONAL_SPACE_ID = "personal";
 export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" };
 
@@ -166,6 +215,7 @@ export type BrowserAction =
   | { type: "restore-tab"; id: string; restoredId: string; now: number }
   | { type: "create-space"; space: BrowserSpace; blankTab: BrowserTab }
   | { type: "rename-space"; id: string; name: string }
+  | { type: "set-space-icon"; id: string; icon: string | null }
   | { type: "reorder-space"; id: string; to: number }
   | { type: "delete-space"; id: string }
   | { type: "select-space"; id: string; blankTab?: BrowserTab }
@@ -406,6 +456,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       if (!data.spaces.some((space) => space.id === action.id) || !action.name.trim()) return data;
 
       return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, name: action.name.trim().slice(0, 40) } : space)) };
+    }
+
+    case "set-space-icon": {
+      if (!data.spaces.some((space) => space.id === action.id)) return data;
+      const icon = action.icon?.trim().slice(0, SPACE_ICON_LENGTH) || null;
+
+      return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, icon } : space)) };
     }
 
     case "reorder-space": {
@@ -950,6 +1007,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
             id: entry.id,
             name: v.is(v.string(), entry.name) && entry.name ? entry.name.slice(0, 40) : "Space",
             color: v.is(v.picklist(SPACE_COLOR_PICKLIST), entry.color) ? entry.color : "gray",
+            icon: v.is(v.string(), entry.icon) && entry.icon ? entry.icon.slice(0, SPACE_ICON_LENGTH) : null,
           },
         ]
       : [],

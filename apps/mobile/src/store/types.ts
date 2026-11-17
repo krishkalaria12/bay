@@ -14,6 +14,8 @@ export interface BrowserSpace {
   id: string;
   name: string;
   color: SpaceColor;
+  /** An emoji, as the desktop's spaces have; none shows the name's first letter. */
+  icon?: string | null;
 }
 
 /** A named group of tabs inside a space. Kept local; sync can map a space with its folders later. */

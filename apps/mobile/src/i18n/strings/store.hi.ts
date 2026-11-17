@@ -5,6 +5,9 @@ export const storeHi: StoreStrings = {
   "space.personal": "निजी",
   "space.default": "स्पेस {index}",
   "space.unnamed": "स्पेस",
+  "space.icon.title": "{name} का आइकन",
+  "space.icon.letter": "उसका पहला अक्षर",
+  "space.icon.change": "{name} का आइकन बदलें",
 
   // The saved document.
   "state.unreadable": "सहेजी गई ब्राउज़िंग स्थिति पढ़ी नहीं जा सकी।",

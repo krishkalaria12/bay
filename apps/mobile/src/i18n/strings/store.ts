@@ -6,6 +6,9 @@ export const store = {
   "space.personal": "Personal",
   "space.default": "Space {index}",
   "space.unnamed": "Space",
+  "space.icon.title": "Icon for {name}",
+  "space.icon.letter": "Its first letter",
+  "space.icon.change": "Change the icon for {name}",
 
   // The saved document (model.ts).
   "state.unreadable": "The saved browsing state could not be read.",

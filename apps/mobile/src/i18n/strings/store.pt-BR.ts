@@ -5,6 +5,9 @@ export const storePtBR: StoreStrings = {
   "space.personal": "Pessoal",
   "space.default": "Espaço {index}",
   "space.unnamed": "Espaço",
+  "space.icon.title": "Ícone de {name}",
+  "space.icon.letter": "A primeira letra",
+  "space.icon.change": "Mudar o ícone de {name}",
 
   // The saved document.
   "state.unreadable": "Não foi possível ler o estado de navegação salvo.",

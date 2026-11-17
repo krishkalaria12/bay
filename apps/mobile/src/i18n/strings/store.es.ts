@@ -5,6 +5,9 @@ export const storeEs: StoreStrings = {
   "space.personal": "Personal",
   "space.default": "Espacio {index}",
   "space.unnamed": "Espacio",
+  "space.icon.title": "Icono de {name}",
+  "space.icon.letter": "Su primera letra",
+  "space.icon.change": "Cambiar el icono de {name}",
 
   // The saved document.
   "state.unreadable": "No se ha podido leer el estado de navegación guardado.",

@@ -5,6 +5,9 @@ export const storeJa: StoreStrings = {
   "space.personal": "個人",
   "space.default": "スペース {index}",
   "space.unnamed": "スペース",
+  "space.icon.title": "{name}のアイコン",
+  "space.icon.letter": "名前の最初の文字",
+  "space.icon.change": "{name}のアイコンを変更",
 
   // The saved document.
   "state.unreadable": "保存された閲覧状態を読み込めませんでした。",

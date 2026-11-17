@@ -6,7 +6,7 @@ import { bookmarkDrafts, draftLinkCount } from "@/import/apply";
 import type { ExportContents } from "@/import/exports";
 
 import { BOOKMARKS_ROOT, bookmarkChildren, bookmarkLinks, bookmarkRoom, draftNodes } from "./bookmarks";
-import { createTab, HISTORY_LIMIT, initialBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
+import { createTab, HISTORY_LIMIT, initialBrowserData, reduceBrowserData, SPACE_COLORS, unusedSpaceIcon, type BrowserAction } from "./model";
 import type { BrowserData } from "./types";
 
 // The store is the state in memory. Reading it from disk, saving it and pruning what it no longer shows belong to the
@@ -39,6 +39,7 @@ interface BrowserStore {
   selectSpace(id: string): void;
   createSpace(): void;
   renameSpace(id: string, name: string): void;
+  setSpaceIcon(id: string, icon: string | null): void;
   deleteSpace(id: string): void;
   moveTab(id: string, spaceId: string, folderId: string | null): void;
   newFolder(name: string): void;
@@ -157,12 +158,20 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   createSpace() {
     const data = get().data;
     const index = data.spaces.length + 1;
-    const space = { id: newId(), name: t("space.default", { index }), color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]! };
+    const space = {
+      id: newId(),
+      name: t("space.default", { index }),
+      color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]!,
+      icon: unusedSpaceIcon(data.spaces),
+    };
 
     get().dispatch({ type: "create-space", space, blankTab: createTab(newId(), Date.now(), "", false, space.id) });
   },
   renameSpace(id, name) {
     get().dispatch({ type: "rename-space", id, name });
+  },
+  setSpaceIcon(id, icon) {
+    get().dispatch({ type: "set-space-icon", id, icon });
   },
   deleteSpace(id) {
     get().dispatch({ type: "delete-space", id });

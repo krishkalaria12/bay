@@ -42,6 +42,8 @@ export interface TabSwitcherProps {
   pins: readonly PinnedSite[];
   onOpenSite: (url: string) => void;
   onSettings: () => void;
+  /** Opens the space's emoji, to change it. */
+  onChangeIcon: () => void;
 }
 
 /** A space's colour: its glyph, its dot in the bar and the wash at the top of its page. */
@@ -86,6 +88,7 @@ export function TabSwitcher({
   pins,
   onOpenSite,
   onSettings,
+  onChangeIcon,
 }: TabSwitcherProps): JSX.Element {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -135,7 +138,15 @@ export function TabSwitcher({
         <Animated.View className="flex-1" style={moving}>
           <ScrollView contentContainerStyle={[gutter, { paddingTop: space.sm, paddingBottom: space.xl, gap: space.lg }]} showsVerticalScrollIndicator={false}>
             <View className="flex-row items-center" style={{ gap: space.sm, minHeight: 44 }}>
-              <SpaceGlyph color={color} name={name} size={30} />
+              <PressFeedback
+                testID="tab-switcher-icon"
+                accessibilityRole="button"
+                accessibilityLabel={t("space.icon.change", { name })}
+                onPress={onChangeIcon}
+                hitSlop={6}
+              >
+                <SpaceGlyph color={color} name={name} icon={current?.icon ?? null} size={30} />
+              </PressFeedback>
               <Text testID="tab-switcher-space" accessibilityRole="header" numberOfLines={1} variant="title" weight="bold" className="flex-1">
                 {name}
               </Text>
@@ -243,8 +254,21 @@ function SpaceWash({ color }: { color: string }): JSX.Element {
   );
 }
 
-/** A space's mark: its first letter on its colour, in a rounded square. */
-export function SpaceGlyph({ color, name, size }: { color: string; name: string; size: number }): JSX.Element {
+/** A space's mark: its emoji, or its first letter on its colour in a rounded square. */
+export function SpaceGlyph({ color, name, icon, size }: { color: string; name: string; icon: string | null; size: number }): JSX.Element {
+  if (icon) {
+    return (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        className="items-center justify-center"
+        style={{ width: size, height: size }}
+      >
+        <Text style={{ fontSize: size * 0.82, lineHeight: size }}>{icon}</Text>
+      </View>
+    );
+  }
+
   return (
     <View
       accessibilityElementsHidden

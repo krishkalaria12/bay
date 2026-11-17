@@ -104,7 +104,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   );
 }
 
-/** The tab view's spaces between archive and new tab, in one glass capsule: a dot per space, the one showing larger. */
+/** The tab view's spaces between archive and new tab, in one glass capsule: each space's emoji or dot, the one showing larger. */
 function SpacesCapsule({
   spaces,
   onSelect,
@@ -127,14 +127,27 @@ function SpacesCapsule({
             <Button
               key={entry.id}
               onPress={() => select(entry.id)}
-              modifiers={[
-                buttonStyle("plain"),
-                accessibilityLabel(switchLabel(entry.label)),
-                accessibilityIdentifier(`bar-space-${entry.id}`),
-                frame({ width: 34, height: 34 }),
-              ]}
+              modifiers={[buttonStyle("plain"), accessibilityLabel(switchLabel(entry.label)), accessibilityIdentifier(`bar-space-${entry.id}`)]}
             >
-              <Image systemName={entry.active ? "app.fill" : "circle.fill"} size={entry.active ? 18 : 9} modifiers={[foregroundStyle(entry.color)]} />
+              {/* The whole 34 pt square takes the tap, not only the emoji or the dot. */}
+              {entry.icon ? (
+                <Text
+                  modifiers={[
+                    font({ size: entry.active ? 20 : 15 }),
+                    swiftUI.opacity(entry.active ? 1 : 0.55),
+                    frame({ width: 34, height: 34 }),
+                    swiftUI.contentShape(swiftUI.shapes.rectangle()),
+                  ]}
+                >
+                  {entry.icon}
+                </Text>
+              ) : (
+                <Image
+                  systemName={entry.active ? "app.fill" : "circle.fill"}
+                  size={entry.active ? 18 : 9}
+                  modifiers={[foregroundStyle(entry.color), frame({ width: 34, height: 34 }), swiftUI.contentShape(swiftUI.shapes.rectangle())]}
+                />
+              )}
             </Button>
           ))}
           <Button onPress={onNewSpace} modifiers={[buttonStyle("plain"), accessibilityLabel(newSpace.label), accessibilityIdentifier(newSpace.id)]}>
