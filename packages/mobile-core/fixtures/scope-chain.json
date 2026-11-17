@@ -1,0 +1,204 @@
+{
+ "files": [
+  {
+   "id": "f29",
+   "payload": "{\"v\":1,\"kind\":\"snapshot\",\"device\":\"devB\",\"at\":1700000120731,\"vv\":{\"devB\":9,\"devA\":7,\"devC\":9},\"seen\":{\"devB\":1700000120731,\"devA\":1700000114129,\"devC\":1700000112769},\"records\":{\"x:6\":{\"h\":\"0loyw6c02.0000.devB\",\"v\":{\"by\":\"devB\",\"step\":107,\"tags\":[\"a\",\"c\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devB\",8]},\"x:4\":{\"h\":\"0loyw6g7v.0000.devB\",\"v\":{\"by\":\"devB\",\"step\":112,\"tags\":[\"a\",\"c\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devB\",9]},\"x:2\":{\"h\":\"0loyw6a2p.0000.devC\",\"v\":{\"by\":\"devC\",\"step\":105,\"tags\":[\"a\",\"b\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devC\",9]},\"x:0\":{\"h\":\"0loyw6b4h.0000.devA\",\"v\":{\"by\":\"devA\",\"step\":108,\"tags\":[\"a\",\"b\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devA\",7]},\"x:5\":{\"h\":\"0loyw5w9x.0001.devA\",\"v\":null,\"o\":[\"devA\",6]},\"x:3\":{\"h\":\"0loyw5ds4.0000.devA\",\"v\":{\"by\":\"devA\",\"step\":60,\"tags\":[\"a\",\"b\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devA\",4]},\"x:7\":{\"h\":\"0loyw604m.0000.devC\",\"v\":null,\"o\":[\"devC\",8]},\"x:1\":{\"h\":\"0loyw6b4h.0001.devA\",\"v\":{\"by\":\"devA\",\"step\":97,\"tags\":[\"a\",\"c\"],\"nested\":{\"z\":1,\"a\":null}},\"o\":[\"devA\",7]}}}"
+  },
+  {
+   "id": "f30",
+   "payload": "{\"v\":1,\"kind\":\"log\",\"device\":\"devA\",\"seq\":8,\"at\":1700000123822,\"ops\":[{\"k\":\"x:5\",\"h\":\"0loyw6ilq.0000.devA\",\"v\":{\"by\":\"devA\",\"step\":114,\"tags\":[\"a\",\"b\"],\"nested\":{\"z\":1,\"a\":null}}}]}"
+  },
+  {
+   "id": "f31",
+   "payload": "{\"v\":1,\"kind\":\"log\",\"device\":\"devB\",\"seq\":10,\"at\":1700000123822,\"ops\":[{\"k\":\"x:6\",\"h\":\"0loyw6ilq.0000.devB\",\"v\":{\"by\":\"devB\",\"step\":116,\"tags\":[\"a\",\"c\"],\"nested\":{\"z\":1,\"a\":null}}},{\"k\":\"x:4\",\"h\":\"0loyw6ilq.0001.devB\",\"v\":{\"by\":\"devB\",\"step\":118,\"tags\":[\"a\",\"c\"],\"nested\":{\"z\":1,\"a\":null}}}]}"
+  },
+  {
+   "id": "f32",
+   "payload": "{\"v\":1,\"kind\":\"log\",\"device\":\"devC\",\"seq\":10,\"at\":1700000123822,\"ops\":[{\"k\":\"x:3\",\"h\":\"0loyw6ilq.0000.devC\",\"v\":null},{\"k\":\"x:4\",\"h\":\"0loyw6ilq.0001.devC\",\"v\":null}]}"
+  }
+ ],
+ "records": {
+  "x:6": {
+   "h": "0loyw6ilq.0000.devB",
+   "v": {
+    "by": "devB",
+    "step": 116,
+    "tags": [
+     "a",
+     "c"
+    ],
+    "nested": {
+     "z": 1,
+     "a": null
+    }
+   },
+   "o": [
+    "devB",
+    10
+   ]
+  },
+  "x:4": {
+   "h": "0loyw6ilq.0001.devC",
+   "v": null,
+   "o": [
+    "devC",
+    10
+   ]
+  },
+  "x:2": {
+   "h": "0loyw6a2p.0000.devC",
+   "v": {
+    "by": "devC",
+    "step": 105,
+    "tags": [
+     "a",
+     "b"
+    ],
+    "nested": {
+     "z": 1,
+     "a": null
+    }
+   },
+   "o": [
+    "devC",
+    9
+   ]
+  },
+  "x:0": {
+   "h": "0loyw6b4h.0000.devA",
+   "v": {
+    "by": "devA",
+    "step": 108,
+    "tags": [
+     "a",
+     "b"
+    ],
+    "nested": {
+     "z": 1,
+     "a": null
+    }
+   },
+   "o": [
+    "devA",
+    7
+   ]
+  },
+  "x:5": {
+   "h": "0loyw6ilq.0000.devA",
+   "v": {
+    "by": "devA",
+    "step": 114,
+    "tags": [
+     "a",
+     "b"
+    ],
+    "nested": {
+     "z": 1,
+     "a": null
+    }
+   },
+   "o": [
+    "devA",
+    8
+   ]
+  },
+  "x:3": {
+   "h": "0loyw6ilq.0000.devC",
+   "v": null,
+   "o": [
+    "devC",
+    10
+   ]
+  },
+  "x:7": {
+   "h": "0loyw604m.0000.devC",
+   "v": null,
+   "o": [
+    "devC",
+    8
+   ]
+  },
+  "x:1": {
+   "h": "0loyw6b4h.0001.devA",
+   "v": {
+    "by": "devA",
+    "step": 97,
+    "tags": [
+     "a",
+     "c"
+    ],
+    "nested": {
+     "z": 1,
+     "a": null
+    }
+   },
+   "o": [
+    "devA",
+    7
+   ]
+  }
+ },
+ "store": {
+  "x:6": {
+   "by": "devB",
+   "step": 116,
+   "tags": [
+    "a",
+    "c"
+   ],
+   "nested": {
+    "z": 1,
+    "a": null
+   }
+  },
+  "x:2": {
+   "by": "devC",
+   "step": 105,
+   "tags": [
+    "a",
+    "b"
+   ],
+   "nested": {
+    "z": 1,
+    "a": null
+   }
+  },
+  "x:0": {
+   "by": "devA",
+   "step": 108,
+   "tags": [
+    "a",
+    "b"
+   ],
+   "nested": {
+    "z": 1,
+    "a": null
+   }
+  },
+  "x:5": {
+   "by": "devA",
+   "step": 114,
+   "tags": [
+    "a",
+    "b"
+   ],
+   "nested": {
+    "z": 1,
+    "a": null
+   }
+  },
+  "x:1": {
+   "by": "devA",
+   "step": 97,
+   "tags": [
+    "a",
+    "c"
+   ],
+   "nested": {
+    "z": 1,
+    "a": null
+   }
+  }
+ },
+ "now": 1700000123822
+}

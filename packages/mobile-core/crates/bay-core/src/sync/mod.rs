@@ -3,11 +3,17 @@
 //! `fixtures/golden.json`.
 
 pub mod bytes;
+pub mod canon;
+pub mod hlc;
 pub mod http;
 pub mod keys;
+pub mod order;
 pub mod pairing;
 pub mod phrase;
+pub mod scope;
 pub mod transport;
 
+#[cfg(test)]
+mod scope_tests;
 #[cfg(test)]
 pub(crate) mod stand_in;
