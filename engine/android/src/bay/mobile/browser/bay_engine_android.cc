@@ -109,6 +109,11 @@ static int64_t JNI_BayProfile_GetNormal(JNIEnv* env) {
   return reinterpret_cast<intptr_t>(BayBrowserMainParts::Get()->NormalProfile());
 }
 
+// A space's persistent profile. Owned by the browser's main parts for the life of the process, as the normal one is.
+static int64_t JNI_BayProfile_GetSpace(JNIEnv* env, const JavaRef<jstring>& space_id) {
+  return reinterpret_cast<intptr_t>(BayBrowserMainParts::Get()->SpaceProfile(ConvertJavaStringToUTF8(env, space_id)));
+}
+
 // A new private session's profile, owned by the Java BayProfile until DestroyPrivate.
 static int64_t JNI_BayProfile_CreatePrivate(JNIEnv* env) {
   return reinterpret_cast<intptr_t>(BayBrowserMainParts::Get()->CreatePrivateProfile().release());
