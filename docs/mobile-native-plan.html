@@ -1348,8 +1348,11 @@ impl BrowserStore {
               files, Safari's and Takeout's history, merging, drafts, the phone's browsers and shared tab lists), 525 calls from the Expo app's tests and odd
               files matching (<code>fixtures/import.jsonl</code>). the browser helpers (<code>browser</code>: incoming links and <code>bay://</code> commands,
               page error words, the saved-logins document, downloads that open themselves, favicon checks, history's day groups from the phone's own day bounds,
-              and the navigation-event timing), 282 calls matching (<code>fixtures/browser.jsonl</code>) and the navigation and history-group suites ported.
-              Left: the link resolver, which needs <code>HttpClient</code> to report redirects, headers and the final address.
+              and the navigation-event timing), 282 calls matching (<code>fixtures/browser.jsonl</code>) and the navigation and history-group suites ported. And
+              the link resolver: <code>HttpClient</code> now reports the final address and headers, can stop at the first redirect and takes a time limit (iOS
+              stops redirects with a per-task delegate; Android follows them itself, since <code>HttpURLConnection</code> won't cross between http and https,
+              and allows cleartext as the Expo app does), with its suite ported and checked on both devices along with a sync round trip on the real relay. N2's
+              core work is done.
             </p>
             <ul>
               <li>

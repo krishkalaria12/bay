@@ -1,4 +1,4 @@
-//! The one thing the core asks the apps to do for sync: send an HTTP request. iOS answers with URLSession and
+//! The one thing the core asks the apps to do for sync and the link menu: send an HTTP request. iOS answers with URLSession and
 //! Android with HttpURLConnection, so requests follow the phone's own certificates, proxies and VPN, and the core
 //! carries no TLS stack of its own (plan D5).
 
@@ -13,12 +13,46 @@ pub struct HttpRequest {
     pub url: String,
     pub headers: HashMap<String, String>,
     pub body: Option<Vec<u8>>,
+    /// Follow redirects to the end (the phone's own rules); false answers with the first redirect itself.
+    pub follow_redirects: bool,
+    /// How long the request may take; none leaves the app's own limit.
+    pub timeout_ms: Option<u32>,
+}
+
+impl HttpRequest {
+    /// A request with no headers or body that follows redirects, within the app's own limit.
+    pub fn new(method: &str, url: impl Into<String>) -> Self {
+        Self {
+            method: method.into(),
+            url: url.into(),
+            headers: HashMap::new(),
+            body: None,
+            follow_redirects: true,
+            timeout_ms: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct HttpResponse {
     pub status: u16,
+    /// Where the answer came from, after any redirects followed; empty when the app can't say.
+    pub url: String,
+    /// The answer's headers, names lowercased.
+    pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
+}
+
+impl HttpResponse {
+    /// An answer with a status and body, from the address asked.
+    pub fn new(status: u16, body: Vec<u8>) -> Self {
+        Self {
+            status,
+            url: String::new(),
+            headers: HashMap::new(),
+            body,
+        }
+    }
 }
 
 /// The request got no answer: no network, a timeout, a refused connection.
@@ -92,13 +126,12 @@ impl Relay {
         body: Option<Vec<u8>>,
     ) -> Result<HttpResponse, RelayError> {
         let request = HttpRequest {
-            method: method.into(),
-            url: format!("{}{path}", self.url),
             headers: headers
                 .iter()
                 .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
                 .collect(),
             body,
+            ..HttpRequest::new(method, format!("{}{path}", self.url))
         };
         self.http
             .send(request)

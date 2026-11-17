@@ -8,6 +8,7 @@ import UIKit
 final class AppModel: ObservableObject {
   let store: BrowserStore
   let sync: PhoneSync
+  let http = URLSessionHttp()
   @Published private(set) var spaces: [BrowserSpace] = []
   @Published private(set) var activeSpaceId = ""
   @Published private(set) var activeTabId = ""
@@ -15,6 +16,8 @@ final class AppModel: ObservableObject {
   @Published private(set) var tabs: [BrowserTab] = []
   @Published private(set) var preferences: BrowserPreferences
   @Published private(set) var syncView: SyncView
+  /// Where the link check's link ended, while the stand-in screens prove the HTTP client.
+  @Published private(set) var resolved: String?
 
   /// How often the phone syncs while Bay is in front, and how long after a change.
   private static let cycleInterval: UInt64 = 30_000_000_000
@@ -29,7 +32,7 @@ final class AppModel: ObservableObject {
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
     store = BrowserStore.open(documentsDir: documents, newTabId: UUID().uuidString, now: Self.now())
     sync = PhoneSync(
-      store: store, http: URLSessionHttp(), secrets: KeychainSecrets(), documentsDir: documents,
+      store: store, http: http, secrets: KeychainSecrets(), documentsDir: documents,
       deviceName: UIDevice.current.name, barTitle: barTitle, relayUrl: nil
     )
     preferences = store.preferences()
@@ -47,6 +50,11 @@ final class AppModel: ObservableObject {
   @discardableResult
   func dispatch(_ action: Action) -> Bool {
     store.dispatch(action: action)
+  }
+
+  /// Follows a link's redirects without opening it, as the link menu will.
+  func resolve(_ url: String) {
+    Task { resolved = await resolveLink(http: http, url: url) ?? "no answer" }
   }
 
   /// Saves at once: as the app leaves the foreground.

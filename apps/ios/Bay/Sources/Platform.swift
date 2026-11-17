@@ -17,17 +17,39 @@ final class URLSessionHttp: HttpClient, @unchecked Sendable {
     guard let url = URL(string: request.url) else { throw HttpError.Offline(reason: "bad address") }
     var urlRequest = URLRequest(url: url)
     urlRequest.httpMethod = request.method
+    if let timeout = request.timeoutMs {
+      urlRequest.timeoutInterval = max(Double(timeout) / 1000, 0.1)
+    }
     for (name, value) in request.headers {
       urlRequest.setValue(value, forHTTPHeaderField: name)
     }
     urlRequest.httpBody = request.body
     do {
-      let (data, response) = try await session.data(for: urlRequest)
-      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-      return HttpResponse(status: UInt16(clamping: status), body: data)
+      let (data, response) = try await session.data(
+        for: urlRequest, delegate: request.followRedirects ? nil : StopRedirects.shared)
+      let http = response as? HTTPURLResponse
+      var headers: [String: String] = [:]
+      for (name, value) in http?.allHeaderFields ?? [:] {
+        if let name = name as? String { headers[name.lowercased()] = "\(value)" }
+      }
+      return HttpResponse(
+        status: UInt16(clamping: http?.statusCode ?? 0), url: response.url?.absoluteString ?? "",
+        headers: headers, body: data)
     } catch {
       throw HttpError.Offline(reason: error.localizedDescription)
     }
+  }
+}
+
+/// Answers a request with its first redirect instead of following it, for a walk that goes hop by hop.
+private final class StopRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+  static let shared = StopRedirects()
+
+  func urlSession(
+    _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest
+  ) async -> URLRequest? {
+    nil
   }
 }
 

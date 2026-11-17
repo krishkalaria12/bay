@@ -24,12 +24,11 @@ pub struct StandInRelay {
 }
 
 fn reply(status: u16, body: Option<Value>) -> Result<HttpResponse, HttpError> {
-    Ok(HttpResponse {
+    Ok(HttpResponse::new(
         status,
-        body: body
-            .map(|body| body.to_string().into_bytes())
+        body.map(|body| body.to_string().into_bytes())
             .unwrap_or_default(),
-    })
+    ))
 }
 
 impl StandInRelay {

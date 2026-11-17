@@ -18,6 +18,7 @@ import bay.core.PhoneSync
 import bay.core.StoreObserver
 import bay.core.SyncObserver
 import bay.core.SyncView
+import bay.core.resolveLink
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,8 @@ import kotlinx.coroutines.launch
 class AppModel(context: Context, barTitle: String) {
     private val documents = context.filesDir.absolutePath
     val store: BrowserStore = BrowserStore.open(documents, UUID.randomUUID().toString(), now())
-    val sync = PhoneSync(store, UrlConnectionHttp(), KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
+    private val http = UrlConnectionHttp()
+    val sync = PhoneSync(store, http, KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
 
     var spaces by mutableStateOf(emptyList<BrowserSpace>())
         private set
@@ -51,11 +53,20 @@ class AppModel(context: Context, barTitle: String) {
     var syncView by mutableStateOf<SyncView>(sync.view())
         private set
 
+    /** Where the link check's link ended, while the stand-in screens prove the HTTP client. */
+    var resolved by mutableStateOf<String?>(null)
+        private set
+
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var cycles: Job? = null
     private var kick: Job? = null
     private var pairing: Job? = null
+
+    /** Follows a link's redirects without opening it, as the link menu will. */
+    fun resolve(url: String) {
+        scope.launch { resolved = resolveLink(http, url) ?: "no answer" }
+    }
 
     init {
         store.observe(object : StoreObserver {

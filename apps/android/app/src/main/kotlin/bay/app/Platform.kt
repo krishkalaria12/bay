@@ -22,32 +22,65 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/** The core's HTTP requests, through HttpURLConnection: the phone's own certificates, proxies and VPN. */
+/**
+ * The core's HTTP requests, through HttpURLConnection: the phone's own certificates, proxies and VPN. Redirects are
+ * followed here rather than by the connection, which won't cross between http and https.
+ */
 class UrlConnectionHttp : HttpClient {
     override suspend fun send(request: HttpRequest): HttpResponse = withContext(Dispatchers.IO) {
         try {
-            val connection = URL(request.url).openConnection() as HttpURLConnection
-            connection.requestMethod = request.method
-            connection.connectTimeout = TIMEOUT_MS
-            connection.readTimeout = TIMEOUT_MS
-            request.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-            request.body?.let { body ->
-                connection.doOutput = true
-                connection.setFixedLengthStreamingMode(body.size)
-                connection.outputStream.use { it.write(body) }
+            var url = URL(request.url)
+            var method = request.method
+            var body = request.body
+            var answer = once(url, method, request, body)
+            var hops = 0
+            while (request.followRedirects && answer.status.toInt() in 300..399 && hops < MAX_HOPS) {
+                val location = answer.headers["location"] ?: break
+                val status = answer.status.toInt()
+                url = URL(url, location)
+                hops += 1
+                // A 303, and a 301 or 302 after a POST, come back as GET without the body, as browsers do.
+                if (status == 303 || (method == "POST" && (status == 301 || status == 302))) {
+                    method = "GET"
+                    body = null
+                }
+                answer = once(url, method, request, body)
             }
-            val status = connection.responseCode
-            val stream = if (status >= 400) connection.errorStream else connection.inputStream
-            val body = stream?.use { it.readBytes() } ?: ByteArray(0)
-            connection.disconnect()
-            HttpResponse(status.toUShort(), body)
+            answer
         } catch (error: IOException) {
             throw HttpException.Offline(error.message ?: "no answer")
         }
     }
 
+    private fun once(url: URL, method: String, request: HttpRequest, body: ByteArray?): HttpResponse {
+        val connection = url.openConnection() as HttpURLConnection
+        val timeout = request.timeoutMs?.toInt()?.coerceAtLeast(1) ?: TIMEOUT_MS
+        connection.instanceFollowRedirects = false
+        connection.requestMethod = method
+        connection.connectTimeout = timeout
+        connection.readTimeout = timeout
+        request.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+        body?.let {
+            connection.doOutput = true
+            connection.setFixedLengthStreamingMode(it.size)
+            connection.outputStream.use { stream -> stream.write(it) }
+        }
+        try {
+            val status = connection.responseCode
+            val headers = connection.headerFields.orEmpty()
+                .mapNotNull { (name, values) -> name?.let { it.lowercase() to values.joinToString(", ") } }
+                .toMap()
+            val stream = if (status >= 400) connection.errorStream else connection.inputStream
+            val bytes = stream?.use { it.readBytes() } ?: ByteArray(0)
+            return HttpResponse(status.toUShort(), url.toString(), headers, bytes)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private companion object {
         const val TIMEOUT_MS = 20_000
+        const val MAX_HOPS = 20
     }
 }
 

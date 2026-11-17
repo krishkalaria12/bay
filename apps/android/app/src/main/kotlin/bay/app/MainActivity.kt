@@ -107,6 +107,12 @@ private fun StoreCheck(model: AppModel, strings: Strings) {
         )
         SyncCheck(model)
         BasicText(
+            "Resolve https://www.github.com",
+            modifier = Modifier.testTag("resolve-link").clickable { model.resolve("https://www.github.com") },
+            style = TextStyle(fontSize = 17.sp, color = Color(0xFF3478F6)),
+        )
+        model.resolved?.let { BasicText(it, modifier = Modifier.testTag("resolved-link"), style = TextStyle(fontSize = 13.sp)) }
+        BasicText(
             "Core ${bay.core.version()} · ${strings.locale}",
             modifier = Modifier.testTag("core-version"),
             style = TextStyle(fontSize = 13.sp),

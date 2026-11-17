@@ -60,6 +60,15 @@ private struct StoreCheckView: View {
       }
       .accessibilityIdentifier("new-tab")
       SyncCheckView()
+      Button {
+        model.resolve("https://www.github.com")
+      } label: {
+        Text(verbatim: "Resolve https://www.github.com")
+      }
+      .accessibilityIdentifier("resolve-link")
+      if let resolved = model.resolved {
+        Text(verbatim: resolved).font(.footnote).accessibilityIdentifier("resolved-link")
+      }
       Text("Core \(BayCore.version()) · \(strings.locale)")
         .font(.footnote)
         .foregroundStyle(.secondary)
