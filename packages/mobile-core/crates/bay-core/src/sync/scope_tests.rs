@@ -194,8 +194,8 @@ impl Device {
         let offset = Arc::new(AtomicI64::new(0));
         let journal: Arc<Mutex<IndexMap<i64, LogFile>>> = Arc::default();
         let persisted = journal.clone();
-        let persist: Persist = Arc::new(move |batches| {
-            for file in batches {
+        let persist: Persist = Arc::new(move |state: &ScopeState| {
+            for file in state.journal.iter().flatten() {
                 persisted.lock().unwrap().insert(file.seq, file.clone());
             }
             Ok(())

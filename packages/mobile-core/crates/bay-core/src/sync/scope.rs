@@ -127,8 +127,8 @@ impl ScopeState {
     }
 }
 
-/// Keys an adapter doesn't own though they share its prefix.
-pub type Ignore = Box<dyn Fn(&str) -> bool + Send>;
+/// Keys an adapter doesn't own though they share its prefix: asked with each key's last published value.
+pub type Ignore = Box<dyn Fn(&str, Option<&Value>) -> bool + Send>;
 
 /// What an adapter publishes: its keys' values, and the keys it doesn't own though they share its prefix.
 pub struct Extraction {
@@ -158,8 +158,9 @@ pub trait Adapter: Send {
     }
 }
 
-/// Saves the batches about to be written so they survive a crash; they're written only once it returns.
-pub type Persist = Arc<dyn Fn(&[LogFile]) -> Result<(), String> + Send + Sync>;
+/// Saves the scope, with the batches about to be written in its journal, so they survive a crash; they're written only
+/// once it returns.
+pub type Persist = Arc<dyn Fn(&ScopeState) -> Result<(), String> + Send + Sync>;
 
 /// Whether a record has expired and is dropped at the next snapshot.
 pub type Expired = Arc<dyn Fn(&str, &Value, i64) -> bool + Send + Sync>;
@@ -418,7 +419,10 @@ pub fn publish_adapter(
         .filter(|key| {
             key.starts_with(&prefix)
                 && !extraction.values.contains_key(*key)
-                && !extraction.ignore.as_ref().is_some_and(|ignore| ignore(key))
+                && !extraction
+                    .ignore
+                    .as_ref()
+                    .is_some_and(|ignore| ignore(key, parse_base(state.base.get(*key)).as_ref()))
         })
         .cloned()
         .collect();
@@ -462,11 +466,11 @@ pub async fn flush(
         };
         state.journal.get_or_insert_with(Vec::new).push(file);
     }
-    let Some(journal) = state.journal.as_ref().filter(|journal| !journal.is_empty()) else {
+    if state.journal.as_ref().is_none_or(Vec::is_empty) {
         return Ok(());
-    };
+    }
     if let Some(persist) = &options.persist {
-        persist(journal).map_err(ScopeError::Persist)?;
+        persist(state).map_err(ScopeError::Persist)?;
     }
     while let Some(file) = state
         .journal

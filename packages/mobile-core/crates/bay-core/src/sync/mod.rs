@@ -9,6 +9,7 @@ pub mod http;
 pub mod keys;
 pub mod order;
 pub mod pairing;
+pub mod phone;
 pub mod phrase;
 pub mod scope;
 pub mod transport;

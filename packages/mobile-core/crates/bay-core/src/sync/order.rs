@@ -45,6 +45,64 @@ pub fn position_between(a: &str, b: Option<&str>) -> String {
     format!("{}{}", DIGITS[da] as char, position_between(&rest, None))
 }
 
+/// Positions for a list in its order, keeping as many of the known ones as stay in order (the longest increasing run)
+/// and placing the rest between their neighbours. A known position ending in 0 isn't kept: nothing sorts before it.
+pub fn assign_positions(existing: &[Option<String>]) -> Vec<String> {
+    let mut tails: Vec<usize> = Vec::new();
+    let mut previous: Vec<Option<usize>> = vec![None; existing.len()];
+    for (i, position) in existing.iter().enumerate() {
+        let Some(position) = position
+            .as_deref()
+            .filter(|p| !p.is_empty() && !p.ends_with('0'))
+        else {
+            continue;
+        };
+        let (mut lo, mut hi) = (0, tails.len());
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            if existing[tails[mid]]
+                .as_deref()
+                .is_some_and(|tail| tail < position)
+            {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        if lo > 0 {
+            previous[i] = Some(tails[lo - 1]);
+        }
+        if lo == tails.len() {
+            tails.push(i);
+        } else {
+            tails[lo] = i;
+        }
+    }
+    let mut keep = std::collections::HashSet::new();
+    let mut at = tails.last().copied();
+    while let Some(i) = at {
+        keep.insert(i);
+        at = previous[i];
+    }
+    let mut out = vec![String::new(); existing.len()];
+    for &i in &keep {
+        out[i] = existing[i].clone().unwrap_or_default();
+    }
+    let mut before = String::new();
+    for i in 0..existing.len() {
+        if keep.contains(&i) {
+            before = out[i].clone();
+            continue;
+        }
+        let next = (i + 1..existing.len())
+            .find(|j| keep.contains(j))
+            .map(|j| out[j].clone());
+        out[i] = position_between(&before, next.as_deref());
+        before = out[i].clone();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,5 +124,27 @@ mod tests {
             }
         }
         assert_eq!(position_between("", None), "V");
+    }
+
+    #[test]
+    fn assigned_positions_are_the_typescript_ones() {
+        let known = |list: &[Option<&str>]| {
+            list.iter()
+                .map(|p| p.map(str::to_owned))
+                .collect::<Vec<_>>()
+        };
+        // What packages/sync/src/order.ts answers for the same lists.
+        assert_eq!(
+            assign_positions(&known(&[None, None, None])),
+            ["V", "l", "t"]
+        );
+        assert_eq!(
+            assign_positions(&known(&[Some("V"), None, Some("X")])),
+            ["V", "W", "X"]
+        );
+        assert_eq!(
+            assign_positions(&known(&[Some("X"), Some("V"), Some("Y")])),
+            ["G", "V", "Y"]
+        );
     }
 }
