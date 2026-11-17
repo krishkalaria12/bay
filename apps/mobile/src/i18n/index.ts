@@ -14,6 +14,10 @@ export type MessageParams = Record<string, string | number>;
 /** A message in one language, with English behind it; what `useT` hands a component. */
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
+// The device's tag, read when first asked for and again when Bay hears the language may have changed
+// (refreshDeviceLocale): Intl answers by building a whole date formatter.
+let knownTag: string | undefined;
+
 // The chosen language, until the saved document says otherwise. The device's own language is the first guess.
 let chosen: Locale = matchLocale(intlTag());
 
@@ -86,6 +90,10 @@ export function onPick(handler: (locale: Locale | null) => void): () => void {
 
 /** Follows a change of the device's language while Bay runs; a language picked in Settings stays. */
 export function refreshDeviceLocale(): void {
+  knownTag = undefined;
+  numberFormats.clear();
+  dateFormats.clear();
+
   if (saved === null) choose(matchLocale(intlTag()));
 }
 
@@ -146,16 +154,37 @@ function formattingLocale(): string {
   return device && matchLocale(device) === chosen ? device : chosen;
 }
 
+// Formatters by locale and options: building one costs far more than writing with it, and lists write a date or a
+// number on every row. Emptied with the device's tag (refreshDeviceLocale).
+const numberFormats = new Map<string, Intl.NumberFormat>();
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
 /** A number in the current language's way of writing it. */
 export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
-  return new Intl.NumberFormat(formattingLocale(), options).format(value);
+  const locale = formattingLocale();
+  const key = `${locale} ${JSON.stringify(options ?? {})}`;
+  let format = numberFormats.get(key);
+
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options);
+    numberFormats.set(key, format);
+  }
+
+  return format.format(value);
 }
 
 /** A date in the current language's way of writing it. */
 export function formatDate(value: number | Date, options?: Intl.DateTimeFormatOptions): string {
-  const date = value instanceof Date ? value : new Date(value);
+  const locale = formattingLocale();
+  const key = `${locale} ${JSON.stringify(options ?? {})}`;
+  let format = dateFormats.get(key);
 
-  return new Intl.DateTimeFormat(formattingLocale(), options).format(date);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateFormats.set(key, format);
+  }
+
+  return format.format(value instanceof Date ? value : new Date(value));
 }
 
 const PLACEHOLDER = /\{(\w+)\}/g;
@@ -169,12 +198,16 @@ function interpolate(value: string, params: MessageParams): string {
 }
 
 /** The device's language tag as Intl reports it, or an empty string when Intl can't say. */
-function intlTag(): string {
+export function intlTag(): string {
+  if (knownTag !== undefined) return knownTag;
+
   try {
-    return Intl.DateTimeFormat().resolvedOptions().locale;
+    knownTag = Intl.DateTimeFormat().resolvedOptions().locale;
   } catch {
-    return "";
+    knownTag = "";
   }
+
+  return knownTag;
 }
 
 /** The device's language tag: Intl knows it, and the platform's own modules are the fallback. */

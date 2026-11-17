@@ -40,16 +40,30 @@ const alternateIcons = ((): AlternateIcons | null => {
 
 export const canChangeAppIcon = alternateIcons?.supportsAlternateIcons ?? false;
 
+// The icon on the home screen, asked of the system once: the question waits on the main thread, which can hold up a
+// frame of Settings opening. Only Bay changes it, through setAppIcon.
+let known: AppIconChoice | undefined;
+
 /** The icon on the home screen now; an alternate this build doesn't know reads as the default. */
 export function currentAppIcon(): AppIconChoice {
+  if (known) return known;
+
   const name = alternateIcons?.getAppIconName() ?? null;
 
-  return APP_ICONS.find((icon) => icon.name === name) ?? APP_ICONS[0]!;
+  known = APP_ICONS.find((icon) => icon.name === name) ?? APP_ICONS[0]!;
+
+  return known;
+}
+
+/** Asks for the home screen icon while Bay is idle after starting, so Settings opens without asking. */
+export function learnAppIcon(): void {
+  if (canChangeAppIcon && !known) requestIdleCallback(() => currentAppIcon());
 }
 
 /** Puts `icon` on the home screen. iOS confirms with its own alert; Android swaps the launcher entry. */
 export async function setAppIcon(icon: AppIconChoice): Promise<void> {
   await alternateIcons?.setAlternateAppIcon(icon.name);
+  known = icon;
 }
 
 /** The home screen icon and a way to change it, or null where the phone can't. */

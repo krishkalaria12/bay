@@ -30,8 +30,9 @@ import { Diagnostics } from "@/effect/ports/diagnostics";
 import { Engine } from "@/effect/ports/engine";
 import { Lifecycle } from "@/effect/ports/lifecycle";
 import { useCommand } from "@/effect/react";
-import { useT, type Translate } from "@/i18n";
+import { intlTag, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SiteSettingsPanel, TabsMenu } from "@/panels";
+import { learnAppIcon } from "@/settings/appIcons";
 import { SettingsScreen } from "@/settings/SettingsScreen";
 import type { PageBlocking } from "@/panels/PageMenu";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
@@ -207,6 +208,8 @@ export function BrowserScreen(): JSX.Element {
   useEffect(() => {
     Uniwind.setTheme(theme);
   }, [theme]);
+
+  useEffect(learnAppIcon, []);
 
   // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
   useEffect(() => {
@@ -1598,7 +1601,7 @@ function blockerDetail(status: BlockerStatus, t: Translate): string {
 /** The page through Google Translate, into the phone's language. */
 function translateUrl(url: string): string {
   if (/^https:\/\/[^/]+\.translate\.goog\//.test(url)) return url;
-  const language = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0] || "en";
+  const language = intlTag().split("-")[0] || "en";
 
   return `https://translate.google.com/translate?sl=auto&tl=${language}&u=${encodeURIComponent(url)}`;
 }

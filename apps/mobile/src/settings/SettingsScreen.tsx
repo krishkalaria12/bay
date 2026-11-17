@@ -28,7 +28,7 @@ import { Text } from "@/chrome/Text";
 import { iconSize, inputFont, radius, space } from "@/chrome/tokens";
 import type { EngineError } from "@/effect/ports/engine";
 import { useCommand, useScopedWork } from "@/effect/react";
-import { detectLocale, matchLocale, setLocale, useLocale, useSavedLocale, useT, type Locale } from "@/i18n";
+import { detectLocale, intlTag, matchLocale, setLocale, useLocale, useSavedLocale, useT, type Locale } from "@/i18n";
 import { holdSheetOpen } from "@/panels/openSheets";
 import type { SimplePreferences, WallpaperId } from "@/store/types";
 
@@ -698,7 +698,7 @@ function drawnBody(page: SettingsPage, props: SettingsScreenProps, back: () => v
 /** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
 function useDeviceLocale(): Locale {
   // The formatting locale answers at once; the device's own languages follow.
-  const [formatting] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+  const [formatting] = useState<Locale>(() => matchLocale(intlTag()));
   const { run, result } = useCommand<Locale, never>();
 
   useEffect(() => {
