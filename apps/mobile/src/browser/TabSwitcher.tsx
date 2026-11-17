@@ -13,6 +13,7 @@ import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { iconSize, radius, space } from "@/chrome/tokens";
+import { useStableCallback } from "@/chrome/useStableCallback";
 import { useT } from "@/i18n";
 import { useBrowserStore } from "@/store/browser";
 import { spaceName } from "@/store/spaceName";
@@ -80,8 +81,8 @@ const SPACE_FLING = 600;
 export function TabSwitcher({
   tabs,
   activeTabId,
-  onPick,
-  onClose,
+  onPick: pickProp,
+  onClose: closeProp,
   onCloseAll,
   privateLocked,
   spaces,
@@ -91,12 +92,19 @@ export function TabSwitcher({
   rows,
   folders,
   activeUrl,
-  onOpenPin,
-  onUnpin,
-  onTabMenu,
+  onOpenPin: openPinProp,
+  onUnpin: unpinProp,
+  onTabMenu: tabMenuProp,
   onSettings,
   onChangeIcon,
 }: TabSwitcherProps): JSX.Element {
+  // Handed to every card and pinned row: the screen's handlers change with its data (a tab's new picture is new data), and
+  // one stable function each keeps the cards that didn't change from rendering again.
+  const onPick = useStableCallback(pickProp);
+  const onClose = useStableCallback(closeProp);
+  const onOpenPin = useStableCallback(openPinProp);
+  const onUnpin = useStableCallback(unpinProp);
+  const onTabMenu = useStableCallback(tabMenuProp);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const t = useT();
