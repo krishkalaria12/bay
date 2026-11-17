@@ -1240,10 +1240,28 @@ impl BrowserStore {
       <!-- 7 -->
       <section id="phases">
         <h2>7. Phases</h2>
-        <p>
-          Core (N1–N2) and engine hosts (N3) don't depend on each other and can go in parallel after N0. UI phases need both. Each phase ends with one commit
-          per validated chunk, as the mobile work does now.
-        </p>
+        <p>Core (N1–N2) and engine hosts (N3) don't depend on each other and can go in parallel after N0. UI phases need both.</p>
+        <div class="callout">
+          <p>
+            <strong>Commit in chunks.</strong> Don't wait for a phase to finish, and don't commit every small edit. Commit once a good amount of work is done
+            and checked: a ported core module with its tests passing, an engine host browsing on both devices, a screen that matches the Expo build on iOS and
+            Android with its e2e flows passing.
+          </p>
+          <ul>
+            <li>
+              Before each commit, run lint, typecheck and the slop check (repo AGENTS.md), plus <code>cargo test</code>/<code>clippy</code> for core changes and
+              the Swift and Kotlin builds for app changes.
+            </li>
+            <li>
+              Each commit stands on its own and builds. Messages are one line, for example <code>feat(mobile-core): port the store reducer</code> or
+              <code>feat(ios): add the tab switcher</code>.
+            </li>
+            <li>
+              Push after each chunk so <code>refactor/mobile-native</code> and its PR show progress. Record any gap a chunk leaves open in
+              <a href="#done">Known gaps</a> in the same commit.
+            </li>
+          </ul>
+        </div>
 
         <details class="phase" open>
           <summary>
