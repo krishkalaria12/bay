@@ -551,6 +551,7 @@ export function pinsAdapter({
 
       const byPosition = <T extends { pos: string }>(a: [string, T], b: [string, T]) =>
         a[1].pos < b[1].pos ? -1 : a[1].pos > b[1].pos ? 1 : a[0] < b[0] ? -1 : 1;
+
       const groupIds = new Set(groups.map(([id]) => id));
       const folders = groups.sort(byPosition).map(([id, group]): BrowserFolder => ({ id, spaceId: "", name: group.n }));
 
