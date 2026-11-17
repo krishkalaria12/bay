@@ -20,10 +20,24 @@ let baseSettings: SettingsDictionary = [
   "SWIFT_INCLUDE_PATHS": "$(SRCROOT)/../../packages/mobile-core/apple/include $(SRCROOT)/../../packages/adblock/include",
 ]
 
+/// The app's bundle id per configuration (`…native` in Debug), which the extensions' ids extend.
+let bundleIdSettings: [Configuration] = [
+  .debug(name: "Debug", settings: ["BASE_BUNDLE_ID": "\(bundleId).native"]),
+  .release(name: "Release", settings: ["BASE_BUNDLE_ID": "\(bundleId)"]),
+]
+
+/// The extensions build as their Expo targets did: Swift 5 mode, versions from the app's.
+let extensionSettings: SettingsDictionary = [
+  "SWIFT_VERSION": "5.0",
+  "SWIFT_STRICT_CONCURRENCY": "minimal",
+  "MARKETING_VERSION": "1.0.0",
+  "CURRENT_PROJECT_VERSION": "1",
+]
+
 let project = Project(
   name: "Bay",
   options: .options(automaticSchemesOptions: .disabled, developmentRegion: "en"),
-  settings: .settings(base: baseSettings),
+  settings: .settings(base: baseSettings, configurations: bundleIdSettings),
   targets: [
     .target(
       name: "Bay",
@@ -52,10 +66,21 @@ let project = Project(
         "LSSupportsOpeningDocumentsInPlace": true,
         // iOS 26 runs each download as a continued-processing task under this prefix.
         "BGTaskSchedulerPermittedIdentifiers": ["$(PRODUCT_BUNDLE_IDENTIFIER).download.*"],
+        // Bay's own links (the share extension, widgets and quick actions open `bay://` commands), and the web
+        // schemes it answers as a browser, which iOS reads for the default-browser offer.
+        "CFBundleURLTypes": [["CFBundleURLName": "Bay", "CFBundleURLSchemes": ["bay", "http", "https"]]],
+        "UIApplicationShortcutItems": [
+          ["UIApplicationShortcutItemType": "$(PRODUCT_BUNDLE_IDENTIFIER).new-tab", "UIApplicationShortcutItemTitle": "New tab"],
+          ["UIApplicationShortcutItemType": "$(PRODUCT_BUNDLE_IDENTIFIER).private-tab", "UIApplicationShortcutItemTitle": "Private tab"],
+        ],
+        // The import sheet asks which browsers the phone has by whether their schemes open.
+        "LSApplicationQueriesSchemes": ["googlechrome", "firefox", "microsoft-edge-https", "brave", "ddgQuickLink"],
       ]),
       sources: ["Bay/Sources/**"],
       resources: ["Bay/Resources/**"],
-      dependencies: [.target(name: "BayCore"), .target(name: "BayEngine")],
+      dependencies: [
+        .target(name: "BayCore"), .target(name: "BayEngine"), .target(name: "BayShare"), .target(name: "BayWidgets"),
+      ],
       settings: .settings(
         base: [
           "MARKETING_VERSION": "1.0.0",
@@ -67,6 +92,47 @@ let project = Project(
           .release(name: "Release"),
         ]
       )
+    ),
+    // Share to Bay: a page shared from another app opens in Bay as `bay://share?url=…`.
+    .target(
+      name: "BayShare",
+      destinations: [.iPhone],
+      product: .appExtension,
+      bundleId: "$(BASE_BUNDLE_ID).share",
+      deploymentTargets: deploymentTargets,
+      infoPlist: .extendingDefault(with: [
+        "CFBundleDisplayName": "Bay",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+        "NSExtension": [
+          "NSExtensionPointIdentifier": "com.apple.share-services",
+          "NSExtensionActivationRule": [
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+          ],
+          "NSExtensionPrincipalClass": "$(PRODUCT_MODULE_NAME).BayShareController",
+        ],
+      ]),
+      sources: ["BayShare/**"],
+      settings: .settings(base: extensionSettings)
+    ),
+    // The search widgets: each opens Bay at a `bay://` command. Their buttons use OpenURLIntent, from iOS 18; older
+    // phones keep Bay without the widget.
+    .target(
+      name: "BayWidgets",
+      destinations: [.iPhone],
+      product: .appExtension,
+      bundleId: "$(BASE_BUNDLE_ID).widgets",
+      deploymentTargets: .iOS("18.0"),
+      infoPlist: .extendingDefault(with: [
+        "CFBundleDisplayName": "Bay",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+        "NSExtension": ["NSExtensionPointIdentifier": "com.apple.widgetkit-extension"],
+      ]),
+      sources: ["BayWidget/**"],
+      dependencies: [.sdk(name: "WidgetKit", type: .framework), .sdk(name: "SwiftUI", type: .framework)],
+      settings: .settings(base: extensionSettings)
     ),
     // The page engine: WKWebView behind Bay's navigation policy, content blocking, downloads, media and voice, ported
     // from the Expo module (apps/mobile/modules/bay-engine). Swift 5 mode until it is moved to strict concurrency.
