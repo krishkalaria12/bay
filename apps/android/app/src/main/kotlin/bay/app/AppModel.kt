@@ -19,6 +19,7 @@ import bay.core.StoreObserver
 import bay.core.SyncObserver
 import bay.core.SyncView
 import bay.core.resolveLink
+import bay.engine.Engine
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +70,8 @@ class AppModel(context: Context, barTitle: String) {
     }
 
     init {
+        // Downloads keep reporting after their tab closes, so the store hears them here.
+        Engine.start(downloads = { update -> main.post { store.dispatch(Action.Download(update, now())) } }, media = {})
         store.observe(object : StoreObserver {
             override fun changed(revision: ULong) {
                 main.post { storeChanged() }

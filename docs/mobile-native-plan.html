@@ -1386,8 +1386,11 @@ impl BrowserStore {
               Done so far: iOS hosts the engine without Expo in the <code>BayEngine</code> framework (<code>EngineView</code> with one
               <code>EngineEvent</code> stream, and <code>Engine</code> for what views share), and the content blocker's C functions come from the core's own
               library (D16: <code>bay-core</code>'s <code>adblock</code> feature, on for iOS only, so Android's library doesn't grow). The debug screen ("Engine
-              check") browses, runs a page script and blocks with a test list. Left: Android's <code>:engine</code>, then downloads, background media, voice,
-              shortcuts and the share and widget extensions on devices.
+              check") browses, runs a page script and blocks with a test list. Android hosts Bay's Chromium without Expo too, in the <code>:engine</code> module
+              (<code>BayEngineView</code> with one <code>EngineEvent</code> stream, <code>MainActivity</code> as its <code>EngineHost</code>), built against
+              <code>android-engine-16</code> (the first engine with <code>BayProfile.forSpace</code>), and its debug screen browses, runs a page script and
+              blocks. The share extension and search widgets build with Tuist. Left: downloads, background media, voice, quick actions and the extensions
+              checked on devices.
             </p>
             <div class="lanes">
               <div>

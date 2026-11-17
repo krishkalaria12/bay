@@ -1,0 +1,23 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <!-- A page's media keeps playing while Bay is in the background (BayMediaService). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <!-- Downloads run in a data-sync foreground service with a progress notification (BayDownloadService). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <!-- Android 13+: without it, the download and media notifications never show. Asked for on the first download. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Passkeys in pages (B20): Android 14+ lets a browser ask Credential Manager on behalf of the page's origin only
+       with this (a normal permission, granted at install). -->
+  <uses-permission android:name="android.permission.CREDENTIAL_MANAGER_SET_ORIGIN" />
+  <application>
+    <service
+      android:name="bay.engine.BayMediaService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
+    <service
+      android:name="bay.engine.BayDownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+  </application>
+</manifest>

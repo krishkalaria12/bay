@@ -1,6 +1,13 @@
 package bay.app
 
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import bay.engine.Engine
+import bay.engine.EngineHost
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,15 +44,43 @@ import bay.core.Action
 import bay.core.BrowserTab
 import java.util.UUID
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), EngineHost {
     private lateinit var model: AppModel
+
+    /** The page's permission request waiting on the system's answer (one at a time, as the system asks). */
+    private var permissionsAnswered: (() -> Unit)? = null
+    private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionsAnswered?.invoke()
+        permissionsAnswered = null
+    }
+
+    override val currentActivity: Activity get() = this
+
+    override fun hasPermission(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    override fun requestPermissions(permissions: Array<String>, done: () -> Unit) {
+        permissionsAnswered?.invoke()
+        permissionsAnswered = done
+        permissionRequest.launch(permissions)
+    }
+
+    @Deprecated("The engine's pickers and voice search still start activities for a result.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        Engine.deliverActivityResult(requestCode, resultCode, data)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Engine.host = this
         enableEdgeToEdge()
         val strings = Strings()
         model = AppModel(applicationContext, strings.t("sync.bar"))
-        setContent { StoreCheck(model, strings) }
+        setContent {
+            var showsEngine by remember { mutableStateOf(false) }
+            if (showsEngine) EngineCheck(close = { showsEngine = false }) else StoreCheck(model, strings, openEngine = { showsEngine = true })
+        }
         window.decorView.announceContentChangesToUiAutomator()
     }
 
@@ -68,7 +103,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun StoreCheck(model: AppModel, strings: Strings) {
+private fun StoreCheck(model: AppModel, strings: Strings, openEngine: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -112,6 +147,11 @@ private fun StoreCheck(model: AppModel, strings: Strings) {
             style = TextStyle(fontSize = 17.sp, color = Color(0xFF3478F6)),
         )
         model.resolved?.let { BasicText(it, modifier = Modifier.testTag("resolved-link"), style = TextStyle(fontSize = 13.sp)) }
+        BasicText(
+            "Engine check",
+            modifier = Modifier.testTag("engine-check").clickable(onClick = openEngine),
+            style = TextStyle(fontSize = 17.sp, color = Color(0xFF3478F6)),
+        )
         BasicText(
             "Core ${bay.core.version()} · ${strings.locale}",
             modifier = Modifier.testTag("core-version"),

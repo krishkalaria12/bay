@@ -62,6 +62,9 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.1.12297006" >/dev/null
           cargo install cargo-ndk --locked
+      # Bay's Chromium (bay-engine.aar), the version apps/mobile/android-engine.json pins.
+      - name: Install the engine
+        run: node apps/mobile/scripts/fetch-android-engine.mjs
       - name: Build
         working-directory: apps/android
         run: ./gradlew :app:assembleDebug --no-daemon
