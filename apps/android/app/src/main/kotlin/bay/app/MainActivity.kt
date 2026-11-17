@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
         val strings = Strings()
         model = AppModel(applicationContext, strings.t("sync.bar"))
         setContent { StoreCheck(model, strings) }
+        window.decorView.announceContentChangesToUiAutomator()
     }
 
     override fun onStart() {

@@ -1701,22 +1701,7 @@ impl BrowserStore {
           </ul>
         </div>
         <h3>Known gaps</h3>
-        <ul>
-          <li>
-            <strong>Half an emoji.</strong> Where JavaScript's <code>slice</code> cuts a name or emoji between the two halves of a surrogate pair, the TS store
-            keeps the first half. Rust strings can't hold one, so <code>js::slice</code> leaves the pair out. This only happens for a name that reaches its
-            limit on an emoji. The recorder leaves those calls out.
-          </li>
-          <li>
-            <strong>Fractional numbers.</strong> Timestamps, visit counts and byte counts are integers in the core. A saved fractional value (which neither app
-            writes) is truncated, where the TS store kept it.
-          </li>
-          <li>
-            <strong>Argent reads a stale tree on Android.</strong> On the Compose stand-in screens, <code>describe</code> sometimes returns an older frame (a
-            status that changed, rows that appeared) while the screen shows the new one. It hasn't happened on iOS. Look into it before N4, whose Android e2e
-            flows depend on fresh trees (Compose semantics invalidation, or Argent's <code>android-devtools</code> source).
-          </li>
-        </ul>
+        <p class="muted">None open. Add parity gaps here in the commit that finds them.</p>
       </section>
 
       <section id="sources">

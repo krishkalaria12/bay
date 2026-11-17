@@ -8,3 +8,4 @@ The native Kotlin/Compose rewrite of `apps/mobile` (plan: `docs/mobile-native-pl
 - Debug installs as `in.krishkalaria.bay.mobile.native`, beside the Expo app; release keeps the store ID.
 - Drive the emulator with Argent (`reinstall-app` with the APK, `launch-app` with activity `bay.app.MainActivity`). Root composables set `testTagsAsResourceId`, and controls take `testTag`s equal to the Expo app's `testID`s.
 - Words come from the core's catalog through `Strings` (`strings.t("key", mapOf("name" to value))`), never hard-coded text.
+- Every Activity calls `window.decorView.announceContentChangesToUiAutomator()` after `setContent` (debug builds only). Compose sends accessibility events only while an accessibility *service* is on, and UiAutomator (Argent, e2e) isn't one, so without this its cache keeps the first frame it read and `describe`/`await-ui-element` see a stale screen.
