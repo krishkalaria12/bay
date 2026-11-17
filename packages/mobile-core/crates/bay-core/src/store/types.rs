@@ -157,7 +157,7 @@ impl BookmarkNode {
 pub type Bookmarks = HashMap<String, BookmarkNode>;
 
 /// A closed tab, kept for the archive.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchivedTab {
     #[serde(flatten)]

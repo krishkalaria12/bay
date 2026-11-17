@@ -1,6 +1,7 @@
 //! The browser store: the browsing state, every change to it, and reading it back from disk.
 
 pub mod bookmarks;
+pub mod handle;
 pub mod js;
 pub mod model;
 pub mod parse;

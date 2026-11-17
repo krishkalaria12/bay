@@ -1,0 +1,467 @@
+//! `BrowserStore`: the object both apps hold. It keeps the browsing state, applies actions through the reducer,
+//! tells the app what changed, and saves `browser.json` the way the Expo app's persistence service did: written to a
+//! temporary file and moved over the saved one, once the store has been still for a moment, and at once on `flush`.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
+use std::time::Duration;
+
+use serde_json::Value;
+
+use super::model::{
+    PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
+};
+use super::parse::parse_browser_data;
+use super::types::*;
+use super::{Action, bookmarks::empty_bookmarks};
+
+/// The saved browsing state, in the app's documents.
+pub const STATE_FILE: &str = "browser.json";
+
+/// The version of the document this store writes.
+const VERSION: u64 = 2;
+
+/// How long the store has to stay still before its state is written.
+const SAVE_DELAY: Duration = Duration::from_millis(400);
+
+/// Hears that the state changed. Called on the thread that dispatched; the apps hop to their main thread.
+#[uniffi::export(with_foreign)]
+pub trait StoreObserver: Send + Sync {
+    fn changed(&self, revision: u64);
+}
+
+/// How the saved state was found when the store opened.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum LoadOutcome {
+    /// Read from `browser.json`.
+    Loaded,
+    /// No saved state: a fresh install.
+    Fresh,
+    /// A file was there but couldn't be read or decoded; the store starts fresh and leaves it in place.
+    Unreadable { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+pub enum StoreError {
+    #[error("Couldn't save the browsing state: {reason}")]
+    Save { reason: String },
+}
+
+struct State {
+    data: BrowserData,
+    revision: u64,
+    saved_revision: u64,
+}
+
+#[derive(uniffi::Object)]
+pub struct BrowserStore {
+    state: Arc<Mutex<State>>,
+    file: PathBuf,
+    observers: Mutex<Vec<Arc<dyn StoreObserver>>>,
+    saver: Mutex<Sender<()>>,
+    outcome: LoadOutcome,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn load(file: &Path, fallback: &BrowserData) -> (BrowserData, LoadOutcome) {
+    let text = match fs::read_to_string(file) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (fallback.clone(), LoadOutcome::Fresh);
+        }
+        Err(error) => {
+            return (
+                fallback.clone(),
+                LoadOutcome::Unreadable {
+                    reason: error.to_string(),
+                },
+            );
+        }
+    };
+    let parsed = serde_json::from_str::<Value>(&text)
+        .map_err(|error| error.to_string())
+        .and_then(|value| parse_browser_data(&value, fallback).map_err(|error| error.to_string()));
+    match parsed {
+        Ok(data) => (data, LoadOutcome::Loaded),
+        Err(reason) => (fallback.clone(), LoadOutcome::Unreadable { reason }),
+    }
+}
+
+/// Writes the state as the version-2 document, atomically.
+fn write(file: &Path, data: &BrowserData) -> Result<(), StoreError> {
+    let fail = |error: &dyn std::fmt::Display| StoreError::Save {
+        reason: error.to_string(),
+    };
+    let mut document = match serde_json::to_value(persisted_browser_data(data)) {
+        Ok(Value::Object(map)) => map,
+        Ok(_) => return Err(fail(&"the state isn't an object")),
+        Err(error) => return Err(fail(&error)),
+    };
+    document.insert("version".into(), VERSION.into());
+    let text = serde_json::to_vec(&document).map_err(|error| fail(&error))?;
+    let draft = file.with_extension("json.tmp");
+    if let Some(parent) = file.parent() {
+        fs::create_dir_all(parent).map_err(|error| fail(&error))?;
+    }
+    fs::write(&draft, text).map_err(|error| fail(&error))?;
+    fs::rename(&draft, file).map_err(|error| fail(&error))
+}
+
+/// Saves the newest state when it changed since the last save.
+fn save_if_changed(state: &Mutex<State>, file: &Path) -> Result<(), StoreError> {
+    let (data, revision) = {
+        let state = lock(state);
+        if state.revision == state.saved_revision {
+            return Ok(());
+        }
+        (state.data.clone(), state.revision)
+    };
+    write(file, &data)?;
+    let mut state = lock(state);
+    state.saved_revision = state.saved_revision.max(revision);
+    Ok(())
+}
+
+#[uniffi::export]
+impl BrowserStore {
+    /// Opens the store on the app's documents directory. `new_tab_id` and `now` make the blank tab a fresh install
+    /// (or an unreadable file) starts with.
+    #[uniffi::constructor]
+    pub fn open(documents_dir: String, new_tab_id: String, now: i64) -> Arc<Self> {
+        let file = Path::new(&documents_dir).join(STATE_FILE);
+        let fallback = initial_browser_data(
+            create_tab(&new_tab_id, now, "", false, PERSONAL_SPACE_ID),
+            BrowserPreferences::default(),
+        );
+        let (data, outcome) = load(&file, &fallback);
+        let state = Arc::new(Mutex::new(State {
+            data,
+            revision: 0,
+            saved_revision: 0,
+        }));
+        let (sender, receiver) = mpsc::channel::<()>();
+        let (saver_state, saver_file) = (Arc::clone(&state), file.clone());
+        thread::Builder::new()
+            .name("bay-store-save".into())
+            .spawn(move || {
+                // Waits for a change, then for the store to be still for SAVE_DELAY, then saves.
+                while receiver.recv().is_ok() {
+                    loop {
+                        match receiver.recv_timeout(SAVE_DELAY) {
+                            Ok(()) => continue,
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
+                        }
+                    }
+                    // A failed save stays dirty and is tried again after the next change or flush.
+                    let _ = save_if_changed(&saver_state, &saver_file);
+                }
+            })
+            .expect("the save thread starts");
+        Arc::new(Self {
+            state,
+            file,
+            observers: Mutex::new(Vec::new()),
+            saver: Mutex::new(sender),
+            outcome,
+        })
+    }
+
+    /// How the saved state was found when the store opened.
+    pub fn load_outcome(&self) -> LoadOutcome {
+        self.outcome.clone()
+    }
+
+    /// Applies an action. Returns whether it changed anything; observers hear of each change.
+    pub fn dispatch(&self, action: Action) -> bool {
+        let revision = {
+            let mut state = lock(&self.state);
+            let Some(next) = reduce(&state.data, &action) else {
+                return false;
+            };
+            state.data = next;
+            state.revision += 1;
+            state.revision
+        };
+        let _ = lock(&self.saver).send(());
+        let observers = lock(&self.observers).clone();
+        for observer in observers {
+            observer.changed(revision);
+        }
+        true
+    }
+
+    /// Writes the newest state now, when it changed since the last write: as the app leaves the foreground.
+    pub fn flush(&self) -> Result<(), StoreError> {
+        save_if_changed(&self.state, &self.file)
+    }
+
+    pub fn observe(&self, observer: Arc<dyn StoreObserver>) {
+        lock(&self.observers).push(observer);
+    }
+
+    /// Counts every change since the store opened.
+    pub fn revision(&self) -> u64 {
+        lock(&self.state).revision
+    }
+
+    pub fn spaces(&self) -> Vec<BrowserSpace> {
+        lock(&self.state).data.spaces.clone()
+    }
+
+    pub fn active_space_id(&self) -> String {
+        lock(&self.state).data.active_space_id.clone()
+    }
+
+    pub fn active_tab_id(&self) -> String {
+        lock(&self.state).data.active_tab_id.clone()
+    }
+
+    /// Every tab, private ones included, in list order.
+    pub fn tabs(&self) -> Vec<BrowserTab> {
+        lock(&self.state).data.tabs.clone()
+    }
+
+    /// A space's tabs, in list order.
+    pub fn space_tabs(&self, space_id: String) -> Vec<BrowserTab> {
+        lock(&self.state)
+            .data
+            .tabs
+            .iter()
+            .filter(|tab| tab.space_id == space_id)
+            .cloned()
+            .collect()
+    }
+
+    pub fn folders(&self, space_id: String) -> Vec<BrowserFolder> {
+        lock(&self.state)
+            .data
+            .folders
+            .iter()
+            .filter(|folder| folder.space_id == space_id)
+            .cloned()
+            .collect()
+    }
+
+    pub fn pinned_sites(&self, space_id: String) -> Vec<PinnedSite> {
+        lock(&self.state)
+            .data
+            .pinned_sites
+            .iter()
+            .filter(|site| site.space_id == space_id)
+            .cloned()
+            .collect()
+    }
+
+    /// A page of a space's history, newest first, narrowed to entries whose title or address holds `query`.
+    pub fn history(
+        &self,
+        space_id: String,
+        query: String,
+        offset: u32,
+        limit: u32,
+    ) -> Vec<HistoryEntry> {
+        let query = query.to_lowercase();
+        lock(&self.state)
+            .data
+            .history
+            .iter()
+            .filter(|entry| entry.space_id == space_id)
+            .filter(|entry| {
+                query.is_empty()
+                    || entry.title.to_lowercase().contains(&query)
+                    || entry.url.to_lowercase().contains(&query)
+            })
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect()
+    }
+
+    pub fn bookmarks(&self, space_id: String) -> Bookmarks {
+        lock(&self.state)
+            .data
+            .bookmarks
+            .get(&space_id)
+            .cloned()
+            .unwrap_or_else(empty_bookmarks)
+    }
+
+    /// A space's archive, newest first.
+    pub fn archive(&self, space_id: String) -> Vec<ArchivedTab> {
+        lock(&self.state)
+            .data
+            .archive
+            .iter()
+            .filter(|tab| tab.tab.space_id == space_id)
+            .cloned()
+            .collect()
+    }
+
+    /// Newest first.
+    pub fn downloads(&self) -> Vec<DownloadItem> {
+        lock(&self.state).data.downloads.clone()
+    }
+
+    pub fn preferences(&self) -> BrowserPreferences {
+        lock(&self.state).data.preferences.clone()
+    }
+
+    /// Each site's saved icon, by host without "www.".
+    pub fn favicons(&self) -> std::collections::HashMap<String, String> {
+        lock(&self.state)
+            .data
+            .favicons
+            .iter()
+            .map(|(host, uri)| (host.clone(), uri.clone()))
+            .collect()
+    }
+
+    pub fn left_at(&self) -> Option<i64> {
+        lock(&self.state).data.left_at
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct Counter(AtomicU64);
+
+    impl StoreObserver for Counter {
+        fn changed(&self, revision: u64) {
+            self.0.store(revision, Ordering::SeqCst);
+        }
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bay-store-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn tab(id: &str, url: &str) -> BrowserTab {
+        create_tab(id, 10, url, false, PERSONAL_SPACE_ID)
+    }
+
+    #[test]
+    fn a_fresh_store_starts_with_one_blank_tab() {
+        let dir = temp_dir("fresh");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        assert_eq!(store.load_outcome(), LoadOutcome::Fresh);
+        assert_eq!(store.active_tab_id(), "first");
+        assert_eq!(store.spaces()[0].id, PERSONAL_SPACE_ID);
+        assert!(!store.preferences().welcomed);
+    }
+
+    #[test]
+    fn changes_are_observed_saved_and_read_back() {
+        let dir = temp_dir("save");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        let counter = Arc::new(Counter(AtomicU64::new(0)));
+        store.observe(counter.clone());
+        assert!(store.dispatch(Action::NewTab {
+            tab: tab("t2", "https://example.com/"),
+            background: false
+        }));
+        assert!(!store.dispatch(Action::NewTab {
+            tab: tab("t2", "https://example.com/"),
+            background: false
+        }));
+        assert!(store.dispatch(Action::NewTab {
+            tab: BrowserTab {
+                private: true,
+                ..tab("secret", "https://private.example/")
+            },
+            background: false
+        }));
+        assert_eq!(counter.0.load(Ordering::SeqCst), 2);
+        store.flush().unwrap();
+
+        let saved: Value =
+            serde_json::from_str(&fs::read_to_string(dir.join(STATE_FILE)).unwrap()).unwrap();
+        assert_eq!(saved["version"], 2);
+        assert!(
+            !saved["tabs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tab| tab["id"] == "secret"),
+            "private tabs aren't saved"
+        );
+
+        let reopened = BrowserStore::open(dir.to_string_lossy().into(), "other".into(), 6);
+        assert_eq!(reopened.load_outcome(), LoadOutcome::Loaded);
+        assert_eq!(
+            reopened
+                .tabs()
+                .iter()
+                .map(|tab| tab.id.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "t2"]
+        );
+        assert_eq!(reopened.active_tab_id(), "t2");
+    }
+
+    #[test]
+    fn a_change_is_saved_once_the_store_is_still() {
+        let dir = temp_dir("debounce");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        store.dispatch(Action::Left { now: 99 });
+        assert!(!dir.join(STATE_FILE).exists(), "nothing is written at once");
+        thread::sleep(SAVE_DELAY * 3);
+        assert!(dir.join(STATE_FILE).exists());
+    }
+
+    #[test]
+    fn an_unreadable_file_starts_fresh_and_stays() {
+        let dir = temp_dir("broken");
+        fs::write(dir.join(STATE_FILE), "{ not json").unwrap();
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        assert!(matches!(
+            store.load_outcome(),
+            LoadOutcome::Unreadable { .. }
+        ));
+        assert_eq!(
+            fs::read_to_string(dir.join(STATE_FILE)).unwrap(),
+            "{ not json"
+        );
+    }
+
+    #[test]
+    fn a_document_the_expo_app_wrote_reads_as_it_was() {
+        // A saved state from the Expo app's own tests (fixtures/store.jsonl), written the way it writes them.
+        let fixtures = include_str!("../../../../fixtures/store.jsonl");
+        let line = fixtures
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .find(|line| {
+                line["fn"] == "parseBrowserData"
+                    && line["args"][0]["version"] == 2
+                    && line.get("error").is_none()
+            })
+            .expect("a saved document");
+        let dir = temp_dir("expo");
+        fs::write(
+            dir.join(STATE_FILE),
+            serde_json::to_string(&line["args"][0]).unwrap(),
+        )
+        .unwrap();
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        assert_eq!(store.load_outcome(), LoadOutcome::Loaded);
+        assert_eq!(
+            serde_json::to_value(store.tabs()).unwrap(),
+            line["result"]["tabs"]
+        );
+    }
+}
