@@ -139,7 +139,7 @@ export interface BrowserPreferences {
   /** The welcome has been seen (or skipped); a fresh install shows it once. */
   welcomed: boolean;
   /** Bay opens ready to type: the search card and keyboard come up when it starts (C1). */
-  searchOnLaunch: boolean;
+  openSearchOnLaunch: boolean;
   /** The custom search engine's address, https with `%s` where the words go; used while `searchEngineId` is "custom". */
   customSearchUrl: string | null;
   /** The first-run tips already shown (U7), so each shows once. */
@@ -193,7 +193,7 @@ export const SIMPLE_PREFERENCE_KEYS = [
   "startPageAfterHours",
   "youtube",
   "welcomed",
-  "searchOnLaunch",
+  "openSearchOnLaunch",
   "swipeToNavigate",
   "appLinks",
 ] as const;

@@ -353,7 +353,7 @@ function SettingRow(): JSX.Element | null {
 
   if (step !== "field" && step !== "private") return null;
   const keyboard = step === "field";
-  const value = keyboard ? preferences.searchOnLaunch : preferences.lockPrivateTabs;
+  const value = keyboard ? preferences.openSearchOnLaunch : preferences.lockPrivateTabs;
   const label = t(keyboard ? "settings.searchOnLaunch" : "settings.lockPrivate");
   const detail = t(keyboard ? "settings.searchOnLaunch.detail" : "settings.lockPrivate.detail");
 
@@ -361,7 +361,7 @@ function SettingRow(): JSX.Element | null {
     tick();
 
     if (keyboard) {
-      dispatch({ type: "preferences", update: { searchOnLaunch: !value } });
+      dispatch({ type: "preferences", update: { openSearchOnLaunch: !value } });
 
       return;
     }

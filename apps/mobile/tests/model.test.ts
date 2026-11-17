@@ -155,7 +155,7 @@ test("saved state is validated and repaired", () => {
     youtube: { shorts: false, suggestions: false, distractions: false },
     // Saved before the welcome existed, so its owner has seen Bay already.
     welcomed: true,
-    searchOnLaunch: true,
+    openSearchOnLaunch: false,
     customSearchUrl: null,
     tipsSeen: ["blocking", "bar"],
     swipeToNavigate: "anywhere",
@@ -774,13 +774,15 @@ test("spaces colours cover the palette and don't drift", () => {
   assert.deepEqual(SPACE_COLORS, ["blue", "green", "orange", "red", "violet", "gray"]);
 });
 
-test("Bay opens ready to type unless that is turned off, and an older document opens that way too", () => {
+test("Bay opens without the keyboard unless that is chosen, and the old always-on choice no longer counts", () => {
   let data = initialBrowserData(createTab("a", 0));
-  assert.equal(data.preferences.searchOnLaunch, true);
-  data = reduceBrowserData(data, { type: "preferences", update: { searchOnLaunch: false } });
-  assert.equal(data.preferences.searchOnLaunch, false);
-  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.searchOnLaunch, true);
-  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: false } }, data).preferences.searchOnLaunch, false);
+  assert.equal(data.preferences.openSearchOnLaunch, false);
+  data = reduceBrowserData(data, { type: "preferences", update: { openSearchOnLaunch: true } });
+  assert.equal(data.preferences.openSearchOnLaunch, true);
+  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.openSearchOnLaunch, false);
+  // Saved while it was on by default: off now, until it's chosen again.
+  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: true } }, data).preferences.openSearchOnLaunch, false);
+  assert.equal(parseBrowserData({ version: 1, preferences: { openSearchOnLaunch: true } }, data).preferences.openSearchOnLaunch, true);
 });
 
 test("a custom search engine needs https and a place for the words", () => {

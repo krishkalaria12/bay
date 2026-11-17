@@ -351,9 +351,16 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
         {
           id: "launch",
           rows: [
-            toggle("searchOnLaunch", "settings-search-on-launch", t("settings.searchOnLaunch"), prefs.searchOnLaunch, (on) => change({ searchOnLaunch: on }), {
-              icon: "keyboard",
-            }),
+            toggle(
+              "openSearchOnLaunch",
+              "settings-search-on-launch",
+              t("settings.searchOnLaunch"),
+              prefs.openSearchOnLaunch,
+              (on) => change({ openSearchOnLaunch: on }),
+              {
+                icon: "keyboard",
+              },
+            ),
           ],
           footer: t("settings.searchOnLaunch.detail"),
         },

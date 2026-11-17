@@ -48,7 +48,7 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
   welcomed: false,
-  searchOnLaunch: true,
+  openSearchOnLaunch: false,
   customSearchUrl: null,
   tipsSeen: [],
   swipeToNavigate: "anywhere",
@@ -1423,7 +1423,8 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
     },
     // Saved before the welcome existed: whoever saved it has used Bay already.
     welcomed: savedPreferences.welcomed !== false,
-    searchOnLaunch: savedPreferences.searchOnLaunch !== false,
+    // Off unless chosen: it was saved as searchOnLaunch while it was on by default, which no longer counts.
+    openSearchOnLaunch: savedPreferences.openSearchOnLaunch === true,
     customSearchUrl:
       v.is(v.string(), savedPreferences.customSearchUrl) && isCustomSearchUrl(savedPreferences.customSearchUrl) ? savedPreferences.customSearchUrl : null,
     // Saved before the tips existed: whoever saved it knows Bay already, so they show to people new to it.

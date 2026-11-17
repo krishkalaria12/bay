@@ -15,7 +15,7 @@ steps:
       - tap: { id: welcome-skip }
       - await: { hidden: { id: welcome-skip }, timeout: 10000 }
       - await: { idle: true, timeout: 15000, stableFor: 1500 }
-  # Bay opens ready to type (C1): put the search card away to reach the bar.
+  # With "Open search when Bay starts" chosen (C1), Bay opens ready to type: put the search card away to reach the bar.
   - when: { visible: { id: search-dismiss } }
     steps:
       - tap: { id: search-dismiss }
