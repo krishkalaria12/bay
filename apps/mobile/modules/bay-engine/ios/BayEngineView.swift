@@ -84,6 +84,24 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
   }
 
+  /// How much of the page's bottom the app's floating bar covers. On iOS 26+ WebKit shrinks the layout viewport by it,
+  /// so what a page pins to its bottom sits above the bar while content still scrolls under the glass; earlier, the
+  /// scroll view is inset so the last of the page can scroll clear of it.
+  var obscuredBottom: CGFloat = 0 {
+    didSet {
+      if obscuredBottom != oldValue { applyObscuredBottom() }
+    }
+  }
+
+  private func applyObscuredBottom() {
+    if #available(iOS 26, *) {
+      webView.obscuredContentInsets = UIEdgeInsets(top: 0, left: 0, bottom: obscuredBottom, right: 0)
+    } else {
+      webView.scrollView.contentInset.bottom = obscuredBottom
+      webView.scrollView.verticalScrollIndicatorInsets.bottom = obscuredBottom
+    }
+  }
+
   /// Hidden tabs stay mounted; keep them out of VoiceOver. Leaving the screen is also a good moment to save (B6):
   /// the tab may be the next one unmounted for memory.
   var isActive = true {
@@ -183,6 +201,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.isHidden = isSuspended
     webView.scrollView.delegate = self
     webView.scrollView.contentInsetAdjustmentBehavior = .never
+    applyObscuredBottom()
     webView.scrollView.alwaysBounceVertical = true
     webView.scrollView.refreshControl = pullToRefreshEnabled ? refreshControl : nil
     // Page scripts run in this isolated world (see evaluate), so only they can post to the app.

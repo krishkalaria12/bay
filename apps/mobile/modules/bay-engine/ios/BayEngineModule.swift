@@ -131,6 +131,9 @@ public class BayEngineModule: Module {
       Prop("private", false) { (view: BayEngineView, isPrivate: Bool) in
         view.isPrivate = isPrivate
       }
+      Prop("obscuredBottom", 0.0) { (view: BayEngineView, inset: Double) in
+        view.obscuredBottom = CGFloat(max(0, inset))
+      }
       Prop("profile", "personal") { (view: BayEngineView, profile: String) in
         view.profile = profile
       }

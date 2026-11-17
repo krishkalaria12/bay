@@ -90,6 +90,12 @@ export interface EngineViewProps extends ViewProps {
    * its address again. On iOS before 17 every space shares the default store.
    */
   profile?: string;
+  /**
+   * How far up from the bottom the app's own controls cover the page, in points. iOS 26+ shrinks the layout viewport
+   * by it (`obscuredContentInsets`), so fixed and sticky elements stay in view while content scrolls underneath;
+   * earlier iOS insets the scroll view. Android ignores it: lay the view out above the controls instead.
+   */
+  obscuredBottom?: number;
   /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
   active?: boolean;
   /** Defaults to false. Hidden tabs that aren't playing media pass true so the engine pauses their timers, animations and drawing; snapshots then resolve null. */

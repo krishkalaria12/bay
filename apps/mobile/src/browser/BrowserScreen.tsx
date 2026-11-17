@@ -254,6 +254,8 @@ export function BrowserScreen(): JSX.Element {
   // straight away, brings it back.
   const swipeArchived = useRef<{ id: string; shown: string } | null>(null);
   const barHidden = useSharedValue(0);
+  // Whether the bar has scrolled away, for the pages: while it shows, each page keeps its bottom clear of it.
+  const [barAway, setBarAway] = useState(false);
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
   const spaceTabs = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
@@ -320,6 +322,7 @@ export function BrowserScreen(): JSX.Element {
   useEffect(() => {
     setLive(mountedKey.split(" "));
     barHidden.set(withTiming(0));
+    setBarAway(false);
   }, [mountedKey, barHidden]);
 
   const showToast = toast.show;
@@ -330,7 +333,9 @@ export function BrowserScreen(): JSX.Element {
   // brings it back; otherwise the tap looks like it did nothing.
   const downloadToastKey = downloads.toast ? `${downloads.toast.id} ${downloads.toast.state}` : null;
   useEffect(() => {
-    if (downloadToastKey) barHidden.set(withTiming(0, { duration: 180 }));
+    if (!downloadToastKey) return;
+    barHidden.set(withTiming(0, { duration: 180 }));
+    setBarAway(false);
   }, [downloadToastKey, barHidden]);
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
@@ -395,8 +400,13 @@ export function BrowserScreen(): JSX.Element {
   function onScroll(tabId: string, { offsetY, deltaY }: PageScroll): void {
     if (tabId !== active.id || reading.picking) return;
 
-    if (offsetY < 24 || deltaY < -8) barHidden.set(withTiming(0, { duration: 180 }));
-    else if (deltaY > 8) barHidden.set(withTiming(1, { duration: 220 }));
+    if (offsetY < 24 || deltaY < -8) {
+      barHidden.set(withTiming(0, { duration: 180 }));
+      setBarAway(false);
+    } else if (deltaY > 8) {
+      barHidden.set(withTiming(1, { duration: 220 }));
+      setBarAway(true);
+    }
   }
 
   function navigate(tabId: string, url: string): void {
@@ -903,6 +913,8 @@ export function BrowserScreen(): JSX.Element {
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
   const tabError = error?.tabId === active.id ? error : null;
   const fullscreen = fullscreenByTab[active.id] ?? false;
+  // What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
+  const coveredBottom = barAway || fullscreen ? 0 : Math.max(insets.bottom, space.md) + space.xs + BAR_HEIGHT + space.sm;
   const onPhoto = data.preferences.wallpaper === "photo" && Boolean(data.preferences.wallpaperPhoto);
 
   // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
@@ -946,7 +958,7 @@ export function BrowserScreen(): JSX.Element {
     const opened = startFresh();
     const { data: current } = useBrowserStore.getState();
 
-    if (!current.preferences.welcomed || !current.preferences.searchOnLaunch) return;
+    if (!current.preferences.welcomed || !current.preferences.openSearchOnLaunch) return;
     const tab = current.tabs.find((entry) => entry.id === current.activeTabId);
 
     // Over a page, a new search starts a new tab and leaves the page as it was.
@@ -963,7 +975,7 @@ export function BrowserScreen(): JSX.Element {
     runLifecycleWork(
       followLifecycle(() => {
         // A fresh start page after a long time away opens ready to type too (C1).
-        if (startFresh() && useBrowserStore.getState().data.preferences.searchOnLaunch) search(false);
+        if (startFresh() && useBrowserStore.getState().data.preferences.openSearchOnLaunch) search(false);
       }),
     );
   }, [ready, runLifecycleWork]);
@@ -1008,6 +1020,7 @@ export function BrowserScreen(): JSX.Element {
                   onBlockedCount={(count) => reportBlocked(id, count)}
                   pullToRefresh={data.preferences.pullToRefresh}
                   pageColor={pageColors[id] ?? null}
+                  coveredBottom={coveredBottom}
                   onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
                   onPageMessage={(message) => {
                     if (!media.pageMessage(id, message) && id === active.id) {
@@ -1244,7 +1257,8 @@ export function BrowserScreen(): JSX.Element {
                           setPanel("tabs");
                         }}
                         onTabsSwipeUp={lastOpenTab}
-                        tabCount={data.tabs.length}
+                        // The space's own tabs, as its tab view counts them (pinned pages show as their pins).
+                        tabCount={switcherTabs.length}
                         onSearch={() => search(false)}
                         onMore={() => {
                           if (locked && active.private) return;
@@ -1368,7 +1382,7 @@ export function BrowserScreen(): JSX.Element {
       <TabsMenu
         visible={panel === "tabs"}
         onClose={() => closePanel("tabs")}
-        tabCount={spaceTabs.length}
+        tabCount={switcherTabs.length}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onArchiveTab={() => archiveTab(active.id)}
