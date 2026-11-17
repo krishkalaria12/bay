@@ -7,3 +7,4 @@ The native Kotlin/Compose rewrite of `apps/mobile` (plan: `docs/mobile-native-pl
 - UI is Compose on Foundation: no Material or AppCompat dependency in UI modules (plan D8).
 - Debug installs as `in.krishkalaria.bay.mobile.native`, beside the Expo app; release keeps the store ID.
 - Drive the emulator with Argent (`reinstall-app` with the APK, `launch-app` with activity `bay.app.MainActivity`). Root composables set `testTagsAsResourceId`, and controls take `testTag`s equal to the Expo app's `testID`s.
+- Words come from the core's catalog through `Strings` (`strings.t("key", mapOf("name" to value))`), never hard-coded text.

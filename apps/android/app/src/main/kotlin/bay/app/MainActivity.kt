@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val strings = Strings()
         setContent {
             Column(
                 modifier = Modifier.fillMaxSize().semantics { testTagsAsResourceId = true },
@@ -31,8 +32,9 @@ class MainActivity : ComponentActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 BasicText("Bay", style = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.SemiBold))
+                BasicText(strings.t("start.tapToSearch"), modifier = Modifier.testTag("start-hint"))
                 BasicText(
-                    "Core ${bay.core.version()}",
+                    "Core ${bay.core.version()} · ${strings.locale}",
                     modifier = Modifier.testTag("core-version"),
                     style = TextStyle(fontSize = 13.sp),
                 )

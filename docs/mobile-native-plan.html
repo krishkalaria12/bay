@@ -724,11 +724,16 @@
               <tr>
                 <th><span class="id">D11</span>Strings</th>
                 <td>
-                  One source catalog, <code>packages/mobile-core/strings/&lt;locale&gt;.json</code>, converted once from the TS tables. A generator writes
-                  <code>Localizable.xcstrings</code> and <code>res/values-*/strings.xml</code> at build time. The core returns keys and arguments, never
-                  finished text.
+                  One source catalog, <code>packages/mobile-core/strings/&lt;locale&gt;.json</code>, written from the TS tables by
+                  <code>scripts/import-expo-strings.mjs</code> (re-run until cutover) and compiled into the core. The core's <code>i18n</code> module gives each
+                  app a locale's whole catalog (English behind missing keys), matches device tags, and fills <code>{name}</code> placeholders. Each app keeps
+                  the table in an observable <code>Strings</code> object. Revised in N0: this replaced generated <code>xcstrings</code> and
+                  <code>strings.xml</code>.
                 </td>
-                <td>Translators edit one file per locale. Both apps get native plural rules and per-app language settings.</td>
+                <td>
+                  Settings › Language switches the whole app at once, without a restart, as the Expo app does. Native resource files follow the system's per-app
+                  language and need a restart. One file per locale for translators, and the key and placeholder checks run once in Rust.
+                </td>
               </tr>
               <tr>
                 <th><span class="id">D12</span>Design tokens and icons</th>
@@ -828,7 +833,7 @@
             <div class="layer"><strong>Widgets</strong>search widget, share target, app shortcuts</div>
           </div>
           <p class="bridge wide">
-            Both apps → UniFFI generated bindings (<code>BayCore.swift</code> + xcframework / <code>uniffi.bay_core</code> Kotlin + <code>.so</code>) → core.
+            Both apps → UniFFI generated bindings (<code>BayCore.swift</code> + static library / <code>uniffi.bay_core</code> Kotlin + <code>.so</code>) → core.
             Page scripts (JS) are bundled into both apps.
           </p>
         </div>
@@ -928,7 +933,7 @@ packages/mobile-core/        Rust: Cargo workspace (from uniffi-starter)
   crates/bay-core/           store, db, sync, input, import, settings, onboarding
   strings/                   en.json … pt-BR.json (D11)
   tokens.json                design tokens (D12)
-  scripts/build-ios.sh       → BayCore.xcframework + BayCore.swift
+  scripts/build-ios.sh       → libbay_core.a per platform + BayCoreFFI header + BayCore.swift
 packages/mobile-pagescripts/ JS page scripts + jsdom tests (D13)
 apps/ios/                    Tuist: Project.swift, Bay/, BayEngine/, BayDesign/, BayShare/, BayWidget/
 apps/android/                Gradle: build-logic/, app/, engine/, core/{model,designsystem,core-bindings}/, feature/*
@@ -1145,8 +1150,8 @@ apps/mobile/                 Expo app, fixes only until cutover (N8)</pre>
               </tr>
               <tr>
                 <td><code>src/i18n/*</code> (35 files)</td>
-                <td><span class="lang both">xcstrings / strings.xml</span></td>
-                <td>Generated from <code>strings/*.json</code> (D11).</td>
+                <td><span class="lang rust">core::i18n</span></td>
+                <td><code>strings/*.json</code>, compiled into the core; <code>tests/i18n.test.ts</code> moves with it (D11).</td>
               </tr>
               <tr>
                 <td><code>src/pagescripts/*</code></td>
@@ -1272,8 +1277,10 @@ impl BrowserStore {
             <ul>
               <li>Work on <code>refactor/mobile-native</code> (this plan's PR, stacked on #27). Merge #27 up when it changes; never rebase.</li>
               <li>
-                <code>packages/mobile-core</code> from uniffi-starter. It links <code>packages/adblock</code> as a dependency and builds one xcframework (device
-                + simulator arm64) and per-ABI staticlibs (D16).
+                <code>packages/mobile-core</code> from uniffi-starter. iOS: <code>build-ios.sh</code> writes a static library per platform, UniFFI's header and
+                the Swift API, run by the <code>BayCore</code> target before it compiles (an xcframework's header is copied before the script runs, so it went
+                stale). Android: <code>:core:bindings</code> runs cargo-ndk and UniFFI's Kotlin generator. Linking <code>packages/adblock</code> into the same
+                artifact (D16) comes with the engine hosts in N3.
               </li>
               <li>
                 <code>apps/ios</code> with Tuist: app, BayEngine, BayDesign, BayShare, BayWidget targets, iOS 15.0, bundle ID
@@ -1283,7 +1290,10 @@ impl BrowserStore {
                 <code>apps/android</code> from architecture-templates multimodule plus NiA <code>build-logic</code>. Remove Room, Hilt and Material.
                 applicationId <code>in.krishkalaria.bay.mobile</code>, minSdk 29.
               </li>
-              <li>Generators: <code>tokens.json</code> → Swift/Kotlin, <code>strings/*.json</code> → xcstrings/strings.xml (convert the 35 TS tables once).</li>
+              <li>
+                Strings: the 35 TS tables become <code>strings/*.json</code>, served by the core's <code>i18n</code> module (D11). Tokens:
+                <code>tokens.json</code> → Swift/Kotlin, built with the design system in N4.
+              </li>
               <li>CI: <code>cargo test</code>, iOS simulator build, <code>:app:assembleDebug</code> against the api-stub engine.</li>
             </ul>
             <h4>Done when</h4>

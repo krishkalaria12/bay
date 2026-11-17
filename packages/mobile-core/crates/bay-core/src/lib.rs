@@ -4,6 +4,8 @@
 
 uniffi::setup_scaffolding!("bay_core");
 
+pub mod i18n;
+
 /// The core's version, as the apps show it in Settings › About and send with crash reports.
 #[uniffi::export]
 pub fn version() -> String {

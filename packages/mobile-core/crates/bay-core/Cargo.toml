@@ -13,3 +13,4 @@ crate-type = ["lib", "staticlib", "cdylib"]
 [dependencies]
 uniffi.workspace = true
 thiserror.workspace = true
+serde_json.workspace = true

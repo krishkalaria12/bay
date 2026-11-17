@@ -15,6 +15,8 @@ let baseSettings: SettingsDictionary = [
   "TARGETED_DEVICE_FAMILY": "1",
   // The core is built for Apple silicon simulators only.
   "EXCLUDED_ARCHS[sdk=iphonesimulator*]": "x86_64",
+  // UniFFI's C module, which BayCore imports and every target importing BayCore must see.
+  "SWIFT_INCLUDE_PATHS": "$(SRCROOT)/../../packages/mobile-core/apple/include",
 ]
 
 let project = Project(
@@ -59,16 +61,23 @@ let project = Project(
       product: .framework,
       bundleId: "\(bundleId).core",
       deploymentTargets: deploymentTargets,
-      sources: ["\(core)/apple/Sources/**"],
+      sources: ["\(core)/apple/Sources/BayCore.swift"],
       scripts: [
         .pre(
           script: "\"$SRCROOT/\(core)/scripts/build-ios.sh\"",
           name: "Build the Rust core",
+          // Declared so Xcode compiles and links what the script has just written.
+          outputPaths: [
+            "$(SRCROOT)/\(core)/apple/Sources/BayCore.swift",
+            "$(SRCROOT)/\(core)/apple/include/BayCoreFFI/BayCoreFFI.h",
+            "$(SRCROOT)/\(core)/apple/lib/$(PLATFORM_NAME)/libbay_core.a",
+          ],
           basedOnDependencyAnalysis: false
         ),
       ],
-      dependencies: [.xcframework(path: "\(core)/apple/BayCoreFFI.xcframework")],
       settings: .settings(base: [
+        "LIBRARY_SEARCH_PATHS": "$(SRCROOT)/\(core)/apple/lib/$(PLATFORM_NAME)",
+        "OTHER_LDFLAGS": "-lbay_core",
         // UniFFI's generated file predates Swift 6's checks.
         "SWIFT_VERSION": "5.0",
         "SWIFT_STRICT_CONCURRENCY": "minimal",
