@@ -27,6 +27,8 @@ import bay.core.MediaReport
 import bay.core.NavigationReport
 import bay.core.PinKind
 import bay.core.PinnedSite
+import bay.core.ReaderSettings
+import bay.core.ReaderSettingsInput
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
 import bay.core.SiteSetting
@@ -39,6 +41,7 @@ import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
 import bay.core.parseMediaMessage
+import bay.core.readerVariables
 import bay.core.scriptsFor
 import bay.core.searchEngine
 import bay.core.siteHost
@@ -72,7 +75,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER }
 
 /** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
 enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
@@ -112,6 +115,13 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** What pages asked and wait on, oldest first; the prompts sheet shows the first. */
     val pageRequests = mutableStateListOf<Pair<String, PageRequest>>()
+
+    /** The tab whose page Reader is showing; a new page in it, or another tab, ends Reader. */
+    var readerTab by mutableStateOf<String?>(null)
+        private set
+
+    /** The address Reader last opened by itself on (a site that keeps Reader on), so coming back stays quiet. */
+    private var autoReaderUrl: String? = null
 
     /** The tab whose card was held, for the pin sheet. */
     var pinTab by mutableStateOf<BrowserTab?>(null)
@@ -295,7 +305,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     fun activate(id: String) {
-        if (id != app.activeTabId) endFind()
+        if (id != app.activeTabId) {
+            endFind()
+            readerTab = null
+        }
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
         barHidden = false
@@ -688,12 +701,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (started) {
             blocked.remove(tabId)
             if (tabId == app.activeTabId) endFind()
+            if (readerTab == tabId) readerTab = null
             failed -= tabId
             if (failure?.tabId == tabId) failure = null
             // A new document has no media until it reports some.
             if (media.remove(tabId) != null) updateMediaSession()
         }
         val view = views[tabId]
+        if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
         if (finished && view != null) {
             scope.launch {
                 val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
@@ -819,6 +834,56 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** The article on the page as Markdown, on the clipboard. */
+    // Reader
+
+    /** Reader on the page showing, with its settings sheet; when Reader already reads it, only the sheet opens. */
+    fun openReader() {
+        val tabId = app.activeTabId
+        if (readerTab == tabId) {
+            panel = Panel.READER
+            return
+        }
+        val view = activeView ?: return
+        scope.launch {
+            if (startReader(view)) {
+                readerTab = tabId
+                panel = Panel.READER
+            } else {
+                if (panel == Panel.PAGE) panel = null
+                showToast(strings.t("notice.noArticle"))
+            }
+        }
+    }
+
+    /** A site that keeps Reader on: as each page there finishes loading, Reader opens by itself, once per address. */
+    private fun openReaderBySite(tabId: String, url: String) {
+        if (readerTab == tabId || autoReaderUrl == url || url.isEmpty() || !app.store.siteSetting(url).reader) return
+        if (locked && activeTab?.private == true) return
+        val view = views[tabId] ?: return
+        autoReaderUrl = url
+        scope.launch { if (startReader(view) && app.activeTabId == tabId) readerTab = tabId }
+    }
+
+    /** Runs Reader's open script with the chosen look; false when the page has no article. */
+    private suspend fun startReader(view: BayEngineView): Boolean {
+        val json = runCatching { view.runScript(PageScript.OPEN_READER, mapOf("variables" to readerVariables(app.preferences.reader))) }.getOrNull()
+        return json?.let { runCatching { JSONObject(it).optBoolean("ok") }.getOrNull() } ?: false
+    }
+
+    fun exitReader() {
+        panel = null
+        readerTab = null
+        val view = activeView ?: return
+        scope.launch { runCatching { view.runScript(PageScript.CLOSE_READER) } }
+    }
+
+    /** Keeps Reader's new look and restyles the page Reader is showing. */
+    fun changeReader(settings: ReaderSettings) {
+        app.dispatch(Action.ReaderSettingsChange(ReaderSettingsInput(settings.theme, settings.font, settings.size.toDouble())))
+        val view = activeView?.takeIf { readerTab == app.activeTabId } ?: return
+        scope.launch { runCatching { view.runScript(PageScript.UPDATE_READER, mapOf("variables" to readerVariables(settings))) } }
+    }
+
     fun copyMarkdown() {
         val view = activeView ?: return
         scope.launch {

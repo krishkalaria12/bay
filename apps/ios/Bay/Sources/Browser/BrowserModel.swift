@@ -36,7 +36,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request
+    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -96,6 +96,10 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var blocked: [String: Int] = [:]
   /// A site shown without blocking until its tab leaves it.
   @Published private(set) var restoredHost: String?
+  /// The tab whose page Reader is showing; a new page in it, or another tab, ends Reader.
+  @Published private(set) var readerTab: String?
+  /// The address Reader last opened by itself on (a site that keeps Reader on), so coming back stays quiet.
+  private var autoReaderUrl: String?
   /// The tab whose card was held, for the pin sheet.
   @Published private(set) var pinTab: BrowserTab?
   /// The folder picked in the tabs menu, which it renames or deletes.
@@ -241,7 +245,10 @@ final class BrowserModel: ObservableObject {
   }
 
   func activate(_ id: String) {
-    if id != app.activeTabId { endFind() }
+    if id != app.activeTabId {
+      endFind()
+      readerTab = nil
+    }
     app.dispatch(.activateTab(id: id, now: AppModel.now()))
     overlay = .none
     barHidden = false
@@ -715,6 +722,7 @@ final class BrowserModel: ObservableObject {
     if started {
       blocked[tabId] = nil
       if tabId == app.activeTabId { endFind() }
+      if readerTab == tabId { readerTab = nil }
       failed.remove(tabId)
       if failure?.tabId == tabId { failure = nil }
       // A new document has no media until it reports some.
@@ -723,6 +731,7 @@ final class BrowserModel: ObservableObject {
         updateMediaSession()
       }
     }
+    if finished, tabId == app.activeTabId { openReaderBySite(tabId, url: state.url) }
     if finished, let view = views[tabId] {
       Task { [weak self] in
         let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
@@ -843,6 +852,60 @@ extension BrowserModel {
   }
 
   /// The article on the page as Markdown, on the clipboard.
+  // MARK: Reader
+
+  /// Reader on the page showing, with its settings sheet; when Reader already reads it, only the sheet opens.
+  func openReader() {
+    let tabId = app.activeTabId
+    if readerTab == tabId {
+      panel = .reader
+      return
+    }
+    guard let view = activeView else { return }
+    Task { [weak self] in
+      guard let self else { return }
+      if await self.startReader(view) {
+        self.readerTab = tabId
+        self.panel = .reader
+      } else {
+        if self.panel == .page { self.panel = nil }
+        self.showToast(self.strings.t("notice.noArticle"))
+      }
+    }
+  }
+
+  /// A site that keeps Reader on: as each page there finishes loading, Reader opens by itself, once per address.
+  private func openReaderBySite(_ tabId: String, url: String) {
+    guard readerTab != tabId, autoReaderUrl != url, !url.isEmpty, app.store.siteSetting(url: url).reader,
+      !(locked && activeTab?.private == true), let view = views[tabId]
+    else { return }
+    autoReaderUrl = url
+    Task { [weak self] in
+      if await self?.startReader(view) == true, self?.app.activeTabId == tabId { self?.readerTab = tabId }
+    }
+  }
+
+  /// Runs Reader's open script with the chosen look; false when the page has no article.
+  private func startReader(_ view: EngineView) async -> Bool {
+    struct Opened: Decodable { let ok: Bool }
+    let text = try? await view.runScript(.openReader, args: ["variables": readerVariables(settings: app.preferences.reader)])
+    return text.flatMap { try? JSONDecoder().decode(Opened.self, from: Data($0.utf8)) }?.ok ?? false
+  }
+
+  func exitReader() {
+    panel = nil
+    readerTab = nil
+    guard let view = activeView else { return }
+    Task { _ = try? await view.runScript(.closeReader) }
+  }
+
+  /// Keeps Reader's new look and restyles the page Reader is showing.
+  func changeReader(_ settings: ReaderSettings) {
+    app.dispatch(.readerSettingsChange(settings: ReaderSettingsInput(theme: settings.theme, font: settings.font, size: Double(settings.size))))
+    guard readerTab == app.activeTabId, let view = activeView else { return }
+    Task { _ = try? await view.runScript(.updateReader, args: ["variables": readerVariables(settings: settings)]) }
+  }
+
   func copyMarkdown() {
     guard let view = activeView else { return }
     Task { [weak self] in

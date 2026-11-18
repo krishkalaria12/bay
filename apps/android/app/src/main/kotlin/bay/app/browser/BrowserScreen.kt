@@ -124,6 +124,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         TabsMenu(browser, strings, browser.panel == Panel.TABS)
         PinPanel(browser, strings, browser.panel == Panel.PIN)
         PageRequestPanel(browser, strings, browser.panel == Panel.REQUEST)
+        ReaderPanel(browser, strings, browser.panel == Panel.READER)
     }
 }
 

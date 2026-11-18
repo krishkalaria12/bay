@@ -71,8 +71,9 @@ struct PageMenu: View {
 
       HStack(alignment: .top, spacing: MenuLayout.tileSpacing) {
         Tile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
-        // Reader comes with the reading tools.
-        Tile(id: "page-reader", icon: .reader, label: strings.t("pageMenu.reader"), action: act {})
+        Tile(
+          id: "page-reader", icon: .reader, label: strings.t("pageMenu.reader"), active: browser.readerTab == app.activeTabId,
+          action: { browser.openReader() })
         let bookmarked = browser.isBookmarked
         Tile(
           id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.bookmark"),

@@ -124,8 +124,8 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         }
         Row(Modifier.padding(top = TILES_GAP), horizontalArrangement = Arrangement.spacedBy(TILE_SPACING)) {
             Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
-            // Reader comes with the reading tools.
-            Tile("page-reader", BayIcon.READER, strings.t("pageMenu.reader"), onClick = act {})
+            val reading = browser.readerTab == browser.app.activeTabId
+            Tile("page-reader", BayIcon.READER, strings.t("pageMenu.reader"), strings.t("pageMenu.reader"), reading) { browser.openReader() }
             val bookmarked = browser.isBookmarked
             Tile(
                 "page-bookmark",

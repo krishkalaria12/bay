@@ -1490,7 +1490,9 @@ impl BrowserStore {
               <code>bar-tabs</code>: new and private tabs, archiving, spaces, moving the tab, and making, renaming and deleting folders), the pin sheet (holding
               a tab card: an Essential, a pinned row or a row in a folder) and the page's questions (<code>page-request</code>: alert, confirm, prompt, HTTP
               sign-in, another app's link, camera, microphone and location), queued and answered one at a time; Android's sheets now keep above the keyboard.
-              Left: the other sheets, the menu rows that open them (see Known gaps), app icon, sync status and scheduling.
+              Reader (<code>page-reader</code>: the article in Reader's look, its settings sheet with text size, font and theme changing it live, and sites that
+              open Reader by themselves), its themes and CSS variables from the core (<code>readerThemes</code>, <code>readerVariables</code>). Left: the other
+              sheets, the menu rows that open them (see Known gaps), app icon, sync status and scheduling.
             </p>
             <ul>
               <li>
@@ -1772,8 +1774,8 @@ impl BrowserStore {
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            The page menu's Reader, Hide elements and Inspect rows close the menu and do nothing until their sheets land (N5); the "show hidden elements" row
-            waits for the same.
+            The page menu's Hide elements and Inspect rows close the menu and do nothing until their sheets land (N5); the "show hidden elements" row waits for
+            the same.
           </li>
           <li>
             The bookmarks sheet leaves out "Import from another browser" until the import sheet lands, and Settings' Import and Report rows do nothing yet (N5).

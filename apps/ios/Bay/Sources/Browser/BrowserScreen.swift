@@ -101,6 +101,8 @@ struct BrowserScreen: View {
           TabsMenu(browser: browser)
         case .pin:
           if let tab = browser.pinTab { PinPanel(browser: browser, tab: tab) }
+        case .reader:
+          ReaderPanel(browser: browser)
         case .request:
           if let request = browser.pageRequests.first?.request { PageRequestPanel(browser: browser, request: request).id(request.id) }
         case nil:
