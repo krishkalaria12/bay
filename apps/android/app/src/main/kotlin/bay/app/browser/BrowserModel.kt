@@ -44,6 +44,9 @@ import bay.core.cleanUrl
 import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
+import bay.core.youtubeSelectors
 import bay.core.opensWhenFinished
 import bay.core.parseInspectedElement
 import bay.core.parseMediaMessage
@@ -231,6 +234,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     init {
         app.mediaControl = ::mediaControl
         app.downloadUpdated = ::downloadUpdated
+        // A change to Settings > YouTube reaches the YouTube pages already open.
+        scope.launch { snapshotFlow { app.preferences.youtube }.drop(1).collect { applyHiddenToOpenPages() } }
     }
 
     val activeTab: BrowserTab? get() = app.tabs.firstOrNull { it.id == app.activeTabId }
@@ -792,7 +797,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 if (rgb != null) pageColors[tabId] = rgb else pageColors.remove(tabId)
             }
         }
-        val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { hiddenSelectors(it, state.url) }.orEmpty()
+        val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { pageHidden(it, state.url) }.orEmpty()
         val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), rules.isNotEmpty())
         timing[tabId] = plan.timing
         if (plan.hideElements && view != null) hide(rules, view)
@@ -918,6 +923,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     fun hiddenSelectors(tab: BrowserTab, url: String = tab.url): List<String> =
         if (tab.private) privateRules[tab.id]?.get(hostOf(url)).orEmpty() else app.store.hiddenSelectors(url)
 
+    /** Everything a page hides: its site's hidden elements, and on YouTube what Settings > YouTube cleans up. */
+    private fun pageHidden(tab: BrowserTab, url: String): List<String> = hiddenSelectors(tab, url) + youtubeSelectors(app.preferences.youtube, url)
+
+    private fun applyHiddenToOpenPages() {
+        for ((tabId, view) in views) {
+            val tab = app.tabs.firstOrNull { it.id == tabId } ?: app.store.tabs().firstOrNull { it.id == tabId } ?: continue
+            hide(pageHidden(tab, navigation[tabId]?.url?.ifEmpty { null } ?: tab.url), view)
+        }
+    }
+
     /** The elements hidden on the page showing. */
     val activeHidden: List<String> get() = activeTab?.let { hiddenSelectors(it, activeUrl) }.orEmpty()
 
@@ -931,7 +946,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val host = hostOf(activeUrl)
         if (tab.private) privateRules[tab.id] = privateRules[tab.id].orEmpty() + (host to selectors)
         else app.dispatch(Action.HiddenElements(host, selectors))
-        activeView?.let { hide(selectors, it) }
+        activeView?.let { hide(selectors + youtubeSelectors(app.preferences.youtube, activeUrl), it) }
     }
 
     /** Starts the element picker: a tap on the page then picks what's under it, and links don't open. */

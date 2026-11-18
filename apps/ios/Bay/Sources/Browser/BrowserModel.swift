@@ -1,6 +1,7 @@
 import BayCore
 import BayDesign
 import BayEngine
+import Combine
 import Foundation
 import LocalAuthentication
 import UIKit
@@ -110,6 +111,7 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var inspected: InspectedElement?
   /// Private tabs' hidden elements, by tab and host: kept in memory only, and gone with the tab.
   private var privateRules: [String: [String: [String]]] = [:]
+  private var youtubeWatch: AnyCancellable?
   /// The download the toast above the bar shows: the latest one, until six seconds after it settles.
   @Published private(set) var downloadToastId: String?
   private var downloadToastTimer: Task<Void, Never>?
@@ -142,6 +144,9 @@ final class BrowserModel: ObservableObject {
     self.strings = strings
     app.mediaControl = { [weak self] control in self?.mediaControl(control) }
     app.downloadUpdated = { [weak self] update in self?.downloadUpdated(update) }
+    // Published before it changes: the pages hear it once the new value is in.
+    youtubeWatch = app.$preferences.map(\.youtube).removeDuplicates().dropFirst().receive(on: RunLoop.main)
+      .sink { [weak self] _ in self?.applyHiddenToOpenPages() }
   }
 
   // MARK: What shows
@@ -787,7 +792,7 @@ final class BrowserModel: ObservableObject {
         self?.pageColors[tabId] = color
       }
     }
-    let rules = app.store.tabs().first { $0.id == tabId }.map { hiddenSelectors($0, url: state.url) } ?? []
+    let rules = app.store.tabs().first { $0.id == tabId }.map { pageHidden($0, url: state.url) } ?? []
     let plan = scriptsFor(
       timing: timing[tabId] ?? initialTiming(),
       state: NavigationReport(url: state.url, progress: state.progress, isLoading: state.isLoading), hasRules: !rules.isEmpty)
@@ -912,6 +917,20 @@ extension BrowserModel {
     return app.store.hiddenSelectors(url: address)
   }
 
+  /// Everything a page hides: its site's hidden elements, and on YouTube what Settings > YouTube cleans up.
+  private func pageHidden(_ tab: BrowserTab, url: String) -> [String] {
+    hiddenSelectors(tab, url: url) + youtubeSelectors(cleanup: app.preferences.youtube, url: url)
+  }
+
+  /// A change to Settings > YouTube reaches the YouTube pages already open.
+  private func applyHiddenToOpenPages() {
+    for (tabId, view) in views {
+      guard let tab = app.store.tabs().first(where: { $0.id == tabId }) else { continue }
+      let reported = navigation[tabId]?.url ?? ""
+      hide(pageHidden(tab, url: reported.isEmpty ? tab.url : reported), in: view)
+    }
+  }
+
   /// The elements hidden on the page showing.
   var activeHidden: [String] { activeTab.map { hiddenSelectors($0, url: activeUrl) } ?? [] }
 
@@ -928,7 +947,7 @@ extension BrowserModel {
     } else {
       app.dispatch(.hiddenElements(host: host, selectors: selectors))
     }
-    if let view = activeView { hide(selectors, in: view) }
+    if let view = activeView { hide(selectors + youtubeSelectors(cleanup: app.preferences.youtube, url: activeUrl), in: view) }
   }
 
   /// Starts the element picker: a tap on the page then picks what's under it, and links don't open.
