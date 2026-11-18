@@ -11,13 +11,15 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::Action;
+use super::bookmarks::{empty_bookmarks, is_bookmarked};
 use super::model::{
     PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
     unused_space_icon,
 };
 use super::parse::parse_browser_data;
 use super::types::*;
-use super::{Action, bookmarks::empty_bookmarks};
+use crate::js::site_host;
 
 /// The saved browsing state, in the app's documents.
 pub const STATE_FILE: &str = "browser.json";
@@ -356,6 +358,26 @@ impl BrowserStore {
         lock(&self.state).data.preferences.clone()
     }
 
+    /// What a page follows: its site's own setting, else every global choice.
+    pub fn site_setting(&self, url: String) -> SiteSetting {
+        lock(&self.state)
+            .data
+            .preferences
+            .site_settings
+            .get(&site_host(&url))
+            .cloned()
+            .unwrap_or(SiteSetting::EMPTY)
+    }
+
+    /// Whether a space's bookmarks hold this address.
+    pub fn is_bookmarked(&self, space_id: String, url: String) -> bool {
+        lock(&self.state)
+            .data
+            .bookmarks
+            .get(&space_id)
+            .is_some_and(|bookmarks| is_bookmarked(bookmarks, &url))
+    }
+
     /// Each site's saved icon, by host without "www.".
     pub fn favicons(&self) -> std::collections::HashMap<String, String> {
         lock(&self.state)
@@ -373,6 +395,8 @@ impl BrowserStore {
 
 #[cfg(test)]
 mod tests {
+    use super::super::bookmarks::BOOKMARKS_ROOT;
+    use super::super::model::SiteSettingInput;
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -417,6 +441,43 @@ mod tests {
             (SpaceColor::Green, Some("✨"))
         );
         assert!(!store.preferences().welcomed);
+    }
+
+    #[test]
+    fn a_page_reads_its_site_setting_and_bookmark() {
+        let dir = temp_dir("site");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        store.dispatch(Action::SiteSettings {
+            host: "example.com".into(),
+            update: SiteSettingInput {
+                text_size: Some(120.0),
+                reader: false,
+                desktop_mode: true,
+                block_off: Vec::new(),
+                swipe: None,
+            },
+        });
+        let setting = store.site_setting("https://www.Example.com/a".into());
+        assert_eq!((setting.text_size, setting.desktop_mode), (Some(120), true));
+        assert_eq!(
+            store.site_setting("https://other.org/".into()),
+            SiteSetting::EMPTY
+        );
+
+        let url = "https://example.com/a";
+        assert!(!store.is_bookmarked(PERSONAL_SPACE_ID.into(), url.into()));
+        store.dispatch(Action::ToggleBookmark {
+            space_id: PERSONAL_SPACE_ID.into(),
+            bookmark: BookmarkNode::Url {
+                id: "b1".into(),
+                parent_id: BOOKMARKS_ROOT.into(),
+                title: "A".into(),
+                url: url.into(),
+                added_at: 1,
+            },
+        });
+        assert!(store.is_bookmarked(PERSONAL_SPACE_ID.into(), url.into()));
+        assert!(!store.is_bookmarked("work".into(), url.into()));
     }
 
     #[test]

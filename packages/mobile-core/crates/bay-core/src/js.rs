@@ -48,6 +48,7 @@ pub fn is_file_uri(value: &str) -> bool {
 
 /// The key icons and site settings are kept under: a URL's host, lowercased, without "www.". Mirrors the store's
 /// pattern `^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)` (case-insensitive), so odd addresses key the same way.
+#[uniffi::export]
 pub fn site_host(url: &str) -> String {
     let host = match_host(url).unwrap_or_default().to_lowercase();
     host.strip_prefix("www.").map(str::to_owned).unwrap_or(host)
