@@ -23,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -98,7 +100,9 @@ private const val SUGGEST_DELAY_MS = 120L
 fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, startPrivately: Boolean) {
     val app = browser.app
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf(initialText) }
+    // A prefilled address starts selected, so typing replaces it.
+    var field by remember { mutableStateOf(TextFieldValue(initialText, TextRange(0, initialText.length))) }
+    val query = field.text
     var privately by remember { mutableStateOf(startPrivately) }
     // No inline completion over a prefilled address, or straight after deleting.
     var suppressed by remember { mutableStateOf(initialText.isNotEmpty()) }
@@ -126,9 +130,9 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         browser.open(target, privately)
     }
 
-    fun change(next: String) {
+    fun change(next: String, selection: TextRange = TextRange(next.length)) {
         suppressed = next.length < query.length
-        query = next
+        field = TextFieldValue(next, selection)
         fetch?.cancel()
         val url = if (app.preferences.searchSuggestions && next.isNotBlank()) suggestionsRequestUrl(engine, next) else null
         if (url == null) {
@@ -185,8 +189,8 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
             ) {
                 val fieldStyle = TextVariant.HEADLINE.style(FontWeight.Normal, text)
                 BasicTextField(
-                    value = query,
-                    onValueChange = ::change,
+                    value = field,
+                    onValueChange = { value -> if (value.text != query) change(value.text, value.selection) else field = value },
                     singleLine = true,
                     textStyle = fieldStyle,
                     cursorBrush = SolidColor(Theme.colors.accent),
