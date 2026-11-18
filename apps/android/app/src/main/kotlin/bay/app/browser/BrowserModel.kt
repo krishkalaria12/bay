@@ -9,6 +9,7 @@ import bay.app.AppModel
 import bay.core.Action
 import bay.core.BrowserTab
 import bay.core.NavigationReport
+import bay.core.PinnedSite
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
 import bay.core.TabUpdate
@@ -25,6 +26,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
@@ -161,11 +163,67 @@ class BrowserModel(private val context: Context, val app: AppModel) {
         refreshMounted()
     }
 
-    /** Closes a tab into the archive (private tabs are simply gone). */
+    /** Closes a tab into the archive (private tabs are simply gone). A space left without tabs gets a blank one. */
     fun close(id: String) {
-        app.dispatch(Action.CloseTab(id, AppModel.now(), blankTab(app.activeSpaceId)))
+        val spaceId = app.store.tabs().firstOrNull { it.id == id }?.spaceId ?: app.activeSpaceId
+        app.dispatch(Action.CloseTab(id, AppModel.now(), blankTab(spaceId)))
         visited.remove(id)
         refreshMounted()
+    }
+
+    // The tab switcher
+
+    /** The space's tabs the switcher's grid shows: a tab showing a pinned page is reached by its pin instead. */
+    val switcherTabs: List<BrowserTab>
+        get() {
+            val pinned = app.pins.mapTo(HashSet()) { it.url }
+            return app.tabs.filter { it.url.isEmpty() || it.url !in pinned }
+        }
+
+    fun showTabs() {
+        if (hasPage) capture(app.activeTabId)
+        overlay = Overlay.TABS
+    }
+
+    /** Takes the tab's picture for the switcher now. Private tabs and failed pages keep none. */
+    fun capture(tabId: String) {
+        val view = views[tabId] ?: return
+        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return
+        scope.launch {
+            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@launch
+            app.dispatch(Action.UpdateTab(tabId, TabUpdate(null, null, null, null, uri)))
+        }
+    }
+
+    /** Archives every tab in the switcher's grid; the pinned ones stay. */
+    fun archiveAll() {
+        switcherTabs.forEach { close(it.id) }
+        overlay = Overlay.NONE
+    }
+
+    /** Switches to a space: the tab it was last on (or a fresh one) becomes current. */
+    fun selectSpace(id: String) {
+        if (id == app.activeSpaceId) return
+        val hasTab = app.store.tabs().any { it.spaceId == id }
+        app.dispatch(Action.SelectSpace(id, if (hasTab) null else blankTab(id)))
+        refreshMounted()
+    }
+
+    fun createSpace(name: String) {
+        val space = app.store.newSpace(UUID.randomUUID().toString(), name)
+        app.dispatch(Action.CreateSpace(space, blankTab(space.id)))
+        refreshMounted()
+    }
+
+    /** A pin's page: its tab in the space when one is open there, else a new one. */
+    fun openPin(site: PinnedSite) {
+        val open = app.store.tabs().firstOrNull { it.spaceId == site.spaceId && it.url == site.url }
+        if (open != null) {
+            activate(open.id)
+            return
+        }
+        overlay = Overlay.NONE
+        openTab(site.url)
     }
 
     fun restore(id: String) {
@@ -234,6 +292,11 @@ class BrowserModel(private val context: Context, val app: AppModel) {
         if (!state.isLoading && visited[tabId] != state.url) {
             visited[tabId] = state.url
             app.dispatch(Action.Visit(tab.spaceId, state.url, state.title, null, AppModel.now()))
+            // The tab's picture once the page has drawn: a newer visit replaces it.
+            scope.launch {
+                delay(600)
+                capture(tabId)
+            }
         }
     }
 

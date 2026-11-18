@@ -50,8 +50,15 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     LaunchedEffect(app.activeTabId, app.tabs.map { it.url }) { browser.refreshMounted() }
     Box(Modifier.fillMaxSize()) {
         Wallpaper(app.preferences.wallpaper)
-        if (browser.hasPage) {
-            PagesHost(browser, Modifier.fillMaxSize().statusBarsPadding())
+        // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
+        if (browser.hasPage || browser.mounted.isNotEmpty()) {
+            val shown = browser.hasPage && browser.overlay != Overlay.TABS
+            PagesHost(browser, shown, Modifier.fillMaxSize().statusBarsPadding())
+        }
+        if (browser.overlay == Overlay.TABS) {
+            Wallpaper(app.preferences.wallpaper)
+            TabSwitcher(browser, strings, onSettings)
+        } else if (browser.hasPage) {
             val failure = browser.failure
             if (failure != null && failure.tabId == app.activeTabId) {
                 PageError(failure.message, strings, browser::retry, Modifier.statusBarsPadding())

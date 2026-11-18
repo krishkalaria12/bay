@@ -144,10 +144,16 @@ struct BrowserBar: View {
   var body: some View {
     let app = browser.app
     HStack(spacing: Space.md) {
-      if browser.hasPage {
+      if browser.overlay == .tabs {
+        GlassIconButton(.archive, label: strings.t("bar.archive")) {}
+          .accessibilityIdentifier("bar-archive")
+        SpacesCapsule(browser: browser)
+        GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
+          .accessibilityIdentifier("bar-search")
+      } else if browser.hasPage {
         let count = app.tabs.count
         GlassIconButton(.tabs, label: count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")) {
-          browser.overlay = .tabs
+          browser.showTabs()
         }
         .overlay(alignment: .topTrailing) { TabCount(count: count) }
         .accessibilityIdentifier("bar-tabs")
@@ -193,6 +199,65 @@ struct BrowserBar: View {
     .buttonStyle(.pressFeedback)
     .accessibilityLabel(Text(verbatim: label))
     .accessibilityIdentifier("bar-search")
+  }
+}
+
+/// The tab view's spaces between archive and new tab, in one capsule: each space's emoji or dot, the one showing
+/// larger, and a button for a new space. More spaces than fit scroll inside it.
+struct SpacesCapsule: View {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var browser: BrowserModel
+
+  var body: some View {
+    let app = browser.app
+    HStack(spacing: 2) {
+      ScrollViewReader { reader in
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 2) {
+            ForEach(app.spaces, id: \.id) { space in
+              let active = space.id == app.activeSpaceId
+              Button {
+                Haptics.press()
+                browser.selectSpace(space.id)
+              } label: {
+                Group {
+                  if let icon = space.icon {
+                    Text(verbatim: icon).font(.system(size: active ? 20 : 15)).opacity(active ? 1 : 0.55)
+                  } else {
+                    Image(systemName: active ? "app.fill" : "circle.fill").font(.system(size: active ? 18 : 9))
+                      .foregroundColor(spaceColor(space.color))
+                  }
+                }
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              .id(space.id)
+              .accessibilityLabel(Text(verbatim: strings.t("tabs.switchSpace", ["name": spaceName(space, strings)])))
+              .accessibilityAddTraits(active ? .isSelected : [])
+              .accessibilityIdentifier("bar-space-\(space.id)")
+            }
+          }
+        }
+        .frame(maxWidth: CGFloat(app.spaces.count) * 36)
+        .onAppear { reader.scrollTo(app.activeSpaceId, anchor: .center) }
+        .onChange(of: app.activeSpaceId) { reader.scrollTo($0, anchor: .center) }
+      }
+      Button {
+        browser.createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
+      } label: {
+        Image(systemName: "plus").font(.system(size: 15)).foregroundColor(BayColor.muted).frame(width: 34, height: 34)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(Text(verbatim: strings.t("tabsMenu.newSpace")))
+      .accessibilityIdentifier("bar-new-space")
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .bayCapsule()
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("bar-spaces")
   }
 }
 

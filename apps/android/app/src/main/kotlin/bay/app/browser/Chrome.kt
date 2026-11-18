@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -43,6 +45,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +64,7 @@ import bay.core.pageErrorId
 import bay.design.BayIcon
 import bay.design.BayIconView
 import bay.design.BayText
+import bay.design.Haptics
 import bay.design.IconSize
 import bay.design.PillButton
 import bay.design.Space
@@ -74,10 +78,10 @@ import bay.engine.NavigationState
 /**
  * The browser's pages: the loaded tabs' views in one container, the one showing on top. The views are kept across
  * recompositions, so a page isn't reloaded when the screen around it changes. A page view is made only once the
- * container is in a window, as on iOS.
+ * container is in a window, as on iOS. Under the tab switcher the host is transparent and no page is active.
  */
 @Composable
-fun PagesHost(browser: BrowserModel, modifier: Modifier = Modifier) {
+fun PagesHost(browser: BrowserModel, shown: Boolean, modifier: Modifier = Modifier) {
     val mounted = browser.mounted
     val tabs = browser.app.tabs
     AndroidView(
@@ -92,8 +96,10 @@ fun PagesHost(browser: BrowserModel, modifier: Modifier = Modifier) {
                         (view.parent as? ViewGroup)?.removeView(view)
                         container.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                     }
-                    val showing = index == 0
-                    view.visibility = if (showing) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                    // Hidden pages stay visible to Android, only transparent: the tab on screen takes the window's one
+                    // compositor (isActive), and a page made INVISIBLE stops drawing for good.
+                    val showing = shown && index == 0
+                    view.alpha = if (showing) 1f else 0f
                     view.isActive = showing
                     if (showing) view.bringToFront()
                 }
@@ -194,13 +200,17 @@ private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: 
 fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val app = browser.app
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-        if (browser.hasPage) {
+        if (browser.overlay == Overlay.TABS) {
+            BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            SpacesCapsule(browser, strings)
+            BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
+        } else if (browser.hasPage) {
             val count = app.tabs.size
             Box {
                 BarButton(
                     "bar-tabs",
                     if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs"),
-                    { browser.overlay = Overlay.TABS },
+                    { browser.showTabs() },
                 ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
                 TabCount(count, Modifier.align(Alignment.TopEnd))
             }
@@ -232,6 +242,47 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
             }
         }
         LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.align(Alignment.BottomStart))
+    }
+}
+
+/** The tab view's spaces between archive and new tab: each space's emoji or a dot in its colour, the one showing larger. */
+@Composable
+private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    val colors = Theme.colors
+    Row(
+        Modifier.height(52.dp).clip(CircleShape).background(colors.flatSurface, CircleShape).border(1.dp, colors.hairline, CircleShape)
+            .padding(horizontal = Space.sm).testTag("bar-spaces"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(Modifier.widthIn(max = 36.dp * 5).horizontalScroll(rememberScrollState())) {
+            app.spaces.forEach { space ->
+                val active = space.id == app.activeSpaceId
+                Box(
+                    Modifier.size(36.dp).testTag("bar-space-${space.id}")
+                        .pressFeedback {
+                            Haptics.press(view)
+                            browser.selectSpace(space.id)
+                        }
+                        .clearAndSetSemantics { contentDescription = strings.t("tabs.switchSpace", mapOf("name" to spaceName(space, strings))); role = Role.Button; selected = active },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val icon = space.icon
+                    if (icon != null) {
+                        BayText(icon, Modifier.alpha(if (active) 1f else 0.55f), variant = if (active) TextVariant.TITLE else TextVariant.CALLOUT)
+                    } else {
+                        Box(Modifier.size(if (active) 16.dp else 9.dp).background(spaceColor(space.color), if (active) RoundedCornerShape(4.dp) else CircleShape))
+                    }
+                }
+            }
+        }
+        Box(
+            Modifier.size(36.dp).testTag("bar-new-space")
+                .pressFeedback { browser.createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}"))) }
+                .clearAndSetSemantics { contentDescription = strings.t("tabsMenu.newSpace"); role = Role.Button },
+            contentAlignment = Alignment.Center,
+        ) { BayIconView(BayIcon.ADD, size = IconSize.small, color = colors.muted) }
     }
 }
 

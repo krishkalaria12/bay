@@ -147,11 +147,67 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
-  /// Closes a tab into the archive (private tabs are simply gone).
+  /// Closes a tab into the archive (private tabs are simply gone). A space left without tabs gets a blank one.
   func close(_ id: String) {
-    app.dispatch(.closeTab(id: id, now: AppModel.now(), fallback: Self.blankTab(spaceId: app.activeSpaceId)))
+    let spaceId = app.store.tabs().first { $0.id == id }?.spaceId ?? app.activeSpaceId
+    app.dispatch(.closeTab(id: id, now: AppModel.now(), fallback: Self.blankTab(spaceId: spaceId)))
     visited[id] = nil
     refreshMounted()
+  }
+
+  // MARK: The tab switcher
+
+  /// The space's tabs the switcher's grid shows: a tab showing a pinned page is reached by its pin instead.
+  var switcherTabs: [BrowserTab] {
+    let pinned = Set(app.pins.map(\.url))
+    return app.tabs.filter { $0.url.isEmpty || !pinned.contains($0.url) }
+  }
+
+  func showTabs() {
+    if hasPage { capture(app.activeTabId) }
+    overlay = .tabs
+  }
+
+  /// Takes the tab's picture for the switcher now. Private tabs and failed pages keep none.
+  func capture(_ tabId: String) {
+    guard let view = views[tabId], !failed.contains(tabId),
+          app.tabs.first(where: { $0.id == tabId })?.private == false
+    else { return }
+    Task { [weak self] in
+      guard let uri = try? await view.snapshot() else { return }
+      self?.app.dispatch(
+        .updateTab(id: tabId, update: TabUpdate(url: nil, title: nil, favicon: nil, lastVisit: nil, snapshot: .some(uri))))
+    }
+  }
+
+  /// Archives every tab in the switcher's grid; the pinned ones stay.
+  func archiveAll() {
+    for tab in switcherTabs { close(tab.id) }
+    overlay = .none
+  }
+
+  /// Switches to a space: the tab it was last on (or a fresh one) becomes current.
+  func selectSpace(_ id: String) {
+    guard id != app.activeSpaceId else { return }
+    let hasTab = app.store.tabs().contains { $0.spaceId == id }
+    app.dispatch(.selectSpace(id: id, blankTab: hasTab ? nil : Self.blankTab(spaceId: id)))
+    refreshMounted()
+  }
+
+  func createSpace(name: String) {
+    let space = app.store.newSpace(id: UUID().uuidString, name: name)
+    app.dispatch(.createSpace(space: space, blankTab: Self.blankTab(spaceId: space.id)))
+    refreshMounted()
+  }
+
+  /// A pin's page: its tab in the space when one is open there, else a new one.
+  func openPin(_ site: PinnedSite) {
+    if let open = app.store.tabs().first(where: { $0.spaceId == site.spaceId && $0.url == site.url }) {
+      activate(open.id)
+      return
+    }
+    overlay = .none
+    openTab(site.url)
   }
 
   func restore(_ id: String) {
@@ -236,6 +292,11 @@ final class BrowserModel: ObservableObject {
       visited[tabId] = state.url
       app.dispatch(
         .visit(spaceId: tab.spaceId, url: state.url, title: state.title, favicon: nil, now: AppModel.now()))
+      // The tab's picture once the page has drawn: a newer visit replaces it.
+      Task { [weak self] in
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        self?.capture(tabId)
+      }
     }
   }
 }

@@ -16,9 +16,18 @@ struct BrowserScreen: View {
   var body: some View {
     ZStack(alignment: .bottom) {
       WallpaperView(id: app.preferences.wallpaper)
-      if browser.hasPage {
+      // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
+      if browser.hasPage || !browser.mounted.isEmpty {
         PagesHost(browser: browser)
           .ignoresSafeArea(edges: .bottom)
+          .opacity(browser.hasPage && browser.overlay != .tabs ? 1 : 0)
+          .allowsHitTesting(browser.hasPage && browser.overlay != .tabs)
+          .accessibilityHidden(!browser.hasPage || browser.overlay == .tabs)
+      }
+      if browser.overlay == .tabs {
+        WallpaperView(id: app.preferences.wallpaper)
+        TabSwitcher(browser: browser, onSettings: onSettings)
+      } else if browser.hasPage {
         if let failure = browser.failure, failure.tabId == app.activeTabId {
           PageErrorView(message: failure.message, retry: browser.retry)
         }
