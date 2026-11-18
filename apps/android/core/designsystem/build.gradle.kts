@@ -9,3 +9,8 @@ plugins {
 android {
     namespace = "bay.design"
 }
+
+dependencies {
+    // A sheet closes with the system's back gesture.
+    implementation(libs.activity.compose)
+}
