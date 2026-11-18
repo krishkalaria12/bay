@@ -1,4 +1,5 @@
 import BayCore
+import BayDesign
 import BayEngine
 import Foundation
 import LocalAuthentication
@@ -35,7 +36,22 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case spaceEdit
+    case page, spaceEdit
+  }
+
+  /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
+  enum PageBlocking: Equatable {
+    case on, paused, restored, off
+  }
+
+  /// Find on page: the words, and what the page found for them.
+  struct FindState: Equatable {
+    var query = ""
+    /// Matches for `foundFor`, or nil before the first search finishes.
+    var count: Int?
+    /// The current match, from 0.
+    var index = -1
+    var foundFor = ""
   }
 
   /// At most this many pages stay loaded; the rest reload from their saved state when shown again.
@@ -67,12 +83,21 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var mounted: [String] = []
   /// The colour at the top of each page, for the strip behind the status bar ([r, g, b]); nil when it has none.
   @Published private(set) var pageColors: [String: [Double]] = [:]
+  /// Find on page, while it is open over the page showing.
+  @Published private(set) var find: FindState?
+  /// What the blocker stopped on each page, where the engine counts it.
+  @Published private(set) var blocked: [String: Int] = [:]
+  /// A site shown without blocking until its tab leaves it.
+  @Published private(set) var restoredHost: String?
 
   private var views: [String: EngineView] = [:]
   /// The address each tab was last counted as a visit for.
   private var visited: [String: String] = [:]
   private var timing: [String: ScriptTiming] = [:]
   private var failed: Set<String> = []
+  /// AMP pages each tab already left for their publisher's page. One that comes back stays, so the two never bounce.
+  private var ampLeft: [String: Set<String>] = [:]
+  private var findTimer: Task<Void, Never>?
 
   private var toastTimer: Task<Void, Never>?
   /// Tabs stopped from the mini player or the system's controls: the pause report that follows stays out.
@@ -115,6 +140,7 @@ final class BrowserModel: ObservableObject {
       MainActor.assumeIsolated { self?.receive(id, event) }
     }
     views[tab.id] = view
+    configure(view, url: tab.url)
     view.loadInitial(tab.url.isEmpty ? nil : tab.url)
     return view
   }
@@ -197,6 +223,7 @@ final class BrowserModel: ObservableObject {
   }
 
   func activate(_ id: String) {
+    if id != app.activeTabId { endFind() }
     app.dispatch(.activateTab(id: id, now: AppModel.now()))
     overlay = .none
     barHidden = false
@@ -528,6 +555,8 @@ final class BrowserModel: ObservableObject {
       if isWebUrl(value: url) { openTab(url, privately: isPrivate) }
     case .pageMessage(let message):
       if let report = parseMediaMessage(message: message) { mediaReported(tabId, report) }
+    case .blockedCount(let count):
+      blocked[tabId] = count
     case .scroll(let offsetY, let deltaY):
       scrolled(tabId, offsetY: offsetY, deltaY: deltaY)
     case .pageRequest(let request):
@@ -541,8 +570,17 @@ final class BrowserModel: ObservableObject {
   private func navigated(_ tabId: String, _ state: NavigationState) {
     let started = state.isLoading && !(navigation[tabId]?.isLoading ?? false)
     let finished = !state.isLoading && (navigation[tabId]?.isLoading ?? true)
+    let moved = navigation[tabId]?.url != state.url
     if navigation[tabId] != state { navigation[tabId] = state }
+    if moved, let view = views[tabId] { configure(view, url: state.url) }
+    if tabId == app.activeTabId, let restoredHost, hostOf(url: state.url) != restoredHost {
+      // A site shown without blocking for one visit gets its blocking back once the tab is somewhere else.
+      self.restoredHost = nil
+      applyBlockingPauses()
+    }
     if started {
+      blocked[tabId] = nil
+      if tabId == app.activeTabId { endFind() }
       failed.remove(tabId)
       if failure?.tabId == tabId { failure = nil }
       // A new document has no media until it reports some.
@@ -562,6 +600,8 @@ final class BrowserModel: ObservableObject {
       state: NavigationReport(url: state.url, progress: state.progress, isLoading: state.isLoading), hasRules: false)
     timing[tabId] = plan.timing
     if plan.watchMedia, let view = views[tabId] {
+      // Early in each load (so text doesn't jump late) and again once it finishes.
+      applyTweaks(tabId, url: state.url)
       Task { _ = try? await view.runScript(.watchMedia) }
     }
 
@@ -594,5 +634,261 @@ final class BrowserModel: ObservableObject {
         self?.capture(tabId)
       }
     }
+  }
+}
+
+// MARK: - The page menu
+
+extension BrowserModel {
+  private var activeView: EngineView? { views[app.activeTabId] }
+
+  /// The address the page showing is at: what it last reported, else its tab's.
+  var activeUrl: String {
+    let reported = activeNavigation.url
+    return reported.isEmpty ? (activeTab?.url ?? "") : reported
+  }
+
+  func goBack() { activeView?.goBack() }
+  func goForward() { activeView?.goForward() }
+  func reload() { activeView?.reload() }
+  func stop() { activeView?.stop() }
+
+  var isPinned: Bool {
+    let url = activeTab?.url
+    return app.pins.contains { $0.kind == .essential && $0.url == url }
+  }
+
+  var isBookmarked: Bool {
+    guard let url = activeTab?.url, !url.isEmpty else { return false }
+    return app.store.isBookmarked(spaceId: app.activeSpaceId, url: url)
+  }
+
+  func togglePin() {
+    guard let tab = activeTab else { return }
+    Haptics.tick()
+    let pinned = isPinned
+    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: .essential, folderId: nil))
+    showToast(pinned ? strings.t("toast.unpinned") : strings.t("toast.pinned"))
+  }
+
+  func toggleBookmark() {
+    guard let tab = activeTab, !tab.url.isEmpty else { return }
+    Haptics.tick()
+    let bookmarked = isBookmarked
+    app.dispatch(
+      .toggleBookmark(
+        spaceId: app.activeSpaceId,
+        bookmark: .url(id: UUID().uuidString, parentId: "bookmarks", title: tab.title.isEmpty ? tab.url : tab.title, url: tab.url, addedAt: AppModel.now())))
+    showToast(bookmarked ? strings.t("toast.unbookmarked") : strings.t("toast.bookmarked"))
+  }
+
+  func share() {
+    let clean = cleanUrl(url: activeUrl)
+    guard let url = URL(string: clean) else { return }
+    present(UIActivityViewController(activityItems: [url], applicationActivities: nil))
+  }
+
+  func copyLink() {
+    UIPasteboard.general.string = cleanUrl(url: activeUrl)
+    showToast(strings.t("toast.linkCopied"))
+  }
+
+  /// The page through Google Translate, into the app's language.
+  func translate() {
+    let url = activeUrl
+    guard !url.isEmpty else { return }
+    if url.range(of: #"^https://[^/]+\.translate\.goog/"#, options: .regularExpression) != nil { return }
+    let language = strings.locale.split(separator: "-").first.map(String.init) ?? "en"
+    let encoded = url.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? url
+    navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=\(language)&u=\(encoded)")
+  }
+
+  /// The article on the page as Markdown, on the clipboard.
+  func copyMarkdown() {
+    guard let view = activeView else { return }
+    Task { [weak self] in
+      struct Result: Decodable { let markdown: String }
+      guard let text = try? await view.runScript(.markdown),
+        let result = try? JSONDecoder().decode(Result.self, from: Data(text.utf8))
+      else { return }
+      UIPasteboard.general.string = result.markdown
+      self?.showToast(self?.strings.t("notice.markdownCopied") ?? "")
+    }
+  }
+
+  // MARK: This site's own settings
+
+  /// What the page showing follows: its site's own setting, else every global choice.
+  var siteSetting: SiteSetting { app.store.siteSetting(url: activeUrl) }
+
+  /// The page's zoom in percent: its site's own, else Bay's.
+  var pageZoom: Int { Int(siteSetting.textSize ?? app.preferences.textSize) }
+
+  func setZoom(_ zoom: Int) {
+    let global = Int(app.preferences.textSize)
+    changeSiteSetting { $0.textSize = zoom == global ? nil : Double(zoom) }
+  }
+
+  func setDesktop(_ on: Bool) {
+    changeSiteSetting { $0.desktopMode = on }
+  }
+
+  func changeSiteSetting(_ change: (inout SiteSettingInput) -> Void) {
+    let host = siteHost(url: activeUrl)
+    guard !host.isEmpty else { return }
+    let setting = siteSetting
+    var input = SiteSettingInput(
+      textSize: setting.textSize.map(Double.init), reader: setting.reader, desktopMode: setting.desktopMode, blockOff: setting.blockOff,
+      swipe: setting.swipe)
+    change(&input)
+    app.dispatch(.siteSettings(host: host, update: input))
+    preferencesChanged()
+  }
+
+  /// A changed preference or site setting reaches the open pages at once.
+  func preferencesChanged() {
+    for (id, view) in views {
+      let url = navigation[id]?.url ?? app.tabs.first { $0.id == id }?.url ?? ""
+      configure(view, url: url)
+      applyTweaks(id, url: url)
+    }
+    applyBlockingPauses()
+  }
+
+  /// The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices.
+  private func configure(_ view: EngineView, url: String) {
+    let preferences = app.preferences
+    let setting = url.isEmpty ? SiteSetting(textSize: nil, reader: false, desktopMode: false, blockOff: [], swipe: nil) : app.store.siteSetting(url: url)
+    view.desktopMode = setting.desktopMode
+    view.swipeMode = setting.swipe ?? preferences.swipeToNavigate
+    view.pullToRefreshEnabled = preferences.pullToRefresh
+    view.appLinks = preferences.appLinks
+  }
+
+  /// Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows.
+  private func applyTweaks(_ tabId: String, url: String) {
+    guard let view = views[tabId], isWebUrl(value: url) else { return }
+    let setting = app.store.siteSetting(url: url)
+    let zoom = setting.textSize ?? app.preferences.textSize
+    let skipAmp = app.preferences.skipAmp && !(ampLeft[tabId]?.contains(url) ?? false)
+    Task { [weak self] in
+      let result = try? await view.runScript(.pageTweaks, args: ["textSize": zoom, "skipAmp": skipAmp])
+      if result == "\"amp\"" { self?.ampLeft[tabId, default: []].insert(url) }
+    }
+  }
+
+  // MARK: Blocking on this page
+
+  var blocking: PageBlocking {
+    guard app.preferences.blockContent else { return .off }
+    let host = hostOf(url: activeUrl)
+    if pausedEntry(host) != nil { return .paused }
+    if !host.isEmpty, host == restoredHost { return .restored }
+    return .on
+  }
+
+  /// The paused host this site falls under: itself or a domain it's part of.
+  private func pausedEntry(_ host: String) -> String? {
+    guard !host.isEmpty else { return nil }
+    return app.preferences.blockingPausedHosts.first { host == $0 || host.hasSuffix(".\($0)") }
+  }
+
+  func toggleBlocking() {
+    let host = hostOf(url: activeUrl)
+    guard !host.isEmpty else { return }
+    if restoredHost == host {
+      restoredHost = nil
+    } else {
+      let entry = pausedEntry(host)
+      app.dispatch(.pauseBlocking(host: entry ?? host, paused: entry == nil))
+    }
+    applyBlockingPauses()
+    // The change applies to new loads; reload so this page shows it.
+    reload()
+  }
+
+  /// The page again without blocking, and the question whether that fixed it: yes keeps blocking off for the site;
+  /// otherwise it comes back when the tab leaves.
+  func restoreOriginal() {
+    let host = hostOf(url: activeUrl)
+    guard !host.isEmpty else { return }
+    restoredHost = host
+    applyBlockingPauses()
+    reload()
+    showToast(strings.t("toast.restoredBlocking"), actionLabel: strings.t("toast.keepBlockingOff")) { [weak self] in
+      self?.app.dispatch(.pauseBlocking(host: host, paused: true))
+      self?.restoredHost = nil
+      self?.applyBlockingPauses()
+    }
+  }
+
+  private func applyBlockingPauses() {
+    Engine.setBlockingPausedHosts(app.preferences.blockingPausedHosts + (restoredHost.map { [$0] } ?? []))
+  }
+
+  // MARK: Find on page
+
+  func startFind() {
+    find = FindState()
+  }
+
+  func findChanged(_ query: String) {
+    guard find != nil else { return }
+    find?.query = query
+    findTimer?.cancel()
+    guard let view = activeView else { return }
+    if query.isEmpty {
+      find?.count = nil
+      Task { _ = try? await view.runScript(.findClear) }
+      return
+    }
+    // Typing pauses a moment before the page is searched.
+    findTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 150_000_000)
+      guard !Task.isCancelled else { return }
+      await self?.search(query, in: view)
+    }
+  }
+
+  private struct Found: Decodable {
+    let count: Int
+    let index: Int
+  }
+
+  private func search(_ query: String, in view: EngineView) async {
+    let text = try? await view.runScript(.find, args: ["query": query])
+    // A page that can't be searched has nothing to show for these words.
+    let found = text.flatMap { try? JSONDecoder().decode(Found.self, from: Data($0.utf8)) } ?? Found(count: 0, index: -1)
+    guard find?.query == query else { return }
+    find?.count = found.count
+    find?.index = found.index
+    find?.foundFor = query
+  }
+
+  func findStep(_ step: Int) {
+    guard let find, let view = activeView else { return }
+    // Return right after typing searches now rather than stepping through the old matches.
+    if find.foundFor != find.query {
+      findTimer?.cancel()
+      Task { await search(find.query, in: view) }
+      return
+    }
+    guard (find.count ?? 0) > 0 else { return }
+    let query = find.query
+    Task { [weak self] in
+      guard let text = try? await view.runScript(.findStep, args: ["step": step]),
+        let found = try? JSONDecoder().decode(Found.self, from: Data(text.utf8)),
+        self?.find?.query == query
+      else { return }
+      self?.find?.count = found.count
+      self?.find?.index = found.index
+    }
+  }
+
+  func endFind() {
+    guard find != nil else { return }
+    find = nil
+    findTimer?.cancel()
+    if let view = activeView { Task { _ = try? await view.runScript(.findClear) } }
   }
 }

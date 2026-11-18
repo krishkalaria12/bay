@@ -166,7 +166,7 @@ struct BrowserBar: View {
         .overlay(alignment: .topTrailing) { TabCount(count: count) }
         .accessibilityIdentifier("bar-tabs")
         capsule
-        GlassIconButton(.more, label: strings.t("bar.more")) {}
+        GlassIconButton(.more, label: strings.t("bar.more")) { browser.panel = .page }
           .accessibilityIdentifier("bar-more")
       } else {
         GlassIconButton(.archive, label: strings.t("bar.archive")) {}

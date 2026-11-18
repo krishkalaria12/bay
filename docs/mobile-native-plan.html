@@ -1477,6 +1477,13 @@ impl BrowserStore {
         <details class="phase">
           <summary><span class="pid">N5</span><span class="ptitle">Panels and Settings</span><span class="pdep">Depends on: N2, N4</span></summary>
           <div class="body">
+            <p class="muted">
+              Done so far, on both apps: Settings drawn from the core (the index with search, every page and row, the wallpaper, page zoom, custom engine and
+              sync join pages, clearing browsing data through the store's reset), and the page menu (<code>bar-more</code>): navigation, find on page, bookmark,
+              share, copy link, pin, private tab, Markdown, archive, translate, the site's zoom and desktop mode, and the blocking card. Page zoom, AMP
+              skipping, desktop mode, swipe, pull to refresh and app links now reach the page views. Left: the other sheets, the menu rows that open them (see
+              Known gaps), app icon, sync status and scheduling.
+            </p>
             <ul>
               <li>
                 All 20 sheets: page menu, link menu, tabs menu, bookmarks, history (paged core queries), archive, downloads, import, reader, inspect, site
@@ -1756,7 +1763,15 @@ impl BrowserStore {
             iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
-          <li>Tips (bar and blocking) and the card-to-page zoom aren't ported yet (N4).</li>
+          <li>
+            The page menu's Reader, Site settings, Hide elements, Inspect, History and Downloads rows close the menu and do nothing until their sheets land
+            (N5); the "show hidden elements" row and the bookmark toast's "Show bookmarks" wait for the same.
+          </li>
+          <li>
+            The native apps don't load the filter lists yet, so the blocking card's count stays empty and its pause only reaches the engine's paused hosts; both
+            work once content blocking is wired (N5).
+          </li>
+          <li>The blocking tip isn't ported yet; it comes with content blocking.</li>
         </ul>
       </section>
 

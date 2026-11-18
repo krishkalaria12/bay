@@ -53,13 +53,17 @@ struct BrowserScreen: View {
           if browser.tip == .bar {
             TipCard(title: strings.t("tip.bar.title"), body_: strings.t("tip.bar.body")) { app.dispatch(.tipSeen(id: .bar)) }
           }
-          BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)
-            // The ring round the capsule the tip means.
-            .overlay {
-              if browser.tip == .bar {
-                Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: 184, height: 62).allowsHitTesting(false)
+          if browser.find != nil, browser.hasPage {
+            FindBar(browser: browser)
+          } else {
+            BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)
+              // The ring round the capsule the tip means.
+              .overlay {
+                if browser.tip == .bar {
+                  Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: 184, height: 62).allowsHitTesting(false)
+                }
               }
-            }
+          }
         }
         .padding(.horizontal, Space.edge)
         .padding(.bottom, Space.xs)
@@ -74,13 +78,21 @@ struct BrowserScreen: View {
           privately: browser.searchPrivately || (browser.activeTab?.private ?? false))
       }
     }
-    .baySheet(isPresented: Binding(get: { browser.panel == .spaceEdit }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.85) {
-      if let space = browser.activeSpace {
-        SpaceEditPanel(browser: browser, space: space)
-          .environmentObject(strings)
-          .environmentObject(app)
+    .baySheet(isPresented: Binding(get: { browser.panel != nil }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.88) {
+      Group {
+        switch browser.panel {
+        case .page:
+          PageMenu(browser: browser, onSettings: onSettings)
+        case .spaceEdit:
+          if let space = browser.activeSpace { SpaceEditPanel(browser: browser, space: space) }
+        case nil:
+          EmptyView()
+        }
       }
+      .environmentObject(strings)
+      .environmentObject(app)
     }
+    .onChange(of: app.preferences) { _ in browser.preferencesChanged() }
     .onChange(of: browser.tip) { browser.tipShown($0) }
     .onAppear(perform: browser.refreshMounted)
     .onChange(of: app.activeTabId) { _ in browser.refreshMounted() }

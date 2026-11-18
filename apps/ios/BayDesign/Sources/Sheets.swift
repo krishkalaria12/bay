@@ -22,33 +22,32 @@ public struct PanelSheet<Content: View, Accessory: View>: View {
   private let words: SheetWords
   private let onClose: () -> Void
   private let onBack: (() -> Void)?
+  private let header: AnyView?
   private let accessory: Accessory
   private let content: Content
 
+  /// `header` takes the title's place on the sheet's first page (the page menu's site, say).
   public init(
     title: String, testID: String, words: SheetWords, onClose: @escaping () -> Void, onBack: (() -> Void)? = nil,
-    @ViewBuilder accessory: () -> Accessory = { EmptyView() }, @ViewBuilder content: () -> Content
+    header: AnyView? = nil, @ViewBuilder accessory: () -> Accessory = { EmptyView() }, @ViewBuilder content: () -> Content
   ) {
     self.title = title
     self.testID = testID
     self.words = words
     self.onClose = onClose
     self.onBack = onBack
+    self.header = header
     self.accessory = accessory()
     self.content = content()
   }
 
   public var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: Space.md) {
-        HStack(spacing: Space.xs) {
-          if let onBack {
-            SheetIconButton(.back, label: words.back, tone: .default, action: onBack)
-              .accessibilityIdentifier("\(testID)-back")
-              .padding(.trailing, Space.xs)
-          }
-          BayText(title, variant: .title).lineLimit(1).accessibilityAddTraits(.isHeader)
-          Spacer(minLength: 0)
+      HStack(alignment: header != nil && onBack == nil ? .top : .center, spacing: Space.md) {
+        if let header, onBack == nil {
+          header.frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+          titleRow
         }
         HStack(spacing: Space.sm) {
           accessory
@@ -67,6 +66,18 @@ public struct PanelSheet<Content: View, Accessory: View>: View {
     }
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier(testID)
+  }
+
+  private var titleRow: some View {
+    HStack(spacing: Space.xs) {
+      if let onBack {
+        SheetIconButton(.back, label: words.back, tone: .default, action: onBack)
+          .accessibilityIdentifier("\(testID)-back")
+          .padding(.trailing, Space.xs)
+      }
+      BayText(title, variant: .title).lineLimit(1).accessibilityAddTraits(.isHeader)
+      Spacer(minLength: 0)
+    }
   }
 }
 

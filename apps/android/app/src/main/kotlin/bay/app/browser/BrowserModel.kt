@@ -1,6 +1,11 @@
 package bay.app.browser
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
@@ -11,22 +16,28 @@ import androidx.compose.runtime.setValue
 import bay.app.AppModel
 import bay.app.Strings
 import bay.core.Action
+import bay.core.BookmarkNode
 import bay.core.BrowserSpace
 import bay.core.BrowserTab
 import bay.core.MediaReport
 import bay.core.NavigationReport
+import bay.core.PinKind
 import bay.core.PinnedSite
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
+import bay.core.SiteSetting
+import bay.core.SiteSettingInput
 import bay.core.SpaceColor
 import bay.core.TabUpdate
 import bay.core.TipId
+import bay.core.cleanUrl
 import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
 import bay.core.parseMediaMessage
 import bay.core.scriptsFor
 import bay.core.searchEngine
+import bay.core.siteHost
 import bay.engine.BayEngineView
 import bay.engine.Engine
 import bay.engine.EngineEvent
@@ -42,6 +53,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 
 /** What a search opens: a page, an open tab, or a tab back from the archive. */
 sealed interface OpenTarget {
@@ -55,7 +67,13 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { SPACE_EDIT }
+enum class Panel { PAGE, SPACE_EDIT }
+
+/** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
+enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
+
+/** Find on page: the words, what the page found for them (`count` null before the first search ends), the match shown. */
+data class FindState(val query: String = "", val count: Int? = null, val index: Int = -1, val foundFor: String = "")
 
 /** A card growing into its page: the tab and where its card sat on screen, in pixels. */
 data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rect)
@@ -118,6 +136,21 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
 
+    /** Find on page, while it is open over the page showing. */
+    var find by mutableStateOf<FindState?>(null)
+        private set
+
+    /** What the blocker stopped on each page, where the engine counts it. */
+    val blocked = mutableStateMapOf<String, Int>()
+
+    /** A site shown without blocking until its tab leaves it. */
+    var restoredHost by mutableStateOf<String?>(null)
+        private set
+
+    /** AMP pages each tab already left for their publisher's page. One that comes back stays, so the two never bounce. */
+    private val ampLeft = HashMap<String, MutableSet<String>>()
+    private var findTimer: Job? = null
+
     private val views = HashMap<String, BayEngineView>()
     private val visited = HashMap<String, String>()
     private val timing = HashMap<String, ScriptTiming>()
@@ -145,6 +178,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             // Private tabs keep no saved state.
             stateKey = if (tab.private) null else tab.id
             onEvent = { event -> receive(tab.id, event) }
+            configure(this, tab.url)
             loadInitial(tab.url.ifEmpty { null })
         }
     }
@@ -231,6 +265,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     fun activate(id: String) {
+        if (id != app.activeTabId) endFind()
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
         barHidden = false
@@ -522,6 +557,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             is EngineEvent.NewWindow -> if (isWebUrl(event.url)) openTab(event.url, event.isPrivate)
             is EngineEvent.PageMessage -> parseMediaMessage(event.message)?.let { mediaReported(tabId, it) }
             is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
+            is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             // Page dialogs get their sheet with the panels (N5); until then nothing waits on one.
             is EngineEvent.Request -> views[tabId]?.answerPageRequest(event.request.id, false, null, null, null)
             else -> {}
@@ -533,7 +569,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val started = state.isLoading && before?.isLoading != true
         val finished = !state.isLoading && (before?.isLoading ?: true)
         if (before != state) navigation[tabId] = state
+        if (before?.url != state.url) views[tabId]?.let { configure(it, state.url) }
+        val restored = restoredHost
+        if (tabId == app.activeTabId && restored != null && hostOf(state.url) != restored) {
+            // A site shown without blocking for one visit gets its blocking back once the tab is somewhere else.
+            restoredHost = null
+            applyBlockingPauses()
+        }
         if (started) {
+            blocked.remove(tabId)
+            if (tabId == app.activeTabId) endFind()
             failed -= tabId
             if (failure?.tabId == tabId) failure = null
             // A new document has no media until it reports some.
@@ -549,7 +594,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), false)
         timing[tabId] = plan.timing
-        if (plan.watchMedia && view != null) scope.launch { runCatching { view.runScript(PageScript.WATCH_MEDIA) } }
+        if (plan.watchMedia && view != null) {
+            // Early in each load (so text doesn't jump late) and again once it finishes.
+            applyTweaks(tabId, state.url)
+            scope.launch { runCatching { view.runScript(PageScript.WATCH_MEDIA) } }
+        }
 
         if (state.blank) {
             app.dispatch(Action.UpdateTab(tabId, TabUpdate("", "", null, null, null)))
@@ -574,6 +623,244 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 capture(tabId)
             }
         }
+    }
+
+    // The page menu
+
+    private val activeView: BayEngineView? get() = views[app.activeTabId]
+
+    /** The address the page showing is at: what it last reported, else its tab's. */
+    val activeUrl: String get() = activeNavigation.url.ifEmpty { activeTab?.url.orEmpty() }
+
+    fun goBack() = activeView?.goBack()
+
+    fun goForward() = activeView?.goForward()
+
+    fun reload() = activeView?.reload()
+
+    fun stop() = activeView?.stop()
+
+    val isPinned: Boolean
+        get() {
+            val url = activeTab?.url
+            return app.pins.any { it.kind == PinKind.ESSENTIAL && it.url == url }
+        }
+
+    val isBookmarked: Boolean
+        get() {
+            val url = activeTab?.url
+            return !url.isNullOrEmpty() && app.store.isBookmarked(app.activeSpaceId, url)
+        }
+
+    fun togglePin() {
+        val tab = activeTab ?: return
+        val pinned = isPinned
+        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
+        showToast(if (pinned) strings.t("toast.unpinned") else strings.t("toast.pinned"))
+    }
+
+    fun toggleBookmark() {
+        val tab = activeTab?.takeIf { it.url.isNotEmpty() } ?: return
+        val bookmarked = isBookmarked
+        val bookmark = BookmarkNode.Url(UUID.randomUUID().toString(), "bookmarks", tab.title.ifEmpty { tab.url }, tab.url, AppModel.now())
+        app.dispatch(Action.ToggleBookmark(app.activeSpaceId, bookmark))
+        showToast(if (bookmarked) strings.t("toast.unbookmarked") else strings.t("toast.bookmarked"))
+    }
+
+    fun share() {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, cleanUrl(activeUrl))
+        context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Android 13+ confirms copies itself with the system's clipboard preview. */
+    fun copyLink() {
+        copy(cleanUrl(activeUrl))
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) showToast(strings.t("toast.linkCopied"))
+    }
+
+    private fun copy(text: String) {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText(null, text))
+    }
+
+    /** The page through Google Translate, into the app's language. */
+    fun translate() {
+        val url = activeUrl
+        if (url.isEmpty() || Regex("^https://[^/]+\\.translate\\.goog/").containsMatchIn(url)) return
+        val language = strings.locale.substringBefore('-').ifEmpty { "en" }
+        navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=$language&u=${Uri.encode(url)}")
+    }
+
+    /** The article on the page as Markdown, on the clipboard. */
+    fun copyMarkdown() {
+        val view = activeView ?: return
+        scope.launch {
+            val json = runCatching { view.runScript(PageScript.MARKDOWN) }.getOrNull() ?: return@launch
+            val markdown = runCatching { JSONObject(json).getString("markdown") }.getOrNull() ?: return@launch
+            copy(markdown)
+            showToast(strings.t("notice.markdownCopied"))
+        }
+    }
+
+    // This site's own settings
+
+    /** What the page showing follows: its site's own setting, else every global choice. */
+    val siteSetting: SiteSetting get() = app.store.siteSetting(activeUrl)
+
+    /** The page's zoom in percent: its site's own, else Bay's. */
+    val pageZoom: Int get() = (siteSetting.textSize ?: app.preferences.textSize).toInt()
+
+    fun setZoom(zoom: Int) {
+        val global = app.preferences.textSize.toInt()
+        changeSiteSetting { it.copy(textSize = if (zoom == global) null else zoom.toDouble()) }
+    }
+
+    fun setDesktop(on: Boolean) = changeSiteSetting { it.copy(desktopMode = on) }
+
+    fun changeSiteSetting(change: (SiteSettingInput) -> SiteSettingInput) {
+        val host = siteHost(activeUrl)
+        if (host.isEmpty()) return
+        val setting = siteSetting
+        val input = SiteSettingInput(setting.textSize?.toDouble(), setting.reader, setting.desktopMode, setting.blockOff, setting.swipe)
+        app.dispatch(Action.SiteSettings(host, change(input)))
+        preferencesChanged()
+    }
+
+    /** A changed preference or site setting reaches the open pages at once. */
+    fun preferencesChanged() {
+        for ((id, view) in views) {
+            val url = navigation[id]?.url ?: app.tabs.firstOrNull { it.id == id }?.url.orEmpty()
+            configure(view, url)
+            applyTweaks(id, url)
+        }
+        applyBlockingPauses()
+    }
+
+    /** The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices. */
+    private fun configure(view: BayEngineView, url: String) {
+        val preferences = app.preferences
+        val setting = if (url.isEmpty()) null else app.store.siteSetting(url)
+        view.desktopMode = setting?.desktopMode == true
+        view.swipeMode = (setting?.swipe ?: preferences.swipeToNavigate).name.lowercase()
+        view.pullToRefreshEnabled = preferences.pullToRefresh
+        view.appLinks = preferences.appLinks.name.lowercase()
+    }
+
+    /** Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows. */
+    private fun applyTweaks(tabId: String, url: String) {
+        val view = views[tabId] ?: return
+        if (!isWebUrl(url)) return
+        val zoom = app.store.siteSetting(url).textSize ?: app.preferences.textSize
+        val skipAmp = app.preferences.skipAmp && ampLeft[tabId]?.contains(url) != true
+        scope.launch {
+            val result = runCatching { view.runScript(PageScript.PAGE_TWEAKS, mapOf("textSize" to zoom, "skipAmp" to skipAmp)) }.getOrNull()
+            if (result == "\"amp\"") ampLeft.getOrPut(tabId) { HashSet() } += url
+        }
+    }
+
+    // Blocking on this page
+
+    val blocking: PageBlocking
+        get() {
+            if (!app.preferences.blockContent) return PageBlocking.OFF
+            val host = hostOf(activeUrl)
+            return when {
+                pausedEntry(host) != null -> PageBlocking.PAUSED
+                host.isNotEmpty() && host == restoredHost -> PageBlocking.RESTORED
+                else -> PageBlocking.ON
+            }
+        }
+
+    /** The paused host this site falls under: itself or a domain it's part of. */
+    private fun pausedEntry(host: String): String? =
+        if (host.isEmpty()) null else app.preferences.blockingPausedHosts.firstOrNull { host == it || host.endsWith(".$it") }
+
+    fun toggleBlocking() {
+        val host = hostOf(activeUrl).ifEmpty { return }
+        if (restoredHost == host) {
+            restoredHost = null
+        } else {
+            val entry = pausedEntry(host)
+            app.dispatch(Action.PauseBlocking(entry ?: host, entry == null))
+        }
+        applyBlockingPauses()
+        // The change applies to new loads; reload so this page shows it.
+        reload()
+    }
+
+    /**
+     * The page again without blocking, and the question whether that fixed it: yes keeps blocking off for the site;
+     * otherwise it comes back when the tab leaves.
+     */
+    fun restoreOriginal() {
+        val host = hostOf(activeUrl).ifEmpty { return }
+        restoredHost = host
+        applyBlockingPauses()
+        reload()
+        showToast(strings.t("toast.restoredBlocking"), strings.t("toast.keepBlockingOff")) {
+            app.dispatch(Action.PauseBlocking(host, true))
+            restoredHost = null
+            applyBlockingPauses()
+        }
+    }
+
+    private fun applyBlockingPauses() = Engine.setBlockingPausedHosts(app.preferences.blockingPausedHosts + listOfNotNull(restoredHost))
+
+    // Find on page
+
+    fun startFind() {
+        find = FindState()
+    }
+
+    fun findChanged(query: String) {
+        val current = find ?: return
+        find = current.copy(query = query)
+        findTimer?.cancel()
+        val view = activeView ?: return
+        if (query.isEmpty()) {
+            find = find?.copy(count = null)
+            scope.launch { runCatching { view.runScript(PageScript.FIND_CLEAR) } }
+            return
+        }
+        // Typing pauses a moment before the page is searched.
+        findTimer = scope.launch {
+            delay(150)
+            search(query, view)
+        }
+    }
+
+    private fun found(json: String?): Pair<Int, Int>? =
+        json?.let { runCatching { JSONObject(it) }.getOrNull() }?.let { it.optInt("count") to it.optInt("index", -1) }
+
+    private suspend fun search(query: String, view: BayEngineView) {
+        // A page that can't be searched has nothing to show for these words.
+        val (count, index) = found(runCatching { view.runScript(PageScript.FIND, mapOf("query" to query)) }.getOrNull()) ?: (0 to -1)
+        val current = find ?: return
+        if (current.query == query) find = current.copy(count = count, index = index, foundFor = query)
+    }
+
+    fun findStep(step: Int) {
+        val current = find ?: return
+        val view = activeView ?: return
+        // Return right after typing searches now rather than stepping through the old matches.
+        if (current.foundFor != current.query) {
+            findTimer?.cancel()
+            scope.launch { search(current.query, view) }
+            return
+        }
+        if ((current.count ?: 0) == 0) return
+        scope.launch {
+            val (count, index) = found(runCatching { view.runScript(PageScript.FIND_STEP, mapOf("step" to step)) }.getOrNull()) ?: return@launch
+            val now = find ?: return@launch
+            if (now.query == current.query) find = now.copy(count = count, index = index)
+        }
+    }
+
+    fun endFind() {
+        if (find == null) return
+        find = null
+        findTimer?.cancel()
+        activeView?.let { view -> scope.launch { runCatching { view.runScript(PageScript.FIND_CLEAR) } } }
     }
 
     companion object {

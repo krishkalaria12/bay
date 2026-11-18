@@ -56,6 +56,7 @@ private val BAR_HEIGHT = 52.dp
 fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit = {}) {
     val app = browser.app
     LaunchedEffect(app.activeTabId, app.tabs.map { it.url }) { browser.refreshMounted() }
+    LaunchedEffect(app.preferences) { browser.preferencesChanged() }
     Box(Modifier.fillMaxSize()) {
         Wallpaper(app.preferences.wallpaper)
         // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
@@ -102,10 +103,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                         app.dispatch(bay.core.Action.TipSeen(tip))
                     }
                 }
-                Box(contentAlignment = Alignment.Center) {
-                    BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth(), onChecks)
-                    // The ring round the capsule the tip means.
-                    if (tip == TipId.BAR) Box(Modifier.size(184.dp, 62.dp).border(2.5.dp, Theme.colors.accent, RoundedCornerShape(31.dp)).clearAndSetSemantics {})
+                if (browser.find != null && browser.hasPage) {
+                    FindBar(browser, strings)
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth(), onChecks)
+                        // The ring round the capsule the tip means.
+                        if (tip == TipId.BAR) Box(Modifier.size(184.dp, 62.dp).border(2.5.dp, Theme.colors.accent, RoundedCornerShape(31.dp)).clearAndSetSemantics {})
+                    }
                 }
             }
         } else {
@@ -113,6 +118,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || active?.private == true)
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
+        PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)
     }
 }
 

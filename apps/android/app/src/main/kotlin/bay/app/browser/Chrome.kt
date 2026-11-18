@@ -272,7 +272,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
                 TabCount(count, Modifier.align(Alignment.TopEnd))
             }
             Capsule(browser, strings)
-            BarButton("bar-more", strings.t("bar.more"), {}) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+            BarButton("bar-more", strings.t("bar.more"), { browser.panel = Panel.PAGE }) { BayIconView(BayIcon.MORE, size = IconSize.control) }
         } else {
             BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             Capsule(browser, strings)

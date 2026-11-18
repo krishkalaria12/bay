@@ -69,6 +69,8 @@ fun PanelSheet(
     onClose: () -> Unit,
     onBack: (() -> Unit)? = null,
     maxFraction: Float = 0.65f,
+    /** Takes the title's place on the sheet's first page (the page menu's site, say). */
+    header: (@Composable RowScope.() -> Unit)? = null,
     accessory: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -116,12 +118,16 @@ fun PanelSheet(
                     Row(
                         Modifier.fillMaxWidth().padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md),
                         horizontalArrangement = Arrangement.spacedBy(Space.md),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = if (header != null && onBack == null) Alignment.Top else Alignment.CenterVertically,
                     ) {
-                        if (onBack != null) {
-                            SheetIconButton(BayIcon.BACK, words.back, Modifier.testTag("$testID-back"), muted = false, onClick = onBack)
+                        if (header != null && onBack == null) {
+                            header()
+                        } else {
+                            if (onBack != null) {
+                                SheetIconButton(BayIcon.BACK, words.back, Modifier.testTag("$testID-back"), muted = false, onClick = onBack)
+                            }
+                            BayText(title, Modifier.weight(1f).semantics { heading() }, variant = TextVariant.TITLE, maxLines = 1)
                         }
-                        BayText(title, Modifier.weight(1f).semantics { heading() }, variant = TextVariant.TITLE, maxLines = 1)
                         accessory()
                         SheetIconButton(BayIcon.CLOSE, words.close, Modifier.testTag("$testID-close"), onClick = onClose)
                     }
