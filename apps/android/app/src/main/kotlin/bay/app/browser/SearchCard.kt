@@ -23,9 +23,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -100,12 +102,15 @@ private const val SUGGEST_DELAY_MS = 120L
 fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, startPrivately: Boolean) {
     val app = browser.app
     val scope = rememberCoroutineScope()
-    // A prefilled address starts selected, so typing replaces it.
-    var field by remember { mutableStateOf(TextFieldValue(initialText, TextRange(0, initialText.length))) }
-    val query = field.text
+    // A prefilled address starts selected, so typing replaces it. The field keeps the keyboard's edits itself, so
+    // fast typing isn't lost while the rows are worked out.
+    val field = rememberTextFieldState(initialText, TextRange(0, initialText.length))
+    val query = field.text.toString()
     var privately by remember { mutableStateOf(startPrivately) }
     // No inline completion over a prefilled address, or straight after deleting.
     var suppressed by remember { mutableStateOf(initialText.isNotEmpty()) }
+    // The text was just filled in from a row, not typed.
+    var filling by remember { mutableStateOf(false) }
     var remote by remember { mutableStateOf(emptyList<String>()) }
     var fetch by remember { mutableStateOf<Job?>(null) }
     var dragged by remember { mutableFloatStateOf(0f) }
@@ -130,9 +135,9 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         browser.open(target, privately)
     }
 
-    fun change(next: String, selection: TextRange = TextRange(next.length)) {
-        suppressed = next.length < query.length
-        field = TextFieldValue(next, selection)
+    /** What follows a change to the field: inline completion stops after deleting, and the engine's suggestions refetch. */
+    fun changed(next: String, before: String) {
+        suppressed = next.length < before.length
         fetch?.cancel()
         val url = if (app.preferences.searchSuggestions && next.isNotBlank()) suggestionsRequestUrl(engine, next) else null
         if (url == null) {
@@ -147,13 +152,23 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     }
 
     fun fill(next: String) {
-        suppressed = true
-        change(next)
-        suppressed = true
+        filling = true
+        field.setTextAndPlaceCursorAtEnd(next)
         focus.requestFocus()
     }
 
     LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(field) {
+        var before = field.text.toString()
+        snapshotFlow { field.text.toString() }.collect { next ->
+            if (next == before) return@collect
+            changed(next, before)
+            // A filled-in row keeps completion off until the next keystroke.
+            if (filling) suppressed = true
+            filling = false
+            before = next
+        }
+    }
 
     Box(Modifier.fillMaxSize().testTag("search-card")) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
@@ -189,19 +204,21 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
             ) {
                 val fieldStyle = TextVariant.HEADLINE.style(FontWeight.Normal, text)
                 BasicTextField(
-                    value = field,
-                    onValueChange = { value -> if (value.text != query) change(value.text, value.selection) else field = value },
-                    singleLine = true,
+                    state = field,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     textStyle = fieldStyle,
                     cursorBrush = SolidColor(Theme.colors.accent),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
-                    keyboardActions = KeyboardActions(onGo = {
+                    onKeyboardAction = {
+                        // What's in the field now: Go can arrive before the screen has caught up with fast typing.
+                        val typed = field.text.toString()
                         val first = rows.firstOrNull()
-                        if (completion.isNotEmpty() && first != null) open(targetFor(first)) else addressFor(query, engine)?.let { open(OpenTarget.Url(it)) }
-                    }),
+                        if (typed == query && completion.isNotEmpty() && first != null) open(targetFor(first))
+                        else addressFor(typed, engine)?.let { open(OpenTarget.Url(it)) }
+                    },
                     modifier = Modifier.weight(1f).padding(start = Space.lg).focusRequester(focus).testTag("address-input")
                         .semantics { contentDescription = strings.t("search.placeholder") },
-                    decorationBox = { inner ->
+                    decorator = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (query.isEmpty()) BayText(strings.t("search.placeholder"), variant = TextVariant.HEADLINE, weight = FontWeight.Normal, color = secondary, maxLines = 1)
                             if (completion.isNotEmpty()) {
