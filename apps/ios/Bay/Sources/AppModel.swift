@@ -21,6 +21,12 @@ final class AppModel: ObservableObject {
   @Published private(set) var resolved: String?
   /// Downloads, newest first.
   @Published private(set) var downloads: [DownloadItem] = []
+  /// The space's pinned pages: Essentials and rows.
+  @Published private(set) var pins: [PinnedSite] = []
+  /// The space's latest history, newest first, for the start page.
+  @Published private(set) var recentHistory: [HistoryEntry] = []
+  /// Saved site icons (local file addresses) by host.
+  @Published private(set) var favicons: [String: String] = [:]
   /// Hears the system's media controls (lock screen, Control Center): the screen showing the media sets it.
   var mediaControl: ((MediaControl) -> Void)?
 
@@ -150,6 +156,9 @@ final class AppModel: ObservableObject {
     tabs = store.spaceTabs(spaceId: activeSpaceId)
     preferences = store.preferences()
     downloads = store.downloads()
+    pins = store.pinnedSites(spaceId: activeSpaceId)
+    recentHistory = store.history(spaceId: activeSpaceId, query: "", offset: 0, limit: 24)
+    favicons = store.favicons()
   }
 }
 

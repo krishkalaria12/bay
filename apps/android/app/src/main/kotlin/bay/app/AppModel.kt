@@ -14,8 +14,10 @@ import bay.core.BrowserSpace
 import bay.core.BrowserStore
 import bay.core.BrowserTab
 import bay.core.DownloadItem
+import bay.core.HistoryEntry
 import bay.core.Pairing
 import bay.core.PhoneSync
+import bay.core.PinnedSite
 import bay.core.StoreObserver
 import bay.core.SyncObserver
 import bay.core.SyncView
@@ -38,7 +40,7 @@ import kotlinx.coroutines.launch
 class AppModel(context: Context, barTitle: String) {
     private val documents = context.filesDir.absolutePath
     val store: BrowserStore = BrowserStore.open(documents, UUID.randomUUID().toString(), now())
-    private val http = UrlConnectionHttp()
+    val http = UrlConnectionHttp()
     val sync = PhoneSync(store, http, KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
 
     var spaces by mutableStateOf(emptyList<BrowserSpace>())
@@ -62,6 +64,18 @@ class AppModel(context: Context, barTitle: String) {
 
     /** Downloads, newest first. */
     var downloads by mutableStateOf(emptyList<DownloadItem>())
+        private set
+
+    /** The space's pinned pages: Essentials and rows. */
+    var pins by mutableStateOf(emptyList<PinnedSite>())
+        private set
+
+    /** The space's latest history, newest first, for the start page. */
+    var recentHistory by mutableStateOf(emptyList<HistoryEntry>())
+        private set
+
+    /** Saved site icons (local file addresses) by host. */
+    var favicons by mutableStateOf(emptyMap<String, String>())
         private set
 
     /** Hears the system's media controls (the media notification): the screen showing the media sets it. */
@@ -165,6 +179,9 @@ class AppModel(context: Context, barTitle: String) {
         tabs = store.spaceTabs(activeSpaceId)
         preferences = store.preferences()
         downloads = store.downloads()
+        pins = store.pinnedSites(activeSpaceId)
+        recentHistory = store.history(activeSpaceId, "", 0u, 24u)
+        favicons = store.favicons()
     }
 
     companion object {

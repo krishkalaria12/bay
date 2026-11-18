@@ -1,0 +1,262 @@
+import BayCore
+import BayDesign
+import BayEngine
+import SwiftUI
+
+/// The browser's pages: the loaded tabs' views in one UIKit container, the one showing on top. The views are kept
+/// across SwiftUI updates, so a page isn't reloaded when the screen around it changes. A page view is made only once
+/// the container is in a window: WebKit restores a saved tab state into a blank page when it is set off screen.
+struct PagesHost: UIViewRepresentable {
+  @ObservedObject var browser: BrowserModel
+
+  final class Container: UIView {
+    var sync: (() -> Void)?
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      if window != nil { sync?() }
+    }
+  }
+
+  func makeUIView(context: Context) -> Container {
+    let container = Container()
+    container.clipsToBounds = true
+    return container
+  }
+
+  func updateUIView(_ container: Container, context: Context) {
+    let browser = browser
+    container.sync = { [weak container] in
+      guard let container else { return }
+      MainActor.assumeIsolated { Self.sync(container, browser) }
+    }
+    container.sync?()
+  }
+
+  @MainActor private static func sync(_ container: Container, _ browser: BrowserModel) {
+    guard container.window != nil else { return }
+    let tabs = browser.app.tabs
+    for (index, id) in browser.mounted.enumerated() {
+      guard let tab = tabs.first(where: { $0.id == id }) else { continue }
+      let view = browser.view(for: tab)
+      if view.superview !== container {
+        view.frame = container.bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(view)
+      }
+      let showing = index == 0
+      view.isHidden = !showing
+      view.isActive = showing
+      if showing { container.bringSubviewToFront(view) }
+    }
+  }
+}
+
+/// The site's saved icon on a tile, else a monogram on a tint picked from its name. Icons are local files, so this
+/// never loads anything from the network. It always sits beside the site's name, so VoiceOver skips it.
+struct SiteIcon: View {
+  @EnvironmentObject private var app: AppModel
+  @Environment(\.colorScheme) private var scheme
+  let url: String
+  var size: CGFloat = 28
+  /// Already on a tile of its own (a pin): the icon or the letter alone.
+  var bare = false
+
+  private static let tints: [RGBA] = [
+    RGBA(0xDC, 0xE8, 0xF5), RGBA(0xF3, 0xE2, 0xD6), RGBA(0xE3, 0xEE, 0xDF), RGBA(0xEC, 0xE1, 0xF2), RGBA(0xF5, 0xE9, 0xC9),
+    RGBA(0xDD, 0xEE, 0xEE),
+  ]
+
+  var body: some View {
+    let host = hostOf(url: url)
+    Group {
+      if let file = app.favicons[host].flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: file.path) {
+        if bare {
+          Image(uiImage: image).resizable().scaledToFit().frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
+        } else {
+          Image(uiImage: image).resizable().scaledToFit().frame(width: size * 0.72, height: size * 0.72)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
+            .frame(width: size, height: size)
+            .background(scheme == .dark ? Color(RGBA(0x2C, 0x2C, 0x2E)) : .white, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        }
+      } else {
+        monogram(host)
+      }
+    }
+    .accessibilityHidden(true)
+  }
+
+  @ViewBuilder private func monogram(_ host: String) -> some View {
+    let letter = host.first(where: { $0.isLetter || $0.isNumber }).map { String($0).uppercased() } ?? "•"
+    if bare {
+      Text(verbatim: letter).font(.system(size: size * 0.82, weight: .semibold)).foregroundColor(BayColor.foreground)
+        .frame(width: size, height: size)
+    } else {
+      let hash = host.unicodeScalars.reduce(Int32(0)) { ($0 &* 31) &+ Int32(truncatingIfNeeded: $1.value) }
+      Text(verbatim: letter).font(.system(size: size * 0.48, weight: .semibold)).foregroundColor(Color(RGBA(0x26, 0x31, 0x3D)))
+        .frame(width: size, height: size)
+        .background(Color(Self.tints[Int(hash.magnitude) % Self.tints.count]), in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+    }
+  }
+}
+
+/// Bay's start-page wallpaper: a wash under a fine dot grid, the theme's background for Plain.
+struct WallpaperView: View {
+  let id: WallpaperId
+  @Environment(\.colorScheme) private var scheme
+
+  var body: some View {
+    Group {
+      if let palette = Wallpapers.palette("\(id)", dark: scheme == .dark) {
+        ZStack {
+          LinearGradient(
+            stops: [.init(color: palette.top, location: 0), .init(color: palette.middle, location: 0.55), .init(color: palette.bottom, location: 1)],
+            startPoint: .top, endPoint: .bottom)
+          Canvas { context, size in
+            let step: CGFloat = 14
+            var y = step / 2
+            while y < size.height {
+              var x = step / 2
+              while x < size.width {
+                context.fill(Path(ellipseIn: CGRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8)), with: .color(palette.dot.opacity(palette.dotOpacity)))
+                x += step
+              }
+              y += step
+            }
+          }
+        }
+      } else {
+        BayColor.background
+      }
+    }
+    .ignoresSafeArea()
+    .accessibilityHidden(true)
+  }
+}
+
+/// The floating bar: archive, search and settings over the start page; tabs, the site and more over a page.
+struct BrowserBar: View {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var browser: BrowserModel
+  let onSettings: () -> Void
+
+  var body: some View {
+    let app = browser.app
+    HStack(spacing: Space.md) {
+      if browser.hasPage {
+        let count = app.tabs.count
+        GlassIconButton(.tabs, label: count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")) {
+          browser.overlay = .tabs
+        }
+        .overlay(alignment: .topTrailing) { TabCount(count: count) }
+        .accessibilityIdentifier("bar-tabs")
+        capsule
+        GlassIconButton(.more, label: strings.t("bar.more")) {}
+          .accessibilityIdentifier("bar-more")
+      } else {
+        GlassIconButton(.archive, label: strings.t("bar.archive")) {}
+          .accessibilityIdentifier("bar-archive")
+        capsule
+        GlassIconButton(.settings, label: strings.t("bar.settings"), action: onSettings)
+          .accessibilityIdentifier("bar-settings")
+      }
+    }
+  }
+
+  private var capsule: some View {
+    let site = browser.hasPage ? hostOf(url: browser.activeTab?.url ?? "").replacingOccurrences(of: "www.", with: "", options: .anchored) : ""
+    let insecure = browser.activeTab?.url.hasPrefix("http:") ?? false
+    let label =
+      site.isEmpty
+      ? strings.t("bar.search") : strings.t(insecure ? "bar.searchOrEnterInsecure" : "bar.searchOrEnter", ["site": site])
+    return Button {
+      browser.search(inNewTab: false)
+    } label: {
+      HStack(spacing: Space.xs) {
+        if site.isEmpty {
+          Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium))
+        } else {
+          if insecure {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 13)).foregroundColor(.red)
+          }
+          Text(verbatim: site).font(.system(size: 15, weight: .medium)).lineLimit(1).truncationMode(.tail)
+        }
+      }
+      .foregroundColor(BayColor.foreground)
+      .frame(width: site.isEmpty ? 92 : 136, height: 20)
+      .padding(.vertical, 14)
+      .padding(.horizontal, Space.lg)
+      .bayCapsule()
+      .overlay(alignment: .bottom) { LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty) }
+    }
+    .buttonStyle(.pressFeedback)
+    .accessibilityLabel(Text(verbatim: label))
+    .accessibilityIdentifier("bar-search")
+  }
+}
+
+/// The number of open tabs on the corner of the Tabs button. The button's label says it, so VoiceOver skips it.
+struct TabCount: View {
+  let count: Int
+
+  var body: some View {
+    if count > 1 {
+      Text(verbatim: count > 99 ? "99+" : "\(count)")
+        .font(.system(size: 11, weight: .bold))
+        .foregroundColor(BayColor.background)
+        .padding(.horizontal, 4)
+        .frame(minWidth: 20, minHeight: 20)
+        .background(BayColor.foreground, in: Capsule())
+        .offset(x: 4, y: -4)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .accessibilityIdentifier("tab-count")
+    }
+  }
+}
+
+/// The thin line along the capsule's edge: it fills as the page loads and fades once the page is there.
+struct LoadProgress: View {
+  let state: NavigationState
+  @Environment(\.accessibilityReduceMotion) private var reduced
+
+  var body: some View {
+    GeometryReader { geometry in
+      Capsule()
+        .fill(BayColor.accent)
+        .frame(width: max(0, geometry.size.width - 48) * max(state.progress, 0.04), height: 2)
+        .padding(.leading, 24)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, 2)
+    }
+    .opacity(state.isLoading ? 1 : 0)
+    .animation(reduced ? nil : .easeOut(duration: Motion.settleDuration), value: state.progress)
+    .animation(.easeOut(duration: 0.22), value: state.isLoading)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+    .accessibilityIdentifier(state.isLoading ? "page-progress" : "")
+  }
+}
+
+/// A page that failed to load, in plain words, and a way to try again.
+struct PageErrorView: View {
+  @EnvironmentObject private var strings: Strings
+  let message: String
+  let retry: () -> Void
+
+  var body: some View {
+    let id = pageErrorId(message: message)
+    let known = id != .unknown
+    VStack(spacing: Space.md) {
+      BayIconView(describePageError(message: message).kind == .offline ? .offline : .error, size: 40, color: BayColor.muted)
+      BayText(strings.t("pageError.\(id).title"), variant: .headline).multilineTextAlignment(.center)
+      BayText(known ? strings.t("pageError.\(id).detail") : message, variant: .callout, tone: .muted).multilineTextAlignment(.center)
+      PillButton(strings.t("pageError.tryAgain"), action: retry).accessibilityIdentifier("page-error-retry")
+    }
+    .padding(Space.xl)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(BayColor.background)
+    .accessibilityIdentifier("page-error")
+  }
+}

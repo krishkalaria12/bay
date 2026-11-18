@@ -6,13 +6,18 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import bay.app.browser.BrowserModel
+import bay.app.browser.BrowserScreen
+import bay.design.BayTheme
 import bay.engine.Engine
 import bay.engine.EngineHost
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -77,9 +82,19 @@ class MainActivity : ComponentActivity(), EngineHost {
         enableEdgeToEdge()
         val strings = Strings()
         model = AppModel(applicationContext, strings.t("sync.bar"))
+        val browser = BrowserModel(this, model)
         setContent {
-            var showsEngine by remember { mutableStateOf(false) }
-            if (showsEngine) EngineCheck(model, close = { showsEngine = false }) else StoreCheck(model, strings, openEngine = { showsEngine = true })
+            // The stand-in screens (sync, the engine check) sit behind Settings until it lands (plan N5).
+            var checks by remember { mutableStateOf<String?>(null) }
+            BayTheme {
+                Box(Modifier.semantics { testTagsAsResourceId = true }) {
+                    when (checks) {
+                        "store" -> StoreCheck(model, strings, openEngine = { checks = "engine" }, close = { checks = null })
+                        "engine" -> EngineCheck(model, close = { checks = "store" })
+                        else -> BrowserScreen(browser, strings, onSettings = { checks = "store" })
+                    }
+                }
+            }
         }
         window.decorView.announceContentChangesToUiAutomator()
     }
@@ -98,12 +113,13 @@ class MainActivity : ComponentActivity(), EngineHost {
 }
 
 /**
- * A stand-in screen until the browser screen lands (plan N4): the space's tabs from the core's store, and a button
- * that adds one, to prove the store, its saving and the bindings work end to end.
+ * The stand-in screen behind Settings until it lands (plan N5): the space's tabs from the core's store, a button that
+ * adds one, sync, the link resolver and the engine check, to prove each works end to end.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun StoreCheck(model: AppModel, strings: Strings, openEngine: () -> Unit) {
+private fun StoreCheck(model: AppModel, strings: Strings, openEngine: () -> Unit, close: () -> Unit) {
+    BackHandler(onBack = close)
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.spacedBy(12.dp),

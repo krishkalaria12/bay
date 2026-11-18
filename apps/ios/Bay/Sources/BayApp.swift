@@ -5,17 +5,27 @@ import SwiftUI
 struct BayApp: App {
   @StateObject private var strings: Strings
   @StateObject private var model: AppModel
+  @StateObject private var browser: BrowserModel
+  @State private var showsChecks = false
   @Environment(\.scenePhase) private var scenePhase
 
   init() {
     let strings = Strings()
+    let model = AppModel(barTitle: strings.t("sync.bar"))
     _strings = StateObject(wrappedValue: strings)
-    _model = StateObject(wrappedValue: AppModel(barTitle: strings.t("sync.bar")))
+    _model = StateObject(wrappedValue: model)
+    _browser = StateObject(wrappedValue: BrowserModel(app: model))
   }
 
   var body: some Scene {
     WindowGroup {
-      StoreCheckView()
+      BrowserScreen(browser: browser, onSettings: { showsChecks = true })
+        // The stand-in screens (sync, the engine check) sit behind Settings until it lands (plan N5).
+        .sheet(isPresented: $showsChecks) {
+          StoreCheckView()
+            .environmentObject(strings)
+            .environmentObject(model)
+        }
         .environmentObject(strings)
         .environmentObject(model)
     }
@@ -34,8 +44,8 @@ struct BayApp: App {
   }
 }
 
-/// A stand-in screen until the browser screen lands (plan N4): the space's tabs from the core's store, and a button
-/// that adds one, to prove the store, its saving and the bindings work end to end.
+/// The stand-in screen behind Settings until it lands (plan N5): the space's tabs from the core's store, a button that
+/// adds one, sync, the link resolver and the engine check, to prove each works end to end.
 private struct StoreCheckView: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var model: AppModel

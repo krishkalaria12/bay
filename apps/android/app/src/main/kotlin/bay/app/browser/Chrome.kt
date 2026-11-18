@@ -1,0 +1,288 @@
+package bay.app.browser
+
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import bay.app.AppModel
+import bay.app.Strings
+import bay.core.PageErrorId
+import bay.core.PageErrorKind
+import bay.core.WallpaperId
+import bay.core.describePageError
+import bay.core.hostOf
+import bay.core.pageErrorId
+import bay.design.BayIcon
+import bay.design.BayIconView
+import bay.design.BayText
+import bay.design.IconSize
+import bay.design.PillButton
+import bay.design.Space
+import bay.design.TextTone
+import bay.design.TextVariant
+import bay.design.Theme
+import bay.design.pressFeedback
+import bay.design.wallpaperPalette
+import bay.engine.NavigationState
+
+/**
+ * The browser's pages: the loaded tabs' views in one container, the one showing on top. The views are kept across
+ * recompositions, so a page isn't reloaded when the screen around it changes. A page view is made only once the
+ * container is in a window, as on iOS.
+ */
+@Composable
+fun PagesHost(browser: BrowserModel, modifier: Modifier = Modifier) {
+    val mounted = browser.mounted
+    val tabs = browser.app.tabs
+    AndroidView(
+        factory = { context -> FrameLayout(context) },
+        modifier = modifier,
+        update = { container ->
+            fun sync() {
+                for ((index, id) in mounted.withIndex()) {
+                    val tab = tabs.firstOrNull { it.id == id } ?: continue
+                    val view = browser.view(tab)
+                    if (view.parent !== container) {
+                        (view.parent as? ViewGroup)?.removeView(view)
+                        container.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    }
+                    val showing = index == 0
+                    view.visibility = if (showing) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                    view.isActive = showing
+                    if (showing) view.bringToFront()
+                }
+            }
+            if (container.isAttachedToWindow) sync() else container.post { sync() }
+        },
+    )
+}
+
+private val tints = listOf(0xFFDCE8F5, 0xFFF3E2D6, 0xFFE3EEDF, 0xFFECE1F2, 0xFFF5E9C9, 0xFFDDEEEE).map { Color(it) }
+
+/**
+ * The site's saved icon on a tile, else a monogram on a tint picked from its name. Icons are local files, so this
+ * never loads anything from the network. It always sits beside the site's name, so TalkBack skips it.
+ */
+@Composable
+fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false, color: Color? = null) {
+    val host = hostOf(url)
+    val file = app.favicons[host]
+    val bitmap = remember(file) { file?.let { Uri.parse(it).path }?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() } }
+    val corner = RoundedCornerShape(size * 0.28f)
+    val modifier = Modifier.clearAndSetSemantics {}
+    if (bitmap != null) {
+        if (bare) {
+            Image(bitmap.asImageBitmap(), null, modifier.size(size).clip(RoundedCornerShape(size * 0.14f)))
+        } else {
+            Box(
+                modifier.size(size).background(if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color.White, corner)
+                    .border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(bitmap.asImageBitmap(), null, Modifier.size(size * 0.72f).clip(RoundedCornerShape(size * 0.14f)))
+            }
+        }
+        return
+    }
+    val letter = host.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•"
+    if (bare) {
+        Box(modifier.size(size), contentAlignment = Alignment.Center) {
+            BayText(letter, variant = TextVariant.HEADLINE, weight = FontWeight.SemiBold, color = color)
+        }
+    } else {
+        var hash = 0
+        host.forEach { hash = hash * 31 + it.code }
+        Box(
+            modifier.size(size).background(tints[Math.floorMod(hash, tints.size)], corner).border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
+            contentAlignment = Alignment.Center,
+        ) {
+            BayText(letter, variant = TextVariant.FOOTNOTE, weight = FontWeight.SemiBold, color = Color(0xFF26313D))
+        }
+    }
+}
+
+/** Bay's start-page wallpaper: a wash under a fine dot grid, the theme's background for Plain. */
+@Composable
+fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
+    val palette = wallpaperPalette(id.name.lowercase(), isSystemInDarkTheme())
+    if (palette == null) {
+        Box(modifier.fillMaxSize().background(Theme.colors.background).semantics { invisibleToUser() })
+        return
+    }
+    Canvas(modifier.fillMaxSize().semantics { invisibleToUser() }) {
+        drawRect(Brush.verticalGradient(0f to palette.top, 0.55f to palette.middle, 1f to palette.bottom))
+        val step = 14.dp.toPx()
+        val dot = palette.dot.copy(alpha = palette.dotOpacity)
+        var y = step / 2
+        while (y < size.height) {
+            var x = step / 2
+            while (x < size.width) {
+                drawCircle(dot, 0.9.dp.toPx(), Offset(x, y))
+                x += step
+            }
+            y += step
+        }
+    }
+}
+
+/** One of the bar's round buttons, or its capsule: flat and translucent with a hairline edge, as Arc Search draws them. */
+@Composable
+private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, content: @Composable () -> Unit) {
+    val colors = Theme.colors
+    Box(
+        modifier = modifier
+            .testTag(id)
+            .pressFeedback(onClick = onClick)
+            // The label says what the button does; the icon or text inside it isn't read again.
+            .clearAndSetSemantics { contentDescription = label; role = Role.Button }
+            .size(width, 52.dp)
+            .clip(CircleShape)
+            .background(colors.flatSurface, CircleShape)
+            .border(1.dp, colors.hairline, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+/** The floating bar: archive, search and settings over the start page; tabs, the site and more over a page. */
+@Composable
+fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val app = browser.app
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        if (browser.hasPage) {
+            val count = app.tabs.size
+            Box {
+                BarButton(
+                    "bar-tabs",
+                    if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs"),
+                    { browser.overlay = Overlay.TABS },
+                ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
+                TabCount(count, Modifier.align(Alignment.TopEnd))
+            }
+            Capsule(browser, strings)
+            BarButton("bar-more", strings.t("bar.more"), {}) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+        } else {
+            BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            Capsule(browser, strings)
+            BarButton("bar-settings", strings.t("bar.settings"), onSettings) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
+        }
+    }
+}
+
+@Composable
+private fun Capsule(browser: BrowserModel, strings: Strings) {
+    val url = browser.activeTab?.url.orEmpty()
+    val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
+    val insecure = url.startsWith("http:")
+    val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
+    Box {
+        BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = if (site.isEmpty()) 128.dp else 172.dp) {
+            if (site.isEmpty()) {
+                BayIconView(BayIcon.SEARCH, size = IconSize.control)
+            } else {
+                Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
+                    if (insecure) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
+                    BayText(site, variant = TextVariant.CALLOUT, weight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+        }
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.align(Alignment.BottomStart))
+    }
+}
+
+/** The number of open tabs on the corner of the Tabs button. The button's label says it, so TalkBack skips it. */
+@Composable
+fun TabCount(count: Int, modifier: Modifier = Modifier) {
+    if (count < 2) return
+    val colors = Theme.colors
+    Box(
+        modifier.offset(4.dp, (-4).dp).sizeIn(minWidth = 20.dp, minHeight = 20.dp).background(colors.foreground, CircleShape).padding(horizontal = 4.dp)
+            .testTag("tab-count").clearAndSetSemantics {},
+        contentAlignment = Alignment.Center,
+    ) {
+        BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = colors.background)
+    }
+}
+
+/** The thin line along the capsule's edge: it fills as the page loads and fades once the page is there. */
+@Composable
+fun LoadProgress(state: NavigationState, modifier: Modifier = Modifier) {
+    val filled by animateFloatAsState(maxOf(state.progress.toFloat(), 0.04f), tween(240), label = "progress")
+    val shown by animateFloatAsState(if (state.isLoading) 1f else 0f, tween(if (state.isLoading) 120 else 220), label = "shown")
+    if (shown == 0f) return
+    Box(
+        modifier.padding(start = 24.dp, end = 24.dp, bottom = 2.dp).width(124.dp).height(2.dp).alpha(shown)
+            .testTag("page-progress").clearAndSetSemantics {},
+    ) {
+        Box(Modifier.fillMaxWidth(filled).height(2.dp).background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+    }
+}
+
+/** A page that failed to load, in plain words, and a way to try again. */
+@Composable
+fun PageError(message: String, strings: Strings, retry: () -> Unit, modifier: Modifier = Modifier) {
+    val id = pageErrorId(message)
+    val key = when (id) {
+        PageErrorId.OFFLINE -> "offline"
+        PageErrorId.NOT_FOUND -> "notFound"
+        PageErrorId.TIMEOUT -> "timeout"
+        PageErrorId.REFUSED -> "refused"
+        PageErrorId.CERTIFICATE -> "certificate"
+        PageErrorId.UNKNOWN -> "unknown"
+    }
+    Column(
+        modifier.fillMaxSize().background(Theme.colors.background).padding(Space.xl).testTag("page-error"),
+        verticalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        BayIconView(if (describePageError(message).kind == PageErrorKind.OFFLINE) BayIcon.OFFLINE else BayIcon.ERROR, size = 40.dp, color = Theme.colors.muted)
+        BayText(strings.t("pageError.$key.title"), variant = TextVariant.HEADLINE, textAlign = TextAlign.Center)
+        BayText(if (id == PageErrorId.UNKNOWN) message else strings.t("pageError.$key.detail"), variant = TextVariant.CALLOUT, tone = TextTone.MUTED, textAlign = TextAlign.Center)
+        PillButton(strings.t("pageError.tryAgain"), Modifier.testTag("page-error-retry"), onClick = retry)
+    }
+}
