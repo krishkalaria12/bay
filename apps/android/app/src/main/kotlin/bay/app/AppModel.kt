@@ -30,6 +30,8 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -147,7 +149,7 @@ class AppModel(context: Context, barTitle: String) {
         cycles?.cancel()
         cycles = scope.launch {
             while (isActive) {
-                sync.syncNow()
+                cycle()
                 delay(CYCLE_MS)
             }
         }
@@ -159,8 +161,11 @@ class AppModel(context: Context, barTitle: String) {
     }
 
     fun syncNow() {
-        scope.launch { sync.syncNow() }
+        scope.launch { cycle() }
     }
+
+    /** One cycle. Once started it runs to its end: cancelling the job waiting on it would throw away what it read. */
+    private suspend fun cycle() = withContext(NonCancellable) { sync.syncNow() }
 
     /** Shows a code and asks every two seconds whether a computer has let this phone in. */
     fun pair() {
@@ -169,7 +174,8 @@ class AppModel(context: Context, barTitle: String) {
             var state: Pairing? = sync.startPairing()
             while (isActive && state is Pairing.Waiting) {
                 delay(PAIRING_POLL_MS)
-                state = sync.pollPairing()
+                // A poll that finds the phone let in goes on to join, even if the code's page closes meanwhile.
+                state = withContext(NonCancellable) { sync.pollPairing() }
             }
         }
     }
@@ -192,7 +198,7 @@ class AppModel(context: Context, barTitle: String) {
         kick?.cancel()
         kick = scope.launch {
             delay(AFTER_CHANGE_MS)
-            sync.syncNow()
+            cycle()
         }
     }
 
