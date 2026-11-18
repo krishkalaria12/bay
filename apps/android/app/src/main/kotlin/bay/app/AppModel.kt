@@ -209,7 +209,15 @@ class AppModel(context: Context, barTitle: String) {
         recentHistory = store.history(activeSpaceId, "", 0u, 24u)
         favicons = store.favicons()
         revision = store.revision()
+        val hasPrivate = store.tabs().any { it.private }
+        if (hasPrivate != privateSession) {
+            privateSession = hasPrivate
+            Engine.setPrivateSessionActive(hasPrivate)
+        }
     }
+
+    /** Whether the engine keeps the private session for tabs whose views are unloaded. */
+    private var privateSession = false
 
     companion object {
         private const val CYCLE_MS = 30_000L

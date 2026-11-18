@@ -32,6 +32,8 @@ final class AppModel: ObservableObject {
   /// What the content blocker is doing, for Settings.
   @Published private(set) var blockerStatus: ContentBlocker.Status = .off
   private var blocker: ContentBlocker?
+  /// Whether the engine keeps the private session for tabs whose views are unloaded.
+  private var privateSession = false
   /// The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves.
   @Published private(set) var revision: UInt64 = 0
   /// Hears each download update once the store has it, for the download toast.
@@ -175,6 +177,11 @@ final class AppModel: ObservableObject {
     recentHistory = store.history(spaceId: activeSpaceId, query: "", offset: 0, limit: 24)
     favicons = store.favicons()
     revision = store.revision()
+    let hasPrivate = store.tabs().contains { $0.private }
+    if hasPrivate != privateSession {
+      privateSession = hasPrivate
+      Engine.setPrivateSessionActive(hasPrivate)
+    }
   }
 }
 
