@@ -39,6 +39,18 @@ pub const SPACE_EMOJI: [&str; 35] = [
     "🧠", "📸", "🗃️",
 ];
 
+/// The emoji a space can wear, in the space editor's order.
+#[uniffi::export]
+pub fn space_emoji() -> Vec<String> {
+    SPACE_EMOJI.iter().map(|emoji| emoji.to_string()).collect()
+}
+
+/// The space colours, in the space editor's order.
+#[uniffi::export]
+pub fn space_colors() -> Vec<SpaceColor> {
+    SPACE_COLORS.to_vec()
+}
+
 /// Room for one emoji, however many code points it takes.
 pub const SPACE_ICON_LENGTH: usize = 16;
 
