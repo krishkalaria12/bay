@@ -92,6 +92,12 @@ class AppModel(context: Context, barTitle: String) {
 
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** What the content blocker is doing, for Settings. */
+    var blockerStatus by mutableStateOf<BlockerStatus>(BlockerStatus.Off)
+        private set
+    // Made on first use, after the engine has started.
+    private val blocker by lazy { ContentBlocker(context.applicationContext, documents, http, scope) { blockerStatus = it } }
     private var cycles: Job? = null
     private var kick: Job? = null
     private var pairing: Job? = null
@@ -187,6 +193,7 @@ class AppModel(context: Context, barTitle: String) {
         activeTabId = store.activeTabId()
         tabs = store.spaceTabs(activeSpaceId)
         preferences = store.preferences()
+        blocker.follow(preferences)
         downloads = store.downloads()
         pins = store.pinnedSites(activeSpaceId)
         folders = store.folders(activeSpaceId)

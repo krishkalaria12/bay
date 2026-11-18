@@ -29,6 +29,9 @@ final class AppModel: ObservableObject {
   @Published private(set) var recentHistory: [HistoryEntry] = []
   /// Saved site icons (local file addresses) by host.
   @Published private(set) var favicons: [String: String] = [:]
+  /// What the content blocker is doing, for Settings.
+  @Published private(set) var blockerStatus: ContentBlocker.Status = .off
+  private var blocker: ContentBlocker?
   /// The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves.
   @Published private(set) var revision: UInt64 = 0
   /// Hears the system's media controls (lock screen, Control Center): the screen showing the media sets it.
@@ -59,6 +62,7 @@ final class AppModel: ObservableObject {
     )
     store.observe(observer: StoreChanges(model: self))
     sync.observe(observer: SyncChanges(model: self))
+    blocker = ContentBlocker(documentsDir: documents, http: http) { [weak self] status in self?.blockerStatus = status }
     refresh()
   }
 
@@ -159,6 +163,7 @@ final class AppModel: ObservableObject {
     activeTabId = store.activeTabId()
     tabs = store.spaceTabs(spaceId: activeSpaceId)
     preferences = store.preferences()
+    blocker?.follow(preferences)
     downloads = store.downloads()
     pins = store.pinnedSites(spaceId: activeSpaceId)
     folders = store.folders(spaceId: activeSpaceId)

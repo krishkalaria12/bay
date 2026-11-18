@@ -49,7 +49,7 @@ final class SettingsModel: ObservableObject {
       version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
       prefs: prefs,
       engines: builtInEngines().map { EngineChoice(id: $0.id, name: $0.name) },
-      blockerDetail: "",
+      blockerDetail: blockerDetail,
       wallpaperName: strings.t("settings.wallpapers.\(prefs.wallpaper)"),
       appIconName: nil,
       language: LanguageState(saved: strings.saved, current: strings.locale, device: strings.device),
@@ -59,6 +59,16 @@ final class SettingsModel: ObservableObject {
       clearStage: clearStage,
       sync: app.syncView,
       now: AppModel.now())
+  }
+
+  /// What Privacy says about the blocker under its switch.
+  private var blockerDetail: String {
+    switch app.blockerStatus {
+    case .ready(let lists): return strings.t("settings.blocker.ready", ["lists": "\(lists)"])
+    case .loading: return strings.t("settings.blocker.loading")
+    case .failed: return strings.t("settings.blocker.failed")
+    case .off: return strings.t("settings.blocker.off")
+    }
   }
 
   var counts: IndexCounts {

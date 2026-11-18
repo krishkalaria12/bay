@@ -1495,8 +1495,10 @@ impl BrowserStore {
               and Inspect (<code>page-hide-elements</code>, <code>page-inspect</code>): the element picker in the bar's place, hiding what's picked for the site
               (in memory only for private tabs) with undo, reset and the menu's "show hidden" row, and the inspect sheet (the font and where it comes from,
               size, colours, matching CSS, copy for an agent); the core reads the picker's and inspector's reports (<code>parsePickedMessage</code>,
-              <code>parseInspectedElement</code>, <code>fontOrigin</code>). Left: import, content blocking, app icon, sync status and scheduling (see Known
-              gaps).
+              <code>parseInspectedElement</code>, <code>fontOrigin</code>). Content blocking: the core keeps the eight filter lists on disk
+              (<code>FilterListStore</code>: downloaded once a day at most, a server's same ETag or Last-Modified keeps the saved copy, a version that names
+              their text), the apps hand them to the engines while "Block ads and trackers" is on, with each site's own groups and the tracking parameters
+              (<code>trackingParametersJson</code>), and Privacy says how many lists block. Left: import, app icon, sync status and scheduling (see Known gaps).
             </p>
             <ul>
               <li>
@@ -1784,18 +1786,10 @@ impl BrowserStore {
             Android: a bookmark saved before the page has its title keeps the address without its scheme as its title ("en.wikipedia.org/wiki/Bay"), so the
             sheet shows that rather than the site's name; the title should follow the page once it loads.
           </li>
-          <li>
-            The native apps don't load the filter lists yet, so the blocking card's count stays empty and its pause only reaches the engine's paused hosts; both
-            work once content blocking is wired (N5).
-          </li>
           <li>The blocking tip isn't ported yet; it comes with content blocking.</li>
           <li>
             Saved logins aren't ported: the sign-in sheet has no "Save password" switch, a site with a saved login is still asked, and Settings' Passwords page
             has nothing to list. iOS offers its own password saving on the sheet's fields meanwhile.
-          </li>
-          <li>
-            Site settings' "Block ads / trackers / cookie banners" switches are saved but don't reach the engine yet (<code>setSiteBlocking</code>); they take
-            effect once content blocking is wired (N5).
           </li>
           <li>
             Android: the link menu has no live preview of the linked page. A second page view drawing over the tab leaves the tab blank once it goes, even after

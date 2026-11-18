@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import bay.app.AppModel
+import bay.app.BlockerStatus
 import bay.app.Strings
 import bay.app.browser.BrowserModel
 import bay.app.browser.Panel
@@ -87,7 +88,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 version,
                 prefs,
                 builtInEngines().map { EngineChoice(it.id, it.name) },
-                "",
+                blockerDetail,
                 strings.t("settings.wallpapers.${prefs.wallpaper.name.lowercase()}"),
                 null,
                 LanguageState(strings.saved, strings.locale, strings.device),
@@ -98,6 +99,15 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 app.syncView,
                 AppModel.now(),
             )
+        }
+
+    /** What Privacy says about the blocker under its switch. */
+    private val blockerDetail: String
+        get() = when (val status = app.blockerStatus) {
+            is BlockerStatus.Ready -> strings.t("settings.blocker.ready", mapOf("lists" to "${status.lists}"))
+            BlockerStatus.Loading -> strings.t("settings.blocker.loading")
+            BlockerStatus.Failed -> strings.t("settings.blocker.failed")
+            BlockerStatus.Off -> strings.t("settings.blocker.off")
         }
 
     val counts: IndexCounts
