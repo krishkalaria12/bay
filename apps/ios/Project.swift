@@ -116,9 +116,12 @@ let project = Project(
         "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
           "NSExtensionPointIdentifier": "com.apple.share-services",
-          "NSExtensionActivationRule": [
-            "NSExtensionActivationSupportsText": true,
-            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+          // iOS reads the rule from the attributes only; outside them, the extension matches nothing and never shows.
+          "NSExtensionAttributes": [
+            "NSExtensionActivationRule": [
+              "NSExtensionActivationSupportsText": true,
+              "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            ],
           ],
           "NSExtensionPrincipalClass": "$(PRODUCT_MODULE_NAME).BayShareController",
         ],

@@ -24,52 +24,61 @@ final class BayShareController: UIViewController {
 
   /** Reads the web item the user shared, then opens Bay with it and closes the sheet. */
   private static func handoff(_ context: NSExtensionContext?, from view: UIViewController) {
-    let close = {
+    let close: () -> Void = {
       context?.completeRequest(returningItems: [], completionHandler: nil)
     }
     let providers = (context?.inputItems ?? []).compactMap { $0 as? NSExtensionItem }.flatMap { $0.attachments ?? [] }
-    let shared = providers.first { $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }
 
-    if shared == nil {
+    guard let shared = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }) else {
       close()
       return
     }
 
-    shared!.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { value, _ in
+    shared.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { value, _ in
       let address: URL? = switch value {
       case let url as URL: url
       case let string as String: URL(string: string)
       default: nil
-      };
-
-      if let address {
-        Self.open(address, from: view)
       }
-      close()
+
+      // The item arrives off the main thread; opening Bay is UIKit's.
+      DispatchQueue.main.async {
+        if let address, let link = shareLink(address), open(link, from: view, then: close) {
+          return
+        }
+        close()
+      }
     }
   }
 
-  /** Opens the containing app from an extension, which UIApplication.open refuses to do: the responder chain reaches
-     the UIApplication behind it. The address travels as `bay://share?url=…` (B14), which the app answers as any
-     incoming link (B9); images and other non-page shares stay out, matching `incomingLink`. */
-  private static func open(_ url: URL, from view: UIViewController) {
+  /** The address as `bay://share?url=…` (B14), which the app answers as any incoming link (B9); images and other
+     non-page shares stay out, matching `incomingLink`. */
+  private static func shareLink(_ url: URL) -> URL? {
     guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-      return
+      return nil
     }
 
     var link = URLComponents()
     link.scheme = "bay"
     link.host = "share"
     link.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
+    return link.url
+  }
 
+  /** Opens the containing app from an extension, which `UIApplication.shared` isn't available to: the responder
+     chain reaches the UIApplication behind the sheet. Since iOS 18 only `open(_:options:completionHandler:)` opens
+     anything; the older `openURL:` does nothing. The sheet closes once Bay is asked. False when no application was
+     found. */
+  private static func open(_ url: URL, from view: UIViewController, then done: @escaping () -> Void) -> Bool {
     var responder: UIResponder? = view
 
-    while responder != nil {
-      if responder!.responds(to: Selector(("openURL:"))) {
-        responder!.perform(Selector(("openURL:")), with: link.url)
-        break
+    while let current = responder {
+      if let application = current as? UIApplication {
+        application.open(url, options: [:]) { _ in done() }
+        return true
       }
-      responder = responder!.next
+      responder = current.next
     }
+    return false
   }
 }

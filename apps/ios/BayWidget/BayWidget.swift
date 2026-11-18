@@ -1,5 +1,5 @@
 // Bay's widgets (B15, C7): search, voice and private browsing from the home screen and the Lock Screen. Each button
-// opens Bay at a `bay://` command (search, voice, private-tab), which JavaScript answers like any incoming link (B9).
+// opens Bay at a `bay://` command (search, voice, private-tab), which the app answers like any incoming link (B9).
 // No data of their own: one entry, never refreshed. The colours are Bay's own "Bay" wallpaper.
 
 import AppIntents
