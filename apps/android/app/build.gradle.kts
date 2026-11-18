@@ -12,6 +12,8 @@ android {
         applicationId = "in.krishkalaria.bay.mobile"
         versionCode = 1
         versionName = "1.0.0"
+        // Bay's engine is built for arm64 only; JNA's libraries for other ABIs would ship unused.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // Chromium maps its resource packs, ICU data and snapshots straight out of the APK, so they stay stored.
@@ -27,8 +29,10 @@ android {
         }
     }
 
-    // The dex goes in compressed, for a smaller download; the runtime compiles it at install either way.
+    // The engine's library and the dex go in compressed, for a smaller download (the Expo app measured 274 → 122 MB):
+    // the system extracts the libraries at install, and the runtime compiles the dex either way.
     packaging {
+        jniLibs.useLegacyPackaging = true
         dex.useLegacyPackaging = true
     }
 
