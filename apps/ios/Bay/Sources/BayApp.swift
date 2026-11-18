@@ -82,7 +82,7 @@ private struct StoreCheckView: View {
         .accessibilityIdentifier("core-version")
     }
     .padding()
-    .fullScreenCover(isPresented: $showsEngine) { EngineCheckView() }
+    .fullScreenCover(isPresented: $showsEngine) { EngineCheckView().environmentObject(model) }
   }
 }
 

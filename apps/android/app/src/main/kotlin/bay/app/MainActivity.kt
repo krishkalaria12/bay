@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity(), EngineHost {
         model = AppModel(applicationContext, strings.t("sync.bar"))
         setContent {
             var showsEngine by remember { mutableStateOf(false) }
-            if (showsEngine) EngineCheck(close = { showsEngine = false }) else StoreCheck(model, strings, openEngine = { showsEngine = true })
+            if (showsEngine) EngineCheck(model, close = { showsEngine = false }) else StoreCheck(model, strings, openEngine = { showsEngine = true })
         }
         window.decorView.announceContentChangesToUiAutomator()
     }

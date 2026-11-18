@@ -21,6 +21,9 @@ final class EngineControl: ObservableObject {
   @Published private(set) var failure: NavigationFailure?
   @Published private(set) var blocked = 0
   @Published private(set) var lastMessage: String?
+  /// What the page's media last reported.
+  @Published private(set) var media: MediaReport?
+  private var timing = initialTiming()
 
   init() {
     view.stateKey = "engine-check"
@@ -35,21 +38,52 @@ final class EngineControl: ObservableObject {
     case .navigation(let next):
       state = next
       if next.isLoading { failure = nil }
+      // The media watcher goes on each new document, as the browser screen will run it.
+      let plan = scriptsFor(timing: timing, state: NavigationReport(url: next.url, progress: next.progress, isLoading: next.isLoading), hasRules: false)
+      timing = plan.timing
+      if plan.watchMedia { run(.watchMedia) }
     case .failure(let error): failure = error
     case .blockedCount(let count): blocked = count
-    case .pageMessage(let message): lastMessage = message
+    case .pageMessage(let message):
+      lastMessage = message
+      if let report = parseMediaMessage(message: message) {
+        media = report
+        // The lock screen and Control Center show it, and their buttons come back through `control`.
+        Engine.setMediaSession(title: report.title, site: URL(string: state.url)?.host ?? "", playing: report.playing)
+      }
     case .pageRequest(let request):
       // The debug screen has no sheet: it turns every request down so the page doesn't wait.
       view.answerPageRequest(id: request.id, accepted: false, value: nil, username: nil, password: nil)
     default: break
     }
   }
+
+  /// What the system's media controls asked for, done by the page's own media.
+  func control(_ action: MediaControl) {
+    switch action {
+    case .toggle: run(.toggleMedia)
+    case .stop: run(.pauseMedia)
+    case .skipForward: run(.seekMedia, args: ["seconds": 10])
+    case .skipBackward: run(.seekMedia, args: ["seconds": -10])
+    }
+  }
+
+  func close() {
+    media = nil
+    Engine.setMediaSession(title: nil, site: "", playing: false)
+  }
+
+  private func run(_ script: PageScript, args: [String: Any]? = nil) {
+    Task { _ = try? await view.runScript(script, args: args) }
+  }
 }
 
-/// A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script and
-/// blocks with a small test list, to prove the engine works without Expo before the browser screen lands (N4).
+/// A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script, blocks
+/// with a small test list, downloads, and shows the page's media on the lock screen, to prove the engine works without
+/// Expo before the browser screen lands (N4).
 struct EngineCheckView: View {
   @StateObject private var control = EngineControl()
+  @EnvironmentObject private var model: AppModel
   @Environment(\.dismiss) private var dismiss
   @State private var address = "https://www.bbc.com/news"
   @State private var scriptResult = ""
@@ -82,6 +116,28 @@ struct EngineCheckView: View {
           .accessibilityIdentifier("engine-state")
         Text(verbatim: "Blocking: \(blocking) · blocked \(control.blocked)").accessibilityIdentifier("engine-blocked")
         if !scriptResult.isEmpty { Text(verbatim: "Script: \(scriptResult)").accessibilityIdentifier("engine-script-result") }
+        if let media = control.media {
+          HStack {
+            Text(verbatim: "Media: \(media.playing ? "playing" : "paused") · \(media.title)").accessibilityIdentifier("engine-media")
+            Button(media.playing ? "Pause" : "Play") { control.control(.toggle) }.accessibilityIdentifier("engine-media-toggle")
+          }
+        }
+        if let download = model.downloads.first {
+          HStack {
+            Text(verbatim: "Download: \(download.filename) · \(download.state) · \(download.received)/\(download.total)")
+              .accessibilityIdentifier("engine-download")
+            if let path = download.path {
+              Button("Open") {
+                do {
+                  try Engine.openDownload(path)
+                } catch {
+                  scriptResult = error.localizedDescription
+                }
+              }
+              .accessibilityIdentifier("engine-download-open")
+            }
+          }
+        }
         if let failure = control.failure {
           Text(verbatim: "\(failure.code): \(failure.message)").foregroundStyle(.red).accessibilityIdentifier("engine-failure")
         }
@@ -92,7 +148,14 @@ struct EngineCheckView: View {
       EngineHost(control: control)
     }
     .padding(.horizontal)
-    .onAppear { if control.state.url.isEmpty { go() } }
+    .onAppear {
+      model.mediaControl = { [weak control] action in control?.control(action) }
+      if control.state.url.isEmpty { go() }
+    }
+    .onDisappear {
+      model.mediaControl = nil
+      control.close()
+    }
   }
 
   private func go() {

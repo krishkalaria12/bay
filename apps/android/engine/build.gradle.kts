@@ -34,6 +34,8 @@ android {
         getByName("main") {
             // Scriptlet and $redirect stand-ins for the blocker (uBlock Origin's and Brave's), as resources.json.
             assets.srcDir(rootDir.resolve("../../packages/adblock/resources"))
+            // Page scripts, one copy shared with the Expo app (D13), as pagescripts.json.
+            assets.srcDir(rootDir.resolve("../../packages/mobile-pagescripts/resources"))
         }
     }
 }

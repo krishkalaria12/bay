@@ -13,6 +13,7 @@ import bay.core.BrowserPreferences
 import bay.core.BrowserSpace
 import bay.core.BrowserStore
 import bay.core.BrowserTab
+import bay.core.DownloadItem
 import bay.core.Pairing
 import bay.core.PhoneSync
 import bay.core.StoreObserver
@@ -20,6 +21,7 @@ import bay.core.SyncObserver
 import bay.core.SyncView
 import bay.core.resolveLink
 import bay.engine.Engine
+import bay.engine.MediaControl
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +60,13 @@ class AppModel(context: Context, barTitle: String) {
     var resolved by mutableStateOf<String?>(null)
         private set
 
+    /** Downloads, newest first. */
+    var downloads by mutableStateOf(emptyList<DownloadItem>())
+        private set
+
+    /** Hears the system's media controls (the media notification): the screen showing the media sets it. */
+    var mediaControl: ((MediaControl) -> Unit)? = null
+
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var cycles: Job? = null
@@ -71,7 +80,10 @@ class AppModel(context: Context, barTitle: String) {
 
     init {
         // Downloads keep reporting after their tab closes, so the store hears them here.
-        Engine.start(downloads = { update -> main.post { store.dispatch(Action.Download(update, now())) } }, media = {})
+        Engine.start(
+            downloads = { update -> main.post { store.dispatch(Action.Download(update, now())) } },
+            media = { control -> mediaControl?.invoke(control) },
+        )
         store.observe(object : StoreObserver {
             override fun changed(revision: ULong) {
                 main.post { storeChanged() }
@@ -152,6 +164,7 @@ class AppModel(context: Context, barTitle: String) {
         activeTabId = store.activeTabId()
         tabs = store.spaceTabs(activeSpaceId)
         preferences = store.preferences()
+        downloads = store.downloads()
     }
 
     companion object {

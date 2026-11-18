@@ -143,8 +143,12 @@ let project = Project(
       bundleId: "\(bundleId).engine",
       deploymentTargets: deploymentTargets,
       sources: ["BayEngine/Sources/**"],
-      // Scriptlet and $redirect stand-ins for the blocker (uBlock Origin's and Brave's resources).
-      resources: ["../../packages/adblock/resources/resources.json"],
+      resources: [
+        // Scriptlet and $redirect stand-ins for the blocker (uBlock Origin's and Brave's resources).
+        "../../packages/adblock/resources/resources.json",
+        // Page scripts, one copy shared with the Expo app (D13).
+        "../../packages/mobile-pagescripts/resources/pagescripts.json",
+      ],
       dependencies: [
         .target(name: "BayCore"),
         .sdk(name: "WebKit", type: .framework),

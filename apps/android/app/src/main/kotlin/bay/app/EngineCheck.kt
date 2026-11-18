@@ -1,5 +1,6 @@
 package bay.app
 
+import android.net.Uri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,20 +35,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import bay.core.MediaReport
+import bay.core.NavigationReport
+import bay.core.initialTiming
+import bay.core.parseMediaMessage
+import bay.core.scriptsFor
 import bay.engine.BayEngineView
 import bay.engine.Engine
 import bay.engine.EngineEvent
+import bay.engine.MediaControl
+import bay.engine.PageScript
+import bay.engine.runScript
 import bay.engine.NavigationState
 import java.io.File
 import kotlinx.coroutines.launch
 
 /**
- * A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script and
- * blocks with a small test list, to prove Bay's Chromium works without Expo before the browser screen lands (N4).
+ * A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script, blocks
+ * with a small test list, downloads, and shows the page's media in the media notification, to prove Bay's Chromium
+ * works without Expo before the browser screen lands (N4).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun EngineCheck(close: () -> Unit) {
+fun EngineCheck(model: AppModel, close: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var address by remember { mutableStateOf("https://www.bbc.com/news") }
@@ -56,6 +66,8 @@ fun EngineCheck(close: () -> Unit) {
     var blocked by remember { mutableIntStateOf(0) }
     var blocking by remember { mutableStateOf("off") }
     var scriptResult by remember { mutableStateOf("") }
+    var media by remember { mutableStateOf<MediaReport?>(null) }
+    val timing = remember { arrayOf(initialTiming()) }
     val view = remember {
         BayEngineView(context).apply {
             stateKey = "engine-check"
@@ -64,6 +76,16 @@ fun EngineCheck(close: () -> Unit) {
                     is EngineEvent.Navigation -> {
                         state = event.state
                         if (event.state.isLoading) failure = null
+                        // The media watcher goes on each new document, as the browser screen will run it.
+                        val report = NavigationReport(event.state.url, event.state.progress, event.state.isLoading)
+                        val plan = scriptsFor(timing[0], report, false)
+                        timing[0] = plan.timing
+                        if (plan.watchMedia) scope.launch { runCatching { runScript(PageScript.WATCH_MEDIA) } }
+                    }
+                    is EngineEvent.PageMessage -> parseMediaMessage(event.message)?.let { report ->
+                        media = report
+                        // The media notification shows it, and its buttons come back through `mediaControl`.
+                        Engine.setMediaSession(context, report.title, Uri.parse(state.url).host.orEmpty(), report.playing)
                     }
                     is EngineEvent.Failure -> failure = "${event.code}: ${event.message}"
                     is EngineEvent.BlockedCount -> blocked = event.count
@@ -75,7 +97,23 @@ fun EngineCheck(close: () -> Unit) {
             loadInitial(address)
         }
     }
-    DisposableEffect(view) { onDispose { view.dispose() } }
+    fun control(action: MediaControl) {
+        val (script, args) = when (action) {
+            MediaControl.TOGGLE -> PageScript.TOGGLE_MEDIA to null
+            MediaControl.STOP -> PageScript.PAUSE_MEDIA to null
+            MediaControl.SKIP_FORWARD -> PageScript.SEEK_MEDIA to mapOf("seconds" to 10)
+            MediaControl.SKIP_BACKWARD -> PageScript.SEEK_MEDIA to mapOf("seconds" to -10)
+        }
+        scope.launch { runCatching { view.runScript(script, args) } }
+    }
+    DisposableEffect(view) {
+        model.mediaControl = ::control
+        onDispose {
+            model.mediaControl = null
+            Engine.setMediaSession(context, null, "", false)
+            view.dispose()
+        }
+    }
 
     fun go() {
         val typed = address.trim()
@@ -135,6 +173,40 @@ fun EngineCheck(close: () -> Unit) {
             BasicText("Blocking: $blocking · blocked $blocked", modifier = Modifier.testTag("engine-blocked"), style = small)
             if (scriptResult.isNotEmpty()) {
                 BasicText("Script: $scriptResult", modifier = Modifier.testTag("engine-script-result"), style = small, maxLines = 1)
+            }
+            media?.let {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BasicText(
+                        "Media: ${if (it.playing) "playing" else "paused"} · ${it.title}",
+                        modifier = Modifier.weight(1f, fill = false).testTag("engine-media"),
+                        style = small,
+                        maxLines = 1,
+                    )
+                    BasicText(
+                        if (it.playing) "Pause" else "Play",
+                        modifier = Modifier.testTag("engine-media-toggle").clickable { control(MediaControl.TOGGLE) },
+                        style = link,
+                    )
+                }
+            }
+            model.downloads.firstOrNull()?.let { download ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BasicText(
+                        "Download: ${download.filename} · ${download.state} · ${download.received}/${download.total}",
+                        modifier = Modifier.weight(1f, fill = false).testTag("engine-download"),
+                        style = small,
+                        maxLines = 1,
+                    )
+                    download.path?.let { path ->
+                        BasicText(
+                            "Open",
+                            modifier = Modifier.testTag("engine-download-open").clickable {
+                                scope.launch { runCatching { Engine.openDownload(context, path) } }
+                            },
+                            style = link,
+                        )
+                    }
+                }
             }
             failure?.let { BasicText(it, modifier = Modifier.testTag("engine-failure"), style = small.copy(color = Color.Red), maxLines = 2) }
         }

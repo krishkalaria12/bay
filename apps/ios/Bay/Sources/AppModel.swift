@@ -19,6 +19,10 @@ final class AppModel: ObservableObject {
   @Published private(set) var syncView: SyncView
   /// Where the link check's link ended, while the stand-in screens prove the HTTP client.
   @Published private(set) var resolved: String?
+  /// Downloads, newest first.
+  @Published private(set) var downloads: [DownloadItem] = []
+  /// Hears the system's media controls (lock screen, Control Center): the screen showing the media sets it.
+  var mediaControl: ((MediaControl) -> Void)?
 
   /// How often the phone syncs while Bay is in front, and how long after a change.
   private static let cycleInterval: UInt64 = 30_000_000_000
@@ -41,7 +45,7 @@ final class AppModel: ObservableObject {
     // Downloads keep reporting after their tab closes, so the store hears them here.
     Engine.start(
       downloads: { [store] update in _ = store.dispatch(action: .download(update: update, now: Self.now())) },
-      media: { _ in }
+      media: { [weak self] control in self?.mediaControl?(control) }
     )
     store.observe(observer: StoreChanges(model: self))
     sync.observe(observer: SyncChanges(model: self))
@@ -145,6 +149,7 @@ final class AppModel: ObservableObject {
     activeTabId = store.activeTabId()
     tabs = store.spaceTabs(spaceId: activeSpaceId)
     preferences = store.preferences()
+    downloads = store.downloads()
   }
 }
 
