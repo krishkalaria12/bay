@@ -34,6 +34,8 @@ subtle = "2"
 hex = "0.4"
 async-trait = "0.1"
 pollster = "1"
+# Another browser's export: Safari's and Takeout's archives.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # The blocker's adblock-rust carries one change (packages/adblock/vendor/README.md); patches apply from the root.
 [patch.crates-io]

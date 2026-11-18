@@ -35,6 +35,7 @@ subtle.workspace = true
 async-trait.workspace = true
 hex.workspace = true
 icu_collator.workspace = true
+zip.workspace = true
 bay-adblock = { workspace = true, optional = true }
 
 [features]

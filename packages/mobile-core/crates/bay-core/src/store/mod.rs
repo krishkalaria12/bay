@@ -2,6 +2,7 @@
 
 pub mod bookmarks;
 pub mod handle;
+pub mod importing;
 pub mod model;
 pub mod parse;
 pub mod types;

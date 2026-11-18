@@ -5,6 +5,7 @@
 //! core each file's name and text.
 
 mod apply;
+mod archive;
 mod browsers;
 mod exports;
 mod tabs;
@@ -12,6 +13,7 @@ mod tabs;
 use serde::{Deserialize, Serialize};
 
 pub use apply::{bookmark_drafts, draft_link_count, export_notes};
+pub use archive::{ChosenExport, ExportReadError, MAX_FILE_SIZE, read_export_file};
 pub use browsers::{IOS_BROWSERS, TAKEOUT_URL, android_browsers, android_method, ios_browsers};
 pub use exports::{
     FAVORITES_LIMIT, bookmark_links, decode_entities, is_bookmarks_html, link_count,
