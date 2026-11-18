@@ -10,6 +10,9 @@ struct PagesHost: UIViewRepresentable {
   @ObservedObject var browser: BrowserModel
   /// False under the tab switcher: no page is active, and VoiceOver skips them all.
   var shown = true
+  /// How much of a page's bottom the floating bar covers, in points: WebKit keeps what a page pins to its bottom above
+  /// it, while content still scrolls under the bar. 0 while the bar is away.
+  var coveredBottom: CGFloat = 0
 
   final class Container: UIView {
     var sync: (() -> Void)?
@@ -29,17 +32,18 @@ struct PagesHost: UIViewRepresentable {
   func updateUIView(_ container: Container, context: Context) {
     let browser = browser
     let shown = shown
+    let covered = coveredBottom
     // SwiftUI's accessibilityHidden stops at the representable; the page views are UIKit's. Hidden, the pages stay in
     // the window and keep playing; the switcher covers them anyway.
     container.isHidden = !shown
     container.sync = { [weak container] in
       guard let container else { return }
-      MainActor.assumeIsolated { Self.sync(container, browser, shown: shown) }
+      MainActor.assumeIsolated { Self.sync(container, browser, shown: shown, covered: covered) }
     }
     container.sync?()
   }
 
-  @MainActor private static func sync(_ container: Container, _ browser: BrowserModel, shown: Bool) {
+  @MainActor private static func sync(_ container: Container, _ browser: BrowserModel, shown: Bool, covered: CGFloat) {
     guard container.window != nil else { return }
     let tabs = browser.app.tabs
     for (index, id) in browser.mounted.enumerated() {
@@ -51,6 +55,7 @@ struct PagesHost: UIViewRepresentable {
         container.addSubview(view)
       }
       let showing = index == 0 && shown
+      view.obscuredBottom = covered
       view.isHidden = !showing
       view.isActive = showing
       if showing { container.bringSubviewToFront(view) }

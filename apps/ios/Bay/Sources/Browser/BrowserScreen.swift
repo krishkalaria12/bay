@@ -13,6 +13,13 @@ struct BrowserScreen: View {
   var onChecks: () -> Void = {}
 
   private static let barHeight: CGFloat = 52
+  /// The screen's bottom safe area (the home indicator), which the bar sits above.
+  @State private var safeBottom: CGFloat = 0
+
+  /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
+  private var coveredBottom: CGFloat {
+    browser.barHidden && browser.overlay == .none ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
+  }
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -20,7 +27,7 @@ struct BrowserScreen: View {
       // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
       if browser.hasPage || !browser.mounted.isEmpty {
         let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
-        PagesHost(browser: browser, shown: shown)
+        PagesHost(browser: browser, shown: shown, coveredBottom: coveredBottom)
           .ignoresSafeArea(edges: .bottom)
           .opacity(shown ? 1 : 0)
           .allowsHitTesting(shown)
@@ -84,6 +91,13 @@ struct BrowserScreen: View {
           privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)))
       }
     }
+    .background(
+      GeometryReader { proxy in
+        Color.clear
+          .onAppear { safeBottom = proxy.safeAreaInsets.bottom }
+          .onChange(of: proxy.safeAreaInsets.bottom) { safeBottom = $0 }
+      }
+    )
     .baySheet(isPresented: Binding(get: { browser.panel != nil }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.88) {
       Group {
         switch browser.panel {

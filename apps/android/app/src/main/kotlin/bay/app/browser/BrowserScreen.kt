@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -63,7 +65,16 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
             val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
-            PagesHost(browser, shown, Modifier.fillMaxSize().statusBarsPadding())
+            // The engine has no inset for what covers a page, so the page ends above the floating bar (what a site pins
+            // to its bottom stays clear of it), over the page's own colour. Nothing is covered while the bar is away.
+            val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val covered = if (browser.barHidden && browser.overlay == Overlay.NONE) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
+            if (shown) {
+                val rgb = browser.pageColors[app.activeTabId]
+                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
+                Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
+            }
+            PagesHost(browser, shown, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered))
         }
         if (browser.overlay == Overlay.TABS) {
             Wallpaper(app.preferences.wallpaper)
