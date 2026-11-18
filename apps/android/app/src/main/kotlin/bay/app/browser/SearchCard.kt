@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -97,6 +98,9 @@ private object SearchSheet {
 /** How long typing has to pause before the engine is asked for suggestions. */
 private const val SUGGEST_DELAY_MS = 120L
 
+/** How long Go waits for the keyboard's last edits. */
+private const val GO_SETTLE_MS = 80L
+
 /** The search card: a field that grows out of the bar's capsule, with the rows for what's typed, on the keyboard. */
 @Composable
 fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, startPrivately: Boolean) {
@@ -122,6 +126,8 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     val result = app.store.suggestions(query, remote, initialText.ifEmpty { null }, AppModel.now().toDouble())
     val rows = result.items.filter { it is Suggestion.Page || it is Suggestion.Search || it is Suggestion.Calc }
     val completion = if (suppressed) "" else result.completion
+    // What the screen shows now, for Go, which reads it a moment after it's pressed.
+    val shown by rememberUpdatedState(Triple(query, completion, rows))
     val text = if (privately) Color(0xFFF4F4F5) else Theme.colors.foreground
     val secondary = if (privately) Color(0xFFA1A1AA) else Theme.colors.muted
 
@@ -210,11 +216,16 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
                     cursorBrush = SolidColor(Theme.colors.accent),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
                     onKeyboardAction = {
-                        // What's in the field now: Go can arrive before the screen has caught up with fast typing.
-                        val typed = field.text.toString()
-                        val first = rows.firstOrNull()
-                        if (typed == query && completion.isNotEmpty() && first != null) open(targetFor(first))
-                        else addressFor(typed, engine)?.let { open(OpenTarget.Url(it)) }
+                        // A hardware or injected Enter can arrive before the keyboard's last edits do; they land within
+                        // a moment, so Go reads the field once they have.
+                        scope.launch {
+                            delay(GO_SETTLE_MS)
+                            val typed = field.text.toString()
+                            val (shownQuery, shownCompletion, shownRows) = shown
+                            val first = shownRows.firstOrNull()
+                            if (typed == shownQuery && shownCompletion.isNotEmpty() && first != null) open(targetFor(first))
+                            else addressFor(typed, engine)?.let { open(OpenTarget.Url(it)) }
+                        }
                     },
                     modifier = Modifier.weight(1f).padding(start = Space.lg).focusRequester(focus).testTag("address-input")
                         .semantics { contentDescription = strings.t("search.placeholder") },
