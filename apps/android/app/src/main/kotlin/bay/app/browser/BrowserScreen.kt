@@ -119,7 +119,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
         } else {
             val active = browser.activeTab
-            SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || active?.private == true)
+            SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)

@@ -80,7 +80,8 @@ struct BrowserScreen: View {
       if browser.overlay == .search {
         SearchCard(
           browser: browser, initialText: browser.searchInNewTab ? "" : (browser.activeTab?.url ?? ""),
-          privately: browser.searchPrivately || (browser.activeTab?.private ?? false))
+          // A new tab starts as a normal one unless asked for private; editing a private tab's address stays private.
+          privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)))
       }
     }
     .baySheet(isPresented: Binding(get: { browser.panel != nil }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.88) {
