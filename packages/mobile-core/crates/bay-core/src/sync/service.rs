@@ -419,8 +419,12 @@ impl PhoneSync {
             taken
         };
         self.notify();
+        // A caller that gives up on the cycle drops it mid-way (a Kotlin job cancelled, say); the guard still lets the
+        // next one run.
+        let guard = CycleGuard(self);
         let deps = self.deps(&keys, Arc::new(StoreForSync(self.store.clone())), true);
         let result = run_cycle(&mut doc, &deps, false).await;
+        std::mem::forget(guard);
         {
             let mut inner = lock(&self.inner);
             inner.running = false;
@@ -440,6 +444,22 @@ impl PhoneSync {
             }
         }
         self.notify();
+    }
+}
+
+/// Releases a cycle that was dropped before it finished: what it learned is lost, and the next cycle starts over.
+struct CycleGuard<'a>(&'a PhoneSync);
+
+impl Drop for CycleGuard<'_> {
+    fn drop(&mut self) {
+        {
+            let mut inner = lock(&self.0.inner);
+            inner.running = false;
+            if inner.status == SyncStatus::Syncing {
+                inner.status = SyncStatus::Waiting;
+            }
+        }
+        self.0.notify();
     }
 }
 
@@ -523,6 +543,23 @@ mod tests {
             assert!(!sync.is_joined());
             assert_eq!(secrets.read(KEY.into()), None);
         });
+    }
+
+    #[test]
+    fn a_cycle_given_up_mid_way_lets_the_next_one_run() {
+        let relay = Arc::new(StandInRelay::default());
+        let sync = phone("dropped", &relay, &Arc::new(Secrets::default()));
+        pollster::block_on(sync.join_with_phrase(phrase_words(&[6; 32]).join(" "))).unwrap();
+        {
+            let mut inner = lock(&sync.inner);
+            inner.running = true;
+            inner.status = SyncStatus::Syncing;
+        }
+        drop(CycleGuard(&sync));
+        assert!(!lock(&sync.inner).running);
+        assert_eq!(sync.view().status, SyncStatus::Waiting);
+        pollster::block_on(sync.sync_now());
+        assert_ne!(sync.view().status, SyncStatus::Syncing);
     }
 
     #[test]
