@@ -383,6 +383,18 @@ impl BrowserStore {
             .unwrap_or(SiteSetting::EMPTY)
     }
 
+    /// The elements hidden on a page's site, as selectors.
+    pub fn hidden_selectors(&self, url: String) -> Vec<String> {
+        let host = crate::input::url::host_of(&url);
+        lock(&self.state)
+            .data
+            .preferences
+            .hidden_elements
+            .get(&host)
+            .cloned()
+            .unwrap_or_default()
+    }
+
     /// Whether a space's bookmarks hold this address.
     pub fn is_bookmarked(&self, space_id: String, url: String) -> bool {
         lock(&self.state)
@@ -492,6 +504,20 @@ mod tests {
         });
         assert!(store.is_bookmarked(PERSONAL_SPACE_ID.into(), url.into()));
         assert!(!store.is_bookmarked("work".into(), url.into()));
+
+        store.dispatch(Action::HiddenElements {
+            host: "example.com".into(),
+            selectors: vec!["#ad".into()],
+        });
+        assert_eq!(
+            store.hidden_selectors("https://www.example.com/b".into()),
+            ["#ad"]
+        );
+        assert!(
+            store
+                .hidden_selectors("https://other.org/".into())
+                .is_empty()
+        );
     }
 
     #[test]

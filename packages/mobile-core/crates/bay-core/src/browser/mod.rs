@@ -11,6 +11,7 @@ mod icons;
 mod links;
 mod logins;
 mod messages;
+mod picker;
 mod reader;
 mod resolve;
 mod timing;
@@ -21,6 +22,10 @@ pub use icons::{KNOWN_LIMIT, SHARP_WIDTH, icon_width, is_image, known_sites_with
 pub use links::{BayCommand, bay_command, incoming_link, share_link};
 pub use logins::{SavedLogin, format_saved_logins, origin_of, parse_saved_logins};
 pub use messages::{ImagePress, MediaReport, parse_image_press, parse_media_message};
+pub use picker::{
+    ColorSwatches, CssDeclaration, FontKind, FontOrigin, InspectedElement, InspectedFont,
+    InspectedRule, PickedElement, font_origin, parse_inspected_element, parse_picked_message,
+};
 pub use reader::{
     READER_SIZE_MAX, READER_SIZE_MIN, ReaderSizeSteps, ReaderThemeColors, reader_size_steps,
     reader_themes, reader_variables,
