@@ -26,6 +26,7 @@ struct DrawnBody: View {
   var body: some View {
     switch page {
     case .wallpaper: WallpaperPicker(settings: settings)
+    case .appIcon: AppIconPicker(settings: settings)
     case .textSize: TextSizeBody(settings: settings)
     case .customEngine: CustomEngineBody(settings: settings)
     case .syncJoin: SyncJoinBody(settings: settings)
@@ -77,6 +78,43 @@ private struct WallpaperPicker: View {
         .accessibilityIdentifier("settings-wallpaper-\(id)")
       }
     }
+  }
+}
+
+/// The home screen icons, three to a row; the one on the home screen is ringed.
+private struct AppIconPicker: View {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var settings: SettingsModel
+
+  var body: some View {
+    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Space.md), count: 3), spacing: Space.lg) {
+      ForEach(AppIcon.all, id: \.testID) { icon in
+        let selected = icon == settings.appIcon
+        let name = strings.t(icon.label)
+        Button {
+          settings.chooseAppIcon(icon)
+        } label: {
+          VStack(spacing: Space.sm) {
+            Image(decorative: icon.preview)
+              .resizable()
+              .accessibilityIgnoresInvertColors()
+              .frame(width: 64, height: 64)
+              .clipShape(RoundedRectangle(cornerRadius: Radius.tile - 4, style: .continuous))
+              .padding(3)
+              .overlay(
+                RoundedRectangle(cornerRadius: Radius.tile + 5, style: .continuous)
+                  .stroke(selected ? BayColor.accent : Color.clear, lineWidth: 2))
+            BayText(name, variant: .subhead, weight: selected ? .medium : nil, tone: selected ? .accent : .default)
+          }
+          .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.pressFeedback)
+        .accessibilityLabel(Text(verbatim: name))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(icon.testID)
+      }
+    }
+    .padding(.top, Space.xs)
   }
 }
 

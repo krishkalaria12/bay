@@ -16,11 +16,23 @@ final class SettingsModel: ObservableObject {
   @Published private(set) var clearStage: ClearStage = .idle
   /// The row a search opened a page at, lit for a moment.
   @Published var focus: String?
+  /// The home screen icon, or nil where the phone can't change it.
+  @Published private(set) var appIcon: AppIcon?
 
   init(app: AppModel, browser: BrowserModel, strings: Strings) {
     self.app = app
     self.browser = browser
     self.strings = strings
+    appIcon = AppIcon.supported ? AppIcon.current : nil
+  }
+
+  /// Puts an icon on the home screen; when iOS refuses, the picker goes back to the icon that stayed.
+  func chooseAppIcon(_ icon: AppIcon) {
+    guard let before = appIcon, icon != before else { return }
+    appIcon = icon
+    Task {
+      do { try await icon.apply() } catch { appIcon = before }
+    }
   }
 
   func open() {
@@ -51,7 +63,7 @@ final class SettingsModel: ObservableObject {
       engines: builtInEngines().map { EngineChoice(id: $0.id, name: $0.name) },
       blockerDetail: blockerDetail,
       wallpaperName: strings.t("settings.wallpapers.\(prefs.wallpaper)"),
-      appIconName: nil,
+      appIconName: appIcon.map { strings.t($0.label) },
       language: LanguageState(saved: strings.saved, current: strings.locale, device: strings.device),
       defaultBrowser: .unknown,
       openTabCount: UInt32(app.store.tabs().count),

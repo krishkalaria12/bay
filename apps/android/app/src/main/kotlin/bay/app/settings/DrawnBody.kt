@@ -1,5 +1,7 @@
 package bay.app.settings
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -75,6 +77,7 @@ private const val TEXT_STEP = 10
 fun DrawnBody(settings: SettingsModel, page: SettingsPage) {
     when (page) {
         SettingsPage.WALLPAPER -> WallpaperPicker(settings)
+        SettingsPage.APP_ICON -> AppIconPicker(settings)
         SettingsPage.TEXT_SIZE -> TextSizeBody(settings)
         SettingsPage.CUSTOM_ENGINE -> CustomEngineBody(settings)
         SettingsPage.SYNC_JOIN -> SyncJoinBody(settings)
@@ -110,6 +113,38 @@ private fun WallpaperPicker(settings: SettingsModel) {
                             .border(if (selected) 2.dp else 1.dp, if (selected) Theme.colors.accent else Theme.colors.foreground.copy(alpha = 0.1f), shape),
                         contentAlignment = Alignment.Center,
                     ) { if (empty) BayIconView(BayIcon.ADD, size = 28.dp) else Wallpaper(id) }
+                    BayText(name, variant = TextVariant.SUBHEAD, weight = if (selected) FontWeight.Medium else null, tone = if (selected) TextTone.ACCENT else TextTone.DEFAULT)
+                }
+            }
+        }
+    }
+}
+
+/** The home screen icons, three to a row; the one on the home screen is ringed. */
+@Composable
+private fun AppIconPicker(settings: SettingsModel) {
+    val strings = settings.strings
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Space.xs)) {
+        val width = (maxWidth - Space.md * 2) / 3 - 0.5.dp
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalArrangement = Arrangement.spacedBy(Space.lg), maxItemsInEachRow = 3) {
+            AppIcon.entries.forEach { icon ->
+                val selected = icon == settings.appIcon
+                val name = strings.t(icon.label)
+                Column(
+                    Modifier.width(width).testTag(icon.testID)
+                        .clearAndSetSemantics { contentDescription = name; role = Role.RadioButton; this.selected = selected }
+                        .pressFeedback { settings.chooseAppIcon(icon) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Space.sm),
+                ) {
+                    val ring = RoundedCornerShape(Radius.tile + 5.dp)
+                    Box(Modifier.border(2.dp, if (selected) Theme.colors.accent else Color.Transparent, ring).padding(3.dp)) {
+                        androidx.compose.foundation.Image(
+                            androidx.compose.ui.res.painterResource(icon.preview),
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(Radius.tile - 4.dp)),
+                        )
+                    }
                     BayText(name, variant = TextVariant.SUBHEAD, weight = if (selected) FontWeight.Medium else null, tone = if (selected) TextTone.ACCENT else TextTone.DEFAULT)
                 }
             }

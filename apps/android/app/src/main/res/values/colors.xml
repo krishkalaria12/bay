@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="iconBackground">#F1EADF</color>
+    <!-- The home screen icons Settings > Appearance offers (AppIcons.kt). -->
+    <color name="iconBackgroundNavy">#141831</color>
+    <color name="iconBackgroundCoral">#D9482A</color>
+    <color name="iconBackgroundNoir">#050505</color>
+    <color name="iconBackgroundCobalt">#14286B</color>
+    <color name="iconBackgroundBridge">#151C36</color>
 </resources>

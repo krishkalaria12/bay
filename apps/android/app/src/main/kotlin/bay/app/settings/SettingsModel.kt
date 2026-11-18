@@ -55,6 +55,16 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
     /** The row a search opened a page at, lit for a moment. */
     var focus by mutableStateOf<String?>(null)
 
+    /** The home screen icon. */
+    var appIcon by mutableStateOf(AppIcon.current(appContext))
+        private set
+
+    fun chooseAppIcon(icon: AppIcon) {
+        if (icon == appIcon) return
+        appIcon = icon
+        icon.apply(appContext)
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     fun open() {
@@ -90,7 +100,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 builtInEngines().map { EngineChoice(it.id, it.name) },
                 blockerDetail,
                 strings.t("settings.wallpapers.${prefs.wallpaper.name.lowercase()}"),
-                null,
+                strings.t(appIcon.label),
                 LanguageState(strings.saved, strings.locale, strings.device),
                 DefaultBrowser.UNKNOWN,
                 app.store.tabs().size.toUInt(),

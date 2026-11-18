@@ -87,6 +87,9 @@ let project = Project(
           "MARKETING_VERSION": "1.0.0",
           "CURRENT_PROJECT_VERSION": "1",
           "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+          // The icons Settings > Appearance can put on the home screen (AppIcons.swift), named as the Expo app named them.
+          "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES": "Navy Coral Noir Cobalt Bridge",
+          "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
         ],
         configurations: [
           .debug(name: "Debug", settings: ["PRODUCT_BUNDLE_IDENTIFIER": "\(bundleId).native"]),
