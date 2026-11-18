@@ -345,6 +345,16 @@ private struct TabCard: View {
         .padding(6)
         .accessibilityLabel(Text(verbatim: strings.t("tabs.closeLabel", ["title": title])))
         .accessibilityIdentifier("tab-close-\(index)")
+        // The card says it's private already; the badge shows it.
+        if tab.private {
+          BayIconView(.private, size: 12, color: Color(RGBA(0xF4, 0xF4, 0xF5)))
+            .frame(width: 22, height: 22)
+            .background(Color(RGBA(0x17, 0x17, 0x17)), in: Circle())
+            .padding(6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .allowsHitTesting(false)
+            .accessibilityIdentifier("tab-private-\(index)")
+        }
       }
       HStack(spacing: 4) {
         if !tab.url.isEmpty { SiteIcon(url: tab.url, size: 14) }

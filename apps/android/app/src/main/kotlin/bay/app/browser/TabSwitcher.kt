@@ -365,6 +365,14 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                     .background(Color.Black.copy(alpha = 0.45f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) { BayIconView(BayIcon.CLOSE, size = 12.dp, color = Color.White) }
+            // The card says it's private already; the badge shows it.
+            if (tab.private) {
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp).testTag("tab-private-$index").clearAndSetSemantics {}
+                        .background(Color(0xFF171717), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { BayIconView(BayIcon.PRIVATE, size = 12.dp, color = Color(0xFFF4F4F5)) }
+            }
         }
         Row(Modifier.clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (tab.url.isNotEmpty()) SiteIcon(app, tab.url, 14.dp)
