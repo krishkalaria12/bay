@@ -16,6 +16,7 @@ mod picker;
 mod reader;
 mod resolve;
 mod timing;
+mod youtube;
 
 pub use days::{DayBounds, DayGroup, DayGroupId, group_by_day};
 pub use errors::{PageErrorId, PageErrorKind, PageErrorText, describe_page_error, page_error_id};
@@ -37,6 +38,7 @@ pub use timing::{
     Navigation, NavigationReport, ScriptPlan, ScriptTiming, initial_timing, same_navigation,
     scripts_for, should_hide,
 };
+pub use youtube::youtube_selectors;
 
 use std::sync::LazyLock;
 
