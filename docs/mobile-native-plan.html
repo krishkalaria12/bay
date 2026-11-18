@@ -1534,6 +1534,17 @@ impl BrowserStore {
             <span class="pid">N6</span><span class="ptitle">Onboarding, extensions, languages, polish</span><span class="pdep">Depends on: N4, N5</span>
           </summary>
           <div class="body">
+            <p class="muted">
+              Done so far, on both apps: the first run, ported from Yab's (SwiftUI on iOS with Liquid Glass from 26 and a material before it; Compose on Android
+              with flat plates and the name in ink), its pages, words and motion from the core (<code>welcomeContent</code>,
+              <code>hero</code>, <code>welcomeForward</code>), Skip handing over to the real search field, the keyboard and lock settings (the lock proves Face
+              ID or the fingerprint first), and "Make Bay default" (Android's role dialog, iOS's Default Apps). Settings shows whether Bay is the default.
+              Search opens when Bay starts if asked, and a long time away starts on a fresh start page (the core's <code>startFresh</code>). Links from other
+              apps, <code>bay://</code> commands, quick actions (iOS) and app shortcuts (Android), the share extension and Android's share target, the search
+              widget (Android, moved into the app under Expo's receiver name so placed widgets survive the update), and voice search from the search card's
+              microphone or the widget. <code>fresh-start</code> passes on Android. Left: locales, Dynamic Type and font scale, the accessibility audits, and
+              iOS 15 and Android 10 devices.
+            </p>
             <ul>
               <li>
                 First run: the pages from <code>flow.ts</code> with the travelling glass object, default-browser prompt (Android role dialog, iOS Default Apps
@@ -1788,6 +1799,15 @@ impl BrowserStore {
             <code>fresh-start</code> and use N5's panels; now that N5 has landed they can run, but they haven't been re-run on Android yet.
           </li>
           <li>Settings' Report row does nothing yet; the problem report sheet comes with N6.</li>
+          <li>
+            iOS: the widgets weren't placed on the simulator (automation can't add one); the <code>bay://</code> links they send were checked instead. Links to
+            <code>http</code>/<code>https</code> pages go to Safari on a debug build, which can't be the default browser; they take the same path as the share
+            extension's links, which were checked.
+          </li>
+          <li>
+            iOS builds claim the default-browser entitlement only with <code>TUIST_BAY_DEFAULT_BROWSER=1</code> (as the Expo app's
+            <code>BAY_DEFAULT_BROWSER</code>); without it the welcome skips the links page and Settings says Bay can't be the default.
+          </li>
           <li>
             iOS: the e2e flows can't run through Argent's runner, which reads a projected UIView tree where SwiftUI's accessibility identifiers don't appear
             (<code>describe</code> and <code>await-ui-element</code> do see them). N5's flows were checked by hand on the iPhone simulator instead: import
