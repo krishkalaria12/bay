@@ -1,6 +1,6 @@
 //! The browser screen's pure helpers: the page a link from another app opens and the `bay://` commands, plain words
 //! for a page that failed to load, the saved-logins document, history's day groups, which downloads open themselves,
-//! favicon checks, which navigation reports run page scripts, and where a link's redirects end. The Expo app's
+//! favicon checks, which navigation reports run page scripts, pages' media reports, and where a link's redirects end. The Expo app's
 //! `src/browser/{incomingLink,pageErrors,logins,downloads,favicons,navigationEvents,linkResolver}.ts` and
 //! `src/panels/historyGroups.ts`, checked against `fixtures/browser.jsonl` (`scripts/record-fixtures.mjs browser`) and
 //! their ported tests.
@@ -10,6 +10,7 @@ mod errors;
 mod icons;
 mod links;
 mod logins;
+mod messages;
 mod resolve;
 mod timing;
 
@@ -18,6 +19,7 @@ pub use errors::{PageErrorId, PageErrorKind, PageErrorText, describe_page_error,
 pub use icons::{KNOWN_LIMIT, SHARP_WIDTH, icon_width, is_image, known_sites_without_icons};
 pub use links::{BayCommand, bay_command, incoming_link, share_link};
 pub use logins::{SavedLogin, format_saved_logins, origin_of, parse_saved_logins};
+pub use messages::{MediaReport, parse_media_message};
 pub use resolve::{MAX_REDIRECTS, RESOLVE_TIMEOUT_MS, resolve_link, resolve_with};
 pub use timing::{
     Navigation, NavigationReport, ScriptPlan, ScriptTiming, initial_timing, same_navigation,
