@@ -214,3 +214,15 @@ pub fn imported_tabs_ffi(text: &str) -> Vec<ImportedTab> {
 pub fn takeout_url() -> String {
     TAKEOUT_URL.into()
 }
+
+/// How many links an export's bookmarks hold, for the review.
+#[uniffi::export(name = "importedLinkCount")]
+pub fn imported_link_count(node: ImportedBookmark) -> u32 {
+    link_count(&node) as u32
+}
+
+/// How many pages of history Bay keeps a space, so the review can say an import keeps only the newest.
+#[uniffi::export(name = "historyLimit")]
+pub fn history_limit() -> u32 {
+    crate::store::model::HISTORY_LIMIT as u32
+}
