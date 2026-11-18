@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bay.core.Action
 import bay.core.BrowserTab
+import bay.core.importedTabs
+import bay.core.incomingLink
 import java.util.UUID
 
 class MainActivity : ComponentActivity(), EngineHost {
@@ -62,6 +64,9 @@ class MainActivity : ComponentActivity(), EngineHost {
     private lateinit var browser: BrowserModel
     private lateinit var settings: SettingsModel
     private var launched = false
+
+    /** A link or `bay://` command that came in, waiting until the browser shows (past the welcome) to open. */
+    private var incoming: String? = null
 
     /** The page's permission request waiting on the system's answer (one at a time, as the system asks). */
     private var permissionsAnswered: (() -> Unit)? = null
@@ -95,6 +100,8 @@ class MainActivity : ComponentActivity(), EngineHost {
         model = AppModel(applicationContext, strings.t("sync.bar"))
         browser = BrowserModel(this, model, strings)
         settings = SettingsModel(applicationContext, model, browser, strings)
+        // Brought back after the system let it go, the activity has its launch intent again: answered the first time.
+        if (savedInstanceState == null) receive(intent)
         setContent {
             // The stand-in screens (the engine check, the store check) behind a long press on Settings, for testing.
             var checks by remember { mutableStateOf<String?>(null) }
@@ -119,6 +126,7 @@ class MainActivity : ComponentActivity(), EngineHost {
                                     model.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, true, null, null, null)))
                                     // Skipped early: the plate hands over to the real field.
                                     if (openField) browser.search(inNewTab = false)
+                                    openIncoming(welcomed = true)
                                 }
                             }
                         }
@@ -154,6 +162,41 @@ class MainActivity : ComponentActivity(), EngineHost {
         browser.panel = null
         settings.close()
         if (model.preferences.openSearchOnLaunch) browser.search(inNewTab = false)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receive(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        openIncoming()
+    }
+
+    /**
+     * Keeps what an intent brings in (B9): a link or `bay://` command to view, or the first web address in shared
+     * text. Opened in [onResume], once a return's fresh start page (in [onStart]) is done, so the link is what shows.
+     */
+    private fun receive(intent: Intent) {
+        // Reopened from recents: the intent is the one that first started Bay, already answered.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val value = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+                if (incomingLink(text) != null) text else importedTabs(text).firstOrNull()?.url
+            }
+            else -> null
+        }
+        if (value != null) incoming = value
+    }
+
+    /** Opens the waiting link or command over whatever is up; while the welcome shows, it keeps waiting. */
+    private fun openIncoming(welcomed: Boolean = model.preferences.welcomed) {
+        val value = incoming ?: return
+        if (!welcomed) return
+        incoming = null
+        if (browser.openIncoming(value)) settings.close()
     }
 
     override fun onStop() {

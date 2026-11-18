@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import bay.app.AppModel
 import bay.app.Strings
 import bay.core.Action
+import bay.core.BayCommand
 import bay.core.BookmarkNode
 import bay.core.BrowserSpace
 import bay.core.BrowserFolder
@@ -44,8 +45,10 @@ import bay.core.SiteSettingInput
 import bay.core.SpaceColor
 import bay.core.TabUpdate
 import bay.core.TipId
+import bay.core.bayCommand
 import bay.core.cleanUrl
 import bay.core.hostOf
+import bay.core.incomingLink
 import bay.core.initialTiming
 import bay.core.isWebUrl
 import kotlinx.coroutines.flow.drop
@@ -198,6 +201,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var searchPrivately by mutableStateOf(false)
         private set
 
+    /** The search card should listen as it opens: the widget's microphone (C7). The card turns it off as it starts. */
+    var searchListening by mutableStateOf(false)
+
     /** What each loaded page last reported. */
     val navigation = mutableStateMapOf<String, NavigationState>()
     var failure by mutableStateOf<PageFailure?>(null)
@@ -316,6 +322,32 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         searchInNewTab = inNewTab
         searchPrivately = privately
         overlay = Overlay.SEARCH
+    }
+
+    /**
+     * Answers a link from another app or a `bay://` command from a shortcut or the widget (B9, B15), over whatever is
+     * up: a page opens in the blank tab showing or a new one; a command opens a fresh tab, a private one, or the search
+     * card over the tab showing. False, and nothing changes, for anything else.
+     */
+    fun openIncoming(value: String): Boolean {
+        val command = bayCommand(value)
+        // The page a link opens; a command opens none.
+        val url = if (command == null) incomingLink(value) ?: return false else ""
+        panel = null
+        link = null
+        overlay = Overlay.NONE
+        when (command) {
+            BayCommand.SEARCH, BayCommand.VOICE -> {
+                search(inNewTab = false)
+                searchListening = command == BayCommand.VOICE
+            }
+            BayCommand.NEW_TAB, BayCommand.PRIVATE_TAB -> openTab("", privately = command == BayCommand.PRIVATE_TAB)
+            null -> {
+                val tab = activeTab
+                if (tab != null && tab.url.isEmpty()) navigate(tab.id, url) else openTab(url)
+            }
+        }
+        return true
     }
 
     fun dismissSearch() {

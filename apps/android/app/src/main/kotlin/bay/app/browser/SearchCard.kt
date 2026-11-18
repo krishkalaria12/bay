@@ -79,8 +79,10 @@ import bay.design.TextVariant
 import bay.design.Theme
 import bay.design.pressFeedback
 import bay.design.style
+import bay.engine.Engine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** The search sheet's measures (U4): it sits on the keyboard, holding the field and four rows. */
@@ -164,6 +166,23 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     }
 
     LaunchedEffect(Unit) { focus.requestFocus() }
+    // Opened from the widget's microphone (C7): listens at once, and what's heard replaces the field, like a paste.
+    // Voice search (B16): the engine listens once, and what it hears replaces the field, like a paste.
+    var listening by remember { mutableStateOf(false) }
+    fun listen() {
+        if (listening) return
+        listening = true
+        scope.launch {
+            val heard = Engine.listen()
+            listening = false
+            if (!heard.isNullOrEmpty()) fill(heard)
+        }
+    }
+    LaunchedEffect(browser.searchListening) {
+        if (!browser.searchListening) return@LaunchedEffect
+        browser.searchListening = false
+        listen()
+    }
     LaunchedEffect(field) {
         var before = field.text.toString()
         snapshotFlow { field.text.toString() }.collect { next ->
@@ -246,6 +265,10 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
                 if (query.isNotEmpty()) {
                     FieldButton("clear-address", strings.t("search.clear"), BayIcon.CLOSE, secondary, IconSize.row) { fill("") }
                 }
+                FieldButton(
+                    "voice-search", strings.t(if (listening) "search.listening" else "search.voice"), BayIcon.MIC,
+                    if (listening) text else secondary, IconSize.control,
+                ) { listen() }
                 FieldButton("private-toggle", strings.t("search.private"), BayIcon.PRIVATE, if (privately) text else secondary, IconSize.control, selected = privately) {
                     privately = !privately
                 }

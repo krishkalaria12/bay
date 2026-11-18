@@ -25,11 +25,32 @@
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize">
+            <!--
+                Links from other apps (B9), which also lets Android offer Bay as the default browser, and the `bay://`
+                commands the app shortcuts and the search widget send.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bay" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <!-- Text shared to Bay opens the first web address in it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
         <!--
             The launcher entry: one alias per home screen icon (AppIcons.kt), only the chosen one enabled. They keep the Expo
-            app's component names, so the icon someone picked there stays after the update.
+            app's component names, so the icon someone picked there stays after the update. Android reads the app
+            shortcuts (long press on the icon) from the launcher entry, so each alias names them.
         -->
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityDefault"
@@ -40,6 +61,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityNavy"
@@ -52,6 +74,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityCoral"
@@ -64,6 +87,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityNoir"
@@ -76,6 +100,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityCobalt"
@@ -88,6 +113,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityBridge"
@@ -100,6 +126,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
+        <receiver
+            android:name="expo.modules.bayengine.BaySearchWidget"
+            android:exported="false"
+            android:label="@string/search_widget_hint">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/search_widget_info" />
+        </receiver>
     </application>
 </manifest>

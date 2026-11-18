@@ -122,16 +122,6 @@ object Engine {
   /** Listens once through the system's recogniser and answers with what was said, or null. */
   suspend fun listen(): String? = answer<Any?> { BayVoice.listen(host?.currentActivity, it) } as? String
 
-  /** A shared link in an intent (`ACTION_SEND` text holding a web address), as `bay://share?url=…`, or null. */
-  fun shareLink(intent: Intent?): String? {
-    if (intent?.action != Intent.ACTION_SEND) return null
-    val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-    val url = sharedPattern.find(text)?.value?.trimEnd(')', '.', ',', ';', '"', '\'') ?: return null
-    return "bay://share?url=" + Uri.encode(url, "")
-  }
-
-  private val sharedPattern = Regex("https?://[^\\s\"<>()\\[\\]]+")
-
   private suspend fun <T> answer(call: (Promise) -> Unit): T = suspendCoroutine { call(it.asPromise()) }
 }
 
