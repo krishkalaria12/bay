@@ -7,6 +7,7 @@
 
 mod days;
 mod errors;
+mod filter_lists;
 mod icons;
 mod links;
 mod logins;
@@ -18,6 +19,7 @@ mod timing;
 
 pub use days::{DayBounds, DayGroup, DayGroupId, group_by_day};
 pub use errors::{PageErrorId, PageErrorKind, PageErrorText, describe_page_error, page_error_id};
+pub use filter_lists::{FilterGroup, FilterList, FilterListStore, ListsOnDisk, filter_lists};
 pub use icons::{KNOWN_LIMIT, SHARP_WIDTH, icon_width, is_image, known_sites_without_icons};
 pub use links::{BayCommand, bay_command, incoming_link, share_link};
 pub use logins::{SavedLogin, format_saved_logins, origin_of, parse_saved_logins};

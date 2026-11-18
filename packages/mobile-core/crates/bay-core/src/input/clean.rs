@@ -192,6 +192,21 @@ pub fn is_tracking_param(name: &str, hostname: &str) -> bool {
     })
 }
 
+/// The tracking-parameter table as JSON (`{ global, prefixes, sites: [{ hosts, params, prefixes }] }`), for the engines,
+/// which strip the same parameters from main-frame navigations.
+#[uniffi::export]
+pub fn tracking_parameters_json() -> String {
+    serde_json::json!({
+        "global": GLOBAL_PARAMS,
+        "prefixes": GLOBAL_PREFIXES,
+        "sites": SITE_PARAMS
+            .iter()
+            .map(|site| serde_json::json!({ "hosts": site.hosts, "params": site.params, "prefixes": site.prefixes }))
+            .collect::<Vec<_>>(),
+    })
+    .to_string()
+}
+
 /// The address without its tracking parameters.
 #[uniffi::export]
 pub fn clean_url(url: &str) -> String {
