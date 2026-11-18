@@ -36,6 +36,8 @@ struct PagesHost: UIViewRepresentable {
     // SwiftUI's accessibilityHidden stops at the representable; the page views are UIKit's. Hidden, the pages stay in
     // the window and keep playing; the switcher covers them anyway.
     container.isHidden = !shown
+    // WebKit's page content answers VoiceOver from its own process, so hiding the views alone can leave it reachable.
+    container.accessibilityElementsHidden = !shown
     container.sync = { [weak container] in
       guard let container else { return }
       MainActor.assumeIsolated { Self.sync(container, browser, shown: shown, covered: covered) }
@@ -57,6 +59,7 @@ struct PagesHost: UIViewRepresentable {
       let showing = index == 0 && shown
       view.obscuredBottom = covered
       view.isHidden = !showing
+      view.accessibilityElementsHidden = !showing
       view.isActive = showing
       if showing { container.bringSubviewToFront(view) }
     }
