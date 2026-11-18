@@ -1440,6 +1440,17 @@ impl BrowserStore {
             <span class="pid">N4</span><span class="ptitle">Design system and the browser shell</span><span class="pdep">Depends on: N1, N3</span>
           </summary>
           <div class="body">
+            <p class="muted">
+              Done so far: the design system on both apps (<code>BayDesign</code>, <code>:core:designsystem</code>) from one source,
+              <code>packages/mobile-core/design/{tokens,icons}.json</code>, generated into <code>BayTokens.swift</code> and <code>BayTokens.kt</code> by
+              <code>scripts/build-design.mjs</code> (CI checks it is current); Inter on Android. The browser screen on both: the bar (start, page and tabs
+              modes, load progress, tab count, swipe between tabs, hides while scrolling), pages kept loaded (four, plus tabs playing media) and restored from
+              saved state, the status strip in the page's colour, the start page (greeting, pins, recent pages, wallpaper), the search card (the core's ranked
+              rows, the engine's suggestions, inline completion, private toggle), page errors in plain words, the tab switcher as a space's page (Essentials,
+              pinned rows, cards with snapshots, flick up to close, Clear), the spaces capsule and new spaces, toasts with Undo, the mini player and system
+              media controls, and the private lock. Settings is still the stand-in screen behind <code>bar-settings</code>. Left: the find bar (opened from the
+              page menu, N5), tips, the card-to-page zoom, pinned folders and hold-to-slide on the spaces, the space editor, and the e2e flows (see Known gaps).
+            </p>
             <ul>
               <li>
                 BayDesign / <code>:core:designsystem</code>: Text with the type scale (SF on iOS, Inter on Android), Icon squares, Surface (Glass 26 / blur,
@@ -1734,7 +1745,19 @@ impl BrowserStore {
           </ul>
         </div>
         <h3>Known gaps</h3>
-        <p class="muted">None open. Add parity gaps here in the commit that finds them.</p>
+        <p class="muted">Add parity gaps here in the commit that finds them.</p>
+        <ul>
+          <li>
+            N4's done-when flows (smoke, search-and-open, tabs-roundtrip, tab-swipe-close, start-page, page-zoom, wallpaper) all start with
+            <code>fresh-start</code>, which clears data in Settings, and most read the page menu (<code>bar-more</code>) or the archive. Those are N5's panels,
+            so the flows pass once N5 lands; N4 is checked by hand on both devices until then.
+          </li>
+          <li>
+            iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
+            accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
+          </li>
+          <li>Tips (bar and blocking) and the card-to-page zoom aren't ported yet (N4).</li>
+        </ul>
       </section>
 
       <section id="sources">
