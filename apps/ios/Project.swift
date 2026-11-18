@@ -7,6 +7,9 @@ import ProjectDescription
 let bundleId = "in.krishkalaria.bay.mobile"
 let deploymentTargets: DeploymentTargets = .iOS("15.0")
 let core = "../../packages/mobile-core"
+/// Bay as the default browser needs Apple's managed `com.apple.developer.web-browser` entitlement, granted on request:
+/// builds made with TUIST_BAY_DEFAULT_BROWSER=1 claim it (and say so to the app); others sign as before.
+let claimsBrowser = Environment.bayDefaultBrowser.getBoolean(default: false)
 
 let baseSettings: SettingsDictionary = [
   "SWIFT_VERSION": "6.0",
@@ -76,9 +79,12 @@ let project = Project(
         ],
         // The import sheet asks which browsers the phone has by whether their schemes open.
         "LSApplicationQueriesSchemes": ["googlechrome", "firefox", "microsoft-edge-https", "brave", "ddgQuickLink"],
+        // Whether this build may ask iOS if it's the default browser (DefaultBrowserStatus.swift).
+        "BayCanBeDefaultBrowser": .boolean(claimsBrowser),
       ]),
       sources: ["Bay/Sources/**"],
       resources: ["Bay/Resources/**"],
+      entitlements: claimsBrowser ? .dictionary(["com.apple.developer.web-browser": true]) : nil,
       dependencies: [
         .target(name: "BayCore"), .target(name: "BayDesign"), .target(name: "BayEngine"), .target(name: "BayShare"), .target(name: "BayWidgets"),
       ],

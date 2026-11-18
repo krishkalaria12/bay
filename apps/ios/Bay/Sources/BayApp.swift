@@ -8,6 +8,9 @@ struct BayApp: App {
   @StateObject private var browser: BrowserModel
   @StateObject private var settings: SettingsModel
   @State private var showsChecks = false
+  /// The first run, while it's on screen.
+  @State private var welcome: FirstRun?
+  @State private var launched = false
   @Environment(\.scenePhase) private var scenePhase
 
   init() {
@@ -24,10 +27,18 @@ struct BayApp: App {
     WindowGroup {
       ZStack {
         BrowserScreen(browser: browser, onSettings: settings.open, onChecks: { showsChecks = true })
-          .accessibilityHidden(settings.visible)
+          .accessibilityHidden(settings.visible || welcome != nil)
         if settings.visible {
           SettingsScreen(settings: settings).transition(.move(edge: .bottom))
         }
+        if let welcome {
+          FirstRunView(run: welcome).zIndex(1)
+        }
+      }
+      .onAppear(perform: launch)
+      // Settings › General › Show welcome again.
+      .onChange(of: model.preferences.welcomed) { welcomed in
+        if !welcomed { showWelcome() }
       }
       .animation(.easeOut(duration: 0.35), value: settings.visible)
       .onChange(of: settings.visible) { browser.covered = $0 }
@@ -44,6 +55,7 @@ struct BayApp: App {
       switch phase {
       case .active:
         model.startSyncing()
+        if launched { cameBack() }
       case .background:
         browser.appLeft()
         model.stopSyncing()
@@ -52,6 +64,43 @@ struct BayApp: App {
       default:
         break
       }
+    }
+  }
+}
+
+extension BayApp {
+  /// Bay opens ready to type (C1): the search card comes up as it starts, over a fresh start page after a long time
+  /// away. Not on the run that shows the welcome, which ends on the field itself when it's skipped.
+  private func launch() {
+    guard !launched else { return }
+    launched = true
+    let opened = model.store.startFresh(now: AppModel.now(), newTabId: UUID().uuidString)
+    guard model.preferences.welcomed else {
+      showWelcome()
+      return
+    }
+    guard model.preferences.openSearchOnLaunch else { return }
+    // Over a page, a new search starts a new tab and leaves the page as it was.
+    browser.search(inNewTab: !opened && !(browser.activeTab?.url.isEmpty ?? true))
+  }
+
+  /// Back in front: a fresh start page after a long time away, ready to type too.
+  private func cameBack() {
+    guard welcome == nil, model.store.startFresh(now: AppModel.now(), newTabId: UUID().uuidString) else { return }
+    browser.overlay = .none
+    browser.panel = nil
+    settings.close()
+    if model.preferences.openSearchOnLaunch { browser.search(inNewTab: false) }
+  }
+
+  private func showWelcome() {
+    guard welcome == nil else { return }
+    settings.close()
+    welcome = FirstRun(strings: strings) { [model, browser] openField in
+      model.dispatch(.preferences(update: .welcomedNow))
+      welcome = nil
+      // Skipped early: the glass hands over to the real field.
+      if openField { browser.search(inNewTab: false) }
     }
   }
 }

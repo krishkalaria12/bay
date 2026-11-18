@@ -65,7 +65,7 @@ final class SettingsModel: ObservableObject {
       wallpaperName: strings.t("settings.wallpapers.\(prefs.wallpaper)"),
       appIconName: appIcon.map { strings.t($0.label) },
       language: LanguageState(saved: strings.saved, current: strings.locale, device: strings.device),
-      defaultBrowser: .unknown,
+      defaultBrowser: DefaultBrowserStatus.current,
       openTabCount: UInt32(app.store.tabs().count),
       logins: nil,
       clearStage: clearStage,
@@ -119,8 +119,7 @@ final class SettingsModel: ObservableObject {
     case .resumeBlocking(let host): app.dispatch(.pauseBlocking(host: host, paused: false))
     case .setLockPrivateTabs(let on): app.dispatch(.lockPrivateTabs(enabled: on))
     case .setLanguage(let locale): strings.choose(locale)
-    case .makeDefault:
-      if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+    case .makeDefault: DefaultBrowserStatus.openSetting()
     case .exportTabs: exportTabs()
     case .forgetLogin: break
     case .askToClear: clearStage = .confirming
