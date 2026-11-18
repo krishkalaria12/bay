@@ -238,6 +238,69 @@ public enum BayIcon: CaseIterable, Sendable {
   case globe
   case sync
 
+  /// The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were.
+  public init?(name: String) {
+    switch name {
+    case "archive": self = .archive
+    case "search": self = .search
+    case "settings": self = .settings
+    case "tabs": self = .tabs
+    case "more": self = .more
+    case "fill": self = .fill
+    case "close": self = .close
+    case "add": self = .add
+    case "private": self = .`private`
+    case "lock": self = .lock
+    case "shield": self = .shield
+    case "up": self = .up
+    case "down": self = .down
+    case "play": self = .play
+    case "pause": self = .pause
+    case "back": self = .back
+    case "forward": self = .forward
+    case "reload": self = .reload
+    case "reader": self = .reader
+    case "find": self = .find
+    case "inspect": self = .inspect
+    case "hide": self = .hide
+    case "markdown": self = .markdown
+    case "share": self = .share
+    case "pin": self = .pin
+    case "unpin": self = .unpin
+    case "link": self = .link
+    case "copy": self = .copy
+    case "history": self = .history
+    case "delete": self = .delete
+    case "desktop": self = .desktop
+    case "offline": self = .offline
+    case "error": self = .error
+    case "chevron": self = .chevron
+    case "wallpaper": self = .wallpaper
+    case "download": self = .download
+    case "check": self = .check
+    case "translate": self = .translate
+    case "mic": self = .mic
+    case "pip": self = .pip
+    case "textSize": self = .textSize
+    case "palette": self = .palette
+    case "tune": self = .tune
+    case "visibility": self = .visibility
+    case "tick": self = .tick
+    case "bookmark": self = .bookmark
+    case "bookmarked": self = .bookmarked
+    case "folder": self = .folder
+    case "import": self = .`import`
+    case "info": self = .info
+    case "keyboard": self = .keyboard
+    case "key": self = .key
+    case "video": self = .video
+    case "minus": self = .minus
+    case "globe": self = .globe
+    case "sync": self = .sync
+    default: return nil
+    }
+  }
+
   /// The SF Symbol's name.
   public var symbol: String {
     switch self {

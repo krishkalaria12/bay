@@ -222,5 +222,68 @@ enum class BayIcon(val path: String, val lifted: Boolean = false) {
     VIDEO("m380-300 280-180-280-180v360ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-480H160v480Zm0 0v-480 480Z", lifted = true),
     MINUS("M200-440v-80h560v80H200Z", lifted = true),
     GLOBE("M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 31.5-155.5t86-127Q252-817 325-848.5T480-880q83 0 155.5 31.5t127 86q54.5 54.5 86 127T880-480q0 82-31.5 155t-86 127.5q-54.5 54.5-127 86T480-80Zm0-82q26-36 45-75t31-83H404q12 44 31 83t45 75Zm-104-16q-18-33-31.5-68.5T322-320H204q29 50 72.5 87t99.5 55Zm208 0q56-18 99.5-55t72.5-87H638q-9 38-22.5 73.5T584-178ZM170-400h136q-3-20-4.5-39.5T300-480q0-21 1.5-40.5T306-560H170q-5 20-7.5 39.5T160-480q0 21 2.5 40.5T170-400Zm216 0h188q3-20 4.5-39.5T580-480q0-21-1.5-40.5T574-560H386q-3 20-4.5 39.5T380-480q0 21 1.5 40.5T386-400Zm268 0h136q5-20 7.5-39.5T800-480q0-21-2.5-40.5T790-560H654q3 20 4.5 39.5T660-480q0 21-1.5 40.5T654-400Zm-16-240h118q-29-50-72.5-87T584-782q18 33 31.5 68.5T638-640Zm-234 0h152q-12-44-31-83t-45-75q-26 36-45 75t-31 83Zm-200 0h118q9-38 22.5-73.5T376-782q-56 18-99.5 55T204-640Z", lifted = true),
-    SYNC("M160-160v-80h110l-16-14q-52-46-73-105t-21-119q0-111 66.5-197.5T400-790v84q-72 26-116 88.5T240-478q0 45 17 87.5t53 78.5l10 10v-98h80v240H160Zm400-10v-84q72-26 116-88.5T720-482q0-45-17-87.5T650-648l-10-10v98h-80v-240h240v80H690l16 14q49 49 71.5 106.5T800-482q0 111-66.5 197.5T560-170Z", lifted = true),
+    SYNC("M160-160v-80h110l-16-14q-52-46-73-105t-21-119q0-111 66.5-197.5T400-790v84q-72 26-116 88.5T240-478q0 45 17 87.5t53 78.5l10 10v-98h80v240H160Zm400-10v-84q72-26 116-88.5T720-482q0-45-17-87.5T650-648l-10-10v98h-80v-240h240v80H690l16 14q49 49 71.5 106.5T800-482q0 111-66.5 197.5T560-170Z", lifted = true);
+
+    companion object {
+        /** The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were. */
+        fun named(name: String): BayIcon? = when (name) {
+            "archive" -> ARCHIVE
+            "search" -> SEARCH
+            "settings" -> SETTINGS
+            "tabs" -> TABS
+            "more" -> MORE
+            "fill" -> FILL
+            "close" -> CLOSE
+            "add" -> ADD
+            "private" -> PRIVATE
+            "lock" -> LOCK
+            "shield" -> SHIELD
+            "up" -> UP
+            "down" -> DOWN
+            "play" -> PLAY
+            "pause" -> PAUSE
+            "back" -> BACK
+            "forward" -> FORWARD
+            "reload" -> RELOAD
+            "reader" -> READER
+            "find" -> FIND
+            "inspect" -> INSPECT
+            "hide" -> HIDE
+            "markdown" -> MARKDOWN
+            "share" -> SHARE
+            "pin" -> PIN
+            "unpin" -> UNPIN
+            "link" -> LINK
+            "copy" -> COPY
+            "history" -> HISTORY
+            "delete" -> DELETE
+            "desktop" -> DESKTOP
+            "offline" -> OFFLINE
+            "error" -> ERROR
+            "chevron" -> CHEVRON
+            "wallpaper" -> WALLPAPER
+            "download" -> DOWNLOAD
+            "check" -> CHECK
+            "translate" -> TRANSLATE
+            "mic" -> MIC
+            "pip" -> PIP
+            "textSize" -> TEXT_SIZE
+            "palette" -> PALETTE
+            "tune" -> TUNE
+            "visibility" -> VISIBILITY
+            "tick" -> TICK
+            "bookmark" -> BOOKMARK
+            "bookmarked" -> BOOKMARKED
+            "folder" -> FOLDER
+            "import" -> IMPORT
+            "info" -> INFO
+            "keyboard" -> KEYBOARD
+            "key" -> KEY
+            "video" -> VIDEO
+            "minus" -> MINUS
+            "globe" -> GLOBE
+            "sync" -> SYNC
+            else -> null
+        }
+    }
 }

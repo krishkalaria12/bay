@@ -174,6 +174,16 @@ ${Object.keys(icons)
   .map((name) => `  case ${name == "import" || name == "private" ? `\`${name}\`` : name}`)
   .join("\n")}
 
+  /// The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were.
+  public init?(name: String) {
+    switch name {
+${Object.keys(icons)
+  .map((name) => `    case "${name}": self = .${name == "import" || name == "private" ? `\`${name}\`` : name}`)
+  .join("\n")}
+    default: return nil
+    }
+  }
+
   /// The SF Symbol's name.
   public var symbol: String {
     switch self {
@@ -273,7 +283,17 @@ ${Object.entries(tokens.wallpapers)
 enum class BayIcon(val path: String, val lifted: Boolean = false) {
 ${Object.entries(icons)
   .map(([name, icon]) => `    ${upper(name)}("${icon.material}"${icon.lifted ? ", lifted = true" : ""})`)
-  .join(",\n")},
+  .join(",\n")};
+
+    companion object {
+        /** The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were. */
+        fun named(name: String): BayIcon? = when (name) {
+${Object.keys(icons)
+  .map((name) => `            "${name}" -> ${upper(name)}`)
+  .join("\n")}
+            else -> null
+        }
+    }
 }
 `;
 
