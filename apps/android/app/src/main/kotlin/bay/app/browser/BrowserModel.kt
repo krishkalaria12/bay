@@ -10,6 +10,7 @@ import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,6 +19,7 @@ import bay.app.Strings
 import bay.core.Action
 import bay.core.BookmarkNode
 import bay.core.BrowserSpace
+import bay.core.BrowserFolder
 import bay.core.BrowserTab
 import bay.core.DownloadItem
 import bay.core.DownloadState
@@ -45,6 +47,7 @@ import bay.engine.Engine
 import bay.engine.EngineEvent
 import bay.engine.MediaControl
 import bay.engine.NavigationState
+import bay.engine.PageRequest
 import bay.engine.PageScript
 import bay.engine.runScript
 import java.util.UUID
@@ -69,7 +72,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST }
 
 /** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
 enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
@@ -96,7 +99,26 @@ data class PageFailure(val tabId: String, val url: String, val message: String)
 class BrowserModel(private val context: Context, val app: AppModel, private val strings: Strings) {
     var overlay by mutableStateOf(Overlay.NONE)
 
-    var panel by mutableStateOf<Panel?>(null)
+    private var panelState by mutableStateOf<Panel?>(null)
+
+    var panel: Panel?
+        get() = panelState
+        set(value) {
+            val before = panelState
+            panelState = value
+            // The prompts sheet swiped away (or covered by another): the page's question is cancelled.
+            if (before == Panel.REQUEST && value != Panel.REQUEST && pageRequests.isNotEmpty()) answerPageRequest(false)
+        }
+
+    /** What pages asked and wait on, oldest first; the prompts sheet shows the first. */
+    val pageRequests = mutableStateListOf<Pair<String, PageRequest>>()
+
+    /** The tab whose card was held, for the pin sheet. */
+    var pinTab by mutableStateOf<BrowserTab?>(null)
+        private set
+
+    /** The folder picked in the tabs menu, which it renames or deletes. */
+    var activeFolderId by mutableStateOf<String?>(null)
 
     var zoom by mutableStateOf<Zoom?>(null)
         private set
@@ -207,6 +229,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             navigation.remove(id)
             timing.remove(id)
             if (media.remove(id) != null) updateMediaSession()
+            // An unloaded page no longer waits on its questions.
+            if (pageRequests.removeAll { it.first == id } && pageRequests.isEmpty() && panelState == Panel.REQUEST) panelState = null
         }
         if (next != mounted) mounted = next
     }
@@ -528,6 +552,56 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         refreshMounted()
     }
 
+    /** A space with the next default name ("Space 3"). */
+    fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
+
+    fun newFolder(name: String) {
+        val folder = BrowserFolder(UUID.randomUUID().toString(), app.activeSpaceId, name)
+        app.dispatch(Action.NewFolder(folder))
+        activeFolderId = folder.id
+    }
+
+    fun renameFolder(id: String, name: String) = app.dispatch(Action.RenameFolder(id, name))
+
+    /** Deletes a folder; its pinned rows return to the top level. */
+    fun deleteFolder(id: String) {
+        if (activeFolderId == id) activeFolderId = null
+        app.dispatch(Action.DeleteFolder(id))
+    }
+
+    /**
+     * Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
+     * desktop's Pinned folders hold pinned rows).
+     */
+    fun moveActiveTab(spaceId: String, folderId: String?) {
+        val id = app.activeTabId
+        app.dispatch(Action.MoveTab(id, spaceId, null))
+        activeFolderId = folderId
+        if (folderId != null) app.dispatch(Action.PinSite(id, UUID.randomUUID().toString(), PinKind.ROW, folderId))
+        refreshMounted()
+    }
+
+    /** The pin sheet for a held tab card. Private and blank tabs have nothing to pin. */
+    fun showPinMenu(tab: BrowserTab) {
+        if (tab.private || tab.url.isEmpty()) return
+        pinTab = tab
+        panel = Panel.PIN
+    }
+
+    /** Pins a tab's page that way, or unpins it when it is already pinned so. */
+    fun pin(tab: BrowserTab, kind: PinKind, folderId: String?) {
+        panel = null
+        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+    }
+
+    /** Answers the page question on show, then shows the next one waiting, if any. */
+    fun answerPageRequest(accepted: Boolean, value: String? = null, username: String? = null, password: String? = null) {
+        if (pageRequests.isEmpty()) return
+        val (tabId, request) = pageRequests.removeAt(0)
+        views[tabId]?.answerPageRequest(request.id, accepted, value, username, password)
+        panel = if (pageRequests.isNotEmpty()) Panel.REQUEST else if (panel == Panel.REQUEST) null else panel
+    }
+
     /** A pin's page: its tab in the space when one is open there, else a new one. */
     fun openPin(site: PinnedSite) {
         val open = app.store.tabs().firstOrNull { it.spaceId == site.spaceId && it.url == site.url }
@@ -591,8 +665,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 link = event
                 panel = Panel.LINK
             }
-            // Page dialogs get their sheet with the panels (N5); until then nothing waits on one.
-            is EngineEvent.Request -> views[tabId]?.answerPageRequest(event.request.id, false, null, null, null)
+            is EngineEvent.Request -> {
+                pageRequests += tabId to event.request
+                panel = Panel.REQUEST
+            }
             else -> {}
         }
     }

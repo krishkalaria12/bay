@@ -22,7 +22,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -96,7 +100,8 @@ fun PanelSheet(
                     .graphicsLayer { translationY = dragged }
                     .heightIn(max = tallest + 1.dp)
                     .background(colors.surface, RoundedCornerShape(topStart = Radius.sheet, topEnd = Radius.sheet))
-                    .navigationBarsPadding()
+                    // Above the navigation bar, and above the keyboard while a field in the sheet has it.
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                     .testTag(testID),
             ) {
                 // The grabber and header take the drag; the rows keep their own scrolling and taps.

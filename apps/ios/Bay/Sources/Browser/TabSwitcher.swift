@@ -292,6 +292,7 @@ private struct TabCard: View {
   let active: Bool
   @ObservedObject var browser: BrowserModel
   @State private var lift: CGFloat = 0
+  @State private var held = false
   /// Where the card sits on screen, so the page can grow out of it.
   @State private var frame: CGRect = .zero
 
@@ -301,7 +302,12 @@ private struct TabCard: View {
     VStack(alignment: .leading, spacing: Space.xs) {
       ZStack(alignment: .topTrailing) {
         Button {
-          browser.pick(tab, frame: frame)
+          // Held, the card opened the pin sheet instead.
+          if held {
+            held = false
+          } else {
+            browser.pick(tab, frame: frame)
+          }
         } label: {
           picture
             .frame(width: width, height: height)
@@ -317,6 +323,13 @@ private struct TabCard: View {
             })
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+          LongPressGesture().onEnded { _ in
+            held = true
+            browser.showPinMenu(tab)
+          })
+        // A hold whose lift never reached the card (the finger slid off) doesn't eat the next tap.
+        .onChange(of: browser.panel) { if $0 == nil { held = false } }
         .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
         .accessibilityLabel(Text(verbatim: strings.t("tabs.openLabel", ["title": title])))
         .accessibilityValue(

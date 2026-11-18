@@ -97,6 +97,12 @@ struct BrowserScreen: View {
           SiteSettingsPanel(browser: browser, onSettings: onSettings)
         case .link:
           if let link = browser.link { LinkMenu(browser: browser, link: link) }
+        case .tabs:
+          TabsMenu(browser: browser)
+        case .pin:
+          if let tab = browser.pinTab { PinPanel(browser: browser, tab: tab) }
+        case .request:
+          if let request = browser.pageRequests.first?.request { PageRequestPanel(browser: browser, request: request).id(request.id) }
         case nil:
           EmptyView()
         }

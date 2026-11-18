@@ -256,6 +256,7 @@ private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f
 @Composable
 private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit) {
     val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
             BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
@@ -268,6 +269,10 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
                     "bar-tabs",
                     if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs"),
                     { browser.showTabs() },
+                    onLongClick = {
+                        Haptics.tick(view)
+                        browser.panel = Panel.TABS
+                    },
                 ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
                 TabCount(count, Modifier.align(Alignment.TopEnd))
             }
@@ -368,7 +373,7 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
         }
         Box(
             Modifier.size(36.dp).testTag("bar-new-space")
-                .pressFeedback { browser.createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}"))) }
+                .pressFeedback { browser.newSpace() }
                 .clearAndSetSemantics { contentDescription = strings.t("tabsMenu.newSpace"); role = Role.Button },
             contentAlignment = Alignment.Center,
         ) { BayIconView(BayIcon.ADD, size = IconSize.small, color = colors.muted) }

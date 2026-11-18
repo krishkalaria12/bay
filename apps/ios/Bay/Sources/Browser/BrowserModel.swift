@@ -36,7 +36,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link
+    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -60,7 +60,14 @@ final class BrowserModel: ObservableObject {
   let app: AppModel
   let strings: Strings
   @Published var overlay: Overlay = .none
-  @Published var panel: Panel?
+  @Published var panel: Panel? {
+    didSet {
+      // The prompts sheet swiped away (or covered by another): the page's question is cancelled.
+      if oldValue == .request, panel != .request, !pageRequests.isEmpty { answerPageRequest(accepted: false) }
+    }
+  }
+  /// What pages asked and wait on, oldest first; the prompts sheet shows the first.
+  @Published private(set) var pageRequests: [(tabId: String, request: PageRequest)] = []
   /// A screen of its own (Settings) is over the browser: no page is active, and VoiceOver skips them.
   @Published var covered = false
   /// A card growing into its page: the tab and where its card sat on screen.
@@ -89,6 +96,10 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var blocked: [String: Int] = [:]
   /// A site shown without blocking until its tab leaves it.
   @Published private(set) var restoredHost: String?
+  /// The tab whose card was held, for the pin sheet.
+  @Published private(set) var pinTab: BrowserTab?
+  /// The folder picked in the tabs menu, which it renames or deletes.
+  @Published var activeFolderId: String?
   /// The link (or bare image) a long press on the page showing opened the link menu for.
   @Published private(set) var link: LinkPress?
 
@@ -162,6 +173,11 @@ final class BrowserModel: ObservableObject {
       views[id] = nil
       navigation[id] = nil
       timing[id] = nil
+      // An unloaded page no longer waits on its questions.
+      if pageRequests.contains(where: { $0.tabId == id }) {
+        pageRequests.removeAll { $0.tabId == id }
+        if pageRequests.isEmpty, panel == .request { panel = nil }
+      }
       if media[id] != nil {
         media[id] = nil
         updateMediaSession()
@@ -516,6 +532,51 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
+  /// A space with the next default name ("Space 3").
+  func newSpace() {
+    createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
+  }
+
+  func newFolder(_ name: String) {
+    let folder = BrowserFolder(id: UUID().uuidString, spaceId: app.activeSpaceId, name: name)
+    app.dispatch(.newFolder(folder: folder))
+    activeFolderId = folder.id
+  }
+
+  func renameFolder(_ id: String, _ name: String) {
+    app.dispatch(.renameFolder(id: id, name: name))
+  }
+
+  /// Deletes a folder; its pinned rows return to the top level.
+  func deleteFolder(_ id: String) {
+    if activeFolderId == id { activeFolderId = nil }
+    app.dispatch(.deleteFolder(id: id))
+  }
+
+  /// Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
+  /// desktop's Pinned folders hold pinned rows).
+  func moveActiveTab(spaceId: String, folderId: String?) {
+    let id = app.activeTabId
+    app.dispatch(.moveTab(id: id, spaceId: spaceId, folderId: nil))
+    activeFolderId = folderId
+    if let folderId { app.dispatch(.pinSite(tabId: id, pinId: UUID().uuidString, kind: .row, folderId: folderId)) }
+    refreshMounted()
+  }
+
+  /// The pin sheet for a held tab card. Private and blank tabs have nothing to pin.
+  func showPinMenu(_ tab: BrowserTab) {
+    guard !tab.private, !tab.url.isEmpty else { return }
+    Haptics.tick()
+    pinTab = tab
+    panel = .pin
+  }
+
+  /// Pins a tab's page that way, or unpins it when it is already pinned so.
+  func pin(_ tab: BrowserTab, kind: PinKind, folderId: String?) {
+    panel = nil
+    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: kind, folderId: folderId))
+  }
+
   /// A pin's page: its tab in the space when one is open there, else a new one.
   func openPin(_ site: PinnedSite) {
     if let open = app.store.tabs().first(where: { $0.spaceId == site.spaceId && $0.url == site.url }) {
@@ -558,6 +619,14 @@ final class BrowserModel: ObservableObject {
         showToast(strings.t("toast.imageNotSaved"))
       }
     }
+  }
+
+  /// Answers the page question on show, then shows the next one waiting, if any.
+  func answerPageRequest(accepted: Bool, value: String? = nil, username: String? = nil, password: String? = nil) {
+    guard !pageRequests.isEmpty else { return }
+    let current = pageRequests.removeFirst()
+    views[current.tabId]?.answerPageRequest(id: current.request.id, accepted: accepted, value: value, username: username, password: password)
+    panel = pageRequests.isEmpty ? (panel == .request ? nil : panel) : .request
   }
 
   /// Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it.
@@ -625,8 +694,8 @@ final class BrowserModel: ObservableObject {
     case .scroll(let offsetY, let deltaY):
       scrolled(tabId, offsetY: offsetY, deltaY: deltaY)
     case .pageRequest(let request):
-      // Page dialogs get their sheet with the panels (N5); until then nothing waits on one.
-      views[tabId]?.answerPageRequest(id: request.id, accepted: false, value: nil, username: nil, password: nil)
+      pageRequests.append((tabId, request))
+      panel = .request
     default:
       break
     }

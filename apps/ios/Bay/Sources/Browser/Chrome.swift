@@ -148,6 +148,7 @@ struct BrowserBar: View {
   let onSettings: () -> Void
   var onChecks: () -> Void = {}
   @State private var swipe: CGFloat = 0
+  @State private var tabsHeld = false
 
   var body: some View {
     let app = browser.app
@@ -161,8 +162,21 @@ struct BrowserBar: View {
       } else if browser.hasPage {
         let count = app.tabs.count
         GlassIconButton(.tabs, label: count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")) {
-          browser.showTabs()
+          // Held, the button opened the tabs menu instead.
+          if tabsHeld {
+            tabsHeld = false
+          } else {
+            browser.showTabs()
+          }
         }
+        .simultaneousGesture(
+          LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+            tabsHeld = true
+            Haptics.tick()
+            browser.panel = .tabs
+          })
+        // A hold whose lift never reached the button (the finger slid off) doesn't eat the next tap.
+        .onChange(of: browser.panel) { if $0 == nil { tabsHeld = false } }
         .overlay(alignment: .topTrailing) { TabCount(count: count) }
         .accessibilityIdentifier("bar-tabs")
         capsule
@@ -314,7 +328,7 @@ struct SpacesCapsule: View {
         .onChange(of: app.activeSpaceId) { reader.scrollTo($0, anchor: .center) }
       }
       Button {
-        browser.createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
+        browser.newSpace()
       } label: {
         Image(systemName: "plus").font(.system(size: 15)).foregroundColor(BayColor.muted).frame(width: 34, height: 34)
           .contentShape(Rectangle())

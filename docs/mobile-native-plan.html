@@ -1486,8 +1486,11 @@ impl BrowserStore {
               Settings' index, with day groups and swipe-to-remove rows; the core lists a bookmark folder or search (<code>bookmarkListing</code>). Site
               settings (<code>page-site-settings</code>: zoom, desktop page, blocking and what it blocks here, Reader opening by itself, swipe, downloads from
               the site, the connection, reset) and the link menu (a long press on a link, or on a bare image on iOS through the core's
-              <code>parseImagePress</code>: open, open in background, copy, share, save an image, and where a link goes). Left: the other sheets, the menu rows
-              that open them (see Known gaps), app icon, sync status and scheduling.
+              <code>parseImagePress</code>: open, open in background, copy, share, save an image, and where a link goes). The tabs menu (holding
+              <code>bar-tabs</code>: new and private tabs, archiving, spaces, moving the tab, and making, renaming and deleting folders), the pin sheet (holding
+              a tab card: an Essential, a pinned row or a row in a folder) and the page's questions (<code>page-request</code>: alert, confirm, prompt, HTTP
+              sign-in, another app's link, camera, microphone and location), queued and answered one at a time; Android's sheets now keep above the keyboard.
+              Left: the other sheets, the menu rows that open them (see Known gaps), app icon, sync status and scheduling.
             </p>
             <ul>
               <li>
@@ -1784,6 +1787,10 @@ impl BrowserStore {
             work once content blocking is wired (N5).
           </li>
           <li>The blocking tip isn't ported yet; it comes with content blocking.</li>
+          <li>
+            Saved logins aren't ported: the sign-in sheet has no "Save password" switch, a site with a saved login is still asked, and Settings' Passwords page
+            has nothing to list. iOS offers its own password saving on the sheet's fields meanwhile.
+          </li>
           <li>
             Site settings' "Block ads / trackers / cookie banners" switches are saved but don't reach the engine yet (<code>setSiteBlocking</code>); they take
             effect once content blocking is wired (N5).

@@ -333,7 +333,14 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                         selected = active
                     }
                     .onGloballyPositioned { frame = it.boundsInRoot() }
-                    .pressFeedback { browser.pick(tab, frame) }
+                    .combinedClickable(
+                        remember { MutableInteractionSource() },
+                        null,
+                        onLongClick = {
+                            Haptics.tick(view)
+                            browser.showPinMenu(tab)
+                        },
+                    ) { browser.pick(tab, frame) }
                     .clip(shape)
                     .background(if (tab.private) Color(0xFF171717) else Theme.colors.surface, shape)
                     .border(if (active) 2.5.dp else 1.dp, if (active) Theme.colors.accent else Theme.colors.hairline, shape),
