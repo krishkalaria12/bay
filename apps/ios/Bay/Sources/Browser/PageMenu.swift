@@ -97,8 +97,7 @@ struct PageMenu: View {
           ActionRow(strings.t("site.desktop"), testID: "page-desktop", icon: .desktop, toggle: desktop) { browser.setDesktop(!desktop) }
         }
         RowDivider()
-        // Site settings come with their panel.
-        ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true, action: act {})
+        ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true) { browser.panel = .siteSettings }
         RowDivider()
         ActionRow(strings.t("pageMenu.tools"), testID: "page-more-tools", icon: .more, chevron: true) { tools = true }
       }

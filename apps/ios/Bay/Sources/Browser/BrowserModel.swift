@@ -36,7 +36,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads
+    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -89,6 +89,8 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var blocked: [String: Int] = [:]
   /// A site shown without blocking until its tab leaves it.
   @Published private(set) var restoredHost: String?
+  /// The link (or bare image) a long press on the page showing opened the link menu for.
+  @Published private(set) var link: LinkPress?
 
   private var views: [String: EngineView] = [:]
   /// The address each tab was last counted as a visit for.
@@ -529,6 +531,35 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
+  private func showLinkMenu(_ press: LinkPress) {
+    Haptics.tick()
+    link = press
+    panel = .link
+  }
+
+  /// Shares a page address (a link's, an image's) through the system's share sheet.
+  func share(_ address: String) {
+    guard let url = URL(string: cleanUrl(url: address)) else { return }
+    present(UIActivityViewController(activityItems: [url], applicationActivities: nil))
+  }
+
+  func copy(_ address: String) {
+    UIPasteboard.general.string = cleanUrl(url: address)
+    showToast(strings.t("toast.linkCopied"))
+  }
+
+  /// Saves a web image to the photo library.
+  func saveImage(_ address: String) {
+    Task {
+      do {
+        try await Engine.saveImage(address)
+        showToast(strings.t("toast.savedToPhotos"))
+      } catch {
+        showToast(strings.t("toast.imageNotSaved"))
+      }
+    }
+  }
+
   /// Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it.
   func openListed(_ url: String) {
     panel = nil
@@ -582,7 +613,13 @@ final class BrowserModel: ObservableObject {
       // A new window becomes a real tab in front, in the opener's own session.
       if isWebUrl(value: url) { openTab(url, privately: isPrivate) }
     case .pageMessage(let message):
-      if let report = parseMediaMessage(message: message) { mediaReported(tabId, report) }
+      if let report = parseMediaMessage(message: message) {
+        mediaReported(tabId, report)
+      } else if tabId == app.activeTabId, let press = parseImagePress(message: message) {
+        showLinkMenu(LinkPress(url: press.url, title: press.title, x: nil, y: nil, image: true))
+      }
+    case .linkPress(let press):
+      if tabId == app.activeTabId { showLinkMenu(press) }
     case .blockedCount(let count):
       blocked[tabId] = count
     case .scroll(let offsetY, let deltaY):
@@ -630,7 +667,11 @@ final class BrowserModel: ObservableObject {
     if plan.watchMedia, let view = views[tabId] {
       // Early in each load (so text doesn't jump late) and again once it finishes.
       applyTweaks(tabId, url: state.url)
-      Task { _ = try? await view.runScript(.watchMedia) }
+      Task {
+        _ = try? await view.runScript(.watchMedia)
+        // WebKit's menu hook knows links but not bare images, so the page reports their long presses itself.
+        _ = try? await view.runScript(.watchImages)
+      }
     }
 
     if state.blank {
@@ -715,14 +756,11 @@ extension BrowserModel {
   }
 
   func share() {
-    let clean = cleanUrl(url: activeUrl)
-    guard let url = URL(string: clean) else { return }
-    present(UIActivityViewController(activityItems: [url], applicationActivities: nil))
+    share(activeUrl)
   }
 
   func copyLink() {
-    UIPasteboard.general.string = cleanUrl(url: activeUrl)
-    showToast(strings.t("toast.linkCopied"))
+    copy(activeUrl)
   }
 
   /// The page through Google Translate, into the app's language.

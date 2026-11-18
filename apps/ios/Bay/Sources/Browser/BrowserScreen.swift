@@ -93,6 +93,10 @@ struct BrowserScreen: View {
           BookmarksPanel(browser: browser)
         case .downloads:
           DownloadsPanel(browser: browser)
+        case .siteSettings:
+          SiteSettingsPanel(browser: browser, onSettings: onSettings)
+        case .link:
+          if let link = browser.link { LinkMenu(browser: browser, link: link) }
         case nil:
           EmptyView()
         }

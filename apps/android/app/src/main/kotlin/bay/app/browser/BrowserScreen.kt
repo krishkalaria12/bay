@@ -119,6 +119,8 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)
+        SiteSettingsPanel(browser, strings, browser.panel == Panel.SITE_SETTINGS, onSettings)
+        LinkMenu(browser, strings, browser.panel == Panel.LINK)
     }
 }
 

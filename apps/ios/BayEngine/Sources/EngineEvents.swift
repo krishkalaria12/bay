@@ -55,6 +55,14 @@ public struct LinkPress: Equatable, Sendable {
   public var y: Double?
   /// A bare image rather than a link: `url` is the image's own address.
   public var image: Bool
+
+  public init(url: String, title: String, x: Double?, y: Double?, image: Bool) {
+    self.url = url
+    self.title = title
+    self.x = x
+    self.y = y
+    self.image = image
+  }
 }
 
 public enum PageRequestKind: String, Sendable {

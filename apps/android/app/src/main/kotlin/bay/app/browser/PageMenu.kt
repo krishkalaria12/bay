@@ -156,8 +156,7 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                 ActionRow(strings.t("site.desktop"), "page-desktop", icon = BayIcon.DESKTOP, toggle = desktop) { browser.setDesktop(!desktop) }
             }
             RowDivider()
-            // Site settings come with their panel.
-            ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, chevron = true, onClick = act {})
+            ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, chevron = true) { browser.panel = Panel.SITE_SETTINGS }
             RowDivider()
             ActionRow(strings.t("pageMenu.tools"), "page-more-tools", icon = BayIcon.MORE, chevron = true) { tools = true }
         }

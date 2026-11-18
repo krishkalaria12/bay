@@ -69,7 +69,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK }
 
 /** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
 enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
@@ -147,6 +147,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** A site shown without blocking until its tab leaves it. */
     var restoredHost by mutableStateOf<String?>(null)
+        private set
+
+    /** The link (or bare image) a long press on the page showing opened the link menu for. */
+    var link by mutableStateOf<EngineEvent.LinkPress?>(null)
         private set
 
     /** AMP pages each tab already left for their publisher's page. One that comes back stays, so the two never bounce. */
@@ -583,6 +587,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             is EngineEvent.PageMessage -> parseMediaMessage(event.message)?.let { mediaReported(tabId, it) }
             is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
+            is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
+                link = event
+                panel = Panel.LINK
+            }
             // Page dialogs get their sheet with the panels (N5); until then nothing waits on one.
             is EngineEvent.Request -> views[tabId]?.answerPageRequest(event.request.id, false, null, null, null)
             else -> {}
@@ -696,15 +704,29 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
     }
 
-    fun share() {
-        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, cleanUrl(activeUrl))
+    fun share() = share(activeUrl)
+
+    /** Shares a page address (a link's, an image's) through the system's share sheet. */
+    fun share(address: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, cleanUrl(address))
         context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    fun copyLink() = copyAddress(activeUrl)
+
     /** Android 13+ confirms copies itself with the system's clipboard preview. */
-    fun copyLink() {
-        copy(cleanUrl(activeUrl))
+    fun copyAddress(address: String) {
+        copy(cleanUrl(address))
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) showToast(strings.t("toast.linkCopied"))
+    }
+
+    /** Saves a web image to Downloads. */
+    fun saveImage(address: String) {
+        scope.launch {
+            runCatching { Engine.saveImage(context, address) }
+                .onSuccess { showToast(strings.t("toast.savedToDownloads")) }
+                .onFailure { showToast(strings.t("toast.imageNotSaved")) }
+        }
     }
 
     private fun copy(text: String) {
