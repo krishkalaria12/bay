@@ -687,6 +687,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     private fun downloadUpdated(update: DownloadEvent) {
         downloadToastId = update.id
         downloadToastTimer?.cancel()
+        // A tab whose first navigation became this download has no page: it goes back to the start page instead of
+        // keeping the file's address (and downloading it again when it's restored). The engine doesn't say so itself.
+        if (update.state == DownloadEventState.STARTED) {
+            navigation.filter { (_, state) -> state.url == update.url && !state.canGoBack }.keys.forEach { tabId ->
+                navigation.remove(tabId)
+                app.dispatch(Action.UpdateTab(tabId, TabUpdate("", "", null, null, null)))
+            }
+            refreshMounted()
+        }
         if (update.state == DownloadEventState.FINISHED && opensWhenFinished(update.filename)) {
             app.downloads.firstOrNull { it.id == update.id }?.let(::openDownload)
         }
