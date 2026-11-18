@@ -1481,8 +1481,10 @@ impl BrowserStore {
               Done so far, on both apps: Settings drawn from the core (the index with search, every page and row, the wallpaper, page zoom, custom engine and
               sync join pages, clearing browsing data through the store's reset), and the page menu (<code>bar-more</code>): navigation, find on page, bookmark,
               share, copy link, pin, private tab, Markdown, archive, translate, the site's zoom and desktop mode, and the blocking card. Page zoom, AMP
-              skipping, desktop mode, swipe, pull to refresh and app links now reach the page views. Left: the other sheets, the menu rows that open them (see
-              Known gaps), app icon, sync status and scheduling.
+              skipping, desktop mode, swipe, pull to refresh and app links now reach the page views. The archive (<code>bar-archive</code>), history, bookmarks
+              (folders, search across the tree, removing a folder after asking) and downloads sheets, opened from the bar, the page menu, the bookmark toast and
+              Settings' index, with day groups and swipe-to-remove rows; the core lists a bookmark folder or search (<code>bookmarkListing</code>). Left: the
+              other sheets, the menu rows that open them (see Known gaps), app icon, sync status and scheduling.
             </p>
             <ul>
               <li>
@@ -1764,8 +1766,15 @@ impl BrowserStore {
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            The page menu's Reader, Site settings, Hide elements, Inspect, History and Downloads rows close the menu and do nothing until their sheets land
-            (N5); the "show hidden elements" row and the bookmark toast's "Show bookmarks" wait for the same.
+            The page menu's Reader, Site settings, Hide elements and Inspect rows close the menu and do nothing until their sheets land (N5); the "show hidden
+            elements" row waits for the same.
+          </li>
+          <li>
+            The bookmarks sheet leaves out "Import from another browser" until the import sheet lands, and Settings' Import and Report rows do nothing yet (N5).
+          </li>
+          <li>
+            Android: a bookmark saved before the page has its title keeps the address without its scheme as its title ("en.wikipedia.org/wiki/Bay"), so the
+            sheet shows that rather than the site's name; the title should follow the page once it loads.
           </li>
           <li>
             The native apps don't load the filter lists yet, so the blocking card's count stays empty and its pause only reaches the engine's paused hosts; both

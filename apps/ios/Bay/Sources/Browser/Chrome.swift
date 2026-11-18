@@ -153,7 +153,7 @@ struct BrowserBar: View {
     let app = browser.app
     HStack(spacing: Space.md) {
       if browser.overlay == .tabs {
-        GlassIconButton(.archive, label: strings.t("bar.archive")) {}
+        GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.panel = .archive }
           .accessibilityIdentifier("bar-archive")
         SpacesCapsule(browser: browser)
         GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
@@ -169,7 +169,7 @@ struct BrowserBar: View {
         GlassIconButton(.more, label: strings.t("bar.more")) { browser.panel = .page }
           .accessibilityIdentifier("bar-more")
       } else {
-        GlassIconButton(.archive, label: strings.t("bar.archive")) {}
+        GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.panel = .archive }
           .accessibilityIdentifier("bar-archive")
         capsule
         GlassIconButton(.settings, label: strings.t("bar.settings"), action: onSettings)

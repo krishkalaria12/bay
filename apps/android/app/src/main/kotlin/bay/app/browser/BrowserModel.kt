@@ -19,6 +19,8 @@ import bay.core.Action
 import bay.core.BookmarkNode
 import bay.core.BrowserSpace
 import bay.core.BrowserTab
+import bay.core.DownloadItem
+import bay.core.DownloadState
 import bay.core.MediaReport
 import bay.core.NavigationReport
 import bay.core.PinKind
@@ -67,7 +69,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS }
 
 /** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
 enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
@@ -538,6 +540,29 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         refreshMounted()
     }
 
+    /** Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it. */
+    fun openListed(url: String) {
+        panel = null
+        overlay = Overlay.NONE
+        val tab = activeTab
+        if (hasPage || tab == null) openTab(url) else navigate(tab.id, url)
+    }
+
+    /** Brings an archived tab back and shows it. */
+    fun restoreArchived(id: String) {
+        panel = null
+        overlay = Overlay.NONE
+        restore(id)
+    }
+
+    /** Opens a finished download in the phone's viewer for its kind. */
+    fun openDownload(item: DownloadItem) {
+        val path = item.path?.takeIf { item.state == DownloadState.FINISHED } ?: return
+        scope.launch {
+            runCatching { Engine.openDownload(context, path) }.onFailure { showToast(strings.t("downloads.status.failed")) }
+        }
+    }
+
     fun retry() {
         val current = failure ?: return
         failure = null
@@ -664,7 +689,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val bookmarked = isBookmarked
         val bookmark = BookmarkNode.Url(UUID.randomUUID().toString(), "bookmarks", tab.title.ifEmpty { tab.url }, tab.url, AppModel.now())
         app.dispatch(Action.ToggleBookmark(app.activeSpaceId, bookmark))
-        showToast(if (bookmarked) strings.t("toast.unbookmarked") else strings.t("toast.bookmarked"))
+        if (bookmarked) {
+            showToast(strings.t("toast.unbookmarked"))
+        } else {
+            showToast(strings.t("toast.bookmarked"), strings.t("toast.showBookmarks")) { panel = Panel.BOOKMARKS }
+        }
     }
 
     fun share() {

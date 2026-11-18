@@ -195,10 +195,9 @@ private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit)
             )
         }
         RowGroup {
-            // History and downloads come with their panels.
-            ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true, onClick = act {})
+            ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true) { browser.panel = Panel.HISTORY }
             RowDivider()
-            ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true, onClick = act {})
+            ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true) { browser.panel = Panel.DOWNLOADS }
             RowDivider()
             ActionRow(strings.t("pageMenu.archiveTab"), "page-close-tab", icon = BayIcon.ARCHIVE, onClick = act { browser.archive(browser.app.activeTabId) })
         }

@@ -62,8 +62,10 @@ final class SettingsModel: ObservableObject {
   }
 
   var counts: IndexCounts {
-    let history = app.store.history(spaceId: app.activeSpaceId, query: "", offset: 0, limit: 10_000).count
-    return IndexCounts(bookmarks: 0, history: UInt32(history), downloads: UInt32(app.downloads.count), crashes: 0)
+    let space = app.activeSpaceId
+    let history = app.store.history(spaceId: space, query: "", offset: 0, limit: 10_000).count
+    let bookmarks = app.store.bookmarkListing(spaceId: space, folderId: "bookmarks", query: "").links
+    return IndexCounts(bookmarks: bookmarks, history: UInt32(history), downloads: UInt32(app.downloads.count), crashes: 0)
   }
 
   /// Opens an index entry: a page (or the page a search found a row on), or one of the browser's own sheets.
@@ -72,9 +74,14 @@ final class SettingsModel: ObservableObject {
     case .page(let page):
       focus = match?.row
       push(match?.page.map { settingsPath(page: $0) } ?? [page])
-    case .action:
-      // The browser's sheets (bookmarks, history, downloads, import) come with the panels.
-      break
+    case .action(let action):
+      // The browser's own sheets open over Settings; import and problem reports come with their sheets.
+      switch action {
+      case .bookmarks: browser.panel = .bookmarks
+      case .history: browser.panel = .history
+      case .downloads: browser.panel = .downloads
+      case .import, .report: break
+      }
     }
   }
 

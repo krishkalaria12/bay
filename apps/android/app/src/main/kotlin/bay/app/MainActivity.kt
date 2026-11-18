@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import bay.app.browser.BrowserModel
 import bay.app.browser.BrowserScreen
+import bay.app.browser.ListPanels
 import bay.app.settings.SettingsModel
 import bay.app.settings.SettingsScreen
 import bay.design.BayTheme
@@ -98,6 +99,7 @@ class MainActivity : ComponentActivity(), EngineHost {
                         else -> {
                             BrowserScreen(browser, strings, onSettings = settings::open, onChecks = { checks = "store" })
                             if (settings.visible) SettingsScreen(settings)
+                            ListPanels(browser, strings)
                         }
                     }
                 }

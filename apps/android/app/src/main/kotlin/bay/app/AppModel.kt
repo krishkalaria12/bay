@@ -83,6 +83,10 @@ class AppModel(context: Context, barTitle: String) {
     var favicons by mutableStateOf(emptyMap<String, String>())
         private set
 
+    /** The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves. */
+    var revision by mutableStateOf(0uL)
+        private set
+
     /** Hears the system's media controls (the media notification): the screen showing the media sets it. */
     var mediaControl: ((MediaControl) -> Unit)? = null
 
@@ -188,6 +192,7 @@ class AppModel(context: Context, barTitle: String) {
         folders = store.folders(activeSpaceId)
         recentHistory = store.history(activeSpaceId, "", 0u, 24u)
         favicons = store.favicons()
+        revision = store.revision()
     }
 
     companion object {

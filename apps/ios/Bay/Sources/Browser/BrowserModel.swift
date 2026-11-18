@@ -36,7 +36,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit
+    case page, spaceEdit, archive, history, bookmarks, downloads
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -529,6 +529,34 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
+  /// Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it.
+  func openListed(_ url: String) {
+    panel = nil
+    overlay = .none
+    if hasPage || activeTab == nil {
+      openTab(url)
+    } else if let tab = activeTab {
+      navigate(tab.id, url)
+    }
+  }
+
+  /// Brings an archived tab back and shows it.
+  func restoreArchived(_ id: String) {
+    panel = nil
+    overlay = .none
+    restore(id)
+  }
+
+  /// Opens a finished download in the phone's viewer for its kind.
+  func openDownload(_ item: DownloadItem) {
+    guard item.state == .finished, let path = item.path else { return }
+    do {
+      try Engine.openDownload(path)
+    } catch {
+      showToast(strings.t("downloads.status.failed"))
+    }
+  }
+
   func retry() {
     guard let failure else { return }
     self.failure = nil
@@ -679,7 +707,11 @@ extension BrowserModel {
       .toggleBookmark(
         spaceId: app.activeSpaceId,
         bookmark: .url(id: UUID().uuidString, parentId: "bookmarks", title: tab.title.isEmpty ? tab.url : tab.title, url: tab.url, addedAt: AppModel.now())))
-    showToast(bookmarked ? strings.t("toast.unbookmarked") : strings.t("toast.bookmarked"))
+    if bookmarked {
+      showToast(strings.t("toast.unbookmarked"))
+    } else {
+      showToast(strings.t("toast.bookmarked"), actionLabel: strings.t("toast.showBookmarks")) { [weak self] in self?.panel = .bookmarks }
+    }
   }
 
   func share() {

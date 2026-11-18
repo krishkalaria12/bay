@@ -10,10 +10,12 @@ import androidx.compose.runtime.setValue
 import bay.app.AppModel
 import bay.app.Strings
 import bay.app.browser.BrowserModel
+import bay.app.browser.Panel
 import bay.core.Action
 import bay.core.ClearStage
 import bay.core.DefaultBrowser
 import bay.core.EngineChoice
+import bay.core.IndexAction
 import bay.core.IndexCounts
 import bay.core.IndexEntry
 import bay.core.LanguageState
@@ -100,8 +102,10 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
 
     val counts: IndexCounts
         get() {
-            val history = app.store.history(app.activeSpaceId, "", 0u, 10_000u).size
-            return IndexCounts(0u, history.toUInt(), app.downloads.size.toUInt(), 0u)
+            val space = app.activeSpaceId
+            val history = app.store.history(space, "", 0u, 10_000u).size
+            val bookmarks = app.store.bookmarkListing(space, "bookmarks", "").links
+            return IndexCounts(bookmarks, history.toUInt(), app.downloads.size.toUInt(), 0u)
         }
 
     /** Opens an index entry: a page (or the page a search found a row on), or one of the browser's own sheets. */
@@ -111,8 +115,13 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 focus = match?.row
                 push(match?.page?.let { settingsPath(it) } ?: listOf(entry.page))
             }
-            // The browser's sheets (bookmarks, history, downloads, import) come with the panels.
-            is IndexEntry.Action -> {}
+            // The browser's own sheets open over Settings; import and problem reports come with their sheets.
+            is IndexEntry.Action -> when (entry.action) {
+                IndexAction.BOOKMARKS -> browser.panel = Panel.BOOKMARKS
+                IndexAction.HISTORY -> browser.panel = Panel.HISTORY
+                IndexAction.DOWNLOADS -> browser.panel = Panel.DOWNLOADS
+                IndexAction.IMPORT, IndexAction.REPORT -> {}
+            }
         }
     }
 

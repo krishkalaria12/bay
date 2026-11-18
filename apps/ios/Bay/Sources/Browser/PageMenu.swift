@@ -136,10 +136,9 @@ struct PageMenu: View {
             action: act(browser.copyMarkdown))
         }
         RowGroup {
-          // History and downloads come with their panels.
-          ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true, action: act {})
+          ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true) { browser.panel = .history }
           RowDivider()
-          ActionRow(strings.t("pageMenu.downloads"), testID: "page-downloads", icon: .download, chevron: true, action: act {})
+          ActionRow(strings.t("pageMenu.downloads"), testID: "page-downloads", icon: .download, chevron: true) { browser.panel = .downloads }
           RowDivider()
           ActionRow(strings.t("pageMenu.archiveTab"), testID: "page-close-tab", icon: .archive, action: act { browser.archive(app.activeTabId) })
         }

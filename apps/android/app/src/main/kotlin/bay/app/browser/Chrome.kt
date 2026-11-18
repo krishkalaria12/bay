@@ -258,7 +258,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
     val app = browser.app
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
-            BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             SpacesCapsule(browser, strings)
             BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
         } else if (browser.hasPage) {
@@ -274,7 +274,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
             Capsule(browser, strings)
             BarButton("bar-more", strings.t("bar.more"), { browser.panel = Panel.PAGE }) { BayIconView(BayIcon.MORE, size = IconSize.control) }
         } else {
-            BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             Capsule(browser, strings)
             BarButton("bar-settings", strings.t("bar.settings"), onSettings, onLongClick = onChecks) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
         }

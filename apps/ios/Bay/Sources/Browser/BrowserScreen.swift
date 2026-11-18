@@ -85,6 +85,14 @@ struct BrowserScreen: View {
           PageMenu(browser: browser, onSettings: onSettings)
         case .spaceEdit:
           if let space = browser.activeSpace { SpaceEditPanel(browser: browser, space: space) }
+        case .archive:
+          ArchivePanel(browser: browser)
+        case .history:
+          HistoryPanel(browser: browser)
+        case .bookmarks:
+          BookmarksPanel(browser: browser)
+        case .downloads:
+          DownloadsPanel(browser: browser)
         case nil:
           EmptyView()
         }

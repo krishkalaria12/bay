@@ -29,6 +29,8 @@ final class AppModel: ObservableObject {
   @Published private(set) var recentHistory: [HistoryEntry] = []
   /// Saved site icons (local file addresses) by host.
   @Published private(set) var favicons: [String: String] = [:]
+  /// The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves.
+  @Published private(set) var revision: UInt64 = 0
   /// Hears the system's media controls (lock screen, Control Center): the screen showing the media sets it.
   var mediaControl: ((MediaControl) -> Void)?
 
@@ -162,6 +164,7 @@ final class AppModel: ObservableObject {
     folders = store.folders(spaceId: activeSpaceId)
     recentHistory = store.history(spaceId: activeSpaceId, query: "", offset: 0, limit: 24)
     favicons = store.favicons()
+    revision = store.revision()
   }
 }
 
