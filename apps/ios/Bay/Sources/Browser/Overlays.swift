@@ -11,7 +11,7 @@ struct ToastView: View {
     HStack(spacing: Space.sm) {
       BayText(toast.text, variant: .callout).lineLimit(2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier("toast")
+        .accessibilityIdentifier(toast.notice ? "reading-notice" : "toast")
       if let label = toast.actionLabel, let action = toast.action {
         Button {
           onDone()

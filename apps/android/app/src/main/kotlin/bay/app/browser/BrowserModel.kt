@@ -97,7 +97,8 @@ data class FindState(val query: String = "", val count: Int? = null, val index: 
 data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rect)
 
 /** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
-data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
+/** A short message above the bar; a reading tool's notice (Inspect, Reader, the element picker) has its own id. */
+data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null, val notice: Boolean = false)
 
 /** What a tab's media last reported, and when. */
 data class TabMedia(val report: MediaReport, val at: Long)
@@ -377,12 +378,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         showToast(strings.t("toast.unpinned"), strings.t("toast.undo")) { app.dispatch(Action.AddPin(site, index.toLong())) }
     }
 
-    fun showToast(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
-        val message = ToastMessage(System.nanoTime(), text, actionLabel, action)
+    fun showToast(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) = show(ToastMessage(System.nanoTime(), text, actionLabel, action))
+
+    /** A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't. */
+    fun showNotice(text: String) = show(ToastMessage(System.nanoTime(), text, notice = true))
+
+    private fun show(message: ToastMessage) {
         toast = message
         toastTimer?.cancel()
         toastTimer = scope.launch {
-            delay(if (action == null) 2_500 else 8_000)
+            delay(if (message.notice) 4_000 else if (message.action == null) 2_500 else 8_000)
             if (toast?.id == message.id) toast = null
         }
     }
@@ -962,7 +967,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val view = activeView ?: return
         scope.launch {
             val moved = runCatching { view.runScript(PageScript.PICK_PARENT) }.getOrNull() == "true"
-            if (!moved) showToast(strings.t("notice.noParent"))
+            if (!moved) showNotice(strings.t("notice.noParent"))
         }
     }
 
@@ -992,7 +997,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     fun copyInspected() {
         val element = inspected ?: return
         copy(element.agent)
-        showToast(strings.t("notice.copiedForAgent"))
+        showNotice(strings.t("notice.copiedForAgent"))
     }
 
     // Reader
@@ -1011,7 +1016,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 panel = Panel.READER
             } else {
                 if (panel == Panel.PAGE) panel = null
-                showToast(strings.t("notice.noArticle"))
+                showNotice(strings.t("notice.noArticle"))
             }
         }
     }
@@ -1051,7 +1056,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             val json = runCatching { view.runScript(PageScript.MARKDOWN) }.getOrNull() ?: return@launch
             val markdown = runCatching { JSONObject(json).getString("markdown") }.getOrNull() ?: return@launch
             copy(markdown)
-            showToast(strings.t("notice.markdownCopied"))
+            showNotice(strings.t("notice.markdownCopied"))
         }
     }
 

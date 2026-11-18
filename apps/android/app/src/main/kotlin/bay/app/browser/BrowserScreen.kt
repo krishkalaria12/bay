@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,7 +85,9 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             PrivateLock(strings) { activity?.let(browser::unlock) }
         }
         browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
-        if (browser.overlay != Overlay.SEARCH) {
+        // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
+        // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
+        val bottom: @Composable BoxScope.() -> Unit = {
             // Scrolled away while the page scrolls down; the toast and the player go with it.
             val away by animateFloatAsState(if (browser.barHidden && browser.overlay == Overlay.NONE) 1f else 0f, tween(200), label = "bar")
             Column(
@@ -117,6 +120,10 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                     }
                 }
             }
+        }
+        val pickerOnTop = browser.picking != null && browser.panel != null
+        if (browser.overlay != Overlay.SEARCH) {
+            if (!pickerOnTop) bottom()
         } else {
             val active = browser.activeTab
             SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
@@ -130,6 +137,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         PageRequestPanel(browser, strings, browser.panel == Panel.REQUEST)
         ReaderPanel(browser, strings, browser.panel == Panel.READER)
         InspectPanel(browser, strings, browser.panel == Panel.INSPECT)
+        if (pickerOnTop && browser.overlay != Overlay.SEARCH) bottom()
     }
 }
 

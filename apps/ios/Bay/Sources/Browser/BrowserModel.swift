@@ -18,6 +18,8 @@ struct ToastMessage: Identifiable {
   let text: String
   let actionLabel: String?
   let action: (() -> Void)?
+  /// A reading tool's notice (Inspect, Reader, the element picker), which has its own id.
+  var notice = false
 }
 
 /// What a tab's media last reported, and when.
@@ -304,12 +306,20 @@ final class BrowserModel: ObservableObject {
   }
 
   func showToast(_ text: String, actionLabel: String? = nil, action: (() -> Void)? = nil) {
-    let message = ToastMessage(text: text, actionLabel: actionLabel, action: action)
+    show(ToastMessage(text: text, actionLabel: actionLabel, action: action))
+  }
+
+  /// A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't.
+  func showNotice(_ text: String) {
+    show(ToastMessage(text: text, actionLabel: nil, action: nil, notice: true))
+  }
+
+  private func show(_ message: ToastMessage) {
     toast = message
-    UIAccessibility.post(notification: .announcement, argument: actionLabel.map { "\(text). \($0)" } ?? text)
+    UIAccessibility.post(notification: .announcement, argument: message.actionLabel.map { "\(message.text). \($0)" } ?? message.text)
     toastTimer?.cancel()
     toastTimer = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: action == nil ? 2_500_000_000 : 8_000_000_000)
+      try? await Task.sleep(nanoseconds: message.notice ? 4_000_000_000 : message.action == nil ? 2_500_000_000 : 8_000_000_000)
       guard !Task.isCancelled, self?.toast?.id == message.id else { return }
       self?.toast = nil
     }
@@ -954,7 +964,7 @@ extension BrowserModel {
     guard let view = activeView else { return }
     Task { [weak self] in
       let moved = (try? await view.runScript(.pickParent)) == "true"
-      if !moved, let self { self.showToast(self.strings.t("notice.noParent")) }
+      if !moved, let self { self.showNotice(self.strings.t("notice.noParent")) }
     }
   }
 
@@ -987,7 +997,7 @@ extension BrowserModel {
   func copyInspected() {
     guard let inspected else { return }
     UIPasteboard.general.string = inspected.agent
-    showToast(strings.t("notice.copiedForAgent"))
+    showNotice(strings.t("notice.copiedForAgent"))
   }
 
   // MARK: Reader
@@ -1007,7 +1017,7 @@ extension BrowserModel {
         self.panel = .reader
       } else {
         if self.panel == .page { self.panel = nil }
-        self.showToast(self.strings.t("notice.noArticle"))
+        self.showNotice(self.strings.t("notice.noArticle"))
       }
     }
   }
@@ -1052,7 +1062,7 @@ extension BrowserModel {
         let result = try? JSONDecoder().decode(Result.self, from: Data(text.utf8))
       else { return }
       UIPasteboard.general.string = result.markdown
-      self?.showToast(self?.strings.t("notice.markdownCopied") ?? "")
+      self?.showNotice(self?.strings.t("notice.markdownCopied") ?? "")
     }
   }
 

@@ -141,6 +141,20 @@ struct InspectPanel: View {
         }
       }
     }
+    // The sheet covers the bar, so the picker's card and its notices stay at the sheet's foot, as they were before it
+    // opened.
+    .safeAreaInset(edge: .bottom) {
+      VStack(spacing: Space.md) {
+        if let toast = browser.toast {
+          ToastView(toast: toast, onDone: browser.dismissToast).id(toast.id)
+        }
+        if let mode = browser.picking {
+          PickerCard(browser: browser, mode: mode)
+        }
+      }
+      .padding(.horizontal, Space.edge)
+      .padding(.bottom, Space.xs)
+    }
   }
 
   /// Where the rendered font comes from, and why it isn't the page's first choice when it isn't.

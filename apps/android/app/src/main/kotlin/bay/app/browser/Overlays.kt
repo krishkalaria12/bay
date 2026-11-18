@@ -72,7 +72,7 @@ fun Toast(toast: ToastMessage, onDone: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(Space.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BayText(toast.text, Modifier.weight(1f).testTag("toast").semantics { liveRegion = LiveRegionMode.Polite }, variant = TextVariant.CALLOUT, maxLines = 2)
+        BayText(toast.text, Modifier.weight(1f).testTag(if (toast.notice) "reading-notice" else "toast").semantics { liveRegion = LiveRegionMode.Polite }, variant = TextVariant.CALLOUT, maxLines = 2)
         val label = toast.actionLabel
         val action = toast.action
         if (label != null && action != null) {
