@@ -87,6 +87,8 @@ final class BrowserModel: ObservableObject {
   /// The search was started for a new tab (from the switcher) rather than for the page on screen.
   @Published private(set) var searchInNewTab = false
   @Published private(set) var searchPrivately = false
+  /// The search card starts listening as it opens: the widget's microphone (C7).
+  @Published private(set) var searchListening = false
   /// What each loaded page last reported.
   @Published private(set) var navigation: [String: NavigationState] = [:]
   /// A page that failed to load, while its tab shows.
@@ -231,9 +233,10 @@ final class BrowserModel: ObservableObject {
 
   // MARK: Actions
 
-  func search(inNewTab: Bool, privately: Bool = false) {
+  func search(inNewTab: Bool, privately: Bool = false, listening: Bool = false) {
     searchInNewTab = inNewTab
     searchPrivately = privately
+    searchListening = listening
     overlay = .search
   }
 
@@ -677,6 +680,35 @@ final class BrowserModel: ObservableObject {
     } else if let tab = activeTab {
       navigate(tab.id, url)
     }
+  }
+
+  /// Answers a link from another app (B9, B14, B15). A `bay://` command opens a fresh tab, a private tab, or the search
+  /// card over the tab showing; a page takes the tab showing when it's blank, and a new tab otherwise. What is open
+  /// over the browser goes first. False for anything else, which is left alone.
+  @discardableResult
+  func openIncoming(_ value: String) -> Bool {
+    if let command = bayCommand(value: value) {
+      panel = nil
+      link = nil
+      switch command {
+      case .search: search(inNewTab: false)
+      case .voice: search(inNewTab: false, listening: true)
+      case .newTab, .privateTab:
+        overlay = .none
+        openTab("", privately: command == .privateTab)
+      }
+      return true
+    }
+    guard let url = incomingLink(value: value) else { return false }
+    overlay = .none
+    panel = nil
+    link = nil
+    if let tab = activeTab, tab.url.isEmpty {
+      navigate(tab.id, url)
+    } else {
+      openTab(url)
+    }
+    return true
   }
 
   /// Brings an archived tab back and shows it.

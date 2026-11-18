@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct BayApp: App {
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var strings: Strings
   @StateObject private var model: AppModel
   @StateObject private var browser: BrowserModel
@@ -36,6 +37,7 @@ struct BayApp: App {
         }
       }
       .onAppear(perform: launch)
+      .onOpenURL { IncomingLinks.shared.arrive($0.absoluteString) }
       // Settings › General › Show welcome again.
       .onChange(of: model.preferences.welcomed) { welcomed in
         if !welcomed { showWelcome() }
@@ -79,9 +81,18 @@ extension BayApp {
       showWelcome()
       return
     }
-    guard model.preferences.openSearchOnLaunch else { return }
-    // Over a page, a new search starts a new tab and leaves the page as it was.
-    browser.search(inNewTab: !opened && !(browser.activeTab?.url.isEmpty ?? true))
+    if model.preferences.openSearchOnLaunch {
+      // Over a page, a new search starts a new tab and leaves the page as it was.
+      browser.search(inNewTab: !opened && !(browser.activeTab?.url.isEmpty ?? true))
+    }
+    takeLinks()
+  }
+
+  /// The browser takes links from other apps from now on, starting with one that waited for it. Settings goes first.
+  private func takeLinks() {
+    IncomingLinks.shared.receiver = { [browser, settings] url in
+      if browser.openIncoming(url) { settings.close() }
+    }
   }
 
   /// Back in front: a fresh start page after a long time away, ready to type too.
@@ -96,11 +107,14 @@ extension BayApp {
   private func showWelcome() {
     guard welcome == nil else { return }
     settings.close()
+    // Links wait under the welcome, and open once it's done.
+    IncomingLinks.shared.receiver = nil
     welcome = FirstRun(strings: strings) { [model, browser] openField in
       model.dispatch(.preferences(update: .welcomedNow))
       welcome = nil
       // Skipped early: the glass hands over to the real field.
       if openField { browser.search(inNewTab: false) }
+      takeLinks()
     }
   }
 }

@@ -1,5 +1,6 @@
 import BayCore
 import BayDesign
+import BayEngine
 import SwiftUI
 import UIKit
 
@@ -69,6 +70,7 @@ struct SearchCard: View {
   @State private var suppressed: Bool
   @State private var dragged: CGFloat = 0
   @State private var grown = false
+  @State private var listening = false
   @FocusState private var focused: Bool
   private let initialText: String
 
@@ -164,6 +166,8 @@ struct SearchCard: View {
           UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
         }
       }
+      // Opened from the widget's microphone: listening at once, as if the mic had been tapped.
+      if browser.searchListening { listen() }
     }
     .onChange(of: query) { remote.request($0, engine: browser.engine, enabled: app.preferences.searchSuggestions) }
     .onDisappear { remote.cancel() }
@@ -201,6 +205,11 @@ struct SearchCard: View {
         iconButton(.close, label: strings.t("search.clear"), color: secondary) { fill("") }
           .accessibilityIdentifier("clear-address")
       }
+      iconButton(.mic, label: strings.t(listening ? "search.listening" : "search.voice"), color: listening ? text : secondary, size: IconSize.control) {
+        listen()
+      }
+      .disabled(listening)
+      .accessibilityIdentifier("voice-search")
       iconButton(.private, label: strings.t("search.private"), color: privately ? text : secondary, size: IconSize.control) {
         privately.toggle()
       }
@@ -235,6 +244,17 @@ struct SearchCard: View {
     suppressed = true
     query = text
     focused = true
+  }
+
+  /// Voice search (B16): the engine listens once, and what it hears replaces the field, like a paste.
+  private func listen() {
+    guard !listening else { return }
+    listening = true
+    Task {
+      let heard = await Engine.listen()
+      listening = false
+      if let heard { fill(heard) }
+    }
   }
 
   private func dismiss() {
