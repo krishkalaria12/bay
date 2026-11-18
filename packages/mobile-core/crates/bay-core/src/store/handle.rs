@@ -12,7 +12,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::Action;
-use super::bookmarks::{empty_bookmarks, is_bookmarked};
+use super::bookmarks::{BookmarkListing, bookmark_listing, empty_bookmarks, is_bookmarked};
 use super::model::{
     PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
     unused_space_icon,
@@ -338,6 +338,20 @@ impl BrowserStore {
             .unwrap_or_else(empty_bookmarks)
     }
 
+    /// The bookmarks sheet's rows: a folder of the space's tree, or the links matching `query` from all of it.
+    pub fn bookmark_listing(
+        &self,
+        space_id: String,
+        folder_id: String,
+        query: String,
+    ) -> BookmarkListing {
+        let state = lock(&self.state);
+        match state.data.bookmarks.get(&space_id) {
+            Some(tree) => bookmark_listing(tree, &folder_id, &query),
+            None => bookmark_listing(&empty_bookmarks(), &folder_id, &query),
+        }
+    }
+
     /// A space's archive, newest first.
     pub fn archive(&self, space_id: String) -> Vec<ArchivedTab> {
         lock(&self.state)
@@ -478,6 +492,72 @@ mod tests {
         });
         assert!(store.is_bookmarked(PERSONAL_SPACE_ID.into(), url.into()));
         assert!(!store.is_bookmarked("work".into(), url.into()));
+    }
+
+    #[test]
+    fn the_bookmarks_sheet_lists_a_folder_or_a_search() {
+        let dir = temp_dir("bookmarks");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        let link = |id: &str, parent: &str, title: &str| BookmarkNode::Url {
+            id: id.into(),
+            parent_id: parent.into(),
+            title: title.into(),
+            url: format!("https://{id}.example/"),
+            added_at: 1,
+        };
+        store.dispatch(Action::AddBookmarks {
+            space_id: PERSONAL_SPACE_ID.into(),
+            nodes: vec![
+                BookmarkNode::Folder {
+                    id: "f".into(),
+                    parent_id: Some(BOOKMARKS_ROOT.into()),
+                    title: "Work".into(),
+                    children: vec!["inner".into()],
+                    added_at: 1,
+                },
+                link("inner", "f", "Docs"),
+                link("top", BOOKMARKS_ROOT, "News"),
+            ],
+        });
+        let space = || PERSONAL_SPACE_ID.to_string();
+
+        let top = store.bookmark_listing(space(), BOOKMARKS_ROOT.into(), String::new());
+        let rows: Vec<(&str, u32)> = top
+            .rows
+            .iter()
+            .map(|row| (row.node.id(), row.links))
+            .collect();
+        assert_eq!(
+            (top.parent_id, top.nodes, top.links, rows),
+            (None, 3, 2, vec![("f", 1), ("top", 0)])
+        );
+
+        let folder = store.bookmark_listing(space(), "f".into(), String::new());
+        assert_eq!(
+            (
+                folder.parent_id.as_deref(),
+                folder.title.as_str(),
+                folder.rows.len()
+            ),
+            (Some(BOOKMARKS_ROOT), "Work", 1)
+        );
+
+        // A search looks through every folder; a folder that's gone shows the top.
+        let found = store.bookmark_listing(space(), "f".into(), " docs ".into());
+        assert_eq!(
+            found
+                .rows
+                .iter()
+                .map(|row| row.node.id())
+                .collect::<Vec<_>>(),
+            ["inner"]
+        );
+        assert_eq!(
+            store
+                .bookmark_listing(space(), "gone".into(), String::new())
+                .folder_id,
+            BOOKMARKS_ROOT
+        );
     }
 
     #[test]

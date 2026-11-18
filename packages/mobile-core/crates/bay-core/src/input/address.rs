@@ -66,3 +66,33 @@ pub fn site_name(url: &str) -> String {
         host
     }
 }
+
+/// A page's title for a list row: its own, or its site's name when it has none or the title is only an address.
+#[uniffi::export]
+pub fn page_title(title: &str, url: &str) -> String {
+    let is_address = title.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
+    });
+    if title.is_empty() || is_address {
+        site_name(url)
+    } else {
+        title.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_title;
+
+    #[test]
+    fn a_row_falls_back_to_the_site_when_the_title_is_missing_or_an_address() {
+        let url = "https://www.example.com/a";
+        assert_eq!(page_title("Docs", url), "Docs");
+        assert_eq!(page_title("", url), "example.com");
+        assert_eq!(page_title("https://www.example.com/a", url), "example.com");
+        assert_eq!(page_title("Read: a://b", url), "Read: a://b");
+    }
+}

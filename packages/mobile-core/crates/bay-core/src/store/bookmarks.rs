@@ -81,6 +81,109 @@ pub fn bookmark_links(bookmarks: &Bookmarks, folder_id: &str) -> Vec<(String, St
     links
 }
 
+/// How many search matches the bookmarks sheet lists.
+const SHOWN_MATCHES: usize = 200;
+
+/// A row of the bookmarks sheet: a link, or a folder with how many links it holds, however deep.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkRow {
+    pub node: BookmarkNode,
+    pub links: u32,
+}
+
+/// What the bookmarks sheet shows: a folder's rows in the order they were saved, or every link that matches a search,
+/// whichever folder it's in.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkListing {
+    /// The folder shown: the one asked for, or the top when it's gone (removed while open, or by clearing data).
+    pub folder_id: String,
+    /// Where the back arrow goes; none at the top.
+    pub parent_id: Option<String>,
+    pub title: String,
+    pub rows: Vec<BookmarkRow>,
+    /// Every bookmark and folder in the tree, the root aside.
+    pub nodes: u32,
+    /// Every link in the tree, however deep.
+    pub links: u32,
+}
+
+/// Every link node under a folder, in the order a walk from it meets them.
+fn link_nodes<'a>(bookmarks: &'a Bookmarks, folder_id: &str) -> Vec<&'a BookmarkNode> {
+    fn walk<'a>(
+        bookmarks: &'a Bookmarks,
+        id: &str,
+        links: &mut Vec<&'a BookmarkNode>,
+        seen: &mut HashSet<String>,
+    ) {
+        if !seen.insert(id.to_owned()) {
+            return;
+        }
+        for child in folder_children(bookmarks, id).into_iter().flatten() {
+            match bookmarks.get(child) {
+                Some(node @ BookmarkNode::Url { .. }) => links.push(node),
+                Some(BookmarkNode::Folder { .. }) => walk(bookmarks, child, links, seen),
+                None => {}
+            }
+        }
+    }
+    let mut links = Vec::new();
+    walk(bookmarks, folder_id, &mut links, &mut HashSet::new());
+    links
+}
+
+/// The bookmarks sheet's rows for a folder, or for a search across the whole tree.
+pub fn bookmark_listing(bookmarks: &Bookmarks, folder_id: &str, query: &str) -> BookmarkListing {
+    let folder_id = match bookmarks.get(folder_id) {
+        Some(BookmarkNode::Folder { .. }) => folder_id,
+        _ => BOOKMARKS_ROOT,
+    };
+    let (parent_id, title) = match bookmarks.get(folder_id) {
+        Some(BookmarkNode::Folder {
+            parent_id, title, ..
+        }) if folder_id != BOOKMARKS_ROOT => (
+            Some(parent_id.clone().unwrap_or_else(|| BOOKMARKS_ROOT.into())),
+            title.clone(),
+        ),
+        _ => (None, String::new()),
+    };
+    let row = |node: &BookmarkNode| BookmarkRow {
+        links: match node {
+            BookmarkNode::Folder { id, .. } => link_nodes(bookmarks, id).len() as u32,
+            BookmarkNode::Url { .. } => 0,
+        },
+        node: node.clone(),
+    };
+    let needle = query.trim().to_lowercase();
+    let rows = if needle.is_empty() {
+        folder_children(bookmarks, folder_id)
+            .into_iter()
+            .flatten()
+            .filter_map(|id| bookmarks.get(id))
+            .map(row)
+            .collect()
+    } else {
+        link_nodes(bookmarks, BOOKMARKS_ROOT)
+            .into_iter()
+            .filter(|node| match node {
+                BookmarkNode::Url { title, url, .. } => {
+                    title.to_lowercase().contains(&needle) || url.to_lowercase().contains(&needle)
+                }
+                BookmarkNode::Folder { .. } => false,
+            })
+            .take(SHOWN_MATCHES)
+            .map(row)
+            .collect()
+    };
+    BookmarkListing {
+        folder_id: folder_id.to_owned(),
+        parent_id,
+        title,
+        rows,
+        nodes: bookmarks.len().saturating_sub(1) as u32,
+        links: link_nodes(bookmarks, BOOKMARKS_ROOT).len() as u32,
+    }
+}
+
 /// Whether a page is bookmarked anywhere in the tree.
 pub fn is_bookmarked(bookmarks: &Bookmarks, url: &str) -> bool {
     bookmarks

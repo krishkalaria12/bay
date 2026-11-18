@@ -31,8 +31,9 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::js::{site_host, trim};
-use crate::store::DownloadItem;
 use crate::store::handle::BrowserStore;
+use crate::store::model::INTERRUPTED_DOWNLOAD;
+use crate::store::{DownloadItem, DownloadState};
 
 static OPENS_ITSELF: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i-u:\.(pkpass|pkpasses|ics))$").unwrap());
@@ -42,6 +43,13 @@ static OPENS_ITSELF: LazyLock<Regex> =
 #[uniffi::export]
 pub fn opens_when_finished(filename: &str) -> bool {
     OPENS_ITSELF.is_match(trim(filename))
+}
+
+/// Whether a download failed because Bay closed during it: the downloads sheet says so in the app's language, where
+/// the engine's own failures arrive already worded.
+#[uniffi::export]
+pub fn download_interrupted(item: DownloadItem) -> bool {
+    item.state == DownloadState::Failed && item.error.as_deref() == Some(INTERRUPTED_DOWNLOAD)
 }
 
 /// How many files came from the site a page is on, for its Site Settings. Private ones are never counted there.
