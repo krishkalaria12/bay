@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use super::model::{
     PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
+    unused_space_icon,
 };
 use super::parse::parse_browser_data;
 use super::types::*;
@@ -220,6 +221,18 @@ impl BrowserStore {
         lock(&self.state).revision
     }
 
+    /// A new space to add after the others (`Action::CreateSpace`): `name`, the next colour in turn and an emoji no
+    /// space wears yet, as the Expo app makes one.
+    pub fn new_space(&self, id: String, name: String) -> BrowserSpace {
+        let spaces = &lock(&self.state).data.spaces;
+        BrowserSpace {
+            id,
+            name,
+            color: SPACE_COLORS[spaces.len() % SPACE_COLORS.len()],
+            icon: Some(unused_space_icon(spaces)),
+        }
+    }
+
     pub fn spaces(&self) -> Vec<BrowserSpace> {
         lock(&self.state).data.spaces.clone()
     }
@@ -368,6 +381,12 @@ mod tests {
         assert_eq!(store.load_outcome(), LoadOutcome::Fresh);
         assert_eq!(store.active_tab_id(), "first");
         assert_eq!(store.spaces()[0].id, PERSONAL_SPACE_ID);
+        // The second space takes the second colour and the first emoji past the house.
+        let next = store.new_space("work".into(), "Space 2".into());
+        assert_eq!(
+            (next.color, next.icon.as_deref()),
+            (SpaceColor::Green, Some("✨"))
+        );
         assert!(!store.preferences().welcomed);
     }
 
