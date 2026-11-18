@@ -4,6 +4,11 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.isSystemInDarkTheme
+import bay.app.browser.Overlay
+import bay.core.PreferencesUpdate
+import bay.app.welcome.FirstRunScreen
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import bay.app.browser.BrowserModel
@@ -55,6 +60,8 @@ import java.util.UUID
 class MainActivity : ComponentActivity(), EngineHost {
     private lateinit var model: AppModel
     private lateinit var browser: BrowserModel
+    private lateinit var settings: SettingsModel
+    private var launched = false
 
     /** The page's permission request waiting on the system's answer (one at a time, as the system asks). */
     private var permissionsAnswered: (() -> Unit)? = null
@@ -87,7 +94,7 @@ class MainActivity : ComponentActivity(), EngineHost {
         val strings = Strings(applicationContext)
         model = AppModel(applicationContext, strings.t("sync.bar"))
         browser = BrowserModel(this, model, strings)
-        val settings = SettingsModel(applicationContext, model, browser, strings)
+        settings = SettingsModel(applicationContext, model, browser, strings)
         setContent {
             // The stand-in screens (the engine check, the store check) behind a long press on Settings, for testing.
             var checks by remember { mutableStateOf<String?>(null) }
@@ -100,6 +107,20 @@ class MainActivity : ComponentActivity(), EngineHost {
                             BrowserScreen(browser, strings, onSettings = settings::open, onChecks = { checks = "store" })
                             if (settings.visible) SettingsScreen(settings)
                             ListPanels(browser, strings)
+                            // The first run, until it's done; Settings › General › Show welcome again brings it back.
+                            if (!model.preferences.welcomed) {
+                                // The browser underneath steps out of TalkBack's way while the welcome is up.
+                                DisposableEffect(Unit) {
+                                    settings.close()
+                                    browser.covered = true
+                                    onDispose { browser.covered = settings.visible }
+                                }
+                                FirstRunScreen(model, strings, isSystemInDarkTheme()) { openField ->
+                                    model.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, true, null, null, null)))
+                                    // Skipped early: the plate hands over to the real field.
+                                    if (openField) browser.search(inNewTab = false)
+                                }
+                            }
                         }
                     }
                 }
@@ -111,6 +132,28 @@ class MainActivity : ComponentActivity(), EngineHost {
     override fun onStart() {
         super.onStart()
         model.startSyncing()
+        if (launched) cameBack() else launch()
+    }
+
+    /**
+     * Bay opens ready to type (C1): the search card comes up as it starts, over a fresh start page after a long time
+     * away. Not on the run that shows the welcome, which ends on the field itself when it's skipped.
+     */
+    private fun launch() {
+        launched = true
+        val opened = model.store.startFresh(AppModel.now(), UUID.randomUUID().toString())
+        if (!model.preferences.welcomed || !model.preferences.openSearchOnLaunch) return
+        // Over a page, a new search starts a new tab and leaves the page as it was.
+        browser.search(inNewTab = !opened && browser.activeTab?.url?.isNotEmpty() == true)
+    }
+
+    /** Back in front: a fresh start page after a long time away, ready to type too. */
+    private fun cameBack() {
+        if (!model.preferences.welcomed || !model.store.startFresh(AppModel.now(), UUID.randomUUID().toString())) return
+        browser.overlay = Overlay.NONE
+        browser.panel = null
+        settings.close()
+        if (model.preferences.openSearchOnLaunch) browser.search(inNewTab = false)
     }
 
     override fun onStop() {

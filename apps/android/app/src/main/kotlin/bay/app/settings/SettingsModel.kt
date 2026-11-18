@@ -52,6 +52,9 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
     var clearStage by mutableStateOf(ClearStage.IDLE)
         private set
 
+    /** Asks to be the default browser with the system's dialog: the screen sets it, since it needs an activity. */
+    var makeDefault: (() -> Unit)? = null
+
     /** The row a search opened a page at, lit for a moment. */
     var focus by mutableStateOf<String?>(null)
 
@@ -102,7 +105,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 strings.t("settings.wallpapers.${prefs.wallpaper.name.lowercase()}"),
                 strings.t(appIcon.label),
                 LanguageState(strings.saved, strings.locale, strings.device),
-                DefaultBrowser.UNKNOWN,
+                bay.app.welcome.DefaultBrowserStatus.current(appContext),
                 app.store.tabs().size.toUInt(),
                 null,
                 clearStage,
@@ -157,7 +160,8 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
             is SettingsAction.ResumeBlocking -> app.dispatch(Action.PauseBlocking(action.host, false))
             is SettingsAction.SetLockPrivateTabs -> app.dispatch(Action.LockPrivateTabs(action.on))
             is SettingsAction.SetLanguage -> strings.choose(action.locale)
-            SettingsAction.MakeDefault -> appContext.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // The system's own dialog where it can still ask, else Default apps settings.
+            SettingsAction.MakeDefault -> makeDefault?.invoke() ?: appContext.startActivity(bay.app.welcome.DefaultBrowserStatus.settings())
             SettingsAction.ExportTabs -> exportTabs()
             is SettingsAction.ForgetLogin -> {}
             SettingsAction.AskToClear -> clearStage = ClearStage.CONFIRMING

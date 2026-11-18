@@ -1,5 +1,9 @@
 package bay.app.settings
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -73,6 +77,23 @@ import bay.design.style
  */
 @Composable
 fun SettingsScreen(settings: SettingsModel) {
+    val activity = LocalContext.current
+    // Make Bay default: the system's dialog where it can still ask; refused twice, Android answers at once, so Default
+    // apps settings open instead.
+    val askDefault = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_CANCELED &&
+            bay.app.welcome.DefaultBrowserStatus.current(activity) != bay.core.DefaultBrowser.DEFAULT
+        ) {
+            runCatching { activity.startActivity(bay.app.welcome.DefaultBrowserStatus.settings()) }
+        }
+    }
+    DisposableEffect(settings) {
+        settings.makeDefault = {
+            bay.app.welcome.DefaultBrowserStatus.request(activity)?.let { askDefault.launch(it) }
+                ?: activity.startActivity(bay.app.welcome.DefaultBrowserStatus.settings())
+        }
+        onDispose { settings.makeDefault = null }
+    }
     val strings = settings.strings
     val context = settings.context
     BackHandler(onBack = settings::back)
