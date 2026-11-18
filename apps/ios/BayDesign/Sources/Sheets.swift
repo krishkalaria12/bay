@@ -219,13 +219,16 @@ public struct ActionRow: View {
   private let destructive: Bool
   private let disabled: Bool
   private let testID: String
+  /// Takes the icon's place: another app's initial, say.
+  private let leading: AnyView?
   private let action: () -> Void
 
   public init(
     _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, value: String? = nil,
     chevron: Bool = false, toggle: Bool? = nil, selected: Bool = false, destructive: Bool = false, disabled: Bool = false,
-    action: @escaping () -> Void
+    leading: AnyView? = nil, action: @escaping () -> Void
   ) {
+    self.leading = leading
     self.label = label
     self.testID = testID
     self.icon = icon
@@ -243,7 +246,9 @@ public struct ActionRow: View {
   public var body: some View {
     Button(action: action) {
       HStack(spacing: rowGap) {
-        if let icon, let tint {
+        if let leading {
+          leading
+        } else if let icon, let tint {
           BayIconView(icon, size: IconSize.small, color: .white)
             .frame(width: 29, height: 29)
             .background(tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

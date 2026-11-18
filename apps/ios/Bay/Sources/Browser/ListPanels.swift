@@ -125,6 +125,7 @@ struct BookmarksPanel: View {
     ) {
       if listing.nodes == 0 {
         EmptyNote(title: strings.t("bookmarks.empty"), detail: strings.t("bookmarks.emptyDetail"), testID: "bookmarks-empty")
+        importRow
       } else {
         SheetSearchField(text: $query, placeholder: strings.t("bookmarks.search"), testID: "bookmarks-search")
         if listing.rows.isEmpty {
@@ -153,8 +154,14 @@ struct BookmarksPanel: View {
               onKeep: { confirming = nil })
           }
         }
+        if atRoot && needle.isEmpty { importRow.padding(.top, Space.lg) }
       }
     }
+  }
+
+  /// The way to bring bookmarks from another browser, under the list's top.
+  private var importRow: some View {
+    ActionRow(strings.t("bookmarks.import"), testID: "bookmarks-import", icon: .import, chevron: true) { browser.panel = .import }
   }
 
   private func enter(_ id: String) {

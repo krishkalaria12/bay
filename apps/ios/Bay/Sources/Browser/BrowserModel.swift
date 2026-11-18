@@ -39,7 +39,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader, inspect
+    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -702,6 +702,25 @@ final class BrowserModel: ObservableObject {
       guard !Task.isCancelled else { return }
       self?.downloadToastId = nil
     }
+  }
+
+  // MARK: Import
+
+  /// Opens pasted links as background tabs, or files them in the archive, and says how many came in.
+  func importLinks(_ tabs: [ImportedTab], archive: Bool) {
+    let count = Int(app.store.importTabs(tabs: tabs, archive: archive, now: AppModel.now()))
+    panel = nil
+    guard count > 0 else {
+      showToast(strings.t("toast.linksAlreadyHere"))
+      return
+    }
+    let key = archive ? (count == 1 ? "toast.archivedTab" : "toast.archivedTabs") : (count == 1 ? "toast.openedTab" : "toast.openedTabs")
+    showToast(strings.t(key, ["count": "\(count)"]))
+  }
+
+  /// Adds the chosen parts of an export to the space showing; its bookmarks go in a folder named for the browser.
+  func importExport(_ chosen: ChosenExport, choice: ImportChoice, folderName: String) -> ImportCounts {
+    app.store.importExport(contents: chosen.contents, choice: choice, folderName: folderName, now: AppModel.now())
   }
 
   /// Opens a finished download in the phone's viewer for its kind.

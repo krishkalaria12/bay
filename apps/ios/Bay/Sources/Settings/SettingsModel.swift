@@ -97,12 +97,14 @@ final class SettingsModel: ObservableObject {
       focus = match?.row
       push(match?.page.map { settingsPath(page: $0) } ?? [page])
     case .action(let action):
-      // The browser's own sheets open over Settings; import and problem reports come with their sheets.
+      // The browser's own sheets open over Settings.
       switch action {
       case .bookmarks: browser.panel = .bookmarks
       case .history: browser.panel = .history
       case .downloads: browser.panel = .downloads
-      case .import, .report: break
+      case .import: browser.panel = .import
+      // Problem reports come with their sheet.
+      case .report: break
       }
     }
   }

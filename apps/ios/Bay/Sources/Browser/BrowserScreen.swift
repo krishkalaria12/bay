@@ -113,6 +113,8 @@ struct BrowserScreen: View {
           BookmarksPanel(browser: browser)
         case .downloads:
           DownloadsPanel(browser: browser)
+        case .import:
+          ImportPanel(browser: browser)
         case .siteSettings:
           SiteSettingsPanel(browser: browser, onSettings: onSettings)
         case .link:
