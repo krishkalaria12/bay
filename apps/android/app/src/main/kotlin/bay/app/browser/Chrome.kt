@@ -7,7 +7,9 @@ import android.widget.FrameLayout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
@@ -187,14 +189,15 @@ fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 /** One of the bar's round buttons, or its capsule: flat and translucent with a hairline edge, as Arc Search draws them. */
 @Composable
-private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, content: @Composable () -> Unit) {
+private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     val colors = Theme.colors
     Box(
         modifier = modifier
             .testTag(id)
-            .pressFeedback(onClick = onClick)
+            .let { if (onLongClick == null) it.pressFeedback(onClick = onClick) else it.combinedClickable(onLongClick = onLongClick, onClick = onClick) }
             // The label says what the button does; the icon or text inside it isn't read again.
             .clearAndSetSemantics { contentDescription = label; role = Role.Button }
             .size(width, 52.dp)
@@ -207,7 +210,7 @@ private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: 
 
 /** The floating bar: archive, search and settings over the start page; tabs, the site and more over a page. */
 @Composable
-fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier, onChecks: () -> Unit = {}) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
     var swipe by remember { mutableFloatStateOf(0f) }
@@ -244,14 +247,14 @@ fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, 
             },
         )
     }
-    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged) }
+    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks) }
 }
 
 /** How far the capsule follows a sideways drag on the bar. */
 private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f }
 
 @Composable
-private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier) {
+private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit) {
     val app = browser.app
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
@@ -273,7 +276,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
         } else {
             BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             Capsule(browser, strings)
-            BarButton("bar-settings", strings.t("bar.settings"), onSettings) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
+            BarButton("bar-settings", strings.t("bar.settings"), onSettings, onLongClick = onChecks) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
         }
     }
 }

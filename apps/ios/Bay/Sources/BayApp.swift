@@ -6,6 +6,7 @@ struct BayApp: App {
   @StateObject private var strings: Strings
   @StateObject private var model: AppModel
   @StateObject private var browser: BrowserModel
+  @StateObject private var settings: SettingsModel
   @State private var showsChecks = false
   @Environment(\.scenePhase) private var scenePhase
 
@@ -14,13 +15,23 @@ struct BayApp: App {
     let model = AppModel(barTitle: strings.t("sync.bar"))
     _strings = StateObject(wrappedValue: strings)
     _model = StateObject(wrappedValue: model)
-    _browser = StateObject(wrappedValue: BrowserModel(app: model, strings: strings))
+    let browser = BrowserModel(app: model, strings: strings)
+    _browser = StateObject(wrappedValue: browser)
+    _settings = StateObject(wrappedValue: SettingsModel(app: model, browser: browser, strings: strings))
   }
 
   var body: some Scene {
     WindowGroup {
-      BrowserScreen(browser: browser, onSettings: { showsChecks = true })
-        // The stand-in screens (sync, the engine check) sit behind Settings until it lands (plan N5).
+      ZStack {
+        BrowserScreen(browser: browser, onSettings: settings.open, onChecks: { showsChecks = true })
+          .accessibilityHidden(settings.visible)
+        if settings.visible {
+          SettingsScreen(settings: settings).transition(.move(edge: .bottom))
+        }
+      }
+      .animation(.easeOut(duration: 0.35), value: settings.visible)
+      .onChange(of: settings.visible) { browser.covered = $0 }
+        // The stand-in screens (the engine check, the store check) behind a long press on Settings, for testing.
         .sheet(isPresented: $showsChecks) {
           StoreCheckView()
             .environmentObject(strings)

@@ -8,8 +8,9 @@ struct BrowserScreen: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @ObservedObject var browser: BrowserModel
-  /// Settings, while it is still the stand-in screen (plan N5).
   let onSettings: () -> Void
+  /// The stand-in check screens, for testing.
+  var onChecks: () -> Void = {}
 
   private static let barHeight: CGFloat = 52
 
@@ -18,7 +19,7 @@ struct BrowserScreen: View {
       WallpaperView(id: app.preferences.wallpaper)
       // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
       if browser.hasPage || !browser.mounted.isEmpty {
-        let shown = browser.hasPage && browser.overlay != .tabs
+        let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
         PagesHost(browser: browser, shown: shown)
           .ignoresSafeArea(edges: .bottom)
           .opacity(shown ? 1 : 0)
@@ -52,7 +53,7 @@ struct BrowserScreen: View {
           if browser.tip == .bar {
             TipCard(title: strings.t("tip.bar.title"), body_: strings.t("tip.bar.body")) { app.dispatch(.tipSeen(id: .bar)) }
           }
-          BrowserBar(browser: browser, onSettings: onSettings)
+          BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)
             // The ring round the capsule the tip means.
             .overlay {
               if browser.tip == .bar {

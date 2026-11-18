@@ -171,6 +171,28 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (next != mounted) mounted = next
     }
 
+    /** A screen of its own (Settings) is over the browser: no page is active. */
+    var covered by mutableStateOf(false)
+
+    /** Takes every page view off the screen and forgets what they reported, for clearing browsing data. */
+    fun closeAllPages() {
+        overlay = Overlay.NONE
+        panel = null
+        views.values.forEach { view ->
+            (view.parent as? android.view.ViewGroup)?.removeView(view)
+            view.dispose()
+        }
+        views.clear()
+        navigation.clear()
+        timing.clear()
+        visited.clear()
+        media.clear()
+        pageColors.clear()
+        failure = null
+        mounted = emptyList()
+        Engine.setMediaSession(context, null, "", false)
+    }
+
     // Actions
 
     fun search(inNewTab: Boolean, privately: Boolean = false) {

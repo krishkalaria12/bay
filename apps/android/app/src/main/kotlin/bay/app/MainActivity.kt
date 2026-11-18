@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import bay.app.browser.BrowserModel
 import bay.app.browser.BrowserScreen
+import bay.app.settings.SettingsModel
+import bay.app.settings.SettingsScreen
 import bay.design.BayTheme
 import bay.engine.Engine
 import bay.engine.EngineHost
@@ -81,18 +83,22 @@ class MainActivity : ComponentActivity(), EngineHost {
         super.onCreate(savedInstanceState)
         Engine.host = this
         enableEdgeToEdge()
-        val strings = Strings()
+        val strings = Strings(applicationContext)
         model = AppModel(applicationContext, strings.t("sync.bar"))
         browser = BrowserModel(this, model, strings)
+        val settings = SettingsModel(applicationContext, model, browser, strings)
         setContent {
-            // The stand-in screens (sync, the engine check) sit behind Settings until it lands (plan N5).
+            // The stand-in screens (the engine check, the store check) behind a long press on Settings, for testing.
             var checks by remember { mutableStateOf<String?>(null) }
             BayTheme {
                 Box(Modifier.semantics { testTagsAsResourceId = true }) {
                     when (checks) {
                         "store" -> StoreCheck(model, strings, openEngine = { checks = "engine" }, close = { checks = null })
                         "engine" -> EngineCheck(model, close = { checks = "store" })
-                        else -> BrowserScreen(browser, strings, onSettings = { checks = "store" })
+                        else -> {
+                            BrowserScreen(browser, strings, onSettings = settings::open, onChecks = { checks = "store" })
+                            if (settings.visible) SettingsScreen(settings)
+                        }
                     }
                 }
             }

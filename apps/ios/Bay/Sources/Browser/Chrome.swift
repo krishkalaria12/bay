@@ -146,6 +146,7 @@ struct BrowserBar: View {
   @EnvironmentObject private var strings: Strings
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
+  var onChecks: () -> Void = {}
   @State private var swipe: CGFloat = 0
 
   var body: some View {
@@ -172,6 +173,7 @@ struct BrowserBar: View {
           .accessibilityIdentifier("bar-archive")
         capsule
         GlassIconButton(.settings, label: strings.t("bar.settings"), action: onSettings)
+          .simultaneousGesture(LongPressGesture(minimumDuration: 0.8).onEnded { _ in onChecks() })
           .accessibilityIdentifier("bar-settings")
       }
     }

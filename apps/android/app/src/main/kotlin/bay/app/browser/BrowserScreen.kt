@@ -53,14 +53,14 @@ private val BAR_HEIGHT = 52.dp
 
 /** Bay's one screen: the page showing (or the start page), the floating bar, and what opens over them. */
 @Composable
-fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Unit) {
+fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit = {}) {
     val app = browser.app
     LaunchedEffect(app.activeTabId, app.tabs.map { it.url }) { browser.refreshMounted() }
     Box(Modifier.fillMaxSize()) {
         Wallpaper(app.preferences.wallpaper)
         // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
-            val shown = browser.hasPage && browser.overlay != Overlay.TABS
+            val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
             PagesHost(browser, shown, Modifier.fillMaxSize().statusBarsPadding())
         }
         if (browser.overlay == Overlay.TABS) {
@@ -103,7 +103,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                     }
                 }
                 Box(contentAlignment = Alignment.Center) {
-                    BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth())
+                    BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth(), onChecks)
                     // The ring round the capsule the tip means.
                     if (tip == TipId.BAR) Box(Modifier.size(184.dp, 62.dp).border(2.5.dp, Theme.colors.accent, RoundedCornerShape(31.dp)).clearAndSetSemantics {})
                 }

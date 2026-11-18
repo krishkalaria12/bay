@@ -48,7 +48,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 
 /** The words a sheet's chrome needs, in the app's language (the design system has no catalog of its own). */
@@ -202,7 +203,7 @@ fun ActionRow(
             .testTag(testID)
             .semantics(mergeDescendants = true) {
                 role = if (toggle == null) Role.Button else Role.Switch
-                if (toggle != null) stateDescription = if (toggle) "On" else "Off"
+                if (toggle != null) toggleableState = ToggleableState(toggle)
                 // Only a chosen row says so; a row that can't be chosen isn't "checkable".
                 if (selected) this.selected = true
             }

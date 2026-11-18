@@ -74,6 +74,8 @@ public enum Engine {
 
   /// Clears cookies, website storage, network cache, snapshots and saved tab states in every space's store. Close page
   /// views first so pages can't write fresh data.
+  /// On the main thread: WebKit's data stores are main-thread only.
+  @MainActor
   public static func clearData() async throws {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       BaySpaceProfiles.clearAll {
@@ -89,6 +91,7 @@ public enum Engine {
   }
 
   /// Deletes a space's website data, as deleting the space does.
+  @MainActor
   public static func deleteProfile(_ profile: String) async {
     await withCheckedContinuation { continuation in
       BaySpaceProfiles.delete(profile) { continuation.resume() }
@@ -117,6 +120,7 @@ public enum Engine {
   }
 
   /// Saves a web image to the photo library, asking for access the first time.
+  @MainActor
   public static func saveImage(_ url: String) async throws {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       BayImages.save(url) { continuation.resume(with: $0) }

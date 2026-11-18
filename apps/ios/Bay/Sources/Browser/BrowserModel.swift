@@ -45,6 +45,8 @@ final class BrowserModel: ObservableObject {
   let strings: Strings
   @Published var overlay: Overlay = .none
   @Published var panel: Panel?
+  /// A screen of its own (Settings) is over the browser: no page is active, and VoiceOver skips them.
+  @Published var covered = false
   /// A card growing into its page: the tab and where its card sat on screen.
   @Published private(set) var zoom: (tab: BrowserTab, frame: CGRect)?
   @Published private(set) var toast: ToastMessage?
@@ -138,6 +140,22 @@ final class BrowserModel: ObservableObject {
       }
     }
     if next != mounted { mounted = next }
+  }
+
+  /// Takes every page view off the screen and forgets what they reported, for clearing browsing data.
+  func closeAllPages() {
+    overlay = .none
+    panel = nil
+    for (_, view) in views { view.removeFromSuperview() }
+    views = [:]
+    navigation = [:]
+    timing = [:]
+    visited = [:]
+    media = [:]
+    pageColors = [:]
+    failure = nil
+    mounted = []
+    Engine.setMediaSession(title: nil, site: "", playing: false)
   }
 
   // MARK: Actions
