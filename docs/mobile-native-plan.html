@@ -748,8 +748,11 @@
               <tr>
                 <th><span class="id">D13</span>Page scripts</th>
                 <td>
-                  They stay JavaScript in <code>packages/mobile-pagescripts</code>. A build step minifies each script into a resource folder that both apps
-                  bundle. Their jsdom tests keep running under Node.
+                  They stay JavaScript in <code>packages/mobile-pagescripts</code>. A build step writes every script into one resource file
+                  (<code>resources/pagescripts.json</code>) that both apps bundle; a script with arguments reads them from <code>args</code>, declared ahead of
+                  it as JSON. The scripts stay in the Expo app's <code>src/pagescripts</code> until the cut-over and the build reads them there, so there is one
+                  copy; a test fails when the resource is out of date. They aren't minified: no minifier is in the repo, and only Readability is large, which is
+                  compact already. Their jsdom tests keep running under Node.
                 </td>
                 <td>They run inside the page, so they can't be native. Sharing them as files keeps one copy.</td>
               </tr>
@@ -1385,12 +1388,16 @@ impl BrowserStore {
             <p class="muted">
               Done so far: iOS hosts the engine without Expo in the <code>BayEngine</code> framework (<code>EngineView</code> with one
               <code>EngineEvent</code> stream, and <code>Engine</code> for what views share), and the content blocker's C functions come from the core's own
-              library (D16: <code>bay-core</code>'s <code>adblock</code> feature, on for iOS only, so Android's library doesn't grow). The debug screen ("Engine
-              check") browses, runs a page script and blocks with a test list. Android hosts Bay's Chromium without Expo too, in the <code>:engine</code> module
-              (<code>BayEngineView</code> with one <code>EngineEvent</code> stream, <code>MainActivity</code> as its <code>EngineHost</code>), built against
-              <code>android-engine-16</code> (the first engine with <code>BayProfile.forSpace</code>), and its debug screen browses, runs a page script and
-              blocks. The share extension and search widgets build with Tuist. Left: downloads, background media, voice, quick actions and the extensions
-              checked on devices.
+              library (D16: <code>bay-core</code>'s <code>adblock</code> feature, on for iOS only, so Android's library doesn't grow). Android hosts Bay's
+              Chromium without Expo too, in the <code>:engine</code> module (<code>BayEngineView</code> with one <code>EngineEvent</code> stream,
+              <code>MainActivity</code> as its <code>EngineHost</code>), built against <code>android-engine-16</code> (the first engine with
+              <code>BayProfile.forSpace</code>). Page scripts are one resource both apps bundle (D13), run by <code>PageScript</code> on each platform; the core
+              reads pages' media reports (<code>parse_media_message</code>) and decides when the watcher runs (<code>scripts_for</code>). On both devices the
+              debug screen ("Engine check") browses, runs a page script, blocks with a test list, downloads a file into the store and opens it, and keeps
+              playing audio in the background with the system's controls (lock screen, media notification) pausing it. The release APK builds locally with R8 at
+              93 MB (compressed native libraries, arm64 only), and the engine loads from it in every process. The share extension and search widgets build with
+              Tuist. Ported but not yet checked on devices: voice search, quick actions, and the extensions themselves; they get checked as N4–N5 screens use
+              them.
             </p>
             <div class="lanes">
               <div>
