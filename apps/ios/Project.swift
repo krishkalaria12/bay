@@ -79,7 +79,7 @@ let project = Project(
       sources: ["Bay/Sources/**"],
       resources: ["Bay/Resources/**"],
       dependencies: [
-        .target(name: "BayCore"), .target(name: "BayEngine"), .target(name: "BayShare"), .target(name: "BayWidgets"),
+        .target(name: "BayCore"), .target(name: "BayDesign"), .target(name: "BayEngine"), .target(name: "BayShare"), .target(name: "BayWidgets"),
       ],
       settings: .settings(
         base: [
@@ -133,6 +133,17 @@ let project = Project(
       sources: ["BayWidget/**"],
       dependencies: [.sdk(name: "WidgetKit", type: .framework), .sdk(name: "SwiftUI", type: .framework)],
       settings: .settings(base: extensionSettings)
+    ),
+    // Bay's design system (plan D12): tokens and icons generated from packages/mobile-core/design, and the components
+    // every screen is built from (text, icons, glass surfaces, buttons, switches, press feedback, haptics).
+    .target(
+      name: "BayDesign",
+      destinations: [.iPhone],
+      product: .framework,
+      bundleId: "\(bundleId).design",
+      deploymentTargets: deploymentTargets,
+      sources: ["BayDesign/Sources/**"],
+      dependencies: [.sdk(name: "SwiftUI", type: .framework)]
     ),
     // The page engine: WKWebView behind Bay's navigation policy, content blocking, downloads, media and voice, ported
     // from the Expo module (apps/mobile/modules/bay-engine). Swift 5 mode until it is moved to strict concurrency.

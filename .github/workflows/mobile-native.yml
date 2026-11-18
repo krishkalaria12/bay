@@ -7,12 +7,14 @@ on:
     branches: [main]
     paths:
       - "packages/mobile-core/**"
+      - "packages/mobile-pagescripts/**"
       - "apps/ios/**"
       - "apps/android/**"
       - ".github/workflows/mobile-native.yml"
   pull_request:
     paths:
       - "packages/mobile-core/**"
+      - "packages/mobile-pagescripts/**"
       - "apps/ios/**"
       - "apps/android/**"
       - ".github/workflows/mobile-native.yml"
@@ -44,6 +46,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked
+      # BayTokens.swift and BayTokens.kt are written from design/tokens.json and icons.json.
+      - name: Design tokens are current
+        run: node scripts/build-design.mjs --check
 
   android:
     name: Android app

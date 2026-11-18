@@ -25,4 +25,5 @@ rootProject.name = "Bay"
 
 include(":app")
 include(":core:bindings")
+include(":core:designsystem")
 include(":engine")

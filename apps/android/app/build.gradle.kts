@@ -52,6 +52,7 @@ tasks.named("preBuild") { dependsOn(":engine:generateEngineRClasses") }
 
 dependencies {
     implementation(project(":core:bindings"))
+    implementation(project(":core:designsystem"))
     implementation(project(":engine"))
     // Android's window extensions (foldable postures) come with the system: compiled against, not shipped, so R8 keeps
     // what Chromium implements of them (an unseen Consumer once cost the first page load an AbstractMethodError).
