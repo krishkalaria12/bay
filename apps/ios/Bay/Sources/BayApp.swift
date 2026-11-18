@@ -14,7 +14,7 @@ struct BayApp: App {
     let model = AppModel(barTitle: strings.t("sync.bar"))
     _strings = StateObject(wrappedValue: strings)
     _model = StateObject(wrappedValue: model)
-    _browser = StateObject(wrappedValue: BrowserModel(app: model))
+    _browser = StateObject(wrappedValue: BrowserModel(app: model, strings: strings))
   }
 
   var body: some Scene {
@@ -34,6 +34,7 @@ struct BayApp: App {
       case .active:
         model.startSyncing()
       case .background:
+        browser.appLeft()
         model.stopSyncing()
         model.dispatch(.left(now: AppModel.now()))
         model.flush()

@@ -1,30 +1,41 @@
 package bay.app.browser
 
 import android.content.Context
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricPrompt
+import android.os.CancellationSignal
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import bay.app.AppModel
+import bay.app.Strings
 import bay.core.Action
 import bay.core.BrowserTab
+import bay.core.MediaReport
 import bay.core.NavigationReport
 import bay.core.PinnedSite
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
 import bay.core.TabUpdate
+import bay.core.TipId
+import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
+import bay.core.parseMediaMessage
 import bay.core.scriptsFor
 import bay.core.searchEngine
 import bay.engine.BayEngineView
+import bay.engine.Engine
 import bay.engine.EngineEvent
+import bay.engine.MediaControl
 import bay.engine.NavigationState
 import bay.engine.PageScript
 import bay.engine.runScript
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -41,6 +52,12 @@ sealed interface OpenTarget {
 
 enum class Overlay { NONE, SEARCH, TABS }
 
+/** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
+data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
+
+/** What a tab's media last reported, and when. */
+data class TabMedia(val report: MediaReport, val at: Long)
+
 /** A page that failed to load, while its tab shows. */
 data class PageFailure(val tabId: String, val url: String, val message: String)
 
@@ -48,8 +65,27 @@ data class PageFailure(val tabId: String, val url: String, val message: String)
  * The browser screen's state over the store: which pages are loaded, what each reports, and what is over them. The
  * Expo app's BrowserScreen, without its rendering. Every change to tabs goes through the core's store.
  */
-class BrowserModel(private val context: Context, val app: AppModel) {
+class BrowserModel(private val context: Context, val app: AppModel, private val strings: Strings) {
     var overlay by mutableStateOf(Overlay.NONE)
+
+    var toast by mutableStateOf<ToastMessage?>(null)
+        private set
+
+    /** The bar is scrolled away while the page scrolls down. */
+    var barHidden by mutableStateOf(false)
+        private set
+
+    /** Media playing (or paused) in each tab, as its page reports it. */
+    val media = mutableStateMapOf<String, TabMedia>()
+
+    /** Private tabs are covered once Bay has been in the background, until the owner unlocks them. */
+    var locked by mutableStateOf(false)
+        private set
+
+    private var toastTimer: Job? = null
+
+    /** Tabs stopped from the mini player or the system's controls: the pause report that follows stays out. */
+    private val stopped = HashSet<String>()
 
     /** The search was started for a new tab (from the switcher) rather than for the page on screen. */
     var searchInNewTab by mutableStateOf(false)
@@ -74,6 +110,10 @@ class BrowserModel(private val context: Context, val app: AppModel) {
     private val timing = HashMap<String, ScriptTiming>()
     private val failed = HashSet<String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    init {
+        app.mediaControl = ::mediaControl
+    }
 
     val activeTab: BrowserTab? get() = app.tabs.firstOrNull { it.id == app.activeTabId }
 
@@ -100,8 +140,10 @@ class BrowserModel(private val context: Context, val app: AppModel) {
     fun refreshMounted() {
         val existing = app.tabs.mapTo(HashSet()) { it.id }
         val next = if (hasPage) mutableListOf(app.activeTabId) else mutableListOf()
-        for (id in mounted) {
-            if (id != app.activeTabId && id in existing && next.size < MAX_LIVE) next += id
+        // A tab playing media stays loaded, so its sound doesn't stop when others open.
+        val playing = media.filterValues { it.report.playing }.keys.filter { it in existing }
+        for (id in playing + mounted) {
+            if (id !in next && id in existing && next.size < MAX_LIVE) next += id
         }
         views.keys.filter { it !in next }.forEach { id ->
             views.remove(id)?.let { view ->
@@ -111,6 +153,7 @@ class BrowserModel(private val context: Context, val app: AppModel) {
             }
             navigation.remove(id)
             timing.remove(id)
+            if (media.remove(id) != null) updateMediaSession()
         }
         if (next != mounted) mounted = next
     }
@@ -155,6 +198,7 @@ class BrowserModel(private val context: Context, val app: AppModel) {
     fun activate(id: String) {
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
+        barHidden = false
         refreshMounted()
     }
 
@@ -169,6 +213,142 @@ class BrowserModel(private val context: Context, val app: AppModel) {
         app.dispatch(Action.CloseTab(id, AppModel.now(), blankTab(spaceId)))
         visited.remove(id)
         refreshMounted()
+    }
+
+    /** Closes a tab into the archive, with a toast to bring it straight back. */
+    fun archive(id: String) {
+        val tab = app.store.tabs().firstOrNull { it.id == id }
+        close(id)
+        if (tab == null || tab.url.isEmpty() || tab.private) return
+        showToast(strings.t("toast.tabArchived"), strings.t("toast.undo")) { restore(id) }
+    }
+
+    /** Takes a pin away, with a toast to put it back where it was. */
+    fun unpin(site: PinnedSite) {
+        val index = app.store.pinnedSites(site.spaceId).indexOfFirst { it.id == site.id }.coerceAtLeast(0)
+        app.dispatch(Action.RemovePin(site.id))
+        showToast(strings.t("toast.unpinned"), strings.t("toast.undo")) { app.dispatch(Action.AddPin(site, index.toLong())) }
+    }
+
+    fun showToast(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
+        val message = ToastMessage(System.nanoTime(), text, actionLabel, action)
+        toast = message
+        toastTimer?.cancel()
+        toastTimer = scope.launch {
+            delay(if (action == null) 2_500 else 8_000)
+            if (toast?.id == message.id) toast = null
+        }
+    }
+
+    fun dismissToast() {
+        toast = null
+    }
+
+    // The bar
+
+    /** Moves to the tab before (-1) or after (1) the one showing, in the switcher's order. */
+    fun swipeTabs(step: Int) {
+        val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
+        val next = app.tabs.getOrNull(index + step) ?: return
+        app.dispatch(Action.TipSeen(TipId.BAR))
+        capture(app.activeTabId)
+        activate(next.id)
+    }
+
+    private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
+        if (tabId != app.activeTabId) return
+        if (offsetY < 24 || deltaY < -8) barHidden = false else if (deltaY > 8) barHidden = true
+    }
+
+    // Media
+
+    /** The tab whose media the mini player shows: the latest playing one that isn't on screen. */
+    val player: Pair<BrowserTab, TabMedia>?
+        get() {
+            val onScreen = if (overlay == Overlay.NONE && hasPage) app.activeTabId else null
+            return latestMedia { it.id != onScreen && !(locked && it.private) }
+        }
+
+    private fun latestMedia(include: (BrowserTab) -> Boolean): Pair<BrowserTab, TabMedia>? {
+        val tabs = app.store.tabs()
+        return media.mapNotNull { (id, state) -> tabs.firstOrNull { it.id == id }?.takeIf(include)?.let { it to state } }
+            .maxWithOrNull(compareBy<Pair<BrowserTab, TabMedia>> { it.second.report.playing }.thenBy { it.second.at })
+    }
+
+    /** The media notification shows the latest media outside private tabs. */
+    private fun updateMediaSession() {
+        val session = latestMedia { !it.private }
+        if (session == null) {
+            Engine.setMediaSession(context, null, "", false)
+            return
+        }
+        val (tab, state) = session
+        Engine.setMediaSession(context, state.report.title.ifEmpty { tab.title }, hostOf(tab.url), state.report.playing)
+    }
+
+    private fun mediaControl(control: MediaControl) {
+        val tab = latestMedia { !it.private }?.first ?: return
+        when (control) {
+            MediaControl.TOGGLE -> toggleMedia(tab.id)
+            MediaControl.STOP -> stopMedia(tab.id)
+            MediaControl.SKIP_FORWARD -> seekMedia(tab.id, 10)
+            MediaControl.SKIP_BACKWARD -> seekMedia(tab.id, -10)
+        }
+    }
+
+    fun toggleMedia(tabId: String) = command(tabId, PageScript.TOGGLE_MEDIA)
+
+    fun seekMedia(tabId: String, seconds: Int) = command(tabId, PageScript.SEEK_MEDIA, mapOf("seconds" to seconds))
+
+    fun stopMedia(tabId: String) {
+        stopped += tabId
+        command(tabId, PageScript.PAUSE_MEDIA)
+        media.remove(tabId)
+        updateMediaSession()
+    }
+
+    fun pictureInPicture(tabId: String) = command(tabId, PageScript.PIP_MEDIA)
+
+    /** Runs a media script on a tab's page; one that finds no media there forgets the tab's media. */
+    private fun command(tabId: String, script: PageScript, args: Map<String, Any?>? = null) {
+        val view = views[tabId] ?: return
+        scope.launch {
+            val result = runCatching { view.runScript(script, args) }.getOrNull()
+            if (result == "null") {
+                media.remove(tabId)
+                updateMediaSession()
+            }
+        }
+    }
+
+    private fun mediaReported(tabId: String, report: MediaReport) {
+        if (!report.playing && tabId in stopped) return
+        stopped -= tabId
+        media[tabId] = TabMedia(report, System.currentTimeMillis())
+        updateMediaSession()
+    }
+
+    // Private tabs
+
+    /** Bay left the foreground: private tabs lock, when the owner asked for that and there are any. */
+    fun appLeft() {
+        if (app.preferences.lockPrivateTabs && app.store.tabs().any { it.private }) locked = true
+    }
+
+    /** The fingerprint, face or screen lock unlocks the private tabs. */
+    fun unlock(activity: android.app.Activity) {
+        val builder = BiometricPrompt.Builder(activity).setTitle(strings.t("lock.prompt"))
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+        } else {
+            @Suppress("DEPRECATION")
+            builder.setDeviceCredentialAllowed(true)
+        }
+        builder.build().authenticate(CancellationSignal(), activity.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                locked = false
+            }
+        })
     }
 
     // The tab switcher
@@ -195,10 +375,19 @@ class BrowserModel(private val context: Context, val app: AppModel) {
         }
     }
 
-    /** Archives every tab in the switcher's grid; the pinned ones stay. */
+    /** Archives every tab in the switcher's grid; the pinned ones stay. A toast brings them back. */
     fun archiveAll() {
-        switcherTabs.forEach { close(it.id) }
+        val tabs = switcherTabs
+        val archived = tabs.filter { it.url.isNotEmpty() && !it.private }.map { it.id }
+        tabs.forEach { close(it.id) }
         overlay = Overlay.NONE
+        if (archived.isEmpty()) return
+        val text = if (archived.size == 1) strings.t("toast.oneTabArchived") else strings.t("toast.tabsArchived", mapOf("count" to "${archived.size}"))
+        showToast(text, strings.t("toast.undo")) {
+            archived.forEach(::restore)
+            // Closing every tab left a blank one behind.
+            app.store.tabs().filter { it.url.isEmpty() && it.spaceId == app.activeSpaceId }.forEach { close(it.id) }
+        }
     }
 
     /** Switches to a space: the tab it was last on (or a fresh one) becomes current. */
@@ -248,6 +437,8 @@ class BrowserModel(private val context: Context, val app: AppModel) {
             }
             // A new window becomes a real tab in front, in the opener's own session.
             is EngineEvent.NewWindow -> if (isWebUrl(event.url)) openTab(event.url, event.isPrivate)
+            is EngineEvent.PageMessage -> parseMediaMessage(event.message)?.let { mediaReported(tabId, it) }
+            is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
             // Page dialogs get their sheet with the panels (N5); until then nothing waits on one.
             is EngineEvent.Request -> views[tabId]?.answerPageRequest(event.request.id, false, null, null, null)
             else -> {}
@@ -262,6 +453,8 @@ class BrowserModel(private val context: Context, val app: AppModel) {
         if (started) {
             failed -= tabId
             if (failure?.tabId == tabId) failure = null
+            // A new document has no media until it reports some.
+            if (media.remove(tabId) != null) updateMediaSession()
         }
         val view = views[tabId]
         if (finished && view != null) {

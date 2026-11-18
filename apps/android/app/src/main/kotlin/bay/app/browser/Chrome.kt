@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,8 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,6 +43,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -199,6 +205,37 @@ private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: 
 @Composable
 fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    var swipe by remember { mutableFloatStateOf(0f) }
+    // Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
+    val swipeable = browser.hasPage && browser.overlay == Overlay.NONE
+    val dragged = if (!swipeable) modifier else modifier.pointerInput(app.activeTabId, app.tabs.size) {
+        detectHorizontalDragGestures(
+            onDragEnd = {
+                val distance = swipe
+                swipe = 0f
+                if (kotlin.math.abs(distance) > 24.dp.toPx()) {
+                    Haptics.press(view)
+                    browser.swipeTabs(if (distance < 0) 1 else -1)
+                }
+            },
+            onDragCancel = { swipe = 0f },
+            onHorizontalDrag = { _, amount ->
+                val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
+                val open = app.tabs.getOrNull(index + if (swipe + amount < 0) 1 else -1) != null
+                swipe += amount * if (open) 0.4f else 0.12f
+            },
+        )
+    }
+    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged) }
+}
+
+/** How far the capsule follows a sideways drag on the bar. */
+private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f }
+
+@Composable
+private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier) {
+    val app = browser.app
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
             BarButton("bar-archive", strings.t("bar.archive"), {}) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
@@ -230,7 +267,8 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
     val insecure = url.startsWith("http:")
     val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
-    Box {
+    val shift = LocalCapsuleShift.current
+    Box(Modifier.graphicsLayer { translationX = shift; alpha = 1f - minOf(kotlin.math.abs(shift) / 110.dp.toPx(), 0.6f) }) {
         BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = if (site.isEmpty()) 128.dp else 172.dp) {
             if (site.isEmpty()) {
                 BayIconView(BayIcon.SEARCH, size = IconSize.control)

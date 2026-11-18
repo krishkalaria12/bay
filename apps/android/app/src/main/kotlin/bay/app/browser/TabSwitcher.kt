@@ -154,8 +154,9 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to color.copy(alpha = 0.34f), 0.55f to color.copy(alpha = 0.08f), 1f to Color.Transparent)))
         BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift }) {
             val inner = maxWidth - Space.gutter * 2
-            val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS
-            val essentialWidth = (inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS
+            // Half a point narrower than an exact fit, so rounding never wraps the last card onto a row of its own.
+            val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS - 0.5.dp
+            val essentialWidth = (inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS - 0.5.dp
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = Space.sm, bottom = 52.dp + Space.xxl),
                 verticalArrangement = Arrangement.spacedBy(Space.lg),
@@ -252,7 +253,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
 
 private fun unpin(browser: BrowserModel, site: PinnedSite, view: android.view.View) {
     Haptics.tick(view)
-    browser.app.dispatch(bay.core.Action.RemovePin(site.id))
+    browser.unpin(site)
 }
 
 /** A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. A flick up closes it into the archive. */
@@ -268,7 +269,7 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
     val shape = RoundedCornerShape(Radius.tile)
     fun close() {
         Haptics.tick(view)
-        browser.close(tab.id)
+        browser.archive(tab.id)
     }
     Column(
         Modifier.width(width)

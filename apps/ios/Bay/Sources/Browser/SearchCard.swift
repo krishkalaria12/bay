@@ -158,6 +158,12 @@ struct SearchCard: View {
     .onAppear {
       focused = true
       withAnimation(Motion.settle.animation) { grown = true }
+      // A prefilled address starts selected, so typing replaces it (as in Safari and Lens).
+      if !initialText.isEmpty {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+          UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+        }
+      }
     }
     .onChange(of: query) { remote.request($0, engine: browser.engine, enabled: app.preferences.searchSuggestions) }
     .onDisappear { remote.cancel() }

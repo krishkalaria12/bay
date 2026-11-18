@@ -217,7 +217,7 @@ struct TabSwitcher: View {
 
   private func unpin(_ site: PinnedSite) {
     Haptics.tick()
-    app.dispatch(.removePin(id: site.id))
+    browser.unpin(site)
   }
 }
 
@@ -311,6 +311,6 @@ private struct TabCard: View {
 
   private func close() {
     Haptics.tick()
-    browser.close(tab.id)
+    browser.archive(tab.id)
   }
 }

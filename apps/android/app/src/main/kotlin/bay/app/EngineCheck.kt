@@ -107,9 +107,11 @@ fun EngineCheck(model: AppModel, close: () -> Unit) {
         scope.launch { runCatching { view.runScript(script, args) } }
     }
     DisposableEffect(view) {
+        // The browser's handler for the system's media controls, given back when the check closes.
+        val browserControl = model.mediaControl
         model.mediaControl = ::control
         onDispose {
-            model.mediaControl = null
+            model.mediaControl = browserControl
             Engine.setMediaSession(context, null, "", false)
             view.dispose()
         }

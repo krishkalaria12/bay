@@ -8,6 +8,8 @@ import SwiftUI
 /// the container is in a window: WebKit restores a saved tab state into a blank page when it is set off screen.
 struct PagesHost: UIViewRepresentable {
   @ObservedObject var browser: BrowserModel
+  /// False under the tab switcher: no page is active, and VoiceOver skips them all.
+  var shown = true
 
   final class Container: UIView {
     var sync: (() -> Void)?
@@ -26,14 +28,18 @@ struct PagesHost: UIViewRepresentable {
 
   func updateUIView(_ container: Container, context: Context) {
     let browser = browser
+    let shown = shown
+    // SwiftUI's accessibilityHidden stops at the representable; the page views are UIKit's. Hidden, the pages stay in
+    // the window and keep playing; the switcher covers them anyway.
+    container.isHidden = !shown
     container.sync = { [weak container] in
       guard let container else { return }
-      MainActor.assumeIsolated { Self.sync(container, browser) }
+      MainActor.assumeIsolated { Self.sync(container, browser, shown: shown) }
     }
     container.sync?()
   }
 
-  @MainActor private static func sync(_ container: Container, _ browser: BrowserModel) {
+  @MainActor private static func sync(_ container: Container, _ browser: BrowserModel, shown: Bool) {
     guard container.window != nil else { return }
     let tabs = browser.app.tabs
     for (index, id) in browser.mounted.enumerated() {
@@ -44,7 +50,7 @@ struct PagesHost: UIViewRepresentable {
         view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         container.addSubview(view)
       }
-      let showing = index == 0
+      let showing = index == 0 && shown
       view.isHidden = !showing
       view.isActive = showing
       if showing { container.bringSubviewToFront(view) }
@@ -140,6 +146,7 @@ struct BrowserBar: View {
   @EnvironmentObject private var strings: Strings
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
+  @State private var swipe: CGFloat = 0
 
   var body: some View {
     let app = browser.app
@@ -168,6 +175,27 @@ struct BrowserBar: View {
           .accessibilityIdentifier("bar-settings")
       }
     }
+    // Above the buttons' own taps: a tap never travels the drag's 16 points, so taps still reach them.
+    .highPriorityGesture(browser.hasPage && browser.overlay == .none ? tabSwipe : nil)
+  }
+
+  /// Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
+  private var tabSwipe: some Gesture {
+    DragGesture(minimumDistance: 16)
+      .onChanged { value in
+        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+        let step = value.translation.width < 0 ? 1 : -1
+        let open = browser.app.tabs.indices.contains((browser.app.tabs.firstIndex { $0.id == browser.app.activeTabId } ?? 0) + step)
+        swipe = value.translation.width * (open ? 0.4 : 0.12)
+      }
+      .onEnded { value in
+        let distance = value.translation.width
+        let flick = value.predictedEndTranslation.width - distance
+        withAnimation(Motion.settle.animation) { swipe = 0 }
+        guard abs(distance) > abs(value.translation.height), abs(distance) > 64 || abs(flick) > 120 else { return }
+        Haptics.press()
+        browser.swipeTabs(distance < 0 ? 1 : -1)
+      }
   }
 
   private var capsule: some View {
@@ -197,6 +225,8 @@ struct BrowserBar: View {
       .overlay(alignment: .bottom) { LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty) }
     }
     .buttonStyle(.pressFeedback)
+    .offset(x: swipe)
+    .opacity(1 - min(abs(swipe) / 110, 0.6))
     .accessibilityLabel(Text(verbatim: label))
     .accessibilityIdentifier("bar-search")
   }

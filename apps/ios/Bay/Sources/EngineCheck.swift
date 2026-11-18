@@ -84,6 +84,8 @@ final class EngineControl: ObservableObject {
 struct EngineCheckView: View {
   @StateObject private var control = EngineControl()
   @EnvironmentObject private var model: AppModel
+  /// The browser's handler for the system's media controls, given back when the check closes.
+  @State private var browserMediaControl: ((MediaControl) -> Void)?
   @Environment(\.dismiss) private var dismiss
   @State private var address = "https://www.bbc.com/news"
   @State private var scriptResult = ""
@@ -149,11 +151,12 @@ struct EngineCheckView: View {
     }
     .padding(.horizontal)
     .onAppear {
+      browserMediaControl = model.mediaControl
       model.mediaControl = { [weak control] action in control?.control(action) }
       if control.state.url.isEmpty { go() }
     }
     .onDisappear {
-      model.mediaControl = nil
+      model.mediaControl = browserMediaControl
       control.close()
     }
   }

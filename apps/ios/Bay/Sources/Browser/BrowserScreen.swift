@@ -18,11 +18,11 @@ struct BrowserScreen: View {
       WallpaperView(id: app.preferences.wallpaper)
       // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
       if browser.hasPage || !browser.mounted.isEmpty {
-        PagesHost(browser: browser)
+        let shown = browser.hasPage && browser.overlay != .tabs
+        PagesHost(browser: browser, shown: shown)
           .ignoresSafeArea(edges: .bottom)
-          .opacity(browser.hasPage && browser.overlay != .tabs ? 1 : 0)
-          .allowsHitTesting(browser.hasPage && browser.overlay != .tabs)
-          .accessibilityHidden(!browser.hasPage || browser.overlay == .tabs)
+          .opacity(shown ? 1 : 0)
+          .allowsHitTesting(shown)
       }
       if browser.overlay == .tabs {
         WallpaperView(id: app.preferences.wallpaper)
@@ -35,10 +35,25 @@ struct BrowserScreen: View {
       } else if browser.overlay == .none {
         startScreen
       }
+      if browser.locked, browser.activeTab?.private == true, browser.overlay == .none {
+        PrivateLockView(onUnlock: browser.unlock)
+      }
       if browser.overlay != .search {
-        BrowserBar(browser: browser, onSettings: onSettings)
-          .padding(.horizontal, Space.edge)
-          .padding(.bottom, Space.xs)
+        VStack(spacing: Space.md) {
+          if let player = browser.player {
+            MiniPlayer(browser: browser, tab: player.tab, media: player.media)
+          }
+          if let toast = browser.toast {
+            ToastView(toast: toast, onDone: browser.dismissToast).id(toast.id)
+          }
+          BrowserBar(browser: browser, onSettings: onSettings)
+        }
+        .padding(.horizontal, Space.edge)
+        .padding(.bottom, Space.xs)
+        // Scrolled away while the page scrolls down; the toast and player go with it.
+        .offset(y: browser.barHidden && browser.overlay == .none ? 140 : 0)
+        .animation(.easeOut(duration: 0.2), value: browser.barHidden)
+        .animation(.easeOut(duration: 0.2), value: browser.toast?.id)
       }
       if browser.overlay == .search {
         SearchCard(
@@ -78,7 +93,7 @@ struct BrowserScreen: View {
           onOpen: { browser.open(.url($0), privately: false) },
           onUnpin: { site in
             Haptics.tick()
-            app.dispatch(.removePin(id: site.id))
+            browser.unpin(site)
           })
         VStack(spacing: 2) {
           BayText(strings.t("start.tapToSearch"), variant: .subhead, weight: .medium, tone: .muted)

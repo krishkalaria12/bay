@@ -51,6 +51,7 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity(), EngineHost {
     private lateinit var model: AppModel
+    private lateinit var browser: BrowserModel
 
     /** The page's permission request waiting on the system's answer (one at a time, as the system asks). */
     private var permissionsAnswered: (() -> Unit)? = null
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity(), EngineHost {
         enableEdgeToEdge()
         val strings = Strings()
         model = AppModel(applicationContext, strings.t("sync.bar"))
-        val browser = BrowserModel(this, model)
+        browser = BrowserModel(this, model, strings)
         setContent {
             // The stand-in screens (sync, the engine check) sit behind Settings until it lands (plan N5).
             var checks by remember { mutableStateOf<String?>(null) }
@@ -106,6 +107,7 @@ class MainActivity : ComponentActivity(), EngineHost {
 
     override fun onStop() {
         super.onStop()
+        browser.appLeft()
         model.stopSyncing()
         model.dispatch(Action.Left(AppModel.now()))
         model.flush()

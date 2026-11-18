@@ -61,6 +61,7 @@ let project = Project(
         "NSMicrophoneUsageDescription": "Bay uses the microphone to search by voice, and for sites you allow.",
         "NSSpeechRecognitionUsageDescription": "Bay turns your words into a search on the device.",
         "NSPhotoLibraryAddUsageDescription": "Bay saves images you ask for to your photo library.",
+        "NSFaceIDUsageDescription": "Bay uses Face ID to unlock your private tabs.",
         // Downloads land in Documents/Downloads, which the Files app shows under Bay.
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,

@@ -1,5 +1,7 @@
 package bay.app.browser
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,10 +18,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -30,7 +35,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import bay.app.Strings
-import bay.core.Action
 import bay.design.BayIcon
 import bay.design.BayIconView
 import bay.design.BayText
@@ -70,13 +74,22 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         } else if (browser.overlay == Overlay.NONE) {
             StartScreen(browser, strings)
         }
+        val activity = LocalContext.current as? android.app.Activity
+        if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
+            PrivateLock(strings) { activity?.let(browser::unlock) }
+        }
         if (browser.overlay != Overlay.SEARCH) {
-            BrowserBar(
-                browser,
-                strings,
-                onSettings,
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
-            )
+            // Scrolled away while the page scrolls down; the toast and the player go with it.
+            val away by animateFloatAsState(if (browser.barHidden && browser.overlay == Overlay.NONE) 1f else 0f, tween(200), label = "bar")
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs)
+                    .graphicsLayer { translationY = away * 140.dp.toPx() },
+                verticalArrangement = Arrangement.spacedBy(Space.md),
+            ) {
+                browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
+                browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
+                BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth())
+            }
         } else {
             val active = browser.activeTab
             SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || active?.private == true)
@@ -101,7 +114,7 @@ private fun StartScreen(browser: BrowserModel, strings: Strings) {
     ) {
         StartPage(browser.app, strings, onOpen = { browser.open(OpenTarget.Url(it), privately = false) }, onUnpin = { site ->
             Haptics.tick(view)
-            browser.app.dispatch(Action.RemovePin(site.id))
+            browser.unpin(site)
         })
         Column(Modifier.clearAndSetSemantics {}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             BayText(strings.t("start.tapToSearch"), variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, tone = TextTone.MUTED)
