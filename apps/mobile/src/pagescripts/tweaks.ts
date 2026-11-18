@@ -1,8 +1,9 @@
-/** Bay's page zoom, and AMP pages swapped for the publisher's own. Safe to run more than once per page. */
-export function pageTweaksScript({ textSize, skipAmp }: { textSize: number; skipAmp: boolean }): string {
-  return `
+import { withArgs } from "./args.ts";
+
+/** Bay's page zoom (`args.textSize`), and AMP pages swapped for the publisher's own (`args.skipAmp`). Safe to run more than once per page. */
+export const PAGE_TWEAKS_SCRIPT = `
 const root = document.documentElement;
-if (${skipAmp} && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
+if (args.skipAmp && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
   const canonical = document.querySelector('link[rel="canonical"]');
   const href = canonical && canonical.href;
   // Never from https down to http.
@@ -12,7 +13,7 @@ if (${skipAmp} && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
     return "amp";
   }
 }
-const size = ${textSize};
+const size = args.textSize;
 const state = (window[Symbol.for("bay.tweaks")] ??= {});
 // CSS zoom scales text and images and reflows the page, the same on both engines.
 // It goes on <body>: Reader and the element picker attach to <html> and keep their own sizes.
@@ -24,6 +25,9 @@ if (document.body && (size !== 100 || state.size)) {
 }
 return "ok";
 `;
+
+export function pageTweaksScript({ textSize, skipAmp }: { textSize: number; skipAmp: boolean }): string {
+  return withArgs(PAGE_TWEAKS_SCRIPT, { textSize, skipAmp });
 }
 
 /**
