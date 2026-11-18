@@ -300,7 +300,7 @@ private struct DownloadRow: View {
 
 /// A running download's bar: it eases to each new fraction, and while the size is unknown or the download is waiting a
 /// short segment sweeps across instead, so it never looks frozen. The status line says the percentage in words.
-private struct DownloadProgress: View {
+struct DownloadProgress: View {
   let item: DownloadItem
   @State private var sweep = false
 
@@ -555,5 +555,47 @@ private struct ClearFooter: View {
       }
     }
     .padding(.top, Space.lg)
+  }
+}
+
+/// The latest download, above the bar: its progress while it comes in, then Open once it's saved. A tap shows every
+/// download.
+struct DownloadToast: View {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var browser: BrowserModel
+  let item: DownloadItem
+
+  var body: some View {
+    let status = downloadStatus(item, strings)
+    let finished = item.state == .finished
+    let heading = finished ? strings.t("downloadToast.downloaded", ["filename": item.filename]) : item.filename
+    VStack(alignment: .leading, spacing: Space.sm) {
+      HStack(spacing: Space.md) {
+        BayIconView(finished ? .check : item.state == .downloading ? .download : .error, size: IconSize.row,
+          color: item.state == .failed ? BayColor.danger : BayColor.accent)
+        Button { browser.panel = .downloads } label: {
+          VStack(alignment: .leading, spacing: 0) {
+            BayText(heading, weight: .medium).lineLimit(1)
+            BayText(status, variant: .subhead, tone: .muted).lineLimit(1).accessibilityIdentifier("download-toast-status")
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: strings.t("downloadToast.showAll", ["filename": item.filename, "status": status])))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("download-toast")
+        if finished {
+          PillButton(strings.t("downloadToast.open"), compact: true) { browser.openDownload(item) }
+            .accessibilityLabel(Text(verbatim: strings.t("downloadToast.openLabel", ["filename": item.filename])))
+            .accessibilityIdentifier("download-toast-open")
+        }
+      }
+      if item.state == .downloading { DownloadProgress(item: item) }
+    }
+    .padding(Space.md)
+    .baySurface(radius: Radius.card)
+    .transition(.move(edge: .bottom).combined(with: .opacity))
   }
 }

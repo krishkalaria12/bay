@@ -108,6 +108,9 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var inspected: InspectedElement?
   /// Private tabs' hidden elements, by tab and host: kept in memory only, and gone with the tab.
   private var privateRules: [String: [String: [String]]] = [:]
+  /// The download the toast above the bar shows: the latest one, until six seconds after it settles.
+  @Published private(set) var downloadToastId: String?
+  private var downloadToastTimer: Task<Void, Never>?
   /// The tab whose page Reader is showing; a new page in it, or another tab, ends Reader.
   @Published private(set) var readerTab: String?
   /// The address Reader last opened by itself on (a site that keeps Reader on), so coming back stays quiet.
@@ -136,6 +139,7 @@ final class BrowserModel: ObservableObject {
     self.app = app
     self.strings = strings
     app.mediaControl = { [weak self] control in self?.mediaControl(control) }
+    app.downloadUpdated = { [weak self] update in self?.downloadUpdated(update) }
   }
 
   // MARK: What shows
@@ -665,6 +669,24 @@ final class BrowserModel: ObservableObject {
     panel = nil
     overlay = .none
     restore(id)
+  }
+
+  /// The download toast's item, while it has one.
+  var downloadToast: DownloadItem? { downloadToastId.flatMap { id in app.downloads.first { $0.id == id } } }
+
+  /// Shows the toast for a download's update; a Wallet pass or a calendar invitation opens itself once saved.
+  func downloadUpdated(_ update: DownloadEvent) {
+    downloadToastId = update.id
+    downloadToastTimer?.cancel()
+    if update.state == .finished, opensWhenFinished(filename: update.filename), let item = app.downloads.first(where: { $0.id == update.id }) {
+      openDownload(item)
+    }
+    guard update.state != .started, update.state != .progress else { return }
+    downloadToastTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 6_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.downloadToastId = nil
+    }
   }
 
   /// Opens a finished download in the phone's viewer for its kind.

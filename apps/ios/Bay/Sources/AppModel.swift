@@ -34,6 +34,8 @@ final class AppModel: ObservableObject {
   private var blocker: ContentBlocker?
   /// The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves.
   @Published private(set) var revision: UInt64 = 0
+  /// Hears each download update once the store has it, for the download toast.
+  var downloadUpdated: ((DownloadEvent) -> Void)?
   /// Hears the system's media controls (lock screen, Control Center): the screen showing the media sets it.
   var mediaControl: ((MediaControl) -> Void)?
 
@@ -57,7 +59,10 @@ final class AppModel: ObservableObject {
     syncView = sync.view()
     // Downloads keep reporting after their tab closes, so the store hears them here.
     Engine.start(
-      downloads: { [store] update in _ = store.dispatch(action: .download(update: update, now: Self.now())) },
+      downloads: { [weak self, store] update in
+        _ = store.dispatch(action: .download(update: update, now: Self.now()))
+        Task { @MainActor in self?.downloadUpdated?(update) }
+      },
       media: { [weak self] control in self?.mediaControl?(control) }
     )
     store.observe(observer: StoreChanges(model: self))

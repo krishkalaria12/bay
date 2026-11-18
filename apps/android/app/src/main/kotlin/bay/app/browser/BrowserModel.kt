@@ -21,6 +21,8 @@ import bay.core.BookmarkNode
 import bay.core.BrowserSpace
 import bay.core.BrowserFolder
 import bay.core.BrowserTab
+import bay.core.DownloadEvent
+import bay.core.DownloadEventState
 import bay.core.DownloadItem
 import bay.core.DownloadState
 import bay.core.MediaReport
@@ -42,6 +44,7 @@ import bay.core.cleanUrl
 import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
+import bay.core.opensWhenFinished
 import bay.core.parseInspectedElement
 import bay.core.parseMediaMessage
 import bay.core.parsePickedMessage
@@ -140,6 +143,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** Private tabs' hidden elements, by tab and host: kept in memory only, and gone with the tab. */
     private val privateRules = mutableStateMapOf<String, Map<String, List<String>>>()
 
+    /** The download the toast above the bar shows: the latest one, until six seconds after it settles. */
+    var downloadToastId by mutableStateOf<String?>(null)
+        private set
+    private var downloadToastTimer: Job? = null
+
     /** The tab whose page Reader is showing; a new page in it, or another tab, ends Reader. */
     var readerTab by mutableStateOf<String?>(null)
         private set
@@ -221,6 +229,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     init {
         app.mediaControl = ::mediaControl
+        app.downloadUpdated = ::downloadUpdated
     }
 
     val activeTab: BrowserTab? get() = app.tabs.firstOrNull { it.id == app.activeTabId }
@@ -669,6 +678,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         panel = null
         overlay = Overlay.NONE
         restore(id)
+    }
+
+    /** The download toast's item, while it has one. */
+    val downloadToast: DownloadItem? get() = downloadToastId?.let { id -> app.downloads.firstOrNull { it.id == id } }
+
+    /** Shows the toast for a download's update; a Wallet-style pass or a calendar invitation opens itself once saved. */
+    private fun downloadUpdated(update: DownloadEvent) {
+        downloadToastId = update.id
+        downloadToastTimer?.cancel()
+        if (update.state == DownloadEventState.FINISHED && opensWhenFinished(update.filename)) {
+            app.downloads.firstOrNull { it.id == update.id }?.let(::openDownload)
+        }
+        if (update.state == DownloadEventState.STARTED || update.state == DownloadEventState.PROGRESS) return
+        downloadToastTimer = scope.launch {
+            delay(DOWNLOAD_TOAST_MS)
+            downloadToastId = null
+        }
     }
 
     /** Opens a finished download in the phone's viewer for its kind. */
@@ -1184,6 +1210,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     companion object {
         /** At most this many pages stay loaded; the rest reload from their saved state when shown again. */
         const val MAX_LIVE = 4
+
+        /** A settled download's toast stays this long. */
+        private const val DOWNLOAD_TOAST_MS = 6_000L
 
         fun blankTab(spaceId: String, url: String = "", privately: Boolean = false): BrowserTab {
             val now = AppModel.now()

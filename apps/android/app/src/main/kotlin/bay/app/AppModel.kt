@@ -14,6 +14,7 @@ import bay.core.BrowserPreferences
 import bay.core.BrowserSpace
 import bay.core.BrowserStore
 import bay.core.BrowserTab
+import bay.core.DownloadEvent
 import bay.core.DownloadItem
 import bay.core.HistoryEntry
 import bay.core.Pairing
@@ -90,6 +91,9 @@ class AppModel(context: Context, barTitle: String) {
     /** Hears the system's media controls (the media notification): the screen showing the media sets it. */
     var mediaControl: ((MediaControl) -> Unit)? = null
 
+    /** Hears each download update once the store has it, for the download toast. */
+    var downloadUpdated: ((DownloadEvent) -> Unit)? = null
+
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -110,7 +114,12 @@ class AppModel(context: Context, barTitle: String) {
     init {
         // Downloads keep reporting after their tab closes, so the store hears them here.
         Engine.start(
-            downloads = { update -> main.post { store.dispatch(Action.Download(update, now())) } },
+            downloads = { update ->
+                main.post {
+                    store.dispatch(Action.Download(update, now()))
+                    downloadUpdated?.invoke(update)
+                }
+            },
             media = { control -> mediaControl?.invoke(control) },
         )
         store.observe(object : StoreObserver {

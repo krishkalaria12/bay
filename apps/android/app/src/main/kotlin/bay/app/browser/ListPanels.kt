@@ -340,16 +340,17 @@ private fun DownloadRow(browser: BrowserModel, strings: Strings, item: DownloadI
     Row(Modifier.fillMaxWidth().hairline(), horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(
             Modifier.weight(1f).heightIn(min = 56.dp).testTag("download-$index")
-                .clearAndSetSemantics {
+                .pressFeedback(enabled = finished) { browser.openDownload(item) }
+                // The row says the file and its status; the status line keeps its own node, so it can be found by id.
+                .semantics {
                     contentDescription = "${item.filename}, $status"
                     role = Role.Button
                     if (!finished) disabled()
                 }
-                .pressFeedback(enabled = finished) { browser.openDownload(item) }
                 .padding(vertical = Space.sm),
             verticalArrangement = Arrangement.Center,
         ) {
-            BayText(item.filename, maxLines = 1)
+            BayText(item.filename, Modifier.clearAndSetSemantics {}, maxLines = 1)
             BayText(status, Modifier.testTag("download-$index-status"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED, maxLines = 1)
             if (running) DownloadProgress(item, Modifier.padding(top = Space.sm))
         }
@@ -370,7 +371,7 @@ private fun DownloadRow(browser: BrowserModel, strings: Strings, item: DownloadI
  * short segment sweeps across instead, so it never looks frozen. The status line says the percentage in words.
  */
 @Composable
-private fun DownloadProgress(item: DownloadItem, modifier: Modifier = Modifier) {
+fun DownloadProgress(item: DownloadItem, modifier: Modifier = Modifier) {
     val colors = Theme.colors
     val known = item.total > 0 && item.waiting == null
     BoxWithConstraints(modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(colors.fill).clearAndSetSemantics {}) {
@@ -609,5 +610,45 @@ private fun ClearFooter(
         } else {
             ActionRow(label, testID, icon = BayIcon.DELETE, destructive = true) { setConfirming(true) }
         }
+    }
+}
+
+/** The latest download, above the bar: its progress while it comes in, then Open once it's saved. A tap shows every download. */
+@Composable
+fun DownloadToast(browser: BrowserModel, strings: Strings, item: DownloadItem) {
+    val colors = Theme.colors
+    val status = downloadStatus(item, strings)
+    val finished = item.state == DownloadState.FINISHED
+    val heading = if (finished) strings.t("downloadToast.downloaded", mapOf("filename" to item.filename)) else item.filename
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(bay.design.Radius.card)
+    Column(
+        Modifier.fillMaxWidth().clip(shape).background(colors.surface, shape).padding(Space.md),
+        verticalArrangement = Arrangement.spacedBy(Space.sm),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically) {
+            BayIconView(
+                if (finished) BayIcon.CHECK else if (item.state == DownloadState.DOWNLOADING) BayIcon.DOWNLOAD else BayIcon.ERROR,
+                size = IconSize.row,
+                color = if (item.state == DownloadState.FAILED) colors.danger else colors.accent,
+            )
+            Column(
+                Modifier.weight(1f).testTag("download-toast")
+                    .clearAndSetSemantics {
+                        contentDescription = strings.t("downloadToast.showAll", mapOf("filename" to item.filename, "status" to status))
+                        role = Role.Button
+                    }
+                    .pressFeedback { browser.panel = Panel.DOWNLOADS },
+            ) {
+                BayText(heading, weight = androidx.compose.ui.text.font.FontWeight.Medium, maxLines = 1)
+                BayText(status, Modifier.testTag("download-toast-status"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED, maxLines = 1)
+            }
+            if (finished) {
+                val label = strings.t("downloadToast.openLabel", mapOf("filename" to item.filename))
+                PillButton(strings.t("downloadToast.open"), Modifier.testTag("download-toast-open").semantics { contentDescription = label }, compact = true) {
+                    browser.openDownload(item)
+                }
+            }
+        }
+        if (item.state == DownloadState.DOWNLOADING) DownloadProgress(item)
     }
 }

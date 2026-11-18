@@ -93,6 +93,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 verticalArrangement = Arrangement.spacedBy(Space.md),
             ) {
                 browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
+                browser.downloadToast?.let { item -> DownloadToast(browser, strings, item) }
                 browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
                 val tip = browser.tip
                 if (tip == TipId.BAR) {

@@ -47,6 +47,9 @@ struct BrowserScreen: View {
           if let player = browser.player {
             MiniPlayer(browser: browser, tab: player.tab, media: player.media)
           }
+          if let item = browser.downloadToast {
+            DownloadToast(browser: browser, item: item)
+          }
           if let toast = browser.toast {
             ToastView(toast: toast, onDone: browser.dismissToast).id(toast.id)
           }
