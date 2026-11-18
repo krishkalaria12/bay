@@ -9,6 +9,7 @@ uniffi::setup_scaffolding!("bay_core");
 pub use bay_adblock::ffi::*;
 
 pub mod browser;
+pub mod crashes;
 pub mod i18n;
 pub mod imports;
 pub mod input;
