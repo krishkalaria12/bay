@@ -180,10 +180,25 @@ private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit)
             RowDivider()
             ActionRow(strings.t("pageMenu.privateTab"), "page-new-private", icon = BayIcon.PRIVATE, onClick = act { browser.search(inNewTab = true, privately = true) })
             RowDivider()
-            // Hiding elements and inspecting come with the element picker.
-            ActionRow(strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, detail = strings.t("pageMenu.hideElements.detail"), onClick = act {})
+            ActionRow(
+                strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, detail = strings.t("pageMenu.hideElements.detail"),
+                onClick = act { browser.startPicking(PickMode.HIDE) },
+            )
             RowDivider()
-            ActionRow(strings.t("pageMenu.inspect"), "page-inspect", icon = BayIcon.INSPECT, detail = strings.t("pageMenu.inspect.detail"), onClick = act {})
+            ActionRow(
+                strings.t("pageMenu.inspect"), "page-inspect", icon = BayIcon.INSPECT, detail = strings.t("pageMenu.inspect.detail"),
+                onClick = act { browser.startPicking(PickMode.INSPECT) },
+            )
+            val hidden = browser.activeHidden.size
+            if (hidden > 0) {
+                RowDivider()
+                ActionRow(
+                    if (hidden == 1) strings.t("pageMenu.hiddenOne") else strings.t("pageMenu.hiddenMany", mapOf("count" to "$hidden")),
+                    "page-show-hidden",
+                    icon = BayIcon.VISIBILITY,
+                    onClick = act(browser::showHidden),
+                )
+            }
             RowDivider()
             ActionRow(
                 strings.t("pageMenu.markdown"),

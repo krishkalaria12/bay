@@ -26,6 +26,8 @@ import bay.core.DownloadState
 import bay.core.MediaReport
 import bay.core.NavigationReport
 import bay.core.PinKind
+import bay.core.InspectedElement
+import bay.core.PickedElement
 import bay.core.PinnedSite
 import bay.core.ReaderSettings
 import bay.core.ReaderSettingsInput
@@ -40,7 +42,9 @@ import bay.core.cleanUrl
 import bay.core.hostOf
 import bay.core.initialTiming
 import bay.core.isWebUrl
+import bay.core.parseInspectedElement
 import bay.core.parseMediaMessage
+import bay.core.parsePickedMessage
 import bay.core.readerVariables
 import bay.core.scriptsFor
 import bay.core.searchEngine
@@ -75,7 +79,10 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT }
+
+/** What the element picker does with a tap on the page: hide the element, or describe it. */
+enum class PickMode { HIDE, INSPECT }
 
 /** Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings. */
 enum class PageBlocking { ON, PAUSED, RESTORED, OFF }
@@ -111,10 +118,27 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             panelState = value
             // The prompts sheet swiped away (or covered by another): the page's question is cancelled.
             if (before == Panel.REQUEST && value != Panel.REQUEST && pageRequests.isNotEmpty()) answerPageRequest(false)
+            // Inspect's details closed: the picker stays on, ready for the next tap.
+            if (before == Panel.INSPECT && value != Panel.INSPECT) inspected = null
         }
 
     /** What pages asked and wait on, oldest first; the prompts sheet shows the first. */
     val pageRequests = mutableStateListOf<Pair<String, PageRequest>>()
+
+    /** The element picker on the page showing, while it runs. */
+    var picking by mutableStateOf<PickMode?>(null)
+        private set
+
+    /** What the picker selected last. */
+    var picked by mutableStateOf<PickedElement?>(null)
+        private set
+
+    /** What Inspect read about the picked element. */
+    var inspected by mutableStateOf<InspectedElement?>(null)
+        private set
+
+    /** Private tabs' hidden elements, by tab and host: kept in memory only, and gone with the tab. */
+    private val privateRules = mutableStateMapOf<String, Map<String, List<String>>>()
 
     /** The tab whose page Reader is showing; a new page in it, or another tab, ends Reader. */
     var readerTab by mutableStateOf<String?>(null)
@@ -308,6 +332,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (id != app.activeTabId) {
             endFind()
             readerTab = null
+            pickerGone()
         }
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
@@ -671,7 +696,17 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             }
             // A new window becomes a real tab in front, in the opener's own session.
             is EngineEvent.NewWindow -> if (isWebUrl(event.url)) openTab(event.url, event.isPrivate)
-            is EngineEvent.PageMessage -> parseMediaMessage(event.message)?.let { mediaReported(tabId, it) }
+            is EngineEvent.PageMessage -> {
+                val report = parseMediaMessage(event.message)
+                val element = if (report == null && picking != null && tabId == app.activeTabId) parsePickedMessage(event.message) else null
+                when {
+                    report != null -> mediaReported(tabId, report)
+                    element != null -> {
+                        picked = element
+                        if (picking == PickMode.INSPECT) inspectPicked()
+                    }
+                }
+            }
             is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
@@ -702,6 +737,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             blocked.remove(tabId)
             if (tabId == app.activeTabId) endFind()
             if (readerTab == tabId) readerTab = null
+            if (tabId == app.activeTabId) pickerGone()
             failed -= tabId
             if (failure?.tabId == tabId) failure = null
             // A new document has no media until it reports some.
@@ -716,8 +752,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 if (rgb != null) pageColors[tabId] = rgb else pageColors.remove(tabId)
             }
         }
-        val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), false)
+        val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { hiddenSelectors(it, state.url) }.orEmpty()
+        val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), rules.isNotEmpty())
         timing[tabId] = plan.timing
+        if (plan.hideElements && view != null) hide(rules, view)
         if (plan.watchMedia && view != null) {
             // Early in each load (so text doesn't jump late) and again once it finishes.
             applyTweaks(tabId, state.url)
@@ -834,6 +872,94 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** The article on the page as Markdown, on the clipboard. */
+    // Hide elements and Inspect
+
+    /** The elements hidden on a tab's site: its own list in a private tab, else the site's saved one. */
+    fun hiddenSelectors(tab: BrowserTab, url: String = tab.url): List<String> =
+        if (tab.private) privateRules[tab.id]?.get(hostOf(url)).orEmpty() else app.store.hiddenSelectors(url)
+
+    /** The elements hidden on the page showing. */
+    val activeHidden: List<String> get() = activeTab?.let { hiddenSelectors(it, activeUrl) }.orEmpty()
+
+    private fun hide(selectors: List<String>, view: BayEngineView) {
+        scope.launch { runCatching { view.runScript(PageScript.HIDE_ELEMENTS, mapOf("selectors" to selectors)) } }
+    }
+
+    /** Keeps the site's hidden elements and applies them to the page showing at once. */
+    private fun setHidden(selectors: List<String>) {
+        val tab = activeTab ?: return
+        val host = hostOf(activeUrl)
+        if (tab.private) privateRules[tab.id] = privateRules[tab.id].orEmpty() + (host to selectors)
+        else app.dispatch(Action.HiddenElements(host, selectors))
+        activeView?.let { hide(selectors, it) }
+    }
+
+    /** Starts the element picker: a tap on the page then picks what's under it, and links don't open. */
+    fun startPicking(mode: PickMode) {
+        val view = activeView ?: return
+        scope.launch {
+            if (readerTab == app.activeTabId) {
+                readerTab = null
+                runCatching { view.runScript(PageScript.CLOSE_READER) }
+            }
+            runCatching { view.runScript(PageScript.START_PICKER) }
+            picked = null
+            inspected = null
+            picking = mode
+        }
+    }
+
+    fun endPicking() {
+        activeView?.let { view -> scope.launch { runCatching { view.runScript(PageScript.STOP_PICKER) } } }
+        pickerGone()
+    }
+
+    /** The picker's state goes with its page (a new document, another tab), which stops it anyway. */
+    private fun pickerGone() {
+        picking = null
+        picked = null
+        inspected = null
+        if (panel == Panel.INSPECT) panel = null
+    }
+
+    /** Picks the element around the picked one. */
+    fun pickParent() {
+        val view = activeView ?: return
+        scope.launch {
+            val moved = runCatching { view.runScript(PageScript.PICK_PARENT) }.getOrNull() == "true"
+            if (!moved) showToast(strings.t("notice.noParent"))
+        }
+    }
+
+    fun hidePicked() {
+        val selector = picked?.selector ?: return
+        val rules = activeHidden
+        setHidden(if (selector in rules) rules else rules + selector)
+        picked = null
+    }
+
+    fun undoHide() = setHidden(activeHidden.dropLast(1))
+
+    /** Brings back everything hidden on the site showing. */
+    fun showHidden() = setHidden(emptyList())
+
+    /** Reads what the picked element is, for the inspect sheet. */
+    fun inspectPicked() {
+        val view = activeView ?: return
+        scope.launch {
+            val json = runCatching { view.runScript(PageScript.INSPECT) }.getOrNull() ?: return@launch
+            val element = parseInspectedElement(json) ?: return@launch
+            inspected = element
+            panel = Panel.INSPECT
+        }
+    }
+
+    fun copyInspected() {
+        val element = inspected ?: return
+        copy(element.agent)
+        showToast(strings.t("notice.copiedForAgent"))
+    }
+
     // Reader
 
     /** Reader on the page showing, with its settings sheet; when Reader already reads it, only the sheet opens. */

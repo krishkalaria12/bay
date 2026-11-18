@@ -53,7 +53,9 @@ struct BrowserScreen: View {
           if browser.tip == .bar {
             TipCard(title: strings.t("tip.bar.title"), body_: strings.t("tip.bar.body")) { app.dispatch(.tipSeen(id: .bar)) }
           }
-          if browser.find != nil, browser.hasPage {
+          if let mode = browser.picking, browser.hasPage {
+            PickerCard(browser: browser, mode: mode)
+          } else if browser.find != nil, browser.hasPage {
             FindBar(browser: browser)
           } else {
             BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)
@@ -103,6 +105,8 @@ struct BrowserScreen: View {
           if let tab = browser.pinTab { PinPanel(browser: browser, tab: tab) }
         case .reader:
           ReaderPanel(browser: browser)
+        case .inspect:
+          if let element = browser.inspected { InspectPanel(browser: browser, element: element) }
         case .request:
           if let request = browser.pageRequests.first?.request { PageRequestPanel(browser: browser, request: request).id(request.id) }
         case nil:

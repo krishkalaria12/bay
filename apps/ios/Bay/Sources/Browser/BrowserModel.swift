@@ -36,7 +36,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader
+    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader, inspect
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -64,6 +64,8 @@ final class BrowserModel: ObservableObject {
     didSet {
       // The prompts sheet swiped away (or covered by another): the page's question is cancelled.
       if oldValue == .request, panel != .request, !pageRequests.isEmpty { answerPageRequest(accepted: false) }
+      // Inspect's details closed: the picker stays on, ready for the next tap.
+      if oldValue == .inspect, panel != .inspect { inspected = nil }
     }
   }
   /// What pages asked and wait on, oldest first; the prompts sheet shows the first.
@@ -96,6 +98,16 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var blocked: [String: Int] = [:]
   /// A site shown without blocking until its tab leaves it.
   @Published private(set) var restoredHost: String?
+  /// What the element picker does with a tap on the page: hide the element, or describe it.
+  enum PickMode { case hide, inspect }
+  /// The element picker on the page showing, while it runs.
+  @Published private(set) var picking: PickMode?
+  /// What the picker selected last.
+  @Published private(set) var picked: PickedElement?
+  /// What Inspect read about the picked element.
+  @Published private(set) var inspected: InspectedElement?
+  /// Private tabs' hidden elements, by tab and host: kept in memory only, and gone with the tab.
+  private var privateRules: [String: [String: [String]]] = [:]
   /// The tab whose page Reader is showing; a new page in it, or another tab, ends Reader.
   @Published private(set) var readerTab: String?
   /// The address Reader last opened by itself on (a site that keeps Reader on), so coming back stays quiet.
@@ -248,6 +260,7 @@ final class BrowserModel: ObservableObject {
     if id != app.activeTabId {
       endFind()
       readerTab = nil
+      pickerGone()
     }
     app.dispatch(.activateTab(id: id, now: AppModel.now()))
     overlay = .none
@@ -691,6 +704,9 @@ final class BrowserModel: ObservableObject {
     case .pageMessage(let message):
       if let report = parseMediaMessage(message: message) {
         mediaReported(tabId, report)
+      } else if tabId == app.activeTabId, picking != nil, let element = parsePickedMessage(message: message) {
+        picked = element
+        if picking == .inspect { inspectPicked() }
       } else if tabId == app.activeTabId, let press = parseImagePress(message: message) {
         showLinkMenu(LinkPress(url: press.url, title: press.title, x: nil, y: nil, image: true))
       }
@@ -723,6 +739,7 @@ final class BrowserModel: ObservableObject {
       blocked[tabId] = nil
       if tabId == app.activeTabId { endFind() }
       if readerTab == tabId { readerTab = nil }
+      if tabId == app.activeTabId { pickerGone() }
       failed.remove(tabId)
       if failure?.tabId == tabId { failure = nil }
       // A new document has no media until it reports some.
@@ -738,10 +755,12 @@ final class BrowserModel: ObservableObject {
         self?.pageColors[tabId] = color
       }
     }
+    let rules = app.store.tabs().first { $0.id == tabId }.map { hiddenSelectors($0, url: state.url) } ?? []
     let plan = scriptsFor(
       timing: timing[tabId] ?? initialTiming(),
-      state: NavigationReport(url: state.url, progress: state.progress, isLoading: state.isLoading), hasRules: false)
+      state: NavigationReport(url: state.url, progress: state.progress, isLoading: state.isLoading), hasRules: !rules.isEmpty)
     timing[tabId] = plan.timing
+    if plan.hideElements, let view = views[tabId] { hide(rules, in: view) }
     if plan.watchMedia, let view = views[tabId] {
       // Early in each load (so text doesn't jump late) and again once it finishes.
       applyTweaks(tabId, url: state.url)
@@ -852,6 +871,103 @@ extension BrowserModel {
   }
 
   /// The article on the page as Markdown, on the clipboard.
+  // MARK: Hide elements and Inspect
+
+  /// The elements hidden on a tab's site: its own list in a private tab, else the site's saved one.
+  func hiddenSelectors(_ tab: BrowserTab, url: String? = nil) -> [String] {
+    let address = url ?? tab.url
+    if tab.private { return privateRules[tab.id]?[hostOf(url: address)] ?? [] }
+    return app.store.hiddenSelectors(url: address)
+  }
+
+  /// The elements hidden on the page showing.
+  var activeHidden: [String] { activeTab.map { hiddenSelectors($0, url: activeUrl) } ?? [] }
+
+  private func hide(_ selectors: [String], in view: EngineView) {
+    Task { _ = try? await view.runScript(.hideElements, args: ["selectors": selectors]) }
+  }
+
+  /// Keeps the site's hidden elements and applies them to the page showing at once.
+  private func setHidden(_ selectors: [String]) {
+    guard let tab = activeTab else { return }
+    let host = hostOf(url: activeUrl)
+    if tab.private {
+      privateRules[tab.id, default: [:]][host] = selectors
+    } else {
+      app.dispatch(.hiddenElements(host: host, selectors: selectors))
+    }
+    if let view = activeView { hide(selectors, in: view) }
+  }
+
+  /// Starts the element picker: a tap on the page then picks what's under it, and links don't open.
+  func startPicking(_ mode: PickMode) {
+    guard let view = activeView else { return }
+    if readerTab == app.activeTabId {
+      readerTab = nil
+      Task { _ = try? await view.runScript(.closeReader) }
+    }
+    Task { [weak self] in
+      _ = try? await view.runScript(.startPicker)
+      self?.picked = nil
+      self?.inspected = nil
+      self?.picking = mode
+    }
+  }
+
+  func endPicking() {
+    if let view = activeView { Task { _ = try? await view.runScript(.stopPicker) } }
+    pickerGone()
+  }
+
+  /// The picker's state goes with its page (a new document, another tab), which stops it anyway.
+  private func pickerGone() {
+    picking = nil
+    picked = nil
+    inspected = nil
+    if panel == .inspect { panel = nil }
+  }
+
+  /// Picks the element around the picked one.
+  func pickParent() {
+    guard let view = activeView else { return }
+    Task { [weak self] in
+      let moved = (try? await view.runScript(.pickParent)) == "true"
+      if !moved, let self { self.showToast(self.strings.t("notice.noParent")) }
+    }
+  }
+
+  func hidePicked() {
+    guard let picked else { return }
+    let rules = activeHidden
+    setHidden(rules.contains(picked.selector) ? rules : rules + [picked.selector])
+    self.picked = nil
+  }
+
+  func undoHide() {
+    setHidden(Array(activeHidden.dropLast()))
+  }
+
+  /// Brings back everything hidden on the site showing.
+  func showHidden() {
+    setHidden([])
+  }
+
+  /// Reads what the picked element is, for the inspect sheet.
+  func inspectPicked() {
+    guard let view = activeView else { return }
+    Task { [weak self] in
+      guard let text = try? await view.runScript(.inspect), let element = parseInspectedElement(json: text) else { return }
+      self?.inspected = element
+      self?.panel = .inspect
+    }
+  }
+
+  func copyInspected() {
+    guard let inspected else { return }
+    UIPasteboard.general.string = inspected.agent
+    showToast(strings.t("notice.copiedForAgent"))
+  }
+
   // MARK: Reader
 
   /// Reader on the page showing, with its settings sheet; when Reader already reads it, only the sheet opens.

@@ -1491,8 +1491,12 @@ impl BrowserStore {
               a tab card: an Essential, a pinned row or a row in a folder) and the page's questions (<code>page-request</code>: alert, confirm, prompt, HTTP
               sign-in, another app's link, camera, microphone and location), queued and answered one at a time; Android's sheets now keep above the keyboard.
               Reader (<code>page-reader</code>: the article in Reader's look, its settings sheet with text size, font and theme changing it live, and sites that
-              open Reader by themselves), its themes and CSS variables from the core (<code>readerThemes</code>, <code>readerVariables</code>). Left: the other
-              sheets, the menu rows that open them (see Known gaps), app icon, sync status and scheduling.
+              open Reader by themselves), its themes and CSS variables from the core (<code>readerThemes</code>, <code>readerVariables</code>). Hide elements
+              and Inspect (<code>page-hide-elements</code>, <code>page-inspect</code>): the element picker in the bar's place, hiding what's picked for the site
+              (in memory only for private tabs) with undo, reset and the menu's "show hidden" row, and the inspect sheet (the font and where it comes from,
+              size, colours, matching CSS, copy for an agent); the core reads the picker's and inspector's reports (<code>parsePickedMessage</code>,
+              <code>parseInspectedElement</code>, <code>fontOrigin</code>). Left: import, content blocking, app icon, sync status and scheduling (see Known
+              gaps).
             </p>
             <ul>
               <li>
@@ -1772,10 +1776,6 @@ impl BrowserStore {
           <li>
             iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
-          </li>
-          <li>
-            The page menu's Hide elements and Inspect rows close the menu and do nothing until their sheets land (N5); the "show hidden elements" row waits for
-            the same.
           </li>
           <li>
             The bookmarks sheet leaves out "Import from another browser" until the import sheet lands, and Settings' Import and Report rows do nothing yet (N5).

@@ -103,7 +103,10 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                         app.dispatch(bay.core.Action.TipSeen(tip))
                     }
                 }
-                if (browser.find != null && browser.hasPage) {
+                val picking = browser.picking
+                if (picking != null && browser.hasPage) {
+                    PickerCard(browser, strings, picking)
+                } else if (browser.find != null && browser.hasPage) {
                     FindBar(browser, strings)
                 } else {
                     Box(contentAlignment = Alignment.Center) {
@@ -125,6 +128,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         PinPanel(browser, strings, browser.panel == Panel.PIN)
         PageRequestPanel(browser, strings, browser.panel == Panel.REQUEST)
         ReaderPanel(browser, strings, browser.panel == Panel.READER)
+        InspectPanel(browser, strings, browser.panel == Panel.INSPECT)
     }
 }
 

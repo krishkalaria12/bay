@@ -125,11 +125,20 @@ struct PageMenu: View {
           RowDivider()
           ActionRow(strings.t("pageMenu.privateTab"), testID: "page-new-private", icon: .private, action: act { browser.search(inNewTab: true, privately: true) })
           RowDivider()
-          // Hiding elements and inspecting come with the element picker.
           ActionRow(
-            strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, detail: strings.t("pageMenu.hideElements.detail"), action: act {})
+            strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, detail: strings.t("pageMenu.hideElements.detail"),
+            action: act { browser.startPicking(.hide) })
           RowDivider()
-          ActionRow(strings.t("pageMenu.inspect"), testID: "page-inspect", icon: .inspect, detail: strings.t("pageMenu.inspect.detail"), action: act {})
+          ActionRow(
+            strings.t("pageMenu.inspect"), testID: "page-inspect", icon: .inspect, detail: strings.t("pageMenu.inspect.detail"),
+            action: act { browser.startPicking(.inspect) })
+          let hidden = browser.activeHidden.count
+          if hidden > 0 {
+            RowDivider()
+            ActionRow(
+              hidden == 1 ? strings.t("pageMenu.hiddenOne") : strings.t("pageMenu.hiddenMany", ["count": "\(hidden)"]), testID: "page-show-hidden",
+              icon: .visibility, action: act(browser.showHidden))
+          }
           RowDivider()
           ActionRow(
             strings.t("pageMenu.markdown"), testID: "page-markdown", icon: .markdown, detail: strings.t("pageMenu.markdown.detail"),
