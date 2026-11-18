@@ -60,42 +60,11 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val app = browser.app
     LaunchedEffect(app.activeTabId, app.tabs.map { it.url }) { browser.refreshMounted() }
     LaunchedEffect(app.preferences) { browser.preferencesChanged() }
+    // While a sheet or Settings is open, the browser behind it steps out of TalkBack's way, as iOS does under its sheets.
+    val behind = browser.panel != null || browser.covered
+    // The picker's card stays above the sheet it opened (Inspect's details), so it's reachable there.
+    val pickerOnTop = browser.picking != null && browser.panel != null
     Box(Modifier.fillMaxSize()) {
-        Wallpaper(app.preferences.wallpaper)
-        // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
-        if (browser.hasPage || browser.mounted.isNotEmpty()) {
-            val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
-            // The engine has no inset for what covers a page, so the page ends above the floating bar (what a site pins
-            // to its bottom stays clear of it), over the page's own colour. Nothing is covered while the bar is away.
-            val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            val covered = if (browser.barHidden && browser.overlay == Overlay.NONE) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
-            if (shown) {
-                val rgb = browser.pageColors[app.activeTabId]
-                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
-                Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
-            }
-            PagesHost(browser, shown, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered))
-        }
-        if (browser.overlay == Overlay.TABS) {
-            Wallpaper(app.preferences.wallpaper)
-            TabSwitcher(browser, strings, onSettings)
-        } else if (browser.hasPage) {
-            val failure = browser.failure
-            if (failure != null && failure.tabId == app.activeTabId) {
-                PageError(failure.message, strings, browser::retry, Modifier.statusBarsPadding())
-            }
-            // The strip behind the status bar, in the colour at the top of the page.
-            val rgb = browser.pageColors[app.activeTabId]
-            val strip = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
-            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(strip).clearAndSetSemantics {})
-        } else if (browser.overlay == Overlay.NONE) {
-            StartScreen(browser, strings)
-        }
-        val activity = LocalContext.current as? android.app.Activity
-        if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
-            PrivateLock(strings) { activity?.let(browser::unlock) }
-        }
-        browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
         val bottom: @Composable BoxScope.() -> Unit = {
@@ -132,12 +101,48 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 }
             }
         }
-        val pickerOnTop = browser.picking != null && browser.panel != null
+        Box(Modifier.fillMaxSize().then(if (behind) Modifier.clearAndSetSemantics {} else Modifier)) {
+        Wallpaper(app.preferences.wallpaper)
+        // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
+        if (browser.hasPage || browser.mounted.isNotEmpty()) {
+            val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
+            // The engine has no inset for what covers a page, so the page ends above the floating bar (what a site pins
+            // to its bottom stays clear of it), over the page's own colour. Nothing is covered while the bar is away.
+            val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val covered = if (browser.barHidden && browser.overlay == Overlay.NONE) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
+            if (shown) {
+                val rgb = browser.pageColors[app.activeTabId]
+                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
+                Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
+            }
+            PagesHost(browser, shown && !behind, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered), visible = shown)
+        }
+        if (browser.overlay == Overlay.TABS) {
+            Wallpaper(app.preferences.wallpaper)
+            TabSwitcher(browser, strings, onSettings)
+        } else if (browser.hasPage) {
+            val failure = browser.failure
+            if (failure != null && failure.tabId == app.activeTabId) {
+                PageError(failure.message, strings, browser::retry, Modifier.statusBarsPadding())
+            }
+            // The strip behind the status bar, in the colour at the top of the page.
+            val rgb = browser.pageColors[app.activeTabId]
+            val strip = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
+            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(strip).clearAndSetSemantics {})
+        } else if (browser.overlay == Overlay.NONE) {
+            StartScreen(browser, strings)
+        }
+        val activity = LocalContext.current as? android.app.Activity
+        if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
+            PrivateLock(strings) { activity?.let(browser::unlock) }
+        }
+        browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
         if (browser.overlay != Overlay.SEARCH) {
             if (!pickerOnTop) bottom()
         } else {
             val active = browser.activeTab
             SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
+        }
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)

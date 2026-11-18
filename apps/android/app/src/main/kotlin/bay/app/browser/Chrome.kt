@@ -2,6 +2,7 @@ package bay.app.browser
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.animation.core.animateFloatAsState
@@ -93,13 +94,17 @@ import bay.engine.NavigationState
  * container is in a window, as on iOS. Under the tab switcher the host is transparent and no page is active.
  */
 @Composable
-fun PagesHost(browser: BrowserModel, shown: Boolean, modifier: Modifier = Modifier) {
+fun PagesHost(browser: BrowserModel, reachable: Boolean, modifier: Modifier = Modifier, visible: Boolean = reachable) {
+    // `visible`: the page shows (not under the switcher or Settings); `reachable`: TalkBack can reach it (no sheet over it).
+    val shown = visible
     val mounted = browser.mounted
     val tabs = browser.app.tabs
     AndroidView(
         factory = { context -> FrameLayout(context) },
         modifier = modifier,
         update = { container ->
+            container.importantForAccessibility =
+                if (reachable) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             fun sync() {
                 for ((index, id) in mounted.withIndex()) {
                     val tab = tabs.firstOrNull { it.id == id } ?: continue
