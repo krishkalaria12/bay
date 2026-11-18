@@ -417,6 +417,43 @@ impl BrowserStore {
     pub fn left_at(&self) -> Option<i64> {
         lock(&self.state).data.left_at
     }
+
+    /// Back after a long time away (or launched again after it): a fresh start page, like a new day, while the tabs
+    /// stay in the switcher. Takes an empty tab when there is one, else opens one (`new_tab_id`). Says whether it did;
+    /// nothing changes when "start page after" is off, Bay never left, it wasn't away long enough, or the start page
+    /// is showing already. The Expo app's `startFresh`.
+    pub fn start_fresh(&self, now: i64, new_tab_id: String) -> bool {
+        let data = self.snapshot();
+        let (Some(hours), Some(left)) = (data.preferences.start_page_after_hours, data.left_at)
+        else {
+            return false;
+        };
+        if now - left < hours * 60 * 60 * 1000 {
+            return false;
+        }
+        if data
+            .tabs
+            .iter()
+            .any(|tab| tab.id == data.active_tab_id && tab.url.is_empty())
+        {
+            return false;
+        }
+        match data
+            .tabs
+            .iter()
+            .find(|tab| tab.url.is_empty() && !tab.private)
+        {
+            Some(empty) => self.dispatch(Action::ActivateTab {
+                id: empty.id.clone(),
+                now,
+            }),
+            None => self.dispatch(Action::NewTab {
+                tab: create_tab(&new_tab_id, now, "", false, &data.active_space_id),
+                background: false,
+            }),
+        };
+        true
+    }
 }
 
 #[cfg(test)]
@@ -518,6 +555,35 @@ mod tests {
                 .hidden_selectors("https://other.org/".into())
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn a_long_time_away_starts_on_a_fresh_start_page() {
+        let dir = temp_dir("fresh");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        let hour = 60 * 60 * 1000;
+        store.dispatch(Action::UpdateTab {
+            id: "first".into(),
+            update: TabUpdate {
+                url: Some("https://a.example/".into()),
+                ..Default::default()
+            },
+        });
+        store.dispatch(Action::Left { now: 10 });
+        // "Start page after" is off by default.
+        assert!(!store.start_fresh(10 + 100 * hour, "fresh".into()));
+        store.dispatch(Action::Preferences {
+            update: super::super::model::PreferencesUpdate {
+                start_page_after_hours: Some(Some(4)),
+                ..Default::default()
+            },
+        });
+        assert!(!store.start_fresh(10 + 3 * hour, "fresh".into()));
+        assert!(store.start_fresh(10 + 5 * hour, "fresh".into()));
+        assert_eq!(store.active_tab_id(), "fresh");
+        // On the start page already: nothing more.
+        assert!(!store.start_fresh(10 + 5 * hour, "again".into()));
+        assert_eq!(store.tabs().len(), 2);
     }
 
     #[test]
