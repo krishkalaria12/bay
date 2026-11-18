@@ -19,7 +19,7 @@ pub use errors::{PageErrorId, PageErrorKind, PageErrorText, describe_page_error,
 pub use icons::{KNOWN_LIMIT, SHARP_WIDTH, icon_width, is_image, known_sites_without_icons};
 pub use links::{BayCommand, bay_command, incoming_link, share_link};
 pub use logins::{SavedLogin, format_saved_logins, origin_of, parse_saved_logins};
-pub use messages::{MediaReport, parse_media_message};
+pub use messages::{ImagePress, MediaReport, parse_image_press, parse_media_message};
 pub use resolve::{MAX_REDIRECTS, RESOLVE_TIMEOUT_MS, resolve_link, resolve_with};
 pub use timing::{
     Navigation, NavigationReport, ScriptPlan, ScriptTiming, initial_timing, same_navigation,

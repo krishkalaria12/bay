@@ -1,5 +1,6 @@
 //! Messages pages send the app through `post(message)`, as JSON text. They come from the page, so each is checked
-//! before anything acts on it. The Expo app's `parseMediaMessage` (src/pagescripts/media.ts).
+//! before anything acts on it. The Expo app's `parseMediaMessage` (src/pagescripts/media.ts) and `parseImagePress`
+//! (src/pagescripts/images.ts).
 
 use serde_json::Value;
 
@@ -30,6 +31,43 @@ pub fn parse_media_message(message: &str) -> Option<MediaReport> {
     })
 }
 
+/// A long press on a bare image (outside any link), as `watch-images` reports it on iOS
+/// (`{ type: "image", src, title }`): the app's link menu opens for it, answering as an image.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImagePress {
+    /// The image's own web address.
+    pub url: String,
+    /// Its alt text, else the address.
+    pub title: String,
+}
+
+/// Reads a page message as an image press; None for anything else, the watcher's `ready` ping included.
+#[uniffi::export]
+pub fn parse_image_press(message: &str) -> Option<ImagePress> {
+    let value: Value = serde_json::from_str(message).ok()?;
+    let object = value.as_object()?;
+    if object.get("type")?.as_str()? != "image" {
+        return None;
+    }
+    let src = object.get("src")?.as_str()?;
+    let title = object.get("title")?.as_str()?;
+    let address = url::Url::parse(src).ok()?;
+    if !matches!(address.scheme(), "http" | "https") || address.host_str().is_none_or(str::is_empty)
+    {
+        return None;
+    }
+    let url = address.to_string();
+    let title = title.trim();
+    Some(ImagePress {
+        title: if title.is_empty() {
+            url.clone()
+        } else {
+            title.to_owned()
+        },
+        url,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,6 +89,31 @@ mod tests {
             "a".repeat(300)
         );
         assert_eq!(parse_media_message(&long).unwrap().title.len(), 200);
+    }
+
+    #[test]
+    fn reads_image_presses() {
+        assert_eq!(
+            parse_image_press(
+                r#"{"type":"image","src":"https://example.com/a b.png","title":" Cat "}"#
+            ),
+            Some(ImagePress {
+                url: "https://example.com/a%20b.png".into(),
+                title: "Cat".into()
+            })
+        );
+        let untitled =
+            parse_image_press(r#"{"type":"image","src":"https://example.com/a.png","title":""}"#)
+                .unwrap();
+        assert_eq!(untitled.title, "https://example.com/a.png");
+        for message in [
+            r#"{"type":"image","ready":true}"#,
+            r#"{"type":"image","src":"data:image/png;base64,AA","title":""}"#,
+            r#"{"type":"media","src":"https://example.com/a.png","title":""}"#,
+            "not json",
+        ] {
+            assert_eq!(parse_image_press(message), None, "{message}");
+        }
     }
 
     #[test]
