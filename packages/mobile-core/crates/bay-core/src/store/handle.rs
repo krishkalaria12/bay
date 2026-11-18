@@ -207,6 +207,27 @@ impl BrowserStore {
         true
     }
 
+    /// Forgets every tab, page, pin and space and starts afresh on one blank tab; the preferences stay, less the
+    /// elements hidden on sites. What clearing browsing data does to the store, as the Expo app's `reset`.
+    pub fn reset(&self, new_tab_id: String, now: i64) {
+        let revision = {
+            let mut state = lock(&self.state);
+            let mut preferences = state.data.preferences.clone();
+            preferences.hidden_elements.clear();
+            state.data = initial_browser_data(
+                create_tab(&new_tab_id, now, "", false, PERSONAL_SPACE_ID),
+                preferences,
+            );
+            state.revision += 1;
+            state.revision
+        };
+        let _ = lock(&self.saver).send(());
+        let observers = lock(&self.observers).clone();
+        for observer in observers {
+            observer.changed(revision);
+        }
+    }
+
     /// Writes the newest state now, when it changed since the last write: as the app leaves the foreground.
     pub fn flush(&self) -> Result<(), StoreError> {
         save_if_changed(&self.state, &self.file)
@@ -381,6 +402,14 @@ mod tests {
         assert_eq!(store.load_outcome(), LoadOutcome::Fresh);
         assert_eq!(store.active_tab_id(), "first");
         assert_eq!(store.spaces()[0].id, PERSONAL_SPACE_ID);
+        // A reset leaves one blank tab in the personal space and keeps the preferences.
+        store.dispatch(Action::BlockContent { enabled: false });
+        store.reset("fresh".into(), 20);
+        assert_eq!(
+            (store.tabs().len(), store.active_tab_id()),
+            (1, "fresh".to_string())
+        );
+        assert!(!store.preferences().block_content);
         // The second space takes the second colour and the first emoji past the house.
         let next = store.new_space("work".into(), "Space 2".into());
         assert_eq!(
