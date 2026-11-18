@@ -206,6 +206,8 @@ fun ActionRow(
     selected: Boolean = false,
     destructive: Boolean = false,
     enabled: Boolean = true,
+    /** Takes the icon's place: another app's own icon, say. */
+    leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val colors = Theme.colors
@@ -224,7 +226,9 @@ fun ActionRow(
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null && tint != null) {
+        if (leading != null) {
+            leading()
+        } else if (icon != null && tint != null) {
             Box(Modifier.size(29.dp).background(tint, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                 BayIconView(icon, size = IconSize.small, color = Color.White)
             }

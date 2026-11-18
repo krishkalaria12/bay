@@ -24,6 +24,10 @@ import bay.core.BrowserTab
 import bay.core.DownloadEvent
 import bay.core.DownloadEventState
 import bay.core.DownloadItem
+import bay.core.ImportCounts
+import bay.core.ImportChoice
+import bay.core.ChosenExport
+import bay.core.ImportedTab
 import bay.core.DownloadState
 import bay.core.MediaReport
 import bay.core.NavigationReport
@@ -85,7 +89,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -715,6 +719,24 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             downloadToastId = null
         }
     }
+
+    // Import
+
+    /** Opens pasted links as background tabs, or files them in the archive, and says how many came in. */
+    fun importLinks(tabs: List<ImportedTab>, archive: Boolean) {
+        val count = app.store.importTabs(tabs, archive, AppModel.now()).toInt()
+        panel = null
+        if (count == 0) {
+            showToast(strings.t("toast.linksAlreadyHere"))
+            return
+        }
+        val key = if (archive) (if (count == 1) "toast.archivedTab" else "toast.archivedTabs") else if (count == 1) "toast.openedTab" else "toast.openedTabs"
+        showToast(strings.t(key, mapOf("count" to "$count")))
+    }
+
+    /** Adds the chosen parts of an export to the space showing; its bookmarks go in a folder named for the browser. */
+    fun importExport(chosen: ChosenExport, choice: ImportChoice, folderName: String): ImportCounts =
+        app.store.importExport(chosen.contents, choice, folderName, AppModel.now())
 
     /** Opens a finished download in the phone's viewer for its kind. */
     fun openDownload(item: DownloadItem) {

@@ -135,12 +135,14 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 focus = match?.row
                 push(match?.page?.let { settingsPath(it) } ?: listOf(entry.page))
             }
-            // The browser's own sheets open over Settings; import and problem reports come with their sheets.
+            // The browser's own sheets open over Settings.
             is IndexEntry.Action -> when (entry.action) {
                 IndexAction.BOOKMARKS -> browser.panel = Panel.BOOKMARKS
                 IndexAction.HISTORY -> browser.panel = Panel.HISTORY
                 IndexAction.DOWNLOADS -> browser.panel = Panel.DOWNLOADS
-                IndexAction.IMPORT, IndexAction.REPORT -> {}
+                IndexAction.IMPORT -> browser.panel = Panel.IMPORT
+                // Problem reports come with their sheet.
+                IndexAction.REPORT -> {}
             }
         }
     }

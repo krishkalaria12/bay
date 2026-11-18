@@ -109,6 +109,7 @@ fun ListPanels(browser: BrowserModel, strings: Strings) {
     ArchivePanel(browser, strings, browser.panel == Panel.ARCHIVE)
     BookmarksPanel(browser, strings, browser.panel == Panel.BOOKMARKS)
     DownloadsPanel(browser, strings, browser.panel == Panel.DOWNLOADS)
+    ImportPanel(browser, strings, browser.panel == Panel.IMPORT)
 }
 
 // History
@@ -220,8 +221,13 @@ private fun BookmarksPanel(browser: BrowserModel, strings: Strings, visible: Boo
         visible, title, "bookmarks-screen", strings.sheetWords(title), { browser.panel = null },
         onBack = parent?.let { { enter(it) } }, maxFraction = LIST_FRACTION,
     ) {
+        // The way to bring bookmarks from another browser, under the list's top.
+        val importRow = @Composable {
+            ActionRow(strings.t("bookmarks.import"), "bookmarks-import", icon = BayIcon.IMPORT, chevron = true) { browser.panel = Panel.IMPORT }
+        }
         if (listing.nodes == 0u) {
             EmptyNote(strings.t("bookmarks.empty"), strings.t("bookmarks.emptyDetail"), "bookmarks-empty")
+            importRow()
             return@PanelSheet
         }
         SheetSearchField(query, { query = it }, strings.t("bookmarks.search"), "bookmarks-search")
@@ -254,6 +260,9 @@ private fun BookmarksPanel(browser: BrowserModel, strings: Strings, visible: Boo
                     onKeep = { confirming = null },
                 )
             }
+        }
+        if (parent == null && needle.isEmpty()) {
+            Box(Modifier.padding(top = Space.lg)) { importRow() }
         }
     }
 }
