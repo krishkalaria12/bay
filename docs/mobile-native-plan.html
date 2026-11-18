@@ -1498,7 +1498,16 @@ impl BrowserStore {
               <code>parseInspectedElement</code>, <code>fontOrigin</code>). Content blocking: the core keeps the eight filter lists on disk
               (<code>FilterListStore</code>: downloaded once a day at most, a server's same ETag or Last-Modified keeps the saved copy, a version that names
               their text), the apps hand them to the engines while "Block ads and trackers" is on, with each site's own groups and the tracking parameters
-              (<code>trackingParametersJson</code>), and Privacy says how many lists block. Left: import, app icon, sync status and scheduling (see Known gaps).
+              (<code>trackingParametersJson</code>), and Privacy says how many lists block. Import (<code>bookmarks-import</code>, Settings' Import row): the
+              phone's browsers, a browser's steps with the system file picker, the review and what was added, and pasted tabs opened or archived; the core reads
+              the chosen file, unpacking Safari's and Takeout's archives itself (<code>readExportFile</code>, only bookmark pages and history files are read),
+              and applies it (<code>importTabs</code>, <code>importExport</code>). The app icon picker (Appearance: alternate icons on iOS, launcher aliases on
+              Android, both named as the Expo app named them so a chosen icon carries over), the download toast, YouTube's clean-up from the core
+              (<code>youtubeSelectors</code>, reaching open pages when the switches change), the reading tools' notices, the private session kept while its tabs
+              are unloaded, and what a page pins to its bottom kept above the bar. Sync pairs from the UI on both apps with the stand-in computer, shows the
+              devices and the computer's tabs, and a cycle a caller gives up on no longer wedges sync (the core releases it; Android lets a started cycle
+              finish). The browser behind an open sheet steps out of TalkBack's way, as iOS's sheets already do for VoiceOver. Every done-when flow passes on
+              Android; iOS is checked by hand (see Known gaps).
             </p>
             <ul>
               <li>
@@ -1771,22 +1780,40 @@ impl BrowserStore {
         <p class="muted">Add parity gaps here in the commit that finds them.</p>
         <ul>
           <li>
-            N4's done-when flows (smoke, search-and-open, tabs-roundtrip, tab-swipe-close, start-page, page-zoom, wallpaper) all start with
-            <code>fresh-start</code>, which clears data in Settings, and most read the page menu (<code>bar-more</code>) or the archive. Those are N5's panels,
-            so the flows pass once N5 lands; N4 is checked by hand on both devices until then.
-          </li>
-          <li>
             iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            The bookmarks sheet leaves out "Import from another browser" until the import sheet lands, and Settings' Import and Report rows do nothing yet (N5).
+            N4's done-when flows (smoke, search-and-open, tabs-roundtrip, tab-swipe-close, start-page, page-zoom, wallpaper) start with
+            <code>fresh-start</code> and use N5's panels; now that N5 has landed they can run, but they haven't been re-run on Android yet.
+          </li>
+          <li>Settings' Report row does nothing yet; the problem report sheet comes with N6.</li>
+          <li>
+            iOS: the e2e flows can't run through Argent's runner, which reads a projected UIView tree where SwiftUI's accessibility identifiers don't appear
+            (<code>describe</code> and <code>await-ui-element</code> do see them). N5's flows were checked by hand on the iPhone simulator instead: import
+            (paste, steps, the file picker opening and cancelling; choosing a file in the out-of-process picker doesn't take Argent's taps), the app icon, sync
+            pairing, Inspect, Reader and the bottom inset.
+          </li>
+          <li>
+            iOS before 26: WebKit has no obscured inset, so the page's scroll view is inset under the bar but what a page fixes to its bottom (YouTube's tab
+            bar, say) still sits under Bay's bar, as it did in the Expo app.
+          </li>
+          <li>
+            iOS: Argent's tree still lists the page's web content under Settings and sheets, although the page views are hidden and marked
+            <code>accessibilityElementsHidden</code> (WebKit answers accessibility from its own process).
+          </li>
+          <li>
+            Android e2e: on a loaded emulator, the runner's Enter can reach the address field before the keyboard's last characters, so the page opens a
+            shortened address. Go waits a moment for pending edits; a slower run can still lose the tail. A person's Go comes from the keyboard, in order.
+          </li>
+          <li>
+            A reading notice or import toast raised while Settings is open shows under Settings (it's the browser's toast); it's seen once Settings closes.
           </li>
           <li>
             Android: a bookmark saved before the page has its title keeps the address without its scheme as its title ("en.wikipedia.org/wiki/Bay"), so the
             sheet shows that rather than the site's name; the title should follow the page once it loads.
           </li>
-          <li>The blocking tip isn't ported yet; it comes with content blocking.</li>
+          <li>The blocking tip isn't ported yet.</li>
           <li>
             Saved logins aren't ported: the sign-in sheet has no "Save password" switch, a site with a saved login is still asked, and Settings' Passwords page
             has nothing to list. iOS offers its own password saving on the sheet's fields meanwhile.
