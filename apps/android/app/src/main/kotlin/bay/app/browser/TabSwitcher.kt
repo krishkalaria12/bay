@@ -32,18 +32,22 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -58,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import bay.app.Strings
+import bay.core.BrowserFolder
 import bay.core.BrowserSpace
 import bay.core.BrowserTab
 import bay.core.PinKind
@@ -165,7 +170,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                     val name = spaceName(space, strings)
                     Row(Modifier.heightIn(min = 44.dp), horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                         Row(
-                            Modifier.weight(1f).testTag("tab-switcher-icon").semantics { contentDescription = strings.t("space.edit.title", mapOf("name" to name)) }.pressFeedback {},
+                            Modifier.weight(1f).testTag("tab-switcher-icon").semantics { contentDescription = strings.t("space.edit.title", mapOf("name" to name)) }.pressFeedback { browser.panel = Panel.SPACE_EDIT },
                             horizontalArrangement = Arrangement.spacedBy(Space.sm),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -196,22 +201,12 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                         }
                     }
                 }
-                if (rows.isNotEmpty()) {
+                if (rows.isNotEmpty() || app.folders.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         BayText(strings.t("tabs.pinned"), Modifier.padding(bottom = Space.xs), variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, tone = TextTone.MUTED)
-                        rows.forEach { row ->
-                            val active = row.url == activeUrl
-                            Row(
-                                Modifier.fillMaxWidth().testTag("tab-pinned-${row.id}")
-                                    .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = { unpin(browser, row, view) }) { browser.openPin(row) }
-                                    .background(if (active) Theme.colors.fill else Color.Transparent, RoundedCornerShape(Radius.control))
-                                    .heightIn(min = 40.dp).padding(horizontal = Space.sm),
-                                horizontalArrangement = Arrangement.spacedBy(Space.md),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                SiteIcon(app, row.url, 20.dp)
-                                BayText(row.title.ifEmpty { displayUrl(row.url) }, Modifier.weight(1f), variant = TextVariant.CALLOUT, weight = if (active) FontWeight.SemiBold else null, maxLines = 1)
-                            }
+                        rows.filter { it.folderId == null }.forEach { row -> PinRow(browser, row, row.url == activeUrl, indent = false) }
+                        app.folders.forEach { folder ->
+                            PinFolder(browser, folder, rows.filter { it.folderId == folder.id }, activeUrl)
                         }
                     }
                 }
@@ -251,6 +246,45 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     }
 }
 
+/** A pinned row: its site's icon and name; a tap opens its tab, a long press unpins it. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PinRow(browser: BrowserModel, row: PinnedSite, active: Boolean, indent: Boolean) {
+    val view = LocalView.current
+    Row(
+        Modifier.fillMaxWidth().testTag("tab-pinned-${row.id}")
+            .semantics { selected = active }
+            .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = { unpin(browser, row, view) }) { browser.openPin(row) }
+            .background(if (active) Theme.colors.fill else Color.Transparent, RoundedCornerShape(Radius.control))
+            .heightIn(min = 40.dp).padding(start = if (indent) Space.xl + Space.sm else Space.sm, end = Space.sm),
+        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SiteIcon(browser.app, row.url, 20.dp)
+        BayText(row.title.ifEmpty { displayUrl(row.url) }, Modifier.weight(1f), variant = TextVariant.CALLOUT, weight = if (active) FontWeight.SemiBold else null, maxLines = 1)
+    }
+}
+
+/** A pinned folder: a row that opens to show the pinned rows in it. A folder holding the page on screen starts open. */
+@Composable
+private fun PinFolder(browser: BrowserModel, folder: BrowserFolder, rows: List<PinnedSite>, activeUrl: String?) {
+    var open by remember(folder.id) { mutableStateOf(rows.any { it.url == activeUrl }) }
+    Row(
+        Modifier.fillMaxWidth().testTag("tab-folder-${folder.id}")
+            .semantics(mergeDescendants = true) { stateDescription = if (open) "expanded" else "collapsed" }
+            .pressFeedback { open = !open }
+            .heightIn(min = 40.dp).padding(horizontal = Space.sm),
+        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BayIconView(BayIcon.FOLDER, size = IconSize.small)
+        BayText(folder.name, Modifier.weight(1f), variant = TextVariant.CALLOUT, maxLines = 1)
+        if (rows.isNotEmpty()) BayText("${rows.size}", variant = TextVariant.FOOTNOTE, tone = TextTone.MUTED)
+        BayIconView(BayIcon.CHEVRON, Modifier.graphicsLayer { rotationZ = if (open) 90f else 0f }, size = IconSize.inline, color = Theme.colors.muted)
+    }
+    if (open) rows.forEach { PinRow(browser, it, it.url == activeUrl, indent = true) }
+}
+
 private fun unpin(browser: BrowserModel, site: PinnedSite, view: android.view.View) {
     Haptics.tick(view)
     browser.unpin(site)
@@ -263,6 +297,8 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val lift = remember { Animatable(0f) }
+    // Where the card sits on screen, so the page can grow out of it.
+    var frame by remember { mutableStateOf(Rect.Zero) }
     val height = width * CARD_RATIO
     val title = tab.title.ifEmpty { if (tab.url.isEmpty()) strings.t("tabs.newTab") else displayUrl(tab.url) }
     val site = if (tab.url.isEmpty()) title else displayUrl(tab.url).removePrefix("www.").substringBefore('/')
@@ -296,7 +332,8 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                         role = Role.Button
                         selected = active
                     }
-                    .pressFeedback { browser.activate(tab.id) }
+                    .onGloballyPositioned { frame = it.boundsInRoot() }
+                    .pressFeedback { browser.pick(tab, frame) }
                     .clip(shape)
                     .background(if (tab.private) Color(0xFF171717) else Theme.colors.surface, shape)
                     .border(if (active) 2.5.dp else 1.dp, if (active) Theme.colors.accent else Theme.colors.hairline, shape),

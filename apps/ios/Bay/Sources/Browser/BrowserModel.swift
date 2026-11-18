@@ -33,12 +33,20 @@ final class BrowserModel: ObservableObject {
     case none, search, tabs
   }
 
+  /// The sheet open over the browser.
+  enum Panel: Equatable {
+    case spaceEdit
+  }
+
   /// At most this many pages stay loaded; the rest reload from their saved state when shown again.
   static let maxLive = 4
 
   let app: AppModel
   let strings: Strings
   @Published var overlay: Overlay = .none
+  @Published var panel: Panel?
+  /// A card growing into its page: the tab and where its card sat on screen.
+  @Published private(set) var zoom: (tab: BrowserTab, frame: CGRect)?
   @Published private(set) var toast: ToastMessage?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
@@ -316,6 +324,77 @@ final class BrowserModel: ObservableObject {
     stopped.remove(tabId)
     media[tabId] = TabMedia(report: report, at: Date())
     updateMediaSession()
+  }
+
+  /// A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from.
+  func pick(_ tab: BrowserTab, frame: CGRect) {
+    guard tab.snapshot != nil, !UIAccessibility.isReduceMotionEnabled else {
+      activate(tab.id)
+      return
+    }
+    zoom = (tab, frame)
+  }
+
+  func zoomFinished() {
+    guard let zoom else { return }
+    self.zoom = nil
+    activate(zoom.tab.id)
+  }
+
+  // MARK: Tips
+
+  /// The first-run tip showing, if any: the bar's swipe, once two pages are open. It goes after a while unanswered.
+  var tip: TipId? {
+    guard overlay == .none, panel == nil, !locked, !app.preferences.tipsSeen.contains(.bar) else { return nil }
+    return app.tabs.filter { !$0.url.isEmpty && !$0.private }.count > 1 ? .bar : nil
+  }
+
+  private var tipTimer: Task<Void, Never>?
+
+  /// Starts the unanswered tip's clock when one shows.
+  func tipShown(_ tip: TipId?) {
+    tipTimer?.cancel()
+    guard let tip else { return }
+    tipTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 12_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.app.dispatch(.tipSeen(id: tip))
+    }
+  }
+
+  // MARK: Spaces
+
+  var activeSpace: BrowserSpace? {
+    app.spaces.first { $0.id == app.activeSpaceId }
+  }
+
+  func renameSpace(_ id: String, _ name: String) {
+    app.dispatch(.renameSpace(id: id, name: name))
+  }
+
+  func setSpaceIcon(_ id: String, _ icon: String) {
+    app.dispatch(.setSpaceIcon(id: id, icon: icon))
+  }
+
+  func setSpaceColor(_ id: String, _ color: SpaceColor) {
+    app.dispatch(.setSpaceColor(id: id, color: color))
+  }
+
+  /// Moves a space one place along the bar.
+  func moveSpace(_ id: String, by step: Int) {
+    guard let index = app.spaces.firstIndex(where: { $0.id == id }) else { return }
+    app.dispatch(.reorderSpace(id: id, to: Int64(index + step)))
+  }
+
+  /// Deletes a space with what it kept, and a moment later its website data.
+  func deleteSpace(_ id: String) {
+    panel = nil
+    app.dispatch(.deleteSpace(id: id, blankTab: Self.blankTab(spaceId: app.store.spaces().first { $0.id != id }?.id ?? "personal")))
+    refreshMounted()
+    Task {
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+      await Engine.deleteProfile(id)
+    }
   }
 
   // MARK: Private tabs

@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import bay.core.Action
+import bay.core.BrowserFolder
 import bay.core.BrowserPreferences
 import bay.core.BrowserSpace
 import bay.core.BrowserStore
@@ -68,6 +69,10 @@ class AppModel(context: Context, barTitle: String) {
 
     /** The space's pinned pages: Essentials and rows. */
     var pins by mutableStateOf(emptyList<PinnedSite>())
+        private set
+
+    /** The space's folders of pinned rows. */
+    var folders by mutableStateOf(emptyList<BrowserFolder>())
         private set
 
     /** The space's latest history, newest first, for the start page. */
@@ -180,6 +185,7 @@ class AppModel(context: Context, barTitle: String) {
         preferences = store.preferences()
         downloads = store.downloads()
         pins = store.pinnedSites(activeSpaceId)
+        folders = store.folders(activeSpaceId)
         recentHistory = store.history(activeSpaceId, "", 0u, 24u)
         favicons = store.favicons()
     }

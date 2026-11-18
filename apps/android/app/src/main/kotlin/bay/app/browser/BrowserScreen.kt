@@ -3,6 +3,7 @@ package bay.app.browser
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
@@ -35,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import bay.app.Strings
+import bay.core.TipId
 import bay.design.BayIcon
 import bay.design.BayIconView
 import bay.design.BayText
@@ -78,6 +82,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
             PrivateLock(strings) { activity?.let(browser::unlock) }
         }
+        browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
         if (browser.overlay != Overlay.SEARCH) {
             // Scrolled away while the page scrolls down; the toast and the player go with it.
             val away by animateFloatAsState(if (browser.barHidden && browser.overlay == Overlay.NONE) 1f else 0f, tween(200), label = "bar")
@@ -88,12 +93,26 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             ) {
                 browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
                 browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
-                BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth())
+                val tip = browser.tip
+                if (tip == TipId.BAR) {
+                    TipCard(strings.t("tip.bar.title"), strings.t("tip.bar.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(TipId.BAR)) }
+                    // An unanswered tip goes after a while; it has been seen.
+                    LaunchedEffect(tip) {
+                        kotlinx.coroutines.delay(12_000)
+                        app.dispatch(bay.core.Action.TipSeen(tip))
+                    }
+                }
+                Box(contentAlignment = Alignment.Center) {
+                    BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth())
+                    // The ring round the capsule the tip means.
+                    if (tip == TipId.BAR) Box(Modifier.size(184.dp, 62.dp).border(2.5.dp, Theme.colors.accent, RoundedCornerShape(31.dp)).clearAndSetSemantics {})
+                }
             }
         } else {
             val active = browser.activeTab
             SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || active?.private == true)
         }
+        SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
     }
 }
 

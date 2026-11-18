@@ -23,6 +23,8 @@ final class AppModel: ObservableObject {
   @Published private(set) var downloads: [DownloadItem] = []
   /// The space's pinned pages: Essentials and rows.
   @Published private(set) var pins: [PinnedSite] = []
+  /// The space's folders of pinned rows.
+  @Published private(set) var folders: [BrowserFolder] = []
   /// The space's latest history, newest first, for the start page.
   @Published private(set) var recentHistory: [HistoryEntry] = []
   /// Saved site icons (local file addresses) by host.
@@ -157,6 +159,7 @@ final class AppModel: ObservableObject {
     preferences = store.preferences()
     downloads = store.downloads()
     pins = store.pinnedSites(spaceId: activeSpaceId)
+    folders = store.folders(spaceId: activeSpaceId)
     recentHistory = store.history(spaceId: activeSpaceId, query: "", offset: 0, limit: 24)
     favicons = store.favicons()
   }

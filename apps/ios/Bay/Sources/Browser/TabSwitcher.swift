@@ -62,6 +62,7 @@ struct TabSwitcher: View {
     let tabs = browser.switcherTabs
     let essentials = app.pins.filter { $0.kind == .essential }
     let rows = app.pins.filter { $0.kind == .row }
+    let hasPinned = !rows.isEmpty || !app.folders.isEmpty
     ZStack(alignment: .top) {
       LinearGradient(
         stops: [.init(color: color.opacity(0.34), location: 0), .init(color: color.opacity(0.08), location: 0.55), .init(color: color.opacity(0), location: 1)],
@@ -77,7 +78,7 @@ struct TabSwitcher: View {
           VStack(alignment: .leading, spacing: Space.lg) {
             if let space { header(space) }
             if !essentials.isEmpty { essentialTiles(essentials, width: essentialWidth) }
-            if !rows.isEmpty { pinnedRows(rows) }
+            if hasPinned { pinnedRows(rows) }
             if !tabs.isEmpty || (essentials.isEmpty && rows.isEmpty) { countRow(tabs.count) }
             LazyVGrid(
               columns: Array(repeating: GridItem(.fixed(cardWidth), spacing: Self.gap), count: Self.columns), alignment: .leading,
@@ -124,7 +125,9 @@ struct TabSwitcher: View {
   private func header(_ space: BrowserSpace) -> some View {
     let name = spaceName(space, strings)
     return HStack(spacing: Space.sm) {
-      Button {} label: {
+      Button {
+        browser.panel = .spaceEdit
+      } label: {
         HStack(spacing: Space.sm) {
           SpaceGlyph(space: space, name: name, size: 30)
           BayText(name, variant: .title).lineLimit(1)
@@ -171,10 +174,20 @@ struct TabSwitcher: View {
   }
 
   private func pinnedRows(_ rows: [PinnedSite]) -> some View {
-    let activeUrl = browser.activeTab?.url
-    return VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: 2) {
       BayText(strings.t("tabs.pinned"), variant: .footnote, weight: .medium, tone: .muted).padding(.bottom, Space.xs)
-      ForEach(rows, id: \.id) { row in
+      ForEach(rows.filter { $0.folderId == nil }, id: \.id) { row in pinRow(row, indent: false) }
+      ForEach(app.folders, id: \.id) { folder in
+        PinFolder(folder: folder, rows: rows.filter { $0.folderId == folder.id }, activeUrl: browser.activeTab?.url) { row in
+          pinRow(row, indent: true)
+        }
+      }
+    }
+  }
+
+  private func pinRow(_ row: PinnedSite, indent: Bool) -> some View {
+    let activeUrl = browser.activeTab?.url
+    return Group {
         let active = row.url == activeUrl
         Button {
           browser.openPin(row)
@@ -185,14 +198,16 @@ struct TabSwitcher: View {
               .lineLimit(1)
             Spacer(minLength: 0)
           }
-          .padding(.horizontal, Space.sm)
+          .padding(.leading, indent ? Space.xl + Space.sm : Space.sm)
+          .padding(.trailing, Space.sm)
           .frame(minHeight: 40)
           .background(active ? BayColor.fill : .clear, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }
         .buttonStyle(.pressFeedback)
         .simultaneousGesture(LongPressGesture().onEnded { _ in unpin(row) })
+        .accessibilityHint(Text(verbatim: strings.t("pin.unpinHint")))
+        .accessibilityAddTraits(active ? .isSelected : [])
         .accessibilityIdentifier("tab-pinned-\(row.id)")
-      }
     }
   }
 
@@ -221,6 +236,48 @@ struct TabSwitcher: View {
   }
 }
 
+/// A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do. A folder holding
+/// the page on screen starts open.
+private struct PinFolder<Row: View>: View {
+  let folder: BrowserFolder
+  let rows: [PinnedSite]
+  let activeUrl: String?
+  let row: (PinnedSite) -> Row
+  @State private var open: Bool
+
+  init(folder: BrowserFolder, rows: [PinnedSite], activeUrl: String?, @ViewBuilder row: @escaping (PinnedSite) -> Row) {
+    self.folder = folder
+    self.rows = rows
+    self.activeUrl = activeUrl
+    self.row = row
+    _open = State(initialValue: rows.contains { $0.url == activeUrl })
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Button {
+        withAnimation(.easeOut(duration: Motion.tap)) { open.toggle() }
+      } label: {
+        HStack(spacing: Space.md) {
+          BayIconView(.folder, size: IconSize.small)
+          BayText(folder.name, variant: .callout).lineLimit(1)
+          Spacer(minLength: 0)
+          BayText(rows.isEmpty ? "" : "\(rows.count)", variant: .footnote, tone: .muted)
+          BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
+        }
+        .padding(.horizontal, Space.sm)
+        .frame(minHeight: 40)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.pressFeedback)
+      .accessibilityLabel(Text(verbatim: folder.name))
+      .accessibilityValue(Text(verbatim: open ? "expanded" : "collapsed"))
+      .accessibilityIdentifier("tab-folder-\(folder.id)")
+      if open { ForEach(rows, id: \.id) { row($0) } }
+    }
+  }
+}
+
 /// A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. A flick
 /// up closes it into the archive.
 private struct TabCard: View {
@@ -235,6 +292,8 @@ private struct TabCard: View {
   let active: Bool
   @ObservedObject var browser: BrowserModel
   @State private var lift: CGFloat = 0
+  /// Where the card sits on screen, so the page can grow out of it.
+  @State private var frame: CGRect = .zero
 
   var body: some View {
     let title = tab.title.isEmpty ? (tab.url.isEmpty ? strings.t("tabs.newTab") : displayUrl(url: tab.url)) : tab.title
@@ -242,7 +301,7 @@ private struct TabCard: View {
     VStack(alignment: .leading, spacing: Space.xs) {
       ZStack(alignment: .topTrailing) {
         Button {
-          browser.activate(tab.id)
+          browser.pick(tab, frame: frame)
         } label: {
           picture
             .frame(width: width, height: height)
@@ -251,6 +310,11 @@ private struct TabCard: View {
             .overlay(
               RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
                 .stroke(active ? BayColor.accent : BayColor.hairline, lineWidth: active ? 2.5 : 1 / UIScreen.main.scale))
+            .background(GeometryReader { geometry in
+              Color.clear
+                .onAppear { frame = geometry.frame(in: .global) }
+                .onChange(of: geometry.frame(in: .global)) { frame = $0 }
+            })
         }
         .buttonStyle(.plain)
         .shadow(color: .black.opacity(0.12), radius: 10, y: 4)

@@ -110,3 +110,33 @@ struct PrivateLockView: View {
     .accessibilityIdentifier("private-lock")
   }
 }
+
+/// A card in the switcher growing into its page: the tab's picture moves from the card's place to the whole screen,
+/// with the quick open spring, and the page takes over when it lands.
+struct TabZoom: View {
+  let snapshot: UIImage
+  let from: CGRect
+  let onDone: () -> Void
+  @State private var grown = false
+
+  var body: some View {
+    GeometryReader { geometry in
+      let screen = geometry.frame(in: .global)
+      let target = CGRect(x: 0, y: screen.minY + geometry.safeAreaInsets.top, width: screen.width, height: screen.height - geometry.safeAreaInsets.top)
+      let rect = grown ? target : from
+      Image(uiImage: snapshot)
+        .resizable()
+        .scaledToFill()
+        .frame(width: rect.width, height: rect.height, alignment: .top)
+        .clipShape(RoundedRectangle(cornerRadius: grown ? 0 : Radius.tile, style: .continuous))
+        .position(x: rect.midX - screen.minX, y: rect.midY - screen.minY)
+    }
+    .ignoresSafeArea()
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+    .onAppear {
+      withAnimation(Motion.open.animation) { grown = true }
+      DispatchQueue.main.asyncAfter(deadline: .now() + Motion.open.response, execute: onDone)
+    }
+  }
+}

@@ -35,6 +35,9 @@ struct BrowserScreen: View {
       } else if browser.overlay == .none {
         startScreen
       }
+      if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path, let image = UIImage(contentsOfFile: path) {
+        TabZoom(snapshot: image, from: zoom.frame, onDone: browser.zoomFinished)
+      }
       if browser.locked, browser.activeTab?.private == true, browser.overlay == .none {
         PrivateLockView(onUnlock: browser.unlock)
       }
@@ -46,7 +49,16 @@ struct BrowserScreen: View {
           if let toast = browser.toast {
             ToastView(toast: toast, onDone: browser.dismissToast).id(toast.id)
           }
+          if browser.tip == .bar {
+            TipCard(title: strings.t("tip.bar.title"), body_: strings.t("tip.bar.body")) { app.dispatch(.tipSeen(id: .bar)) }
+          }
           BrowserBar(browser: browser, onSettings: onSettings)
+            // The ring round the capsule the tip means.
+            .overlay {
+              if browser.tip == .bar {
+                Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: 184, height: 62).allowsHitTesting(false)
+              }
+            }
         }
         .padding(.horizontal, Space.edge)
         .padding(.bottom, Space.xs)
@@ -61,6 +73,14 @@ struct BrowserScreen: View {
           privately: browser.searchPrivately || (browser.activeTab?.private ?? false))
       }
     }
+    .baySheet(isPresented: Binding(get: { browser.panel == .spaceEdit }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.85) {
+      if let space = browser.activeSpace {
+        SpaceEditPanel(browser: browser, space: space)
+          .environmentObject(strings)
+          .environmentObject(app)
+      }
+    }
+    .onChange(of: browser.tip) { browser.tipShown($0) }
     .onAppear(perform: browser.refreshMounted)
     .onChange(of: app.activeTabId) { _ in browser.refreshMounted() }
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }

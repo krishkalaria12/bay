@@ -11,12 +11,14 @@ import androidx.compose.runtime.setValue
 import bay.app.AppModel
 import bay.app.Strings
 import bay.core.Action
+import bay.core.BrowserSpace
 import bay.core.BrowserTab
 import bay.core.MediaReport
 import bay.core.NavigationReport
 import bay.core.PinnedSite
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
+import bay.core.SpaceColor
 import bay.core.TabUpdate
 import bay.core.TipId
 import bay.core.hostOf
@@ -52,6 +54,12 @@ sealed interface OpenTarget {
 
 enum class Overlay { NONE, SEARCH, TABS }
 
+/** The sheet open over the browser. */
+enum class Panel { SPACE_EDIT }
+
+/** A card growing into its page: the tab and where its card sat on screen, in pixels. */
+data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rect)
+
 /** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
 data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
 
@@ -67,6 +75,11 @@ data class PageFailure(val tabId: String, val url: String, val message: String)
  */
 class BrowserModel(private val context: Context, val app: AppModel, private val strings: Strings) {
     var overlay by mutableStateOf(Overlay.NONE)
+
+    var panel by mutableStateOf<Panel?>(null)
+
+    var zoom by mutableStateOf<Zoom?>(null)
+        private set
 
     var toast by mutableStateOf<ToastMessage?>(null)
         private set
@@ -326,6 +339,54 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         stopped -= tabId
         media[tabId] = TabMedia(report, System.currentTimeMillis())
         updateMediaSession()
+    }
+
+    /** A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from. */
+    fun pick(tab: BrowserTab, frame: androidx.compose.ui.geometry.Rect) {
+        if (tab.snapshot == null) activate(tab.id) else zoom = Zoom(tab, frame)
+    }
+
+    fun zoomFinished() {
+        val current = zoom ?: return
+        zoom = null
+        activate(current.tab.id)
+    }
+
+    // Tips
+
+    /** The first-run tip showing, if any: the bar's swipe, once two pages are open. */
+    val tip: TipId?
+        get() {
+            if (overlay != Overlay.NONE || panel != null || locked || TipId.BAR in app.preferences.tipsSeen) return null
+            return if (app.tabs.count { it.url.isNotEmpty() && !it.private } > 1) TipId.BAR else null
+        }
+
+    // Spaces
+
+    val activeSpace: BrowserSpace? get() = app.spaces.firstOrNull { it.id == app.activeSpaceId }
+
+    fun renameSpace(id: String, name: String) = app.dispatch(Action.RenameSpace(id, name))
+
+    fun setSpaceIcon(id: String, icon: String) = app.dispatch(Action.SetSpaceIcon(id, icon))
+
+    fun setSpaceColor(id: String, color: SpaceColor) = app.dispatch(Action.SetSpaceColor(id, color))
+
+    /** Moves a space one place along the bar. */
+    fun moveSpace(id: String, step: Int) {
+        val index = app.spaces.indexOfFirst { it.id == id }
+        if (index >= 0) app.dispatch(Action.ReorderSpace(id, (index + step).toLong()))
+    }
+
+    /** Deletes a space with what it kept, and a moment later its website data. */
+    fun deleteSpace(id: String) {
+        panel = null
+        val fallback = app.store.spaces().firstOrNull { it.id != id }?.id ?: "personal"
+        app.dispatch(Action.DeleteSpace(id, blankTab(fallback)))
+        refreshMounted()
+        scope.launch {
+            delay(1_000)
+            runCatching { Engine.deleteProfile(context, id) }
+        }
     }
 
     // Private tabs

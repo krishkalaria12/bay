@@ -8,7 +8,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,10 +75,12 @@ import bay.design.BayText
 import bay.design.Haptics
 import bay.design.IconSize
 import bay.design.PillButton
+import bay.design.Radius
 import bay.design.Space
 import bay.design.TextTone
 import bay.design.TextVariant
 import bay.design.Theme
+import bay.design.baySurface
 import bay.design.pressFeedback
 import bay.design.wallpaperPalette
 import bay.engine.NavigationState
@@ -209,21 +213,34 @@ fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, 
     var swipe by remember { mutableFloatStateOf(0f) }
     // Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
     val swipeable = browser.hasPage && browser.overlay == Overlay.NONE
+    var up by remember { mutableFloatStateOf(0f) }
     val dragged = if (!swipeable) modifier else modifier.pointerInput(app.activeTabId, app.tabs.size) {
-        detectHorizontalDragGestures(
+        detectDragGestures(
+            onDragStart = { up = 0f },
             onDragEnd = {
                 val distance = swipe
                 swipe = 0f
-                if (kotlin.math.abs(distance) > 24.dp.toPx()) {
+                // Up opens the tab switcher; sideways goes to the next tab.
+                if (up > 110.dp.toPx() && up > kotlin.math.abs(distance)) {
+                    Haptics.press(view)
+                    app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BAR))
+                    browser.showTabs()
+                } else if (kotlin.math.abs(distance) > 24.dp.toPx()) {
                     Haptics.press(view)
                     browser.swipeTabs(if (distance < 0) 1 else -1)
                 }
+                up = 0f
             },
-            onDragCancel = { swipe = 0f },
-            onHorizontalDrag = { _, amount ->
+            onDragCancel = {
+                swipe = 0f
+                up = 0f
+            },
+            onDrag = { _, amount ->
+                up -= amount.y
+                if (up > kotlin.math.abs(swipe) * 2) return@detectDragGestures
                 val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-                val open = app.tabs.getOrNull(index + if (swipe + amount < 0) 1 else -1) != null
-                swipe += amount * if (open) 0.4f else 0.12f
+                val open = app.tabs.getOrNull(index + if (swipe + amount.x < 0) 1 else -1) != null
+                swipe += amount.x * if (open) 0.4f else 0.12f
             },
         )
     }
@@ -289,12 +306,43 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
     val colors = Theme.colors
+    // Hold the spaces, then slide: the space under the finger shows, with a tick as each one comes and its name above.
+    var scrubLabel by remember { mutableStateOf<String?>(null) }
+    var scrubbed by remember { mutableStateOf(-1) }
+    Box {
+    scrubLabel?.let { label ->
+        BayText(
+            label,
+            Modifier.align(Alignment.TopCenter).offset(y = (-44).dp).baySurface(RoundedCornerShape(Radius.control))
+                .padding(horizontal = Space.md, vertical = Space.xs).testTag("bar-space-scrub-label"),
+            variant = TextVariant.FOOTNOTE,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
     Row(
         Modifier.height(52.dp).clip(CircleShape).background(colors.flatSurface, CircleShape).border(1.dp, colors.hairline, CircleShape)
             .padding(horizontal = Space.sm).testTag("bar-spaces"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.widthIn(max = 36.dp * 5).horizontalScroll(rememberScrollState())) {
+        Row(
+            Modifier.widthIn(max = 36.dp * 5).horizontalScroll(rememberScrollState()).pointerInput(app.spaces.size) {
+                fun reach(x: Float) {
+                    val index = (x / size.width * app.spaces.size).toInt().coerceIn(0, app.spaces.size - 1)
+                    if (index == scrubbed) return
+                    scrubbed = index
+                    Haptics.press(view)
+                    scrubLabel = spaceName(app.spaces[index], strings)
+                    browser.selectSpace(app.spaces[index].id)
+                }
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { if (app.spaces.size > 1) reach(it.x) },
+                    onDrag = { change, _ -> if (app.spaces.size > 1) reach(change.position.x) },
+                    onDragEnd = { scrubbed = -1; scrubLabel = null },
+                    onDragCancel = { scrubbed = -1; scrubLabel = null },
+                )
+            },
+        ) {
             app.spaces.forEach { space ->
                 val active = space.id == app.activeSpaceId
                 Box(
@@ -321,6 +369,7 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
                 .clearAndSetSemantics { contentDescription = strings.t("tabsMenu.newSpace"); role = Role.Button },
             contentAlignment = Alignment.Center,
         ) { BayIconView(BayIcon.ADD, size = IconSize.small, color = colors.muted) }
+    }
     }
 }
 

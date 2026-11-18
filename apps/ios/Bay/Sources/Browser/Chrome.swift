@@ -192,7 +192,17 @@ struct BrowserBar: View {
         let distance = value.translation.width
         let flick = value.predictedEndTranslation.width - distance
         withAnimation(Motion.settle.animation) { swipe = 0 }
-        guard abs(distance) > abs(value.translation.height), abs(distance) > 64 || abs(flick) > 120 else { return }
+        // Up opens the tab switcher: far enough, or flicked up.
+        let up = -value.translation.height
+        if up > abs(distance) {
+          if up > 110 || (up > 20 && -value.predictedEndTranslation.height > 260) {
+            Haptics.press()
+            browser.app.dispatch(.tipSeen(id: .bar))
+            browser.showTabs()
+          }
+          return
+        }
+        guard abs(distance) > 64 || abs(flick) > 120 else { return }
         Haptics.press()
         browser.swipeTabs(distance < 0 ? 1 : -1)
       }
@@ -237,6 +247,31 @@ struct BrowserBar: View {
 struct SpacesCapsule: View {
   @EnvironmentObject private var strings: Strings
   @ObservedObject var browser: BrowserModel
+  /// The space's name over the capsule while a held finger slides across the spaces.
+  @State private var scrubLabel: String?
+  @State private var scrubbed: Int?
+  @State private var width: CGFloat = 0
+
+  /// Hold the spaces, then slide: the space under the finger shows, with a tick as each one comes.
+  private var scrub: some Gesture {
+    LongPressGesture(minimumDuration: 0.22)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+      .onChanged { value in
+        guard case .second(true, let drag) = value, let drag else { return }
+        let spaces = browser.app.spaces
+        guard spaces.count > 1, width > 0 else { return }
+        let index = min(spaces.count - 1, max(0, Int((drag.location.x / width) * CGFloat(spaces.count))))
+        guard index != scrubbed else { return }
+        scrubbed = index
+        UISelectionFeedbackGenerator().selectionChanged()
+        scrubLabel = spaceName(spaces[index], strings)
+        browser.selectSpace(spaces[index].id)
+      }
+      .onEnded { _ in
+        scrubbed = nil
+        scrubLabel = nil
+      }
+  }
 
   var body: some View {
     let app = browser.app
@@ -264,12 +299,15 @@ struct SpacesCapsule: View {
               .buttonStyle(.plain)
               .id(space.id)
               .accessibilityLabel(Text(verbatim: strings.t("tabs.switchSpace", ["name": spaceName(space, strings)])))
+              .accessibilityHint(Text(verbatim: strings.t("tabs.scrubSpacesHint")))
               .accessibilityAddTraits(active ? .isSelected : [])
               .accessibilityIdentifier("bar-space-\(space.id)")
             }
           }
         }
         .frame(maxWidth: CGFloat(app.spaces.count) * 36)
+        .background(GeometryReader { geometry in Color.clear.onAppear { width = geometry.size.width }.onChange(of: geometry.size.width) { width = $0 } })
+        .simultaneousGesture(scrub)
         .onAppear { reader.scrollTo(app.activeSpaceId, anchor: .center) }
         .onChange(of: app.activeSpaceId) { reader.scrollTo($0, anchor: .center) }
       }
@@ -286,6 +324,18 @@ struct SpacesCapsule: View {
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
     .bayCapsule()
+    .scaleEffect(scrubLabel == nil ? 1 : 1.06)
+    .animation(.easeOut(duration: 0.14), value: scrubLabel == nil)
+    .overlay(alignment: .top) {
+      if let scrubLabel {
+        BayText(scrubLabel, variant: .footnote, weight: .semibold).lineLimit(1)
+          .padding(.horizontal, Space.md)
+          .padding(.vertical, Space.xs)
+          .baySurface(radius: Radius.control)
+          .offset(y: -40)
+          .accessibilityIdentifier("bar-space-scrub-label")
+      }
+    }
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("bar-spaces")
   }
