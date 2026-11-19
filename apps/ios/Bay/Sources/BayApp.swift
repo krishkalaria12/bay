@@ -57,6 +57,7 @@ struct BayApp: App {
       switch phase {
       case .active:
         model.startSyncing()
+        model.refreshBangs()
         if launched { cameBack() }
       case .background:
         browser.appLeft()
