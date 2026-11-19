@@ -1,5 +1,19 @@
 package bay.app.browser
 
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
@@ -251,8 +265,12 @@ private fun Field(
     leading: @Composable () -> Unit,
     address: Boolean = false,
     onDone: (() -> Unit)? = null,
+    /** Takes the keyboard as it appears. */
+    focus: Boolean = false,
 ) {
     val colors = Theme.colors
+    val focuser = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (focus) LaunchedEffect(Unit) { runCatching { focuser.requestFocus() } }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).background(colors.fill, RoundedCornerShape(12.dp)).padding(horizontal = Space.lg),
         horizontalArrangement = Arrangement.spacedBy(Space.md),
@@ -262,7 +280,7 @@ private fun Field(
         BasicTextField(
             value,
             onChange,
-            Modifier.weight(1f).testTag(testID).semantics { contentDescription = placeholder },
+            Modifier.weight(1f).focusRequester(focuser).testTag(testID).semantics { contentDescription = placeholder },
             singleLine = true,
             textStyle = (if (address) TextVariant.SUBHEAD else TextVariant.BODY).style(FontWeight.Normal, if (address) colors.muted else colors.foreground),
             cursorBrush = SolidColor(colors.accent),
@@ -296,11 +314,75 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
     val app = browser.app
     var open by remember { mutableStateOf(setOfNotNull(browser.drawerFolder)) }
     var swipe by remember { mutableStateOf(0f) }
-    androidx.activity.compose.BackHandler(onBack = browser::closeDrawer)
+    // Over the list: a row being renamed or moved.
+    var edit by remember { mutableStateOf<DrawerEdit?>(null) }
+    // The search field, shown once the list is pulled down at its top; null while hidden.
+    var query by remember { mutableStateOf<String?>(null) }
+    // Each row's top and bottom in the list, and the row being dragged to a new place with how far it has gone.
+    val bounds = remember { mutableStateMapOf<String, Pair<Float, Float>>() }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var dragged by remember { mutableStateOf(0f) }
+    androidx.activity.compose.BackHandler {
+        when {
+            edit != null -> edit = null
+            query != null -> query = null
+            else -> browser.closeDrawer()
+        }
+    }
     val space = app.spaces.firstOrNull { it.id == app.activeSpaceId } ?: app.spaces.firstOrNull()
     val color = space?.let { spaceColor(it.color) } ?: Theme.colors.muted
     val wash by androidx.compose.animation.animateColorAsState(color, label = "drawer-wash")
-    val rows = app.store.bookmarkTreeRows(app.activeSpaceId, open.toList())
+    val searching = !query.isNullOrBlank()
+    // Read from the store, so they follow its revision: a move, rename or removal redraws them.
+    @Suppress("UNUSED_VARIABLE") val revision = app.revision
+    val rows = if (searching) {
+        app.store.bookmarkListing(app.activeSpaceId, BOOKMARKS_TOP, query.orEmpty()).rows.mapNotNull { found ->
+            (found.node as? bay.core.BookmarkNode.Url)?.let { bay.core.BookmarkTreeRow(it.id, false, it.title, it.url, 0u, 0u, false) }
+        }
+    } else {
+        app.store.bookmarkTreeRows(app.activeSpaceId, open.toList())
+    }
+    val pullToSearch = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
+    val pull = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            var pulled = 0f
+
+            override fun onPostScroll(
+                consumed: androidx.compose.ui.geometry.Offset,
+                available: androidx.compose.ui.geometry.Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+            ): androidx.compose.ui.geometry.Offset {
+                if (available.y > 0 && source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) {
+                    pulled += available.y
+                    if (pulled > pullToSearch && query == null) query = ""
+                } else if (consumed.y < 0) {
+                    pulled = 0f
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                pulled = 0f
+                return androidx.compose.ui.unit.Velocity.Zero
+            }
+        }
+    }
+
+    /** Puts the dragged row where it was let go: into a folder dropped on its middle, else beside the row under it. */
+    fun drop(id: String) {
+        val (top, bottom) = bounds[id] ?: return
+        val center = (top + bottom) / 2 + dragged
+        val target = rows.firstOrNull { row -> row.id != id && bounds[row.id]?.let { center >= it.first && center < it.second } == true } ?: return
+        val (targetTop, targetBottom) = bounds.getValue(target.id)
+        val third = (targetBottom - targetTop) / 3
+        val place = if (target.folder && center > targetTop + third && center < targetBottom - third) {
+            bay.core.BookmarkDrop(target.id, null)
+        } else {
+            app.store.bookmarkDrop(app.activeSpaceId, id, target.id, center > (targetTop + targetBottom) / 2) ?: return
+        }
+        app.dispatch(Action.MoveBookmark(app.activeSpaceId, id, place.parentId, place.index))
+    }
+
     Row(Modifier.fillMaxSize().testTag("bookmarks-drawer")) {
         Box(
             Modifier.weight(1f - DRAWER_WIDTH).fillMaxHeight().background(Color.Black.copy(alpha = 0.35f)).testTag("drawer-close")
@@ -319,6 +401,7 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                                 val next = index + if (swipe < 0) 1 else -1
                                 if (kotlin.math.abs(swipe) > 80.dp.toPx() && next in app.spaces.indices) {
                                     open = emptySet()
+                                    query = null
                                     browser.switchSpace(app.spaces[next].id, announce = false)
                                 }
                                 swipe = 0f
@@ -331,10 +414,31 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
             ) {
                 Column(Modifier.fillMaxSize().padding(top = Space.sm), verticalArrangement = Arrangement.spacedBy(Space.md)) {
                     Box(Modifier.padding(horizontal = Space.lg)) {
-                        SpaceChips(app.spaces, app.activeSpaceId, strings, onChoose = { browser.switchSpace(it, announce = false) })
+                        SpaceChips(app.spaces, app.activeSpaceId, strings, onChoose = {
+                            query = null
+                            browser.switchSpace(it, announce = false)
+                        })
                     }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.sm).padding(bottom = 80.dp)) {
-                        if (rows.isEmpty() && space != null) {
+                    query?.let { text ->
+                        Row(Modifier.padding(horizontal = Space.lg), horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                Field(text, { query = it }, strings.t("bookmarks.search"), "drawer-search", leading = {
+                                    BayIconView(BayIcon.SEARCH, size = IconSize.row, color = Theme.colors.muted)
+                                }, focus = true)
+                            }
+                            Box(
+                                Modifier.size(40.dp).testTag("drawer-search-close")
+                                    .clearAndSetSemantics { contentDescription = strings.t("save.cancel"); role = Role.Button }
+                                    .pressFeedback { query = null },
+                                contentAlignment = Alignment.Center,
+                            ) { BayIconView(BayIcon.CLOSE, size = IconSize.small, color = Theme.colors.muted) }
+                        }
+                    }
+                    Column(
+                        Modifier.weight(1f).nestedScroll(pull).verticalScroll(rememberScrollState())
+                            .padding(horizontal = Space.sm).padding(bottom = 80.dp),
+                    ) {
+                        if (rows.isEmpty() && space != null && !searching) {
                             Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
                                 BayText(strings.t("drawer.empty", mapOf("space" to spaceName(space, strings))), variant = TextVariant.CALLOUT, color = Theme.colors.muted)
                                 bay.design.PillButton(strings.t("drawer.saveHere"), Modifier.testTag("drawer-empty-save")) {
@@ -345,6 +449,8 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                         }
                         rows.forEach { row ->
                             DrawerRow(app, strings, row, row.url == browser.activeUrl, row.id in open,
+                                offset = if (dragging == row.id) dragged else 0f,
+                                canDrag = !searching,
                                 onTap = {
                                     if (row.folder) {
                                         open = if (row.id in open) open - row.id else open + row.id
@@ -355,6 +461,16 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                                 },
                                 onRemove = { app.dispatch(Action.RemoveBookmark(app.activeSpaceId, row.id)) },
                                 onShare = { browser.share(row.url) },
+                                onRename = { edit = DrawerEdit.Rename(row) },
+                                onMove = { edit = DrawerEdit.Move(row) },
+                                onPlaced = { top, bottom -> bounds[row.id] = top to bottom },
+                                onDragStart = { dragging = row.id; dragged = 0f },
+                                onDrag = { dragged += it },
+                                onDragEnd = {
+                                    drop(row.id)
+                                    dragging = null
+                                    dragged = 0f
+                                },
                             )
                         }
                     }
@@ -369,6 +485,108 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                         .background(Theme.colors.fill, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { BayIconView(BayIcon.ADD, size = IconSize.control) }
+                when (val editing = edit) {
+                    is DrawerEdit.Rename -> DrawerRename(app, strings, editing.row, onCancel = { edit = null }) { title, url ->
+                        app.dispatch(Action.RenameBookmark(app.activeSpaceId, editing.row.id, title, url))
+                        edit = null
+                    }
+                    is DrawerEdit.Move -> DrawerMove(app, strings, editing.row, onCancel = { edit = null }) { folder ->
+                        app.dispatch(Action.MoveBookmark(app.activeSpaceId, editing.row.id, folder, null))
+                        open = open + folder
+                        edit = null
+                    }
+                    null -> {}
+                }
+            }
+        }
+    }
+}
+
+/** The drawer's top folder, as the core names it. */
+private const val BOOKMARKS_TOP = "bookmarks"
+
+/** What the drawer has open over its list: a row being renamed, or being moved to another folder. */
+private sealed interface DrawerEdit {
+    data class Rename(val row: bay.core.BookmarkTreeRow) : DrawerEdit
+
+    data class Move(val row: bay.core.BookmarkTreeRow) : DrawerEdit
+}
+
+/** A card over the drawer's list, on a dim, closing when the dim is tapped. */
+@Composable
+private fun DrawerCard(testID: String, onCancel: () -> Unit, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f))
+            .pointerInput(Unit) { detectTapGestures { onCancel() } },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.padding(Space.lg).fillMaxWidth().background(Theme.colors.surface, RoundedCornerShape(20.dp))
+                .pointerInput(Unit) { detectTapGestures {} }
+                .padding(Space.lg).testTag(testID),
+            verticalArrangement = Arrangement.spacedBy(Space.md),
+            content = content,
+        )
+    }
+}
+
+/** A bookmark's title and address, or a folder's name, changed in place. */
+@Composable
+private fun DrawerRename(app: AppModel, strings: Strings, row: bay.core.BookmarkTreeRow, onCancel: () -> Unit, onSave: (String, String?) -> Unit) {
+    var title by remember(row.id) { mutableStateOf(row.title) }
+    var url by remember(row.id) { mutableStateOf(row.url) }
+    val save = { onSave(title, if (row.folder) null else url) }
+    DrawerCard("drawer-rename", onCancel) {
+        BayText(strings.t("drawer.rename"), variant = TextVariant.HEADLINE)
+        Field(title, { title = it }, strings.t(if (row.folder) "save.folderName" else "save.titleField"), "drawer-rename-title", leading = {
+            if (row.folder) BayIconView(BayIcon.FOLDER, size = IconSize.control, color = Theme.colors.muted) else SiteIcon(app, row.url, 28.dp)
+        }, focus = true, onDone = if (row.folder) save else null)
+        if (!row.folder) {
+            Field(url, { url = it }, strings.t("save.addressField"), "drawer-rename-url", leading = {
+                BayIconView(BayIcon.LINK, size = IconSize.row, color = Theme.colors.muted)
+            }, address = true, onDone = save)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End)) {
+            bay.design.PillButton(strings.t("save.cancel"), Modifier.testTag("drawer-rename-cancel"), compact = true, onClick = onCancel)
+            bay.design.PillButton(strings.t("save.done"), Modifier.testTag("drawer-rename-save"), compact = true, enabled = title.isNotBlank(), onClick = save)
+        }
+    }
+}
+
+/** The space's folders to move a row into, indented as they nest; a folder can't go into itself or its own. */
+@Composable
+private fun DrawerMove(app: AppModel, strings: Strings, row: bay.core.BookmarkTreeRow, onCancel: () -> Unit, onMove: (String) -> Unit) {
+    val folders = app.store.bookmarkFolders(app.activeSpaceId)
+    // A folder's own folders follow it one step deeper, up to the next at its depth or above.
+    val inside = HashSet<String>()
+    if (row.folder) {
+        var depth: UInt? = null
+        for (folder in folders) {
+            val at = depth
+            if (folder.id == row.id) {
+                depth = folder.depth
+                inside += folder.id
+            } else if (at != null && folder.depth > at) {
+                inside += folder.id
+            } else {
+                depth = null
+            }
+        }
+    }
+    DrawerCard("drawer-move", onCancel) {
+        BayText(strings.t("drawer.moveTitle"), variant = TextVariant.HEADLINE)
+        Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+            folders.filter { it.id !in inside }.forEach { folder ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("drawer-move-${folder.id}")
+                        .pressFeedback { onMove(folder.id) }
+                        .padding(start = Space.sm + Space.lg * folder.depth.toInt(), end = Space.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Space.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BayIconView(BayIcon.FOLDER, size = IconSize.row, color = Theme.colors.foreground)
+                    BayText(folder.title.ifEmpty { strings.t("save.topOfList") }, Modifier.weight(1f), maxLines = 1)
+                }
             }
         }
     }
@@ -376,7 +594,8 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
 
 /**
  * One row of the drawer: a folder with its count, turning to show it's open, or a link with its site's icon. The page
- * showing sits on a light wash. Holding a row offers sharing a link and removing either.
+ * showing sits on a light wash. Holding a row picks it up to drag it to a new place; let go where it was, it offers
+ * sharing a link, renaming, moving and removing.
  */
 @Composable
 private fun DrawerRow(
@@ -385,28 +604,87 @@ private fun DrawerRow(
     row: bay.core.BookmarkTreeRow,
     current: Boolean,
     open: Boolean,
+    offset: Float,
+    canDrag: Boolean,
     onTap: () -> Unit,
     onRemove: () -> Unit,
     onShare: () -> Unit,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onPlaced: (Float, Float) -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
     val colors = Theme.colors
     var menu by remember { mutableStateOf(false) }
+    val lifted = offset != 0f
     val title = row.title.ifEmpty { displayUrl(row.url) }
     val label = if (row.folder) {
         "$title, ${if (row.links.toInt() == 1) strings.t("drawer.linksOne") else strings.t("drawer.links", mapOf("count" to "${row.links}"))}"
     } else {
         title
     }
-    Box {
+    val view = androidx.compose.ui.platform.LocalView.current
+    Box(
+        Modifier.zIndex(if (lifted) 1f else 0f)
+            .onGloballyPositioned { coordinates ->
+                val top = coordinates.positionInParent().y
+                onPlaced(top, top + coordinates.size.height)
+            }
+            .graphicsLayer { translationY = offset },
+    ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("drawer-row-${row.id}")
                 .clip(RoundedCornerShape(12.dp))
-                .background(if (current) Color.White.copy(alpha = 0.1f) else Color.Transparent)
+                .background(
+                    when {
+                        lifted -> Color.White.copy(alpha = 0.16f)
+                        current -> Color.White.copy(alpha = 0.1f)
+                        else -> Color.Transparent
+                    },
+                )
                 .semantics(mergeDescendants = true) {
                     contentDescription = label
                     role = Role.Button
+                    onClick { onTap(); true }
+                    customActions = listOf(
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("drawer.rename")) { onRename(); true },
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("drawer.move")) { onMove(); true },
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("drawer.remove")) { onRemove(); true },
+                    )
                 }
-                .combinedClickable(onLongClick = { menu = true }, onClick = onTap)
+                // One gesture for all three: a tap opens the row; held, it lifts, follows the finger and lands where
+                // it's let go; held and let go without moving, its menu opens.
+                .pointerInput(row.id, canDrag) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        var cancelled = false
+                        val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                        }
+                        when {
+                            up != null -> {
+                                up.consume()
+                                onTap()
+                            }
+                            cancelled -> {}
+                            else -> {
+                                view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                if (canDrag) onDragStart()
+                                var moved = 0f
+                                drag(down.id) { change ->
+                                    val dy = change.positionChange().y
+                                    moved += kotlin.math.abs(dy)
+                                    change.consume()
+                                    if (canDrag) onDrag(dy)
+                                }
+                                if (moved < 8.dp.toPx()) menu = true
+                                if (canDrag) onDragEnd()
+                            }
+                        }
+                    }
+                }
                 .padding(start = Space.md + Space.lg * row.depth.toInt(), end = Space.md),
             horizontalArrangement = Arrangement.spacedBy(Space.md),
             verticalAlignment = Alignment.CenterVertically,
@@ -426,6 +704,8 @@ private fun DrawerRow(
             androidx.compose.ui.window.Popup(alignment = Alignment.TopEnd, onDismissRequest = { menu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
                 Column(Modifier.width(200.dp).background(colors.surface, RoundedCornerShape(12.dp)).padding(vertical = Space.xs)) {
                     if (!row.folder) MenuChoice(strings.t("drawer.share")) { menu = false; onShare() }
+                    MenuChoice(strings.t("drawer.rename")) { menu = false; onRename() }
+                    MenuChoice(strings.t("drawer.move")) { menu = false; onMove() }
                     MenuChoice(strings.t("drawer.remove"), destructive = true) { menu = false; onRemove() }
                 }
             }

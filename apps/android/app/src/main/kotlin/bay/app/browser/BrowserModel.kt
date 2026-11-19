@@ -96,7 +96,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -208,7 +208,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** The page showing is on a site set to Always fullscreen, with nothing over it: no bar, no status bar. */
     val fullscreen: Boolean
-        get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !peeking &&
+        get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !drawerOpen && !peeking &&
             app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
 
     /** The bar is out of the way: scrolled off, or the site is fullscreen. */
@@ -507,7 +507,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** Slides the bookmarks drawer out over the page, with `folder` open in it. */
+    /** Closes Settings when something opens over the page instead (the drawer); Settings sets it. */
+    var leaveSettings: () -> Unit = {}
+
     fun openDrawer(folder: String? = null) {
+        if (covered) leaveSettings()
         panel = null
         drawerFolder = folder
         drawerOpen = true
@@ -1096,7 +1100,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (bookmarked) {
             showToast(strings.t("toast.unbookmarked"))
         } else {
-            showToast(strings.t("toast.bookmarked"), strings.t("toast.showBookmarks")) { panel = Panel.BOOKMARKS }
+            showToast(strings.t("toast.bookmarked"), strings.t("toast.showBookmarks")) { openDrawer() }
         }
     }
 
