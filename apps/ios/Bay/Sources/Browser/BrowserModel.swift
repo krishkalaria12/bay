@@ -14,6 +14,16 @@ enum OpenTarget: Equatable {
 }
 
 /// One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer.
+/// A short notice at the top of the screen, by the Dynamic Island: the space just switched to, where a bookmark went.
+/// Tapping it does `action`, when it has one.
+struct TopNote: Identifiable {
+  let id = UUID()
+  let text: String
+  /// The space it's about, whose glyph shows beside the words.
+  var space: BrowserSpace?
+  var action: (() -> Void)?
+}
+
 struct ToastMessage: Identifiable {
   let id = UUID()
   let text: String
@@ -78,6 +88,8 @@ final class BrowserModel: ObservableObject {
   /// A card growing into its page: the tab and where its card sat on screen.
   @Published private(set) var zoom: (tab: BrowserTab, frame: CGRect)?
   @Published private(set) var toast: ToastMessage?
+  @Published private(set) var topNote: TopNote?
+  private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
   /// Media playing (or paused) in each tab, as its page reports it.
@@ -315,6 +327,30 @@ final class BrowserModel: ObservableObject {
 
   func showToast(_ text: String, actionLabel: String? = nil, action: (() -> Void)? = nil) {
     show(ToastMessage(text: text, actionLabel: actionLabel, action: action))
+  }
+
+  /// A notice at the top of the screen for a moment; one with an action stays a little longer.
+  func showTopNote(_ note: TopNote) {
+    topNote = note
+    UIAccessibility.post(notification: .announcement, argument: note.text)
+    topNoteTimer?.cancel()
+    topNoteTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: note.action == nil ? 1_400_000_000 : 3_000_000_000)
+      guard !Task.isCancelled, self?.topNote?.id == note.id else { return }
+      self?.topNote = nil
+    }
+  }
+
+  func dismissTopNote() {
+    topNote = nil
+  }
+
+  /// Switches space and says so at the top: for switching from a page, where nothing else shows which space it is.
+  func switchSpace(_ id: String) {
+    guard id != app.activeSpaceId, let space = app.spaces.first(where: { $0.id == id }) else { return }
+    Haptics.tick()
+    selectSpace(id)
+    showTopNote(TopNote(text: spaceName(space, strings), space: space))
   }
 
   /// A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't.

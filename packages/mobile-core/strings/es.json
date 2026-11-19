@@ -9,6 +9,7 @@
   "archive.search": "Buscar en las pestañas archivadas",
   "archive.title": "Archivo",
   "bar.archive": "Archivar",
+  "bar.inSpace": "{label}, en {space}",
   "bar.more": "Más",
   "bar.newTab": "Pestaña nueva",
   "bar.search": "Buscar",

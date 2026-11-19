@@ -1,5 +1,11 @@
 package bay.app.browser
 
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.View
@@ -263,14 +269,97 @@ fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, 
             },
         )
     }
-    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks) }
+    val slide = remember { SpaceSlide() }
+    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks, slide) }
+}
+
+/** Holding Tabs with more than one space: whether the row of spaces is up, what's under the finger, and where things are. */
+private class SpaceSlide {
+    var sliding by mutableStateOf(false)
+    var target by mutableStateOf<SlideTarget?>(null)
+    /** The row's place in the window, and the Tabs button's, to turn the finger's drag into a place in the row. */
+    var row = androidx.compose.ui.geometry.Rect.Zero
+    var button = Offset.Zero
+    var moved = 0f
+}
+
+/** What a held Tabs button's finger is over in the row of spaces. */
+private sealed interface SlideTarget {
+    data class Space(val index: Int) : SlideTarget
+    data object Add : SlideTarget
+}
+
+private val SLIDE_CELL = 52.dp
+
+/** An opaque surface with the bar buttons' edge, so the page never shows through the spaces. */
+@Composable
+private fun Modifier.slideSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
+    val colors = Theme.colors
+    return shadow(12.dp, shape, clip = false).clip(shape).background(colors.background, shape).border(1.dp, colors.hairline, shape)
+}
+
+/**
+ * The column of spaces above a held Tabs button: each space's glyph in a cell of its own, the nearest space at the
+ * bottom, the one under the finger larger with its name over the column, the space showing on a soft circle, and a
+ * new space on top.
+ */
+@Composable
+private fun SpaceSlideColumn(browser: BrowserModel, strings: Strings, slide: SpaceSlide, modifier: Modifier) {
+    val spaces = browser.app.spaces
+    val targetName = when (val target = slide.target) {
+        is SlideTarget.Space -> spaces.getOrNull(target.index)?.let { spaceName(it, strings) }
+        SlideTarget.Add -> strings.t("tabsMenu.newSpace")
+        null -> null
+    }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+    // What's under the finger, named over the column: outside its rounded surface, which would cut it off.
+    if (targetName != null) {
+        BayText(
+            targetName, Modifier.slideSurface(CircleShape).padding(horizontal = Space.sm, vertical = 2.dp),
+            variant = TextVariant.FOOTNOTE, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
+        )
+    }
+    Column(
+        Modifier.width(SLIDE_CELL).slideSurface(RoundedCornerShape(SLIDE_CELL / 2)).padding(vertical = Space.sm)
+            .onGloballyPositioned { slide.row = it.boundsInWindow() }
+            .clearAndSetSemantics {}.testTag("space-slide-row"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(SLIDE_CELL), contentAlignment = Alignment.Center) {
+            val adding = slide.target == SlideTarget.Add
+            if (adding) Box(Modifier.size(44.dp).background(Theme.colors.fill, CircleShape))
+            BayIconView(BayIcon.ADD, size = if (adding) IconSize.control else IconSize.row, color = if (adding) Theme.colors.foreground else Theme.colors.muted)
+        }
+        spaces.withIndex().reversed().forEach { (index, space) ->
+            val hovered = slide.target == SlideTarget.Space(index)
+            val name = spaceName(space, strings)
+            Box(Modifier.size(SLIDE_CELL), contentAlignment = Alignment.Center) {
+                // The space showing sits on a soft circle; the one under the finger on a wash of its own colour.
+                if (hovered) Box(Modifier.size(44.dp).background(spaceColor(space.color).copy(alpha = 0.22f), CircleShape))
+                else if (space.id == browser.app.activeSpaceId) Box(Modifier.size(40.dp).background(Theme.colors.fill, CircleShape))
+                SpaceGlyph(space, name, if (hovered) 30.dp else 24.dp)
+            }
+        }
+    }
+    }
+}
+
+/** The cell under a point in the window, counting up from the column's bottom; nothing far to either side of it. */
+private fun SpaceSlide.targetAt(point: Offset, count: Int, cell: Float, inset: Float): SlideTarget? {
+    if (row.height <= 0f || point.x < row.left - cell || point.x > row.right + cell * 2) return null
+    val index = kotlin.math.floor((row.bottom - inset - point.y) / cell).toInt()
+    return when {
+        index == count -> SlideTarget.Add
+        index in 0 until count -> SlideTarget.Space(index)
+        else -> null
+    }
 }
 
 /** How far the capsule follows a sideways drag on the bar. */
 private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f }
 
 @Composable
-private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit) {
+private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit, slide: SpaceSlide) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
@@ -279,19 +368,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
             SpacesCapsule(browser, strings)
             BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
         } else if (browser.hasPage) {
-            val count = app.tabs.size
-            Box {
-                BarButton(
-                    "bar-tabs",
-                    if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs"),
-                    { browser.showTabs() },
-                    onLongClick = {
-                        Haptics.tick(view)
-                        browser.panel = Panel.TABS
-                    },
-                ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
-                TabCount(count, Modifier.align(Alignment.TopEnd))
-            }
+            TabsButton(browser, strings, slide)
             Capsule(browser, strings)
             Box(contentAlignment = Alignment.Center) {
                 BarButton("bar-more", strings.t("bar.more"), {
@@ -309,6 +386,106 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
     }
 }
 
+/**
+ * Tabs, with the open tabs' count. Holding it with more than one space brings the column of spaces: slide to one and
+ * lift to switch, or lift without sliding for the Tabs menu. TalkBack, which can't hold and slide, gets each other space
+ * as an action.
+ */
+@Composable
+private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlide) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    val density = LocalDensity.current
+    val count = app.tabs.size
+    val spaced = app.spaces.size > 1
+    val space = browser.activeSpace
+    val tabsLabel = if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs")
+    val label = if (spaced && space != null) strings.t("bar.inSpace", mapOf("label" to tabsLabel, "space" to spaceName(space, strings))) else tabsLabel
+    var held by remember { mutableStateOf(false) }
+    val cell = with(density) { SLIDE_CELL.toPx() }
+    val inset = with(density) { Space.sm.toPx() }
+    val hold = if (!spaced) Modifier else Modifier.pointerInput(app.spaces.size) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = {
+                held = true
+                slide.moved = 0f
+                slide.sliding = true
+                Haptics.tick(view)
+            },
+            onDrag = { change, amount ->
+                slide.moved += amount.getDistance()
+                val next = if (slide.moved > 12.dp.toPx()) slide.targetAt(slide.button + change.position, app.spaces.size, cell, inset) else null
+                if (next != slide.target) {
+                    slide.target = next
+                    if (next != null) Haptics.tick(view)
+                }
+            },
+            onDragEnd = {
+                // The row goes first: switching space can take this button away before the gesture ends.
+                val target = slide.target
+                slide.sliding = false
+                slide.target = null
+                when (target) {
+                    is SlideTarget.Space -> browser.switchSpace(app.spaces[target.index].id)
+                    SlideTarget.Add -> browser.newSpace()
+                    null -> if (slide.moved <= 12.dp.toPx()) browser.panel = Panel.TABS
+                }
+            },
+            onDragCancel = {
+                slide.sliding = false
+                slide.target = null
+            },
+        )
+    }
+    // A gesture cut short by the button leaving (the bar changing under it) never ends; the row goes with the button.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            slide.sliding = false
+            slide.target = null
+        }
+    }
+    Box(
+        Modifier.onGloballyPositioned { slide.button = it.positionInWindow() }.then(hold)
+            .semantics {
+                if (spaced) {
+                    customActions = app.spaces.filter { it.id != app.activeSpaceId }.map { other ->
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.switchSpace", mapOf("name" to spaceName(other, strings)))) {
+                            browser.switchSpace(other.id)
+                            true
+                        }
+                    } + androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabsMenu.newSpace")) {
+                        browser.newSpace()
+                        true
+                    }
+                }
+            },
+    ) {
+        BarButton(
+            "bar-tabs", label,
+            {
+                // Held, the button opened the menu or switched space instead.
+                if (held) held = false else browser.showTabs()
+            },
+            onLongClick = if (spaced) null else ({
+                Haptics.tick(view)
+                browser.panel = Panel.TABS
+            }),
+        ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
+        TabCount(count, Modifier.align(Alignment.TopEnd))
+        // The spaces stand in a column above the button while it's held, the nearest first. It's placed without taking
+        // room in the bar.
+        if (slide.sliding) {
+            SpaceSlideColumn(
+                browser, strings, slide,
+                Modifier.align(Alignment.BottomCenter).layout { measurable, _ ->
+                    val column = measurable.measure(androidx.compose.ui.unit.Constraints())
+                    layout(0, 0) { column.place(-column.width / 2, -column.height - (52.dp + Space.md).roundToPx()) }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun Capsule(browser: BrowserModel, strings: Strings) {
     val url = browser.activeTab?.url.orEmpty()
@@ -317,14 +494,12 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
     val shift = LocalCapsuleShift.current
     Box(Modifier.graphicsLayer { translationX = shift; alpha = 1f - minOf(kotlin.math.abs(shift) / 110.dp.toPx(), 0.6f) }) {
-        BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = if (site.isEmpty()) 128.dp else 172.dp) {
-            if (site.isEmpty()) {
+        // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
+        // says so with a mark beside it.
+        BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = 128.dp) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
+                if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
                 BayIconView(BayIcon.SEARCH, size = IconSize.control)
-            } else {
-                Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
-                    if (insecure) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
-                    BayText(site, variant = TextVariant.CALLOUT, weight = FontWeight.Medium, maxLines = 1)
-                }
             }
         }
         LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.align(Alignment.BottomStart))

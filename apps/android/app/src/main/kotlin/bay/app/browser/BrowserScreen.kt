@@ -168,6 +168,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
             }
         }
+        androidx.compose.animation.AnimatedVisibility(
+            browser.topNote != null,
+            Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = Space.xs),
+            enter = androidx.compose.animation.slideInVertically { -it } + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut(),
+        ) {
+            browser.topNote?.let { TopPill(it, browser::dismissTopNote) }
+        }
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)

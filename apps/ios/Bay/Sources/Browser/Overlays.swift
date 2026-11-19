@@ -2,6 +2,34 @@ import BayCore
 import BayDesign
 import SwiftUI
 
+/// A short notice at the top of the screen, under the status bar: a space's glyph and name, or where a bookmark went.
+struct TopPill: View {
+  @EnvironmentObject private var strings: Strings
+  let note: TopNote
+  let onDone: () -> Void
+
+  var body: some View {
+    Button {
+      onDone()
+      note.action?()
+    } label: {
+      HStack(spacing: Space.xs) {
+        if let space = note.space {
+          SpaceGlyph(space: space, name: note.text, size: 20)
+        }
+        BayText(note.text, variant: .subhead, weight: .semibold).lineLimit(1)
+      }
+      .padding(.horizontal, Space.md)
+      .frame(minHeight: 36)
+      .baySurface(radius: 18)
+    }
+    .buttonStyle(.pressFeedback)
+    .disabled(note.action == nil)
+    .accessibilityIdentifier("top-note")
+    .transition(.move(edge: .top).combined(with: .opacity))
+  }
+}
+
 /// One short message above the bar, with its action (Undo) when it has one.
 struct ToastView: View {
   let toast: ToastMessage

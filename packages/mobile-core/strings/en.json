@@ -9,6 +9,7 @@
   "archive.search": "Search archived tabs",
   "archive.title": "Archive",
   "bar.archive": "Archive",
+  "bar.inSpace": "{label}, in {space}",
   "bar.more": "More",
   "bar.newTab": "New tab",
   "bar.search": "Search",

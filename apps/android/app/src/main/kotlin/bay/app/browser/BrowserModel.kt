@@ -108,6 +108,12 @@ data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rec
 
 /** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
 /** A short message above the bar; a reading tool's notice (Inspect, Reader, the element picker) has its own id. */
+/**
+ * A short notice at the top of the screen, under the status bar: the space just switched to, where a bookmark went.
+ * Tapping it does `action`, when it has one.
+ */
+data class TopNote(val id: Long, val text: String, val space: BrowserSpace? = null, val action: (() -> Unit)? = null)
+
 data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null, val notice: Boolean = false)
 
 /** What a tab's media last reported, and when. */
@@ -177,6 +183,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         private set
 
     var toast by mutableStateOf<ToastMessage?>(null)
+    var topNote by mutableStateOf<TopNote?>(null)
+        private set
+    private var topNoteTimer: Job? = null
         private set
 
     /** The bar is scrolled away while the page scrolls down. */
@@ -430,6 +439,28 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     fun showToast(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) = show(ToastMessage(System.nanoTime(), text, actionLabel, action))
+
+    /** A notice at the top of the screen for a moment; one with an action stays a little longer. */
+    fun showTopNote(note: TopNote) {
+        topNote = note
+        topNoteTimer?.cancel()
+        topNoteTimer = scope.launch {
+            delay(if (note.action == null) 1_400 else 3_000)
+            if (topNote?.id == note.id) topNote = null
+        }
+    }
+
+    fun dismissTopNote() {
+        topNote = null
+    }
+
+    /** Switches space and says so at the top: for switching from a page, where nothing else shows which space it is. */
+    fun switchSpace(id: String) {
+        if (id == app.activeSpaceId) return
+        val space = app.spaces.firstOrNull { it.id == id } ?: return
+        selectSpace(id)
+        showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
+    }
 
     /** A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't. */
     fun showNotice(text: String) = show(ToastMessage(System.nanoTime(), text, notice = true))

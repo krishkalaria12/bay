@@ -9,6 +9,7 @@
   "archive.search": "Buscar abas arquivadas",
   "archive.title": "Arquivo",
   "bar.archive": "Arquivar",
+  "bar.inSpace": "{label}, em {space}",
   "bar.more": "Mais",
   "bar.newTab": "Nova aba",
   "bar.search": "Buscar",

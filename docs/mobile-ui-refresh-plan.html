@@ -735,10 +735,9 @@
         </figure>
         <div>
           <p>
-            Over a page the bar becomes four separate round glass buttons: <b>Tabs</b> (with the count), a wider <b>Search</b> button with just the magnifying
-            glass, <b>More</b>, and <b>Bookmarks</b>, which opens the drawer (section 6). Bookmarks goes in the fourth slot, where the video has its summary
-            button (<a href="#decisions">D1</a>). The address capsule leaves the bar and moves to the top of the menu (section 4). The start page bar stays as
-            it is.
+            Over a page the bar becomes three separate round glass buttons: <b>Tabs</b> (with the count), a wider <b>Search</b> button with just the magnifying
+            glass, and <b>More</b>. No fourth button: a Bookmarks button was tried and taken out (<a href="#decisions">D1</a>). The address capsule leaves the
+            bar and moves to the top of the menu (section 4). The start page bar stays as it is.
           </p>
           <ul>
             <li>
@@ -750,7 +749,6 @@
               row, will do.
             </li>
             <li>Opening search from the bar still starts with the page's address filled in and selected.</li>
-            <li>The Bookmarks button looks filled when the page showing is saved in the current space, using <code>bookmark_location</code> from section 5.</li>
           </ul>
         </div>
       </div>
@@ -869,8 +867,8 @@
         <div>
           <p>
             A panel the full height of the screen that slides in from the right. The page slides left with a sliver still showing. Its background is a gradient
-            in the space's colour (Personal red, Work blue, Reading green). The bar's <b>Bookmarks</b> button opens it, and so does tapping the "Added to …"
-            toast, which opens it on that folder (<a href="#decisions">D1</a>). There's no edge swipe, so swipe-to-go-forward keeps working.
+            in the space's colour (Personal red, Work blue, Reading green). A <b>Bookmarks</b> row in the page menu opens it, and so does tapping the "Added to
+            …" notice, which opens it on that folder (<a href="#decisions">D1</a>). There's no edge swipe, so swipe-to-go-forward keeps working.
           </p>
           <ul>
             <li>
@@ -1055,23 +1053,23 @@
           </p>
           <ul>
             <li>
-              Holding Tabs (0.35 s, with a tick) brings up a row of <code>SpaceChips</code> above the bar, centred on the current space. Slide over the chips:
-              each one you pass grows and ticks, its name shows over it, and the bar's glass takes its colour. Lift on a chip to switch.
+              Holding Tabs (0.35 s, with a tick) stands a column of the spaces straight up from the button, the nearest space at the bottom and
+              <b>+ New space</b> on top, so the thumb slides straight up. The space you're in sits on a soft grey circle. The one under the finger grows on a
+              wash of its own colour, with its name in a pill over the column, and ticks. Lift on it to switch. (A row across the bar came first; a column over
+              the button was the better reach.)
             </li>
-            <li>Lift without sliding (or back on the Tabs button) and the Tabs menu opens, as now, so nothing is lost. Sliding up out of the row cancels.</li>
-            <li>The row's last chip is <b>+ New space</b>. With seven or more spaces, the row scrolls on its own while your finger is near either end.</li>
+            <li>Lift without sliding, or slide back onto Tabs, and nothing changes; a hold with no slide opens the Tabs menu, as now.</li>
             <li>
-              With only one space, holding Tabs works exactly as now (no row), like desktop, which only shows space controls once there are two
+              With only one space, holding Tabs works exactly as now (no column), like desktop, which only shows space controls once there are two
               (<code>SpaceIndicator</code>).
             </li>
           </ul>
         </li>
         <li>
           <p>
-            <b>Always show which space you're in.</b> Give the Tabs button a ring in the space's colour, with its glyph where the tab count sits now; the count
-            moves into the button. After a switch, a pill at the top shows the glyph and name ("💼 Work") for about 1.2 s, in the same place as "Added to
-            Watchlist". The new page slides in from the side the space sits on (left or right, following the order of spaces), the way desktop's
-            <code>switchMotion.ts</code> moves things "a little the way it went". With Reduce Motion it fades.
+            <b>Say which space you're in.</b> After a switch, a pill at the top shows the glyph and name ("💼 Work") for about 1.4 s, in the same place as
+            "Added to Watchlist", and the Tabs button reads "Tabs, in Work" to VoiceOver and TalkBack. No ring on the button: a coloured ring read as a stray
+            focus ring, so it was taken out. The new page sliding in from the side the space sits on is still to do.
           </p>
         </li>
         <li>
@@ -1350,8 +1348,8 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           <h3>Bar and page menu</h3>
           <ul>
             <li>
-              The four-button bar (the Bookmarks button opens the existing <code>BookmarksPanel</code> until R5 replaces it), address row in the menu, tiles,
-              Developer Tools, Reader and Translate pop-ups, the footer, and moving things as in the table in section 4.
+              The three-button bar, address row in the menu, tiles, Developer Tools, Reader and Translate pop-ups, the footer, and moving things as in the table
+              in section 4.
             </li>
             <li>
               Switching spaces (6c): <code>SpaceChips</code> (made here, used again in R4 and R5), hold Tabs then slide, the space ring and glyph on the Tabs
@@ -1415,8 +1413,9 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
       <dl class="decisions">
         <dt>D1 · What opens the bookmarks drawer</dt>
         <dd>
-          <span class="rec">Settled:</span> a <b>Bookmarks</b> button in the bar's fourth slot (where the video has summaries), and tapping the "Added to …"
-          toast, which opens the drawer on that folder. No edge swipe, because swiping from the right edge would clash with swipe-to-go-forward.
+          <span class="rec">Settled (changed):</span> a <b>Bookmarks</b> row in the page menu, and tapping the "Added to …" notice, which opens the drawer on
+          that folder. A Bookmarks button in the bar's fourth slot was built and taken out: the bar stays at three buttons. No edge swipe, because swiping from
+          the right edge would clash with swipe-to-go-forward.
         </dd>
         <dt>D2 · Search finds bookmarks in every space</dt>
         <dd>

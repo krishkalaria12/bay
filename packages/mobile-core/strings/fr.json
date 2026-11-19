@@ -9,6 +9,7 @@
   "archive.search": "Rechercher dans les onglets archivés",
   "archive.title": "Archive",
   "bar.archive": "Archiver",
+  "bar.inSpace": "{label}, dans {space}",
   "bar.more": "Plus",
   "bar.newTab": "Nouvel onglet",
   "bar.search": "Rechercher",

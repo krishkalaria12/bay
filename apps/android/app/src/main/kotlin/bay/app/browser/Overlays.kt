@@ -60,6 +60,31 @@ import bay.design.Theme
 import bay.design.baySurface
 import bay.design.pressFeedback
 
+/** A short notice at the top of the screen, under the status bar: a space's glyph and name, or where a bookmark went. */
+@Composable
+fun TopPill(note: TopNote, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val view = LocalView.current
+    LaunchedEffect(note.id) { view.announceForAccessibility(note.text) }
+    Row(
+        modifier.heightIn(min = 36.dp).testTag("top-note")
+            .baySurface(18.dp)
+            .clearAndSetSemantics { contentDescription = note.text; if (note.action != null) role = Role.Button }
+            .let { base ->
+                val action = note.action ?: return@let base
+                base.pressFeedback {
+                    onDone()
+                    action()
+                }
+            }
+            .padding(horizontal = Space.md),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        note.space?.let { SpaceGlyph(it, note.text, 20.dp) }
+        BayText(note.text, variant = TextVariant.SUBHEAD, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
 /** One short message above the bar, with its action (Undo) when it has one. TalkBack reads it as it appears. */
 @Composable
 fun Toast(toast: ToastMessage, onDone: () -> Unit) {

@@ -98,6 +98,13 @@ struct BrowserScreen: View {
           privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)))
         .environment(\.colorScheme, searchOverDarkPage ? .dark : scheme)
       }
+      VStack {
+        if let note = browser.topNote {
+          TopPill(note: note, onDone: browser.dismissTopNote).id(note.id).padding(.top, Space.xs)
+        }
+        Spacer(minLength: 0)
+      }
+      .animation(Motion.settle.animation, value: browser.topNote?.id)
     }
     .background(
       GeometryReader { proxy in

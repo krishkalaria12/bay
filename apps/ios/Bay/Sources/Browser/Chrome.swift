@@ -157,6 +157,10 @@ struct BrowserBar: View {
   var onChecks: () -> Void = {}
   @State private var swipe: CGFloat = 0
   @State private var tabsHeld = false
+  /// Holding Tabs with more than one space: the row of spaces above the bar, and the one under the finger.
+  @State private var sliding = false
+  @State private var slideTarget: SlideTarget?
+  @State private var tabsFrame: CGRect = .zero
 
   var body: some View {
     let app = browser.app
@@ -168,25 +172,7 @@ struct BrowserBar: View {
         GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
           .accessibilityIdentifier("bar-search")
       } else if browser.hasPage {
-        let count = app.tabs.count
-        GlassIconButton(.tabs, label: count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")) {
-          // Held, the button opened the tabs menu instead.
-          if tabsHeld {
-            tabsHeld = false
-          } else {
-            browser.showTabs()
-          }
-        }
-        .simultaneousGesture(
-          LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-            tabsHeld = true
-            Haptics.tick()
-            browser.panel = .tabs
-          })
-        // A hold whose lift never reached the button (the finger slid off) doesn't eat the next tap.
-        .onChange(of: browser.panel) { if $0 == nil { tabsHeld = false } }
-        .overlay(alignment: .topTrailing) { TabCount(count: count) }
-        .accessibilityIdentifier("bar-tabs")
+        tabsButton
         capsule
         GlassIconButton(.more, label: strings.t("bar.more")) {
           browser.app.dispatch(.tipSeen(id: .blocking))
@@ -208,8 +194,95 @@ struct BrowserBar: View {
           .accessibilityIdentifier("bar-settings")
       }
     }
-    // Above the buttons' own taps: a tap never travels the drag's 16 points, so taps still reach them.
-    .highPriorityGesture(browser.hasPage && browser.overlay == .none ? tabSwipe : nil)
+    // Above the buttons' own taps: a tap never travels the drag's 16 points, so taps still reach them. Off while a held
+    // Tabs slides across the spaces.
+    .highPriorityGesture(browser.hasPage && browser.overlay == .none && !sliding ? tabSwipe : nil)
+  }
+
+  /// Tabs, with the open tabs' count. Holding it with more than one space brings the column of spaces: slide to one and
+  /// lift to switch, or lift without sliding for the Tabs menu.
+  private var tabsButton: some View {
+    let app = browser.app
+    let count = app.tabs.count
+    let spaced = app.spaces.count > 1
+    let space = browser.activeSpace
+    let tabsLabel = count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")
+    let label = spaced && space != nil ? strings.t("bar.inSpace", ["label": tabsLabel, "space": spaceName(space!, strings)]) : tabsLabel
+    return GlassIconButton(.tabs, label: label) {
+      // Held, the button opened the menu or switched space instead.
+      if tabsHeld {
+        tabsHeld = false
+      } else {
+        browser.showTabs()
+      }
+    }
+    .simultaneousGesture(spaced ? nil : LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+      tabsHeld = true
+      Haptics.tick()
+      browser.panel = .tabs
+    })
+    .simultaneousGesture(spaced ? spaceSlide : nil)
+    // A hold whose lift never reached the button (the finger slid off) doesn't eat the next tap.
+    .onChange(of: browser.panel) { if $0 == nil { tabsHeld = false } }
+    .overlay(alignment: .topTrailing) { TabCount(count: count) }
+    // The spaces stand in a column above the button while it's held, the nearest first.
+    .overlay(alignment: .bottom) {
+      if sliding {
+        SpaceSlideColumn(spaces: app.spaces, current: app.activeSpaceId, target: slideTarget)
+          .fixedSize()
+          .alignmentGuide(.bottom) { $0[.bottom] + SpaceSlideColumn.gap + tabsFrame.height }
+          .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
+      }
+    }
+    .animation(Motion.settle.animation, value: sliding)
+    // The button's place on screen: the column stands on it, so the cell under the finger is worked out from it.
+    .background(GeometryReader { proxy in
+      Color.clear
+        .onAppear { tabsFrame = proxy.frame(in: .global) }
+        .onChange(of: proxy.frame(in: .global)) { tabsFrame = $0 }
+    })
+    .modifier(SpaceActions(browser: browser, enabled: spaced))
+    .accessibilityIdentifier("bar-tabs")
+  }
+
+  /// Hold Tabs, then slide: the space under the finger grows and ticks; lifting switches to it. Lifting where it
+  /// started opens the Tabs menu; lifting well above the row lets go of nothing.
+  private var spaceSlide: some Gesture {
+    LongPressGesture(minimumDuration: 0.35)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+      .onChanged { value in
+        guard case .second(true, let drag) = value else { return }
+        if !sliding {
+          sliding = true
+          tabsHeld = true
+          Haptics.tick()
+        }
+        guard let drag else { return }
+        let moved = hypot(drag.translation.width, drag.translation.height) > 12
+        let next = moved ? SpaceSlideColumn.target(at: drag.location, above: tabsFrame, count: browser.app.spaces.count) : nil
+        if next != slideTarget {
+          slideTarget = next
+          if next != nil { UISelectionFeedbackGenerator().selectionChanged() }
+        }
+      }
+      .onEnded { value in
+        defer {
+          sliding = false
+          slideTarget = nil
+        }
+        guard case .second(true, let drag) = value else { return }
+        let moved = drag.map { hypot($0.translation.width, $0.translation.height) > 12 } ?? false
+        switch slideTarget {
+        case .space(let index):
+          browser.switchSpace(browser.app.spaces[index].id)
+        case .add:
+          browser.newSpace()
+        case nil:
+          if !moved {
+            browser.panel = .tabs
+          }
+        }
+      }
   }
 
   /// Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
@@ -250,18 +323,16 @@ struct BrowserBar: View {
     return Button {
       browser.search(inNewTab: false)
     } label: {
+      // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
+      // says so with a mark beside it.
       HStack(spacing: Space.xs) {
-        if site.isEmpty {
-          Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium))
-        } else {
-          if insecure {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 13)).foregroundColor(.red)
-          }
-          Text(verbatim: site).font(.system(size: 15, weight: .medium)).lineLimit(1).truncationMode(.tail)
+        if insecure, !site.isEmpty {
+          Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 13)).foregroundColor(.red)
         }
+        Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium))
       }
       .foregroundColor(BayColor.foreground)
-      .frame(width: site.isEmpty ? 92 : 136, height: 20)
+      .frame(width: 92, height: 20)
       .padding(.vertical, 14)
       .padding(.horizontal, Space.lg)
       .bayCapsule()
@@ -436,5 +507,110 @@ struct PageErrorView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(BayColor.background)
     .accessibilityIdentifier("page-error")
+  }
+}
+
+/// VoiceOver can't hold and slide, so Tabs offers each other space as an action, and a new one. iOS 15 has no list of
+/// actions; there it offers the Tabs menu, which lists the spaces.
+private struct SpaceActions: ViewModifier {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var browser: BrowserModel
+  let enabled: Bool
+
+  func body(content: Content) -> some View {
+    if !enabled {
+      content
+    } else if #available(iOS 16, *) {
+      content.accessibilityActions {
+        ForEach(browser.app.spaces.filter { $0.id != browser.app.activeSpaceId }, id: \.id) { other in
+          Button(strings.t("tabs.switchSpace", ["name": spaceName(other, strings)])) { browser.switchSpace(other.id) }
+        }
+        Button(strings.t("tabsMenu.newSpace")) { browser.newSpace() }
+      }
+    } else {
+      content.accessibilityAction(named: Text(verbatim: strings.t("tabsMenu.title"))) { browser.panel = .tabs }
+    }
+  }
+}
+
+/// What a held Tabs button's finger is over in the row of spaces.
+enum SlideTarget: Equatable {
+  case space(Int)
+  case add
+}
+
+/// The column of spaces above a held Tabs button: each space's glyph in a cell of its own, the nearest space at the
+/// bottom, the one under the finger larger with its name over the column, the space showing on a soft circle, and a
+/// new space on top.
+struct SpaceSlideColumn: View {
+  @EnvironmentObject private var strings: Strings
+  let spaces: [BrowserSpace]
+  let current: String
+  let target: SlideTarget?
+
+  static let cell: CGFloat = 52
+
+  private var targetName: String? {
+    switch target {
+    case .space(let index): return spaces.indices.contains(index) ? spaceName(spaces[index], strings) : nil
+    case .add: return strings.t("tabsMenu.newSpace")
+    case nil: return nil
+    }
+  }
+
+  /// An opaque surface with the bar buttons' edge, so the page never shows through the spaces.
+  static func solid<S: InsettableShape>(_ shape: S) -> some View {
+    shape.fill(BayColor.background).overlay(shape.strokeBorder(BayColor.hairline, lineWidth: 1))
+      .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+  }
+
+  /// The space between the Tabs button and the column standing on it.
+  static let gap: CGFloat = Space.md
+
+  /// The cell under `point`, in the column standing `gap` above the Tabs button at `button`, counting up from its
+  /// bottom; nothing far to either side of it.
+  static func target(at point: CGPoint, above button: CGRect, count: Int) -> SlideTarget? {
+    guard button.height > 0, point.x > button.midX - cell * 1.5, point.x < button.midX + cell * 2.5 else { return nil }
+    let bottom = button.minY - gap
+    let index = Int(((bottom - Space.sm - point.y) / cell).rounded(.down))
+    if index == count { return .add }
+    return (0..<count).contains(index) ? .space(index) : nil
+  }
+
+  var body: some View {
+    VStack(spacing: Space.xs) {
+      // What's under the finger, named over the column.
+      if let name = targetName {
+        BayText(name, variant: .footnote, weight: .semibold).lineLimit(1).fixedSize()
+          .padding(.horizontal, Space.sm)
+          .padding(.vertical, Space.xxs)
+          .background(Self.solid(Capsule()))
+      }
+      VStack(spacing: 0) {
+        BayIconView(.add, size: target == .add ? IconSize.control : IconSize.row, color: target == .add ? BayColor.foreground : BayColor.muted)
+          .frame(width: Self.cell, height: Self.cell)
+          .background {
+            if target == .add { Circle().fill(BayColor.fill).frame(width: 44, height: 44) }
+          }
+        ForEach(Array(spaces.enumerated().reversed()), id: \.element.id) { index, space in
+          let hovered = target == .space(index)
+          SpaceGlyph(space: space, name: spaceName(space, strings), size: hovered ? 30 : 24)
+            .frame(width: Self.cell, height: Self.cell)
+            // The space showing sits on a soft circle; the one under the finger on a wash of its own colour.
+            .background {
+              if hovered {
+                Circle().fill(spaceColor(space.color).opacity(0.22)).frame(width: 44, height: 44)
+              } else if space.id == current {
+                Circle().fill(BayColor.fill).frame(width: 40, height: 40)
+              }
+            }
+        }
+      }
+      .padding(.vertical, Space.sm)
+      .background(Self.solid(RoundedRectangle(cornerRadius: Self.cell / 2, style: .continuous)))
+    }
+    .animation(.easeOut(duration: 0.12), value: target)
+    .accessibilityHidden(true)
+    .accessibilityIdentifier("space-slide-row")
   }
 }
