@@ -502,7 +502,8 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
                 BayIconView(BayIcon.SEARCH, size = IconSize.control)
             }
         }
-        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.align(Alignment.BottomStart))
+        // Drawn over the pill and sized by it, so loading never widens the pill.
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.matchParentSize())
     }
 }
 
@@ -602,11 +603,10 @@ fun LoadProgress(state: NavigationState, modifier: Modifier = Modifier) {
     val filled by animateFloatAsState(maxOf(state.progress.toFloat(), 0.04f), tween(240), label = "progress")
     val shown by animateFloatAsState(if (state.isLoading) 1f else 0f, tween(if (state.isLoading) 120 else 220), label = "shown")
     if (shown == 0f) return
-    Box(
-        modifier.padding(start = 24.dp, end = 24.dp, bottom = 2.dp).width(124.dp).height(2.dp).alpha(shown)
-            .testTag("page-progress").clearAndSetSemantics {},
-    ) {
-        Box(Modifier.fillMaxWidth(filled).height(2.dp).background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+    Box(modifier.alpha(shown).testTag("page-progress").clearAndSetSemantics {}) {
+        Box(Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 2.dp).fillMaxWidth().height(2.dp)) {
+            Box(Modifier.fillMaxWidth(filled).height(2.dp).background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+        }
     }
 }
 

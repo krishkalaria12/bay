@@ -772,7 +772,10 @@
             <li><b>Show Reader</b> with a ⌃⌄ pop-up: Show Reader, Reader settings, "Always for this site".</li>
             <li><b>Hide Elements</b>.</li>
             <li><b>Translate Page</b> with a ⌃⌄ pop-up for the language.</li>
-            <li><b>Footer:</b> Downloads on the left, a <b>Site Settings</b> pill with the site's icon in the middle, Bay Settings on the right.</li>
+            <li>
+              <b>Site settings, Downloads and Settings are rows</b> (Site settings beside Developer tools; Downloads and Settings after Bookmarks and History).
+              A footer floating over the rows, as in the reference, was built and taken out: it covered the rows and looked wrong on both platforms.
+            </li>
           </ol>
           <div class="table-wrap">
             <table>
@@ -830,9 +833,10 @@
           </p>
           <ul>
             <li>
-              <b>The card:</b> inset from the screen's sides and bottom, with every corner rounded to match the phone's. iPhone keeps the system sheet, which
-              floats as glass on iOS 26 by itself, so it keeps the system's drag, keyboard and VoiceOver handling. Android's own sheet gets the same insets and
-              corners.
+              <b>Each platform's own sheet.</b> iPhone follows the reference: the system sheet, floating as glass on iOS 26, which keeps the system's drag,
+              keyboard and VoiceOver handling, with rows on rounded cards. Android follows Android: a bottom sheet along the screen's edge with its top corners
+              rounded and a drag handle, flat rows, sections split by a full-width line, no outlines or shadows. (Imitating iPhone's glass on Android was tried
+              and looked wrong.) Sheets stand no taller than about 62% of the screen and scroll.
             </li>
             <li>
               <b>The top:</b> a small title, centred. A sheet one level down (site settings, a font list) has a round back button on the left, and its title is
@@ -840,7 +844,7 @@
               a round ✕ to cancel on the left and a round ✓ to save on the right, because there closing and saving are different things.
             </li>
             <li>
-              <b>The rows:</b> grouped on rounded cards with hairlines between them, as now, and a little shorter. A row that opens a list shows
+              <b>The rows:</b> on iPhone, grouped on rounded cards with hairlines between them; on Android, flat. A row that opens a list shows
               <code>⌃⌄</code> (Show Reader, Translate Page); a row that opens a page shows <code>›</code>.
             </li>
             <li>

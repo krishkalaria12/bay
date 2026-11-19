@@ -113,7 +113,7 @@ struct BrowserScreen: View {
           .onChange(of: proxy.safeAreaInsets.bottom) { safeBottom = $0 }
       }
     )
-    .baySheet(isPresented: Binding(get: { browser.panel != nil }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.88) {
+    .baySheet(isPresented: Binding(get: { browser.panel != nil }, set: { if !$0 { browser.panel = nil } }), maxFraction: 0.62) {
       Group {
         switch browser.panel {
         case .page:

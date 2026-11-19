@@ -67,16 +67,15 @@ import bay.design.style
 private val ADDRESS_HEIGHT = 48.dp
 private val TILE_HEIGHT = 76.dp
 private val ROW_HEIGHT = 52.dp
-private val FOOTER_BUTTON = 52.dp
-/** The room the floating footer takes over the rows' end, so the last row can scroll out from under it. */
-private val FOOTER_ROOM = 72.dp
+/** The menu stands no taller than this part of the screen; its rows scroll. */
+private const val MENU_FRACTION = 0.62f
 private const val ZOOM_MIN = 80
 private const val ZOOM_MAX = 200
 
 /**
  * What to do with the page showing (bar-more), as one floating sheet: the address with back, forward, copy and reload on
- * top; Share, Pin, Save and Find; Developer tools a step away; Reader, Hide elements, Translate and the page's zoom;
- * Bookmarks and History; and a footer floating over the rows with Downloads, this site's settings and Bay's.
+ * top; Share, Pin, Save and Find; this site's settings and Developer tools a step away; Reader, Hide elements, Translate
+ * and the page's zoom; Bookmarks, History, Downloads and Settings.
  */
 @Composable
 fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettings: () -> Unit) {
@@ -90,7 +89,7 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
     }
     if (tools) {
         val title = strings.t("pageMenu.developerTools")
-        PanelSheet(visible, title, "page-menu", strings.sheetWords(title), onClose = close, onBack = { tools = false }, maxFraction = 0.8f) {
+        PanelSheet(visible, title, "page-menu", strings.sheetWords(title), onClose = close, onBack = { tools = false }, maxFraction = MENU_FRACTION) {
             ToolsRows(browser, strings, ::act)
         }
         return
@@ -103,9 +102,8 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         "page-menu",
         strings.sheetWords(title),
         onClose = close,
-        maxFraction = 0.88f,
+        maxFraction = MENU_FRACTION,
         header = { AddressRow(browser, strings, ::act) },
-        footer = { Footer(browser, strings, Modifier.align(Alignment.BottomCenter), act(onSettings)) },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             Tile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
@@ -121,8 +119,9 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
             )
             Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
         }
-        Column(Modifier.padding(top = Space.md, bottom = FOOTER_ROOM), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+        Column(Modifier.padding(top = Space.md)) {
             RowGroup {
+                ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, chevron = true) { browser.panel = Panel.SITE_SETTINGS }
                 ActionRow(strings.t("pageMenu.developerTools"), "page-more-tools", icon = BayIcon.TOOLS, chevron = true) { tools = true }
             }
             RowGroup {
@@ -150,8 +149,9 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
             }
             RowGroup {
                 ActionRow(strings.t("pageMenu.bookmarks"), "page-bookmarks", icon = BayIcon.BOOKMARK, chevron = true) { browser.panel = Panel.BOOKMARKS }
-                RowDivider()
                 ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true) { browser.panel = Panel.HISTORY }
+                ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true) { browser.panel = Panel.DOWNLOADS }
+                ActionRow(strings.t("pageMenu.settings"), "page-settings", icon = BayIcon.SETTINGS, chevron = true, onClick = act(onSettings))
             }
         }
     }
@@ -200,8 +200,7 @@ private fun RowScope.AddressRow(browser: BrowserModel, strings: Strings, act: ((
     val insecure = url.startsWith("http:")
     val colors = Theme.colors
     Row(
-        Modifier.weight(1f).height(ADDRESS_HEIGHT).background(colors.background, CircleShape)
-            .border(1.dp, colors.hairline, CircleShape).padding(horizontal = Space.xs),
+        Modifier.weight(1f).height(ADDRESS_HEIGHT).background(colors.fill, CircleShape).padding(horizontal = Space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AddressIcon("page-back", BayIcon.BACK, strings.t("pageMenu.back"), navigation.canGoBack, act(browser::goBack))
@@ -326,42 +325,6 @@ private fun ListRow(label: String, testID: String, icon: BayIcon, primary: () ->
             }
         }
     }
-}
-
-/** Downloads, this site's settings and Bay's Settings, floating over the rows' end. */
-@Composable
-private fun Footer(browser: BrowserModel, strings: Strings, modifier: Modifier, onSettings: () -> Unit) {
-    val colors = Theme.colors
-    Row(modifier.fillMaxWidth().padding(horizontal = Space.gutter).padding(bottom = Space.md), verticalAlignment = Alignment.CenterVertically) {
-        FooterButton("page-downloads", BayIcon.DOWNLOAD, strings.t("pageMenu.downloads")) { browser.panel = Panel.DOWNLOADS }
-        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-        Row(
-            Modifier.height(FOOTER_BUTTON).testTag("page-site-settings")
-                .clearAndSetSemantics { contentDescription = strings.t("pageMenu.siteSettings"); role = androidx.compose.ui.semantics.Role.Button }
-                .pressFeedback { browser.panel = Panel.SITE_SETTINGS }
-                .shadow(8.dp, CircleShape, clip = false).background(colors.background, CircleShape).border(1.dp, colors.hairline, CircleShape)
-                .padding(horizontal = Space.lg),
-            horizontalArrangement = Arrangement.spacedBy(Space.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (browser.activeUrl.isNotEmpty()) SiteIcon(browser.app, browser.activeUrl, 20.dp, bare = true)
-            BayText(strings.t("pageMenu.siteSettings"), variant = TextVariant.SUBHEAD, weight = FontWeight.SemiBold, maxLines = 1)
-        }
-        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-        FooterButton("page-settings", BayIcon.SETTINGS, strings.t("pageMenu.settings"), onSettings)
-    }
-}
-
-@Composable
-private fun FooterButton(id: String, icon: BayIcon, label: String, onClick: () -> Unit) {
-    val colors = Theme.colors
-    Box(
-        Modifier.size(FOOTER_BUTTON).testTag(id)
-            .clearAndSetSemantics { contentDescription = label; role = androidx.compose.ui.semantics.Role.Button }
-            .pressFeedback(onClick = onClick)
-            .shadow(8.dp, CircleShape, clip = false).background(colors.background, CircleShape).border(1.dp, colors.hairline, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) { BayIconView(icon, size = IconSize.control) }
 }
 
 /** Page zoom, a tenth at a time, kept for this site. */

@@ -7,16 +7,14 @@ private enum MenuLayout {
   static let addressHeight: CGFloat = 48
   static let tileHeight: CGFloat = 76
   static let rowHeight: CGFloat = 52
-  static let footerButton: CGFloat = 52
-  /// The room the floating footer takes over the rows' end, so the last row can scroll out from under it.
-  static let footerRoom: CGFloat = 72
   static let zoomMin = 80
   static let zoomMax = 200
 }
 
 /// What to do with the page showing (bar-more), as one floating sheet: the address with back, forward, copy and reload
-/// on top; Share, Pin, Save and Find; Developer tools a step away; Reader, Hide elements, Translate and the page's zoom;
-/// Bookmarks and History; and a footer floating over the rows with Downloads, this site's settings and Bay's.
+/// on top; Share, Pin, Save and Find; this site's settings and Developer tools a step away; Reader, Hide elements,
+/// Translate and the page's zoom;
+/// Bookmarks, History, Downloads and Settings.
 struct PageMenu: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -65,6 +63,8 @@ struct PageMenu: View {
 
       VStack(spacing: Space.md) {
         RowGroup {
+          ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true) { browser.panel = .siteSettings }
+          RowDivider()
           ActionRow(strings.t("pageMenu.developerTools"), testID: "page-more-tools", icon: .tools, chevron: true) { tools = true }
         }
         RowGroup {
@@ -101,12 +101,14 @@ struct PageMenu: View {
           ActionRow(strings.t("pageMenu.bookmarks"), testID: "page-bookmarks", icon: .bookmark, chevron: true) { browser.panel = .bookmarks }
           RowDivider()
           ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true) { browser.panel = .history }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.downloads"), testID: "page-downloads", icon: .download, chevron: true) { browser.panel = .downloads }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.settings"), testID: "page-settings", icon: .settings, chevron: true, action: act(onSettings))
         }
       }
       .padding(.top, Space.md)
-      .padding(.bottom, MenuLayout.footerRoom)
     }
-    .overlay(alignment: .bottom) { footer }
   }
 
   /// Bay's languages to translate into, the one it's in first.
@@ -114,31 +116,6 @@ struct PageMenu: View {
     let all = locales()
     let current = strings.locale
     return all.filter { $0.id == current } + all.filter { $0.id != current }
-  }
-
-  /// Downloads, this site's settings and Bay's Settings, floating over the rows' end.
-  private var footer: some View {
-    HStack {
-      FooterButton(icon: .download, label: strings.t("pageMenu.downloads"), id: "page-downloads") { browser.panel = .downloads }
-      Spacer(minLength: Space.sm)
-      Button {
-        browser.panel = .siteSettings
-      } label: {
-        HStack(spacing: Space.xs) {
-          if !browser.activeUrl.isEmpty { SiteIcon(url: browser.activeUrl, size: 20, bare: true) }
-          BayText(strings.t("pageMenu.siteSettings"), variant: .subhead, weight: .semibold).lineLimit(1)
-        }
-        .padding(.horizontal, Space.lg)
-        .frame(height: MenuLayout.footerButton)
-        .bayCapsule()
-      }
-      .buttonStyle(.pressFeedback)
-      .accessibilityIdentifier("page-site-settings")
-      Spacer(minLength: Space.sm)
-      FooterButton(icon: .settings, label: strings.t("pageMenu.settings"), id: "page-settings", action: act(onSettings))
-    }
-    .padding(.horizontal, Space.gutter)
-    .padding(.bottom, Space.md)
   }
 
   private var toolsPage: some View {
@@ -279,25 +256,6 @@ private struct ListRow<Items: View>: View {
       .accessibilityLabel(Text(verbatim: label))
       .accessibilityIdentifier("\(testID)-choices")
     }
-  }
-}
-
-/// A round button floating at the menu's foot.
-private struct FooterButton: View {
-  let icon: BayIcon
-  let label: String
-  let id: String
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      BayIconView(icon, size: IconSize.control)
-        .frame(width: MenuLayout.footerButton, height: MenuLayout.footerButton)
-        .bayCapsule()
-    }
-    .buttonStyle(.pressFeedback)
-    .accessibilityLabel(Text(verbatim: label))
-    .accessibilityIdentifier(id)
   }
 }
 
