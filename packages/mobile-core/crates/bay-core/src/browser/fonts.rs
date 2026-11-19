@@ -41,7 +41,8 @@ fn file(file: &str, italic: bool, weight: &str) -> SiteFontFile {
 }
 
 /// The family and files a page needs to show in `font`. The family names the phone's font after the bundled one, so a
-/// script the bundled files leave out (Hindi, Japanese) still shows in the phone's font.
+/// script the bundled files leave out (Hindi, Japanese) still shows in the phone's font, as the plan's
+/// `"Bay Literata", system-ui` has it.
 #[uniffi::export]
 pub fn site_font_face(font: SiteFont) -> SiteFontFace {
     const SYSTEM: &str = "system-ui, -apple-system, Roboto, sans-serif";
@@ -96,12 +97,10 @@ pub fn site_font_face(font: SiteFont) -> SiteFontFace {
             ],
         ),
     };
-    let serif = matches!(font, SiteFont::Literata | SiteFont::Charis | SiteFont::Lora);
+    // The phone's font next, not a serif of its own: the scripts the bundled files leave out (Hindi, Japanese) show
+    // as the phone shows them everywhere else.
     SiteFontFace {
-        family: format!(
-            "\"Bay {name}\", {}",
-            if serif { "Georgia, serif" } else { SYSTEM }
-        ),
+        family: format!("\"Bay {name}\", {SYSTEM}"),
         files,
     }
 }
@@ -145,8 +144,7 @@ mod tests {
         assert_eq!(site_font_face(SiteFont::Original).family, "");
         assert!(site_font_face(SiteFont::System).files.is_empty());
         let literata = site_font_face(SiteFont::Literata);
-        assert!(literata.family.starts_with("\"Bay Literata\", "));
-        assert!(literata.family.ends_with("serif"));
+        assert!(literata.family.starts_with("\"Bay Literata\", system-ui"));
         assert_eq!(site_font_label(SiteFont::Charis), "font.charis");
     }
 }
