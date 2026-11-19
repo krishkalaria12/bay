@@ -1542,8 +1542,13 @@ impl BrowserStore {
               Search opens when Bay starts if asked, and a long time away starts on a fresh start page (the core's <code>startFresh</code>). Links from other
               apps, <code>bay://</code> commands, quick actions (iOS) and app shortcuts (Android), the share extension and Android's share target, the search
               widget (Android, moved into the app under Expo's receiver name so placed widgets survive the update), and voice search from the search card's
-              microphone or the widget. <code>fresh-start</code> passes on Android. Left: locales, Dynamic Type and font scale, the accessibility audits, and
-              iOS 15 and Android 10 devices.
+              microphone or the widget. <code>fresh-start</code> passes on Android. Report a problem shares the crashes Bay kept (the core's
+              <code>CrashLog</code> on disk, filled by MetricKit and uncaught exceptions on iOS and the uncaught-exception handler on Android). Every locale was
+              screenshot-checked on the main screens of both apps (fixes: Hindi text measurement on Android, the page menu's security line, Japanese wording,
+              French apostrophes); the largest Dynamic Type and font scale 2.0, dark mode and reduced motion were checked and fixed where they broke.
+              Accessibility audits run as tests: XCUITest's <code>performAccessibilityAudit</code> (<code>BayUITests</code>) and the Accessibility Test
+              Framework's checks (<code>AccessibilityAuditTest</code>), both passing after the fixes they found (touch targets, labels, text over wallpapers).
+              Android 10 runs the app and <code>smoke</code> passes there; its pages stay black (see Known gaps).
             </p>
             <ul>
               <li>
@@ -1798,7 +1803,25 @@ impl BrowserStore {
             N4's done-when flows (smoke, search-and-open, tabs-roundtrip, tab-swipe-close, start-page, page-zoom, wallpaper) start with
             <code>fresh-start</code> and use N5's panels; now that N5 has landed they can run, but they haven't been re-run on Android yet.
           </li>
-          <li>Settings' Report row does nothing yet; the problem report sheet comes with N6.</li>
+          <li>
+            Android 10: pages render black. Chromium's GPU process crashes there because <code>bay-engine.aar</code> leaves out
+            <code>org.chromium.components.viz.service.frame_sinks.ExternalBeginFrameSourceAndroid</code>, which older Android takes a path through; it needs an
+            engine build that keeps the class (an <code>android-engine-N</code> run).
+          </li>
+          <li>
+            iOS 15 and 16 weren't run: Xcode 27.2 offers no simulator runtime older than iOS 27. The app compiles for the 15.0 deployment target, and the iOS 15
+            paths (materials in place of glass, older toggles and sheets) were only read, not run.
+          </li>
+          <li>
+            The muted grey (<code>#71717A</code>) is 4.3:1 on light cards and less on glass and wallpapers, under 4.5:1, as is white on the accent blue (3.7:1).
+            The audits let these through until the tokens change in <code>packages/mobile-core/design/tokens.json</code> (iOS's audit suggests
+            <code>#52525B</code>).
+          </li>
+          <li>
+            Percentages are written "100%" in every language, where German and French write "100 %". The quick actions' titles and the permission prompts on iOS
+            are English only (no InfoPlist.strings). Google's Accessibility Scanner app wasn't run on Android (it needs a Google sign-in); the same checks run
+            in the audit test.
+          </li>
           <li>
             iOS: the widgets weren't placed on the simulator (automation can't add one); the <code>bay://</code> links they send were checked instead. Links to
             <code>http</code>/<code>https</code> pages go to Safari on a debug build, which can't be the default browser; they take the same path as the share
