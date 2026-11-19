@@ -10,6 +10,9 @@ final class AppModel: ObservableObject {
   let store: BrowserStore
   let sync: PhoneSync
   let http = URLSessionHttp()
+  /// The crashes kept for Settings › Report a problem.
+  let crashLog: CrashLog
+  private let crashWatch: CrashWatch
   @Published private(set) var spaces: [BrowserSpace] = []
   @Published private(set) var activeSpaceId = ""
   @Published private(set) var activeTabId = ""
@@ -52,6 +55,8 @@ final class AppModel: ObservableObject {
 
   init(barTitle: String) {
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+    crashLog = CrashLog(documentsDir: documents)
+    crashWatch = CrashWatch(log: crashLog)
     store = BrowserStore.open(documentsDir: documents, newTabId: UUID().uuidString, now: Self.now())
     sync = PhoneSync(
       store: store, http: http, secrets: KeychainSecrets(), documentsDir: documents,

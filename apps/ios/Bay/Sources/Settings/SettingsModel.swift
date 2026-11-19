@@ -58,7 +58,7 @@ final class SettingsModel: ObservableObject {
     return SettingsContext(
       locale: strings.locale,
       platform: .ios,
-      version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+      version: version,
       prefs: prefs,
       engines: builtInEngines().map { EngineChoice(id: $0.id, name: $0.name) },
       blockerDetail: blockerDetail,
@@ -71,6 +71,11 @@ final class SettingsModel: ObservableObject {
       clearStage: clearStage,
       sync: app.syncView,
       now: AppModel.now())
+  }
+
+  /// The version Bay shows in About and puts on problem reports.
+  private var version: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
   }
 
   /// What Privacy says about the blocker under its switch.
@@ -87,7 +92,8 @@ final class SettingsModel: ObservableObject {
     let space = app.activeSpaceId
     let history = app.store.history(spaceId: space, query: "", offset: 0, limit: 10_000).count
     let bookmarks = app.store.bookmarkListing(spaceId: space, folderId: "bookmarks", query: "").links
-    return IndexCounts(bookmarks: bookmarks, history: UInt32(history), downloads: UInt32(app.downloads.count), crashes: 0)
+    return IndexCounts(bookmarks: bookmarks, history: UInt32(history), downloads: UInt32(app.downloads.count),
+      crashes: UInt32(app.crashLog.reports().count))
   }
 
   /// Opens an index entry: a page (or the page a search found a row on), or one of the browser's own sheets.
@@ -103,8 +109,7 @@ final class SettingsModel: ObservableObject {
       case .history: browser.panel = .history
       case .downloads: browser.panel = .downloads
       case .import: browser.panel = .import
-      // Problem reports come with their sheet.
-      case .report: break
+      case .report: reportProblem()
       }
     }
   }
@@ -158,6 +163,12 @@ final class SettingsModel: ObservableObject {
     let urls = app.store.tabs().filter { !$0.url.isEmpty && !$0.private }.map { cleanUrl(url: $0.url) }
     guard !urls.isEmpty else { return }
     present(UIActivityViewController(activityItems: [urls.joined(separator: "\n")], applicationActivities: nil))
+  }
+
+  /// Shares the crashes kept, or says there were none.
+  private func reportProblem() {
+    let text = app.crashLog.text(version: version) ?? strings.t("crash.none")
+    present(UIActivityViewController(activityItems: [text], applicationActivities: nil))
   }
 }
 
