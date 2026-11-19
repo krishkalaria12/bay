@@ -97,6 +97,7 @@ source_set("lib") {
     "//skia",
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/public/common",
+    "//third_party/blink/public/mojom:android_mojo_bindings",
     "//ui/android",
     "//ui/base",
     "//ui/gfx",

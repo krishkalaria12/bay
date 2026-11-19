@@ -21,7 +21,9 @@
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/posix_file_descriptor_info.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/auth.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
@@ -30,6 +32,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/installedapp/installed_app_provider.mojom.h"
 #include "url/url_constants.h"
 
 namespace bay {
@@ -176,6 +179,34 @@ void BayContentBrowserClient::RegisterAssociatedInterfaceBindersForRenderFrameHo
     blink::AssociatedInterfaceRegistry& associated_registry) {
   associated_registry.AddInterface<autofill::mojom::AutofillDriver>(
       base::BindRepeating(&autofill::ContentAutofillDriverFactory::BindAutofillDriver, &render_frame_host));
+}
+
+namespace {
+
+// navigator.getInstalledRelatedApps(): Bay doesn't tell sites which apps are installed, so the answer is none. On
+// Android content leaves this interface to the embedder, and a frame asking for one nobody binds is killed as a bad
+// message, which GitHub's pages do as they load, reloading over and over.
+class NoInstalledApps : public blink::mojom::InstalledAppProvider {
+ public:
+  void FilterInstalledApps(std::vector<blink::mojom::RelatedApplicationPtr> related_apps,
+                           const GURL& manifest_url,
+                           bool add_saved_related_applications,
+                           FilterInstalledAppsCallback callback) override {
+    std::move(callback).Run({});
+  }
+};
+
+void BindNoInstalledApps(content::RenderFrameHost* render_frame_host,
+                         mojo::PendingReceiver<blink::mojom::InstalledAppProvider> receiver) {
+  mojo::MakeSelfOwnedReceiver(std::make_unique<NoInstalledApps>(), std::move(receiver));
+}
+
+}  // namespace
+
+void BayContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    content::RenderFrameHost* render_frame_host,
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
+  map->Add<blink::mojom::InstalledAppProvider>(&BindNoInstalledApps);
 }
 
 void BayContentBrowserClient::ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,
