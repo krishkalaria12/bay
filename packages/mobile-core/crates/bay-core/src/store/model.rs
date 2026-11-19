@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use super::bookmarks::{
-    BOOKMARKS_ROOT, add_bookmarks, empty_bookmarks, folder_children, is_bookmarked,
-    remove_bookmark, remove_bookmarks_of,
+    BOOKMARKS_ROOT, add_bookmarks, empty_bookmarks, folder_children, is_bookmarked, move_bookmark,
+    remove_bookmark, remove_bookmarks_of, rename_bookmark, save_bookmark,
 };
 use super::parse::{
     parse_preferences, parse_reader_settings, parse_selectors, parse_site_setting_input,
@@ -456,6 +456,27 @@ pub enum Action {
         space_id: String,
         bookmark: BookmarkNode,
     },
+    /// A page saved into a folder of a space (`bookmark`'s parent): moved there and renamed if the space has it already.
+    SaveBookmark {
+        space_id: String,
+        bookmark: BookmarkNode,
+    },
+    /// A bookmark or folder moved into `parent_id`, at `index` among its children (at the end without one).
+    MoveBookmark {
+        space_id: String,
+        id: String,
+        parent_id: String,
+        #[serde(default)]
+        index: Option<i64>,
+    },
+    /// A bookmark's new title (and address), or a folder's new name.
+    RenameBookmark {
+        space_id: String,
+        id: String,
+        title: String,
+        #[serde(default)]
+        url: Option<String>,
+    },
     ActivateTab {
         id: String,
         now: i64,
@@ -816,6 +837,47 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
                 data,
                 space_id,
                 remove_bookmark(&space_bookmarks(data, space_id), id),
+            );
+        }
+
+        Action::SaveBookmark { space_id, bookmark } => {
+            let BookmarkNode::Url { url, .. } = bookmark else {
+                return None;
+            };
+            if !js::is_web_address(url) || !has_space(data, space_id) {
+                return None;
+            }
+            return with_space_bookmarks(
+                data,
+                space_id,
+                save_bookmark(&space_bookmarks(data, space_id), bookmark),
+            );
+        }
+
+        Action::MoveBookmark {
+            space_id,
+            id,
+            parent_id,
+            index,
+        } => {
+            let index = index.and_then(|index| usize::try_from(index).ok());
+            return with_space_bookmarks(
+                data,
+                space_id,
+                move_bookmark(&space_bookmarks(data, space_id), id, parent_id, index),
+            );
+        }
+
+        Action::RenameBookmark {
+            space_id,
+            id,
+            title,
+            url,
+        } => {
+            return with_space_bookmarks(
+                data,
+                space_id,
+                rename_bookmark(&space_bookmarks(data, space_id), id, title, url.as_deref()),
             );
         }
 

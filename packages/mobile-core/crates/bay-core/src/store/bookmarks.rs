@@ -474,3 +474,278 @@ pub fn parse_bookmarks(value: Option<&Value>) -> Bookmarks {
     }
     bookmarks
 }
+
+/// A folder to choose when saving a bookmark: its id, its title ("" for the top of the tree), and how deep it sits.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkFolderChoice {
+    pub id: String,
+    pub title: String,
+    pub depth: u32,
+}
+
+/// Every folder of a tree, the top first, then each folder before the folders inside it, in their order.
+pub fn bookmark_folders(bookmarks: &Bookmarks) -> Vec<BookmarkFolderChoice> {
+    fn walk(
+        bookmarks: &Bookmarks,
+        id: &str,
+        depth: u32,
+        out: &mut Vec<BookmarkFolderChoice>,
+        seen: &mut HashSet<String>,
+    ) {
+        if !seen.insert(id.to_owned()) {
+            return;
+        }
+        let Some(BookmarkNode::Folder {
+            title, children, ..
+        }) = bookmarks.get(id)
+        else {
+            return;
+        };
+        out.push(BookmarkFolderChoice {
+            id: id.to_owned(),
+            title: if id == BOOKMARKS_ROOT {
+                String::new()
+            } else {
+                title.clone()
+            },
+            depth,
+        });
+        for child in children {
+            walk(bookmarks, child, depth + 1, out, seen);
+        }
+    }
+    let mut out = Vec::new();
+    walk(bookmarks, BOOKMARKS_ROOT, 0, &mut out, &mut HashSet::new());
+    out
+}
+
+/// The first bookmark of a page in a tree, in the order a walk from the top meets it.
+pub fn bookmark_of<'a>(bookmarks: &'a Bookmarks, url: &str) -> Option<&'a BookmarkNode> {
+    link_nodes(bookmarks, BOOKMARKS_ROOT)
+        .into_iter()
+        .find(|node| matches!(node, BookmarkNode::Url { url: saved, .. } if saved == url))
+}
+
+/// Whether `id` is `ancestor` or sits somewhere inside it.
+fn is_inside(bookmarks: &Bookmarks, id: &str, ancestor: &str) -> bool {
+    let mut at = Some(id.to_owned());
+    let mut steps = 0;
+    while let Some(current) = at {
+        if current == ancestor {
+            return true;
+        }
+        steps += 1;
+        if steps > bookmarks.len() {
+            return false;
+        }
+        at = bookmarks
+            .get(&current)
+            .and_then(|node| node.parent_id())
+            .map(str::to_owned);
+    }
+    false
+}
+
+/// Moves a bookmark or a folder into `parent_id`, at `index` among its children (at the end without one). A folder
+/// can't go into itself or one of its own folders. Returns `None` when nothing changes.
+pub fn move_bookmark(
+    bookmarks: &Bookmarks,
+    id: &str,
+    parent_id: &str,
+    index: Option<usize>,
+) -> Option<Bookmarks> {
+    let node = bookmarks.get(id)?;
+    if id == BOOKMARKS_ROOT
+        || folder_children(bookmarks, parent_id).is_none()
+        || is_inside(bookmarks, parent_id, id)
+    {
+        return None;
+    }
+    let mut next = bookmarks.clone();
+    if let Some(old) = node.parent_id()
+        && let Some(children) = children_mut(&mut next, old)
+    {
+        children.retain(|child| child != id);
+    }
+    let children = children_mut(&mut next, parent_id)?;
+    let at = index.unwrap_or(children.len()).min(children.len());
+    children.insert(at, id.to_owned());
+    match next.get_mut(id)? {
+        BookmarkNode::Url {
+            parent_id: parent, ..
+        } => *parent = parent_id.to_owned(),
+        BookmarkNode::Folder {
+            parent_id: parent, ..
+        } => *parent = Some(parent_id.to_owned()),
+    }
+    (next != *bookmarks).then_some(next)
+}
+
+/// A bookmark's new title (and address, for a link), or a folder's new name. An empty title keeps the old one.
+pub fn rename_bookmark(
+    bookmarks: &Bookmarks,
+    id: &str,
+    title: &str,
+    url: Option<&str>,
+) -> Option<Bookmarks> {
+    let mut next = bookmarks.clone();
+    let title = crate::js::trim(title);
+    match next.get_mut(id)? {
+        BookmarkNode::Url {
+            title: old,
+            url: address,
+            ..
+        } => {
+            if !title.is_empty() {
+                *old = title.to_owned();
+            }
+            if let Some(url) = url.filter(|url| crate::js::is_web_address(url)) {
+                *address = url.to_owned();
+            }
+        }
+        BookmarkNode::Folder { title: old, .. } => {
+            if !title.is_empty() {
+                *old = title.to_owned();
+            }
+        }
+    }
+    (next != *bookmarks).then_some(next)
+}
+
+/// Saves a page into a folder: a page already saved in the tree moves there and takes the new title, so it's never
+/// saved twice; otherwise it's added at the folder's end. A folder that's gone means the top.
+pub fn save_bookmark(bookmarks: &Bookmarks, bookmark: &BookmarkNode) -> Option<Bookmarks> {
+    let BookmarkNode::Url {
+        url,
+        title,
+        parent_id,
+        ..
+    } = bookmark
+    else {
+        return None;
+    };
+    let parent = if folder_children(bookmarks, parent_id).is_some() {
+        parent_id.as_str()
+    } else {
+        BOOKMARKS_ROOT
+    };
+    if let Some(saved) = bookmark_of(bookmarks, url) {
+        let id = saved.id().to_owned();
+        let moved = if saved.parent_id() == Some(parent) {
+            None
+        } else {
+            move_bookmark(bookmarks, &id, parent, None)
+        };
+        let tree = moved.unwrap_or_else(|| bookmarks.clone());
+        let renamed = rename_bookmark(&tree, &id, title, None).unwrap_or(tree);
+        return (renamed != *bookmarks).then_some(renamed);
+    }
+    let mut node = bookmark.clone();
+    if let BookmarkNode::Url { parent_id, .. } = &mut node {
+        *parent_id = parent.to_owned();
+    }
+    add_bookmarks(bookmarks, std::slice::from_ref(&node))
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+
+    fn link(id: &str, parent: &str, url: &str) -> BookmarkNode {
+        BookmarkNode::Url {
+            id: id.into(),
+            parent_id: parent.into(),
+            title: id.into(),
+            url: url.into(),
+            added_at: 1,
+        }
+    }
+
+    fn folder(id: &str, parent: &str, title: &str) -> BookmarkNode {
+        BookmarkNode::Folder {
+            id: id.into(),
+            parent_id: Some(parent.into()),
+            title: title.into(),
+            children: Vec::new(),
+            added_at: 1,
+        }
+    }
+
+    fn tree() -> Bookmarks {
+        let tree = add_bookmarks(
+            &empty_bookmarks(),
+            &[folder("watch", BOOKMARKS_ROOT, "Watchlist")],
+        )
+        .unwrap();
+        let tree = add_bookmarks(&tree, &[folder("old", "watch", "Old")]).unwrap();
+        add_bookmarks(&tree, &[link("a", BOOKMARKS_ROOT, "https://a.example/")]).unwrap()
+    }
+
+    #[test]
+    fn folders_are_listed_top_first_and_nested_in_order() {
+        let folders = bookmark_folders(&tree());
+        let shape: Vec<(&str, u32)> = folders.iter().map(|f| (f.id.as_str(), f.depth)).collect();
+        assert_eq!(shape, [(BOOKMARKS_ROOT, 0), ("watch", 1), ("old", 2)]);
+        assert_eq!(folders[0].title, "");
+        assert_eq!(folders[1].title, "Watchlist");
+    }
+
+    #[test]
+    fn saving_a_saved_page_moves_it_instead_of_saving_it_twice() {
+        let moved = save_bookmark(
+            &tree(),
+            &BookmarkNode::Url {
+                id: "new".into(),
+                parent_id: "watch".into(),
+                title: "A, renamed".into(),
+                url: "https://a.example/".into(),
+                added_at: 2,
+            },
+        )
+        .unwrap();
+        assert!(!moved.contains_key("new"));
+        assert!(
+            matches!(moved.get("a"), Some(BookmarkNode::Url { parent_id, title, .. }) if parent_id == "watch" && title == "A, renamed")
+        );
+        assert_eq!(
+            folder_children(&moved, "watch").unwrap(),
+            &vec!["old".to_owned(), "a".to_owned()]
+        );
+        assert!(
+            !folder_children(&moved, BOOKMARKS_ROOT)
+                .unwrap()
+                .contains(&"a".to_owned())
+        );
+
+        let added = save_bookmark(&tree(), &link("b", "gone", "https://b.example/")).unwrap();
+        assert!(
+            matches!(added.get("b"), Some(BookmarkNode::Url { parent_id, .. }) if parent_id == BOOKMARKS_ROOT)
+        );
+        assert_eq!(
+            save_bookmark(
+                &tree(),
+                &BookmarkNode::Url {
+                    id: "x".into(),
+                    parent_id: BOOKMARKS_ROOT.into(),
+                    title: "a".into(),
+                    url: "https://a.example/".into(),
+                    added_at: 3,
+                }
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_folder_never_moves_into_itself_and_renames_keep_a_title() {
+        assert_eq!(move_bookmark(&tree(), "watch", "old", None), None);
+        assert_eq!(move_bookmark(&tree(), "watch", "watch", None), None);
+        let moved = move_bookmark(&tree(), "a", "watch", Some(0)).unwrap();
+        assert_eq!(folder_children(&moved, "watch").unwrap()[0], "a");
+        assert_eq!(rename_bookmark(&tree(), "watch", "  ", None), None);
+        let renamed = rename_bookmark(&tree(), "a", "Ay", Some("not an address")).unwrap();
+        assert!(
+            matches!(renamed.get("a"), Some(BookmarkNode::Url { title, url, .. }) if title == "Ay" && url == "https://a.example/")
+        );
+    }
+}

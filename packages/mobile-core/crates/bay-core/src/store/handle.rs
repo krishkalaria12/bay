@@ -12,7 +12,10 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::Action;
-use super::bookmarks::{BookmarkListing, bookmark_listing, empty_bookmarks, is_bookmarked};
+use super::bookmarks::{
+    BOOKMARKS_ROOT, BookmarkFolderChoice, BookmarkListing, bookmark_folders, bookmark_listing,
+    bookmark_of, empty_bookmarks, folder_children, is_bookmarked,
+};
 use super::model::{
     PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
     unused_space_icon,
@@ -404,6 +407,68 @@ impl BrowserStore {
             .is_some_and(|bookmarks| is_bookmarked(bookmarks, &url))
     }
 
+    /// A space's folders to save a bookmark into, the top first.
+    pub fn bookmark_folders(&self, space_id: String) -> Vec<BookmarkFolderChoice> {
+        let state = lock(&self.state);
+        match state.data.bookmarks.get(&space_id) {
+            Some(tree) => bookmark_folders(tree),
+            None => bookmark_folders(&empty_bookmarks()),
+        }
+    }
+
+    /// Where a page is saved: in the space showing if it's there, else the first other space that has it.
+    pub fn bookmark_location(&self, url: String) -> Option<BookmarkLocation> {
+        let state = lock(&self.state);
+        let data = &state.data;
+        let active = data.active_space_id.as_str();
+        std::iter::once(active)
+            .chain(
+                data.spaces
+                    .iter()
+                    .map(|space| space.id.as_str())
+                    .filter(|id| *id != active),
+            )
+            .find_map(|space_id| {
+                let node = bookmark_of(data.bookmarks.get(space_id)?, &url)?;
+                let BookmarkNode::Url {
+                    id,
+                    parent_id,
+                    title,
+                    ..
+                } = node
+                else {
+                    return None;
+                };
+                Some(BookmarkLocation {
+                    space_id: space_id.to_owned(),
+                    id: id.clone(),
+                    parent_id: parent_id.clone(),
+                    title: title.clone(),
+                })
+            })
+    }
+
+    /// The folder a new bookmark in a space starts in: where its newest bookmark went, else the top.
+    pub fn last_bookmark_folder(&self, space_id: String) -> String {
+        let state = lock(&self.state);
+        let Some(tree) = state.data.bookmarks.get(&space_id) else {
+            return BOOKMARKS_ROOT.into();
+        };
+        tree.values()
+            .filter_map(|node| match node {
+                BookmarkNode::Url {
+                    parent_id,
+                    added_at,
+                    ..
+                } => Some((added_at, parent_id)),
+                BookmarkNode::Folder { .. } => None,
+            })
+            .max_by_key(|(added_at, _)| **added_at)
+            .map(|(_, parent)| parent.clone())
+            .filter(|parent| folder_children(tree, parent).is_some())
+            .unwrap_or_else(|| BOOKMARKS_ROOT.into())
+    }
+
     /// Each site's saved icon, by host without "www.".
     pub fn favicons(&self) -> std::collections::HashMap<String, String> {
         lock(&self.state)
@@ -504,6 +569,86 @@ mod tests {
             (SpaceColor::Green, Some("✨"))
         );
         assert!(!store.preferences().welcomed);
+    }
+
+    #[test]
+    fn a_saved_page_says_where_it_is_and_new_ones_start_in_the_last_folder() {
+        let dir = temp_dir("save");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        let space = || PERSONAL_SPACE_ID.to_owned();
+        assert_eq!(store.last_bookmark_folder(space()), BOOKMARKS_ROOT);
+        store.dispatch(Action::AddBookmarks {
+            space_id: space(),
+            nodes: vec![BookmarkNode::Folder {
+                id: "watch".into(),
+                parent_id: Some(BOOKMARKS_ROOT.into()),
+                title: "Watchlist".into(),
+                children: Vec::new(),
+                added_at: 1,
+            }],
+        });
+        let link = |id: &str, url: &str, added_at: i64| BookmarkNode::Url {
+            id: id.into(),
+            parent_id: "watch".into(),
+            title: id.into(),
+            url: url.into(),
+            added_at,
+        };
+        store.dispatch(Action::SaveBookmark {
+            space_id: space(),
+            bookmark: link("a", "https://a.example/", 2),
+        });
+        assert_eq!(store.last_bookmark_folder(space()), "watch");
+        let place = store
+            .bookmark_location("https://a.example/".into())
+            .unwrap();
+        assert_eq!(
+            (
+                place.space_id.as_str(),
+                place.parent_id.as_str(),
+                place.id.as_str()
+            ),
+            (PERSONAL_SPACE_ID, "watch", "a")
+        );
+        assert!(
+            store
+                .bookmark_location("https://b.example/".into())
+                .is_none()
+        );
+
+        let folders: Vec<String> = store
+            .bookmark_folders(space())
+            .into_iter()
+            .map(|folder| folder.id)
+            .collect();
+        assert_eq!(folders, [BOOKMARKS_ROOT, "watch"]);
+
+        store.dispatch(Action::MoveBookmark {
+            space_id: space(),
+            id: "a".into(),
+            parent_id: BOOKMARKS_ROOT.into(),
+            index: Some(0),
+        });
+        assert_eq!(
+            store
+                .bookmark_location("https://a.example/".into())
+                .unwrap()
+                .parent_id,
+            BOOKMARKS_ROOT
+        );
+        store.dispatch(Action::RenameBookmark {
+            space_id: space(),
+            id: "a".into(),
+            title: "Ay".into(),
+            url: None,
+        });
+        assert_eq!(
+            store
+                .bookmark_location("https://a.example/".into())
+                .unwrap()
+                .title,
+            "Ay"
+        );
     }
 
     #[test]

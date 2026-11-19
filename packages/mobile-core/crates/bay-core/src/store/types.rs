@@ -153,6 +153,15 @@ impl BookmarkNode {
     }
 }
 
+/// Where a page is saved: its space, the bookmark, the folder it's in, and its title.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLocation {
+    pub space_id: String,
+    pub id: String,
+    pub parent_id: String,
+    pub title: String,
+}
+
 /// Every bookmark and folder of a tree, by id.
 pub type Bookmarks = HashMap<String, BookmarkNode>;
 
