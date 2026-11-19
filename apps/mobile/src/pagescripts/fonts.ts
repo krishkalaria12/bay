@@ -52,12 +52,19 @@ const parse = (value) => {
   const m = /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(value || "");
   return m && (m[4] === undefined || Number(m[4]) > 0.5) ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 };
+// Looked at without Bay's own rule each time: a run early in the load sees the page before its styles arrive, and a
+// later one takes the inversion off again once the page turns out to be dark.
+if (style) style.disabled = true;
+const body = document.body && parse(getComputedStyle(document.body).backgroundColor);
+const color = body || parse(getComputedStyle(document.documentElement).backgroundColor) || [255, 255, 255];
+if (style) style.disabled = false;
+const light = (0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]) / 255;
+// Dark already, from its own dark look or by design.
+if (light < 0.4) {
+  style?.remove();
+  return "dark";
+}
 if (!style) {
-  const body = document.body && parse(getComputedStyle(document.body).backgroundColor);
-  const color = body || parse(getComputedStyle(document.documentElement).backgroundColor) || [255, 255, 255];
-  const light = (0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]) / 255;
-  // Dark already, from its own dark look or by design.
-  if (light < 0.4) return "dark";
   style = document.createElement("style");
   style.id = "bay-force-dark";
   (document.head || document.documentElement).append(style);
