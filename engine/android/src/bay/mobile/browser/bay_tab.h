@@ -72,6 +72,11 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void set_desktop_mode(bool desktop) { desktop_mode_ = desktop; }
   bool desktop_mode() const { return desktop_mode_; }
 
+  // Force dark (a site setting, BayTab.setForceDark): Blink darkens a page that has no dark look of its own. The
+  // content client reads it whenever the page's preferences are worked out (OverrideWebPreferences).
+  void SetForceDark(bool dark);
+  bool force_dark() const { return force_dark_; }
+
   // Location, asked by BayPermissionManager. An answer lasts for the current page.
   bool HasLocationGrant(const url::Origin& origin) const;
   void RequestLocationPermission(const url::Origin& origin, base::OnceCallback<void(bool)> callback);
@@ -154,6 +159,7 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   std::unique_ptr<js_injection::JsCommunicationHost> js_communication_;
   bool page_committed_ = false;
   bool desktop_mode_ = false;
+  bool force_dark_ = false;
   // Requests blocked on the current page (C18), and whether a report to Java is already on its way.
   int blocked_count_ = 0;
   bool blocked_report_pending_ = false;

@@ -29,6 +29,7 @@
 #include "services/network/public/mojom/websocket.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "url/url_constants.h"
 
 namespace bay {
@@ -252,6 +253,14 @@ bool BayContentBrowserClient::HandleExternalProtocol(
   }
   // Handled: the page stays where it was.
   return true;
+}
+
+void BayContentBrowserClient::OverrideWebPreferences(content::WebContents* web_contents,
+                                                     content::SiteInstance& main_frame_site,
+                                                     blink::web_pref::WebPreferences* prefs) {
+  if (BayTab* tab = BayTab::FromWebContents(web_contents)) {
+    prefs->force_dark_mode_enabled = tab->force_dark();
+  }
 }
 
 }  // namespace bay

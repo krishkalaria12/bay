@@ -54,6 +54,10 @@ public final class BayTab {
         throw new UnsupportedOperationException();
     }
 
+    public void setForceDark(boolean dark) {
+        throw new UnsupportedOperationException();
+    }
+
     public @Nullable String saveState() {
         throw new UnsupportedOperationException();
     }

@@ -895,6 +895,19 @@ static void JNI_BayTab_SetDesktopMode(JNIEnv* env, int64_t tab_ptr, bool desktop
   reinterpret_cast<BayTab*>(tab_ptr)->set_desktop_mode(desktop);
 }
 
+void BayTab::SetForceDark(bool dark) {
+  if (force_dark_ == dark) {
+    return;
+  }
+  force_dark_ = dark;
+  // Works the preferences out again, which asks the content client (OverrideWebPreferences); the page restyles at once.
+  web_contents_->NotifyPreferencesChanged();
+}
+
+static void JNI_BayTab_SetForceDark(JNIEnv* env, int64_t tab_ptr, bool dark) {
+  reinterpret_cast<BayTab*>(tab_ptr)->SetForceDark(dark);
+}
+
 static void JNI_BayTab_InitializeAutofill(JNIEnv* env, int64_t tab_ptr) {
   reinterpret_cast<BayTab*>(tab_ptr)->InitializeAutofill();
 }

@@ -145,6 +145,14 @@ public final class BayTab extends WebContentsDelegateAndroid {
                         desktop, /* reloadOnChange= */ !getUrl().isEmpty(), /* skipOnInitialNavigation= */ false);
     }
 
+    /**
+     * Force dark: the engine darkens a page that has no dark look of its own, at once and for the pages after it, until
+     * it's turned off. A page with its own dark look is left as it is.
+     */
+    public void setForceDark(boolean dark) {
+        if (mNativeTab != 0) BayTabJni.get().setForceDark(mNativeTab, dark);
+    }
+
     /** The back/forward history with each page's scroll position and form text, or null with nothing to keep. */
     public @Nullable String saveState() {
         return mNativeTab == 0 ? null : BayTabJni.get().saveState(mNativeTab);
@@ -532,5 +540,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void initializeAutofill(long tabPtr);
 
         void setDesktopMode(long tabPtr, boolean desktop);
+
+        void setForceDark(long tabPtr, boolean dark);
     }
 }
