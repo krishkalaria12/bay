@@ -1,6 +1,5 @@
-//! Replays what the Expo app's browser helpers did in its tests and `scripts/browser-scenarios.test.ts`
-//! (`fixtures/browser.jsonl`, written by `scripts/record-fixtures.mjs browser`) and checks the Rust port gives the
-//! same answers.
+//! Replays what the Expo app's browser helpers did in its tests and scenarios (`fixtures/browser.jsonl`, recorded
+//! before the app was removed) and checks the Rust port gives the same answers.
 
 use bay_core::browser::{
     KNOWN_LIMIT, bay_command, describe_page_error, downloads_from, format_saved_logins, icon_width,

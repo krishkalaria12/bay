@@ -174,7 +174,7 @@ ${Object.keys(icons)
   .map((name) => `  case ${name == "import" || name == "private" ? `\`${name}\`` : name}`)
   .join("\n")}
 
-  /// The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were.
+  /// The icon a name from the core stands for ("palette", "chevron").
   public init?(name: String) {
     switch name {
 ${Object.keys(icons)
@@ -286,7 +286,7 @@ ${Object.entries(icons)
   .join(",\n")};
 
     companion object {
-        /** The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were. */
+        /** The icon a name from the core stands for ("palette", "chevron"). */
         fun named(name: String): BayIcon? = when (name) {
 ${Object.keys(icons)
   .map((name) => `            "${name}" -> ${upper(name)}`)

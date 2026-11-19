@@ -127,8 +127,8 @@ data class TabMedia(val report: MediaReport, val at: Long)
 data class PageFailure(val tabId: String, val url: String, val message: String)
 
 /**
- * The browser screen's state over the store: which pages are loaded, what each reports, and what is over them. The
- * Expo app's BrowserScreen, without its rendering. Every change to tabs goes through the core's store.
+ * The browser screen's state over the store: which pages are loaded, what each reports, and what is over them. Every
+ * change to tabs goes through the core's store.
  */
 class BrowserModel(private val context: Context, val app: AppModel, private val strings: Strings) {
     var overlay by mutableStateOf(Overlay.NONE)

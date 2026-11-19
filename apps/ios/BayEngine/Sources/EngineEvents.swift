@@ -1,7 +1,6 @@
 import Foundation
 
-/// What a page view reports, as one stream per view (`EngineView.onEvent`). The Expo module sent these as separate
-/// React events; here they are one typed enum the app switches over.
+/// What a page view reports, as one stream per view (`EngineView.onEvent`): one typed enum the app switches over.
 public enum EngineEvent {
   /// The address, title, progress, loading and history the view now has.
   case navigation(NavigationState)

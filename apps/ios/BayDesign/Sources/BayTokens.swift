@@ -245,7 +245,7 @@ public enum BayIcon: CaseIterable, Sendable {
   case dark
   case swipe
 
-  /// The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were.
+  /// The icon a name from the core stands for ("palette", "chevron").
   public init?(name: String) {
     switch name {
     case "archive": self = .archive

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The page scripts Bay runs in pages: one copy of each, shared with the Expo app (packages/mobile-pagescripts, D13),
+/// The page scripts Bay runs in pages: one copy of each, shared with Android (packages/mobile-pagescripts, D13),
 /// bundled as `pagescripts.json`. A script that takes arguments reads them from `args`.
 public enum PageScript: String, CaseIterable, Sendable {
   case closeReader = "close-reader"

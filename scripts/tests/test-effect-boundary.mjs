@@ -1,7 +1,6 @@
-// Effect belongs to the desktop app, the mobile app and the bay CLI: only apps/browser, apps/mobile and apps/cli depend
-// on it, the shared packages and the other apps stay free of it, the apps' pure state code never reaches it, and no
-// Node, Bun or DOM platform adapter goes into Hermes. The CLI is a standalone Bun tool with its own lockfile: its Bun
-// platform layer is its own. Mobile's engine module (@bay/engine) is the native contract and stays free of it too.
+// Effect belongs to the desktop app and the bay CLI: only apps/browser and apps/cli depend on it, the shared packages
+// and the other apps stay free of it, the desktop's pure state code never reaches it, and no Node, Bun or DOM platform
+// adapter goes into Hermes. The CLI is a standalone Bun tool with its own lockfile: its Bun platform layer is its own.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -36,11 +35,10 @@ function sources(dir) {
 const effectImports = (file) => [...readFileSync(file, "utf8").matchAll(IMPORT)].map((m) => m[1]);
 
 const DESKTOP = path.join("apps", "browser");
-const MOBILE = path.join("apps", "mobile");
 const CLI = path.join("apps", "cli");
 
 /** The apps that run on Effect. */
-const EFFECT_APPS = new Set([DESKTOP, MOBILE, CLI]);
+const EFFECT_APPS = new Set([DESKTOP, CLI]);
 
 const workspaces = () =>
   ["apps", "packages"].flatMap((group) =>
@@ -49,7 +47,7 @@ const workspaces = () =>
       .filter((dir) => statSync(dir).isDirectory()),
   );
 
-test("only the desktop app, the mobile app and the CLI depend on effect", () => {
+test("only the desktop app and the CLI depend on effect", () => {
   const pins = {};
 
   for (const dir of workspaces()) {
@@ -68,7 +66,6 @@ test("only the desktop app, the mobile app and the CLI depend on effect", () => 
     if (named.includes("effect")) pins[rel] = deps.effect;
 
     if (rel === DESKTOP) assert.deepEqual(named, ["effect"], "the desktop app pins effect alone");
-    else if (rel === MOBILE) assert.deepEqual(named, ["effect"], "the mobile app pins effect alone");
     else if (rel === CLI) {
       assert.deepEqual(named.sort(), ["@effect/platform-bun", "effect"], "the CLI pins effect and its Bun platform");
       assert.equal(deps.effect, deps["@effect/platform-bun"], "the CLI's effect and its Bun platform are one release");
@@ -87,30 +84,6 @@ test("no shared package or other app imports effect", () => {
 
     for (const file of sources(dir)) assert.deepEqual(effectImports(file), [], path.relative(ROOT, file));
   }
-});
-
-test("the mobile app imports core effect only, and its engine and tab model none of it", () => {
-  const app = path.join(ROOT, MOBILE);
-
-  for (const file of sources(path.join(app, "src"))) {
-    const found = effectImports(file);
-
-    // Node, Bun and browser-DOM platform adapters have no place in Hermes.
-    assert.deepEqual(
-      found.filter((name) => name.startsWith("@effect/")),
-      [],
-      `${path.relative(ROOT, file)} imports a platform package`,
-    );
-  }
-
-  // The engine is the native contract the Chromium work changes underneath: it stays Promise-based.
-  for (const file of sources(path.join(app, "modules"))) assert.deepEqual(effectImports(file), [], path.relative(ROOT, file));
-
-  // The tab model is a pure reducer over one versioned document: services dispatch into it, it never reaches them.
-  const model = path.join(app, "src", "store", "model.ts");
-
-  assert.deepEqual(effectImports(model), [], `${path.relative(ROOT, model)} imports effect`);
-  assert.doesNotMatch(readFileSync(model, "utf8"), /effect\/runtime/, `${path.relative(ROOT, model)} reaches the runtime`);
 });
 
 test("the desktop app imports core effect only, and its store code none of it", () => {

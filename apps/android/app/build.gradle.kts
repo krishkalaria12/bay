@@ -3,14 +3,14 @@ plugins {
     alias(libs.plugins.bay.android.compose)
 }
 
-// Debug builds install as `…mobile.native` beside the Expo app; release keeps the ID the Expo app ships under, so the
-// native app installs over it and takes its data (docs/mobile-native-plan.html §9).
+// Debug builds install as `…mobile.native`, beside a release build; release keeps the store ID.
 android {
     namespace = "bay.app"
 
     defaultConfig {
         applicationId = "in.krishkalaria.bay.mobile"
-        versionCode = 1
+        // CI passes its run number (-PbayVersionCode), so each APK it publishes installs over the last as an update.
+        versionCode = providers.gradleProperty("bayVersionCode").orNull?.toInt() ?: 1
         versionName = "1.0.0"
         // Bay's engine is built for arm64 only; JNA's libraries for other ABIs would ship unused.
         ndk { abiFilters += "arm64-v8a" }
@@ -32,7 +32,7 @@ android {
         }
     }
 
-    // The engine's library and the dex go in compressed, for a smaller download (the Expo app measured 274 → 122 MB):
+    // The engine's library and the dex go in compressed, for a smaller download (274 → 122 MB when it was measured):
     // the system extracts the libraries at install, and the runtime compiles the dex either way.
     packaging {
         jniLibs.useLegacyPackaging = true

@@ -1,4 +1,4 @@
-# Bay's Chromium engine for Android: a content embedder (no //chrome) packaged as bay-engine.aar for the Expo app.
+# Bay's Chromium engine for Android: a content embedder (no //chrome) packaged as bay-engine.aar for apps/android.
 # See docs/android-chromium-plan.html. scripts/android/engine.py copies this directory to //bay/mobile.
 
 import("//build/config/android/config.gni")

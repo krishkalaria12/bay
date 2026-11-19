@@ -287,7 +287,7 @@ const fn android_credit(name: &'static str, licence: &'static str, url: &'static
 }
 
 /// The software Bay is built from, and the licence each ships under. Names and licences stay as their projects write them.
-const CREDITS: [Credit; 18] = [
+const CREDITS: [Credit; 16] = [
     credit("Bay", "Apache-2.0", SOURCE_URL),
     credit(
         "Cra",
@@ -324,12 +324,6 @@ const CREDITS: [Credit; 18] = [
         "Peter Lowe's list",
         "pgl.yoyo.org",
         "https://pgl.yoyo.org/adservers/",
-    ),
-    credit("React Native, Expo", "MIT", "https://github.com/expo/expo"),
-    credit(
-        "HeroUI Native",
-        "MIT",
-        "https://github.com/heroui-inc/heroui-native",
     ),
     android_credit(
         "Material Symbols",

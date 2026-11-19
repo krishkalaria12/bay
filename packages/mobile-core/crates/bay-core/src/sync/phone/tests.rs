@@ -1,5 +1,5 @@
 //! The phone's sync against a stand-in computer on one chain, as the Expo app's `tests/phoneSync.test.ts` runs it.
-//! `fixtures/phone-sync.json` is what the TypeScript phone ended with (scripts/phone-sync-vector.mjs); the Rust phone
+//! `fixtures/phone-sync.json` is what the TypeScript phone ended with (recorded before the Expo app was removed); the Rust phone
 //! must end the same: the same spaces, bookmarks, history and pins, and the same records on the computer.
 
 use std::sync::{Arc, Mutex};

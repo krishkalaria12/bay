@@ -4,7 +4,7 @@ import WebKit
 
 /// One page view: a `WKWebView` with Bay's navigation policy, content blocking, page requests, swipes, snapshots and
 /// saved tab state. Keep it in the view tree while a tab is open; navigate through its methods. Everything it reports
-/// arrives through `onEvent` (the Expo module's `EngineView`, without React).
+/// arrives through `onEvent`.
 public final class EngineView: UIView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   public private(set) var webView: WKWebView
   /// Everything the view reports, on the main thread.

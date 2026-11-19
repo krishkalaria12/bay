@@ -7,7 +7,7 @@ import bay.app.R
 
 /**
  * An icon Bay can wear on the home screen, the same set as the desktop's. Each is a launcher alias in the manifest,
- * named as the Expo app named them, so a chosen icon carries over; only the chosen one is enabled.
+ * named after the icon; only the chosen one is enabled.
  */
 enum class AppIcon(val alias: String, val label: String, val preview: Int) {
     PAPER("Default", "settings.appIcons.paper", R.drawable.app_icon_paper),
@@ -17,7 +17,7 @@ enum class AppIcon(val alias: String, val label: String, val preview: Int) {
     COBALT("Cobalt", "settings.appIcons.cobalt", R.drawable.app_icon_cobalt),
     BRIDGE("Bridge", "settings.appIcons.bridge", R.drawable.app_icon_bridge);
 
-    /** The id its picker tile goes by, as the Expo app's did. */
+    /** The id its picker tile goes by. */
     val testID: String get() = "settings-app-icon-${alias.lowercase()}"
 
     private fun component(context: Context) = ComponentName(context.packageName, "in.krishkalaria.bay.mobile.MainActivity$alias")

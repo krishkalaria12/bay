@@ -26,14 +26,21 @@ private val decoded = object : LruCache<String, ImageBitmap>(32 * 1024 * 1024) {
 
 /** The picture at `uri` (a file address), at least `width` pixels wide where it is that wide; null until it's read. */
 @Composable
-fun rememberFileImage(uri: String?, width: Int): ImageBitmap? {
+fun rememberFileImage(uri: String?, width: Int): ImageBitmap? = rememberFileImageResult(uri, width).image
+
+/** A file's picture so far: null while it decodes, and `failed` once it can't be read (or there's no file). */
+class FileImageResult(val image: ImageBitmap?, val failed: Boolean)
+
+@Composable
+fun rememberFileImageResult(uri: String?, width: Int): FileImageResult {
     val key = uri?.let { "$it@$width" }
-    var image by remember(key) { mutableStateOf(key?.let(decoded::get)) }
+    var result by remember(key) { mutableStateOf(FileImageResult(key?.let(decoded::get), key == null)) }
     LaunchedEffect(key) {
-        if (key == null || image != null) return@LaunchedEffect
-        image = withContext(Dispatchers.IO) { decode(uri, width) }?.also { decoded.put(key, it) }
+        if (key == null || result.image != null) return@LaunchedEffect
+        val image = withContext(Dispatchers.IO) { decode(uri, width) }?.also { decoded.put(key, it) }
+        result = FileImageResult(image, image == null)
     }
-    return image
+    return result
 }
 
 /** Decodes a picture at the first halving of its size that is still at least `width` wide. */
@@ -45,15 +52,6 @@ private fun decode(uri: String, width: Int): ImageBitmap? = runCatching {
     while (width > 0 && bounds.outWidth / (sample * 2) >= width) sample *= 2
     BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
 }.getOrNull()
-
-/**
- * A small picture (a site icon) at once, from memory after the first time: one this small decodes in well under a
- * frame, and drawing the monogram first would flash before it.
- */
-fun fileImageNow(uri: String?, width: Int): ImageBitmap? {
-    val key = uri?.let { "$it@$width" } ?: return null
-    return decoded.get(key) ?: decode(uri, width)?.also { decoded.put(key, it) }
-}
 
 /** Pictures from the web (a site's result posters), kept in memory for the session; never written to disk. */
 private val fetched = object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {

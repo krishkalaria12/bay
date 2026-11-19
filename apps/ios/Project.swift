@@ -1,8 +1,7 @@
 import ProjectDescription
 
 // Bay for iPhone. `tuist generate` writes Bay.xcworkspace from this file; the workspace isn't checked in.
-// Debug builds install as `…mobile.native` so they sit beside the Expo app on a device; Release keeps the store ID
-// the Expo app ships under, so the native app installs over it and takes its data (docs/mobile-native-plan.html §9).
+// Debug builds install as `…mobile.native` so they sit beside a Release build on a device; Release keeps the store ID.
 
 let bundleId = "in.krishkalaria.bay.mobile"
 let deploymentTargets: DeploymentTargets = .iOS("15.0")
@@ -29,7 +28,7 @@ let bundleIdSettings: [Configuration] = [
   .release(name: "Release", settings: ["BASE_BUNDLE_ID": "\(bundleId)"]),
 ]
 
-/// The extensions build as their Expo targets did: Swift 5 mode, versions from the app's.
+/// The extensions build in Swift 5 mode, with versions from the app's.
 let extensionSettings: SettingsDictionary = [
   "SWIFT_VERSION": "5.0",
   "SWIFT_STRICT_CONCURRENCY": "minimal",
@@ -56,7 +55,7 @@ let project = Project(
         "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
         "ITSAppUsesNonExemptEncryption": false,
         // Pages: plain http in web content only (the app's own requests keep ATS), media that keeps playing in the
-        // background, and what pages and the engine may ask for, as the Expo app declares them.
+        // background, and what pages and the engine may ask for.
         "NSAppTransportSecurity": ["NSAllowsArbitraryLoadsInWebContent": true],
         "UIBackgroundModes": ["audio"],
         "NSLocationWhenInUseUsageDescription": "Bay shares your location with sites you allow.",
@@ -98,7 +97,7 @@ let project = Project(
           "MARKETING_VERSION": "1.0.0",
           "CURRENT_PROJECT_VERSION": "1",
           "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
-          // The icons Settings > Appearance can put on the home screen (AppIcons.swift), named as the Expo app named them.
+          // The icons Settings > Appearance can put on the home screen (AppIcons.swift).
           "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES": "Navy Coral Noir Cobalt Bridge",
           "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
         ],
@@ -163,8 +162,8 @@ let project = Project(
       sources: ["BayDesign/Sources/**"],
       dependencies: [.sdk(name: "SwiftUI", type: .framework)]
     ),
-    // The page engine: WKWebView behind Bay's navigation policy, content blocking, downloads, media and voice, ported
-    // from the Expo module (apps/mobile/modules/bay-engine). Swift 5 mode until it is moved to strict concurrency.
+    // The page engine: WKWebView behind Bay's navigation policy, content blocking, downloads, media and voice. Swift 5
+    // mode until it is moved to strict concurrency.
     .target(
       name: "BayEngine",
       destinations: [.iPhone],
@@ -175,7 +174,7 @@ let project = Project(
       resources: [
         // Scriptlet and $redirect stand-ins for the blocker (uBlock Origin's and Brave's resources).
         "../../packages/adblock/resources/resources.json",
-        // Page scripts, one copy shared with the Expo app (D13).
+        // Page scripts, one copy shared with Android (D13).
         "../../packages/mobile-pagescripts/resources/pagescripts.json",
       ],
       dependencies: [

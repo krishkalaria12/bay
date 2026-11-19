@@ -1,6 +1,5 @@
-//! Replays what the Expo app's import code (src/import, src/browser/importTabs.ts) did in its tests and the scenarios in
-//! `scripts/import-scenarios.test.ts` (`fixtures/import.jsonl`, written by `scripts/record-fixtures.mjs import`) and
-//! checks the Rust port gives the same answers.
+//! Replays what the Expo app's import code (src/import, src/browser/importTabs.ts) did in its tests and scenarios
+//! (`fixtures/import.jsonl`, recorded before the app was removed) and checks the Rust port gives the same answers.
 
 use bay_core::imports::{
     ExportFile, ImportedBookmark, InstalledBrowser, android_browsers, android_method,

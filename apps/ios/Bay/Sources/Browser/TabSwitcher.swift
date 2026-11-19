@@ -442,8 +442,12 @@ private struct TabCard: View {
   }
 
   @ViewBuilder private var picture: some View {
-    if let snapshot = tab.snapshot.flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: snapshot.path) {
-      Image(uiImage: image).resizable().scaledToFill().frame(width: width, height: height, alignment: .top).clipped()
+    if let snapshot = tab.snapshot {
+      FileImage(uri: snapshot, points: max(width, height)) { image in
+        image.resizable().scaledToFill().frame(width: width, height: height, alignment: .top).clipped()
+      } placeholder: { failed in
+        if failed, !tab.url.isEmpty { SiteIcon(url: tab.url, size: 32) } else { Color.clear }
+      }
     } else if !tab.url.isEmpty {
       SiteIcon(url: tab.url, size: 32)
     } else {
@@ -502,8 +506,12 @@ private struct SpacePreview: View {
   }
 
   @ViewBuilder private func picture(_ tab: BrowserTab) -> some View {
-    if let snapshot = tab.snapshot.flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: snapshot.path) {
-      Image(uiImage: image).resizable().scaledToFill().frame(width: cardWidth, height: cardHeight, alignment: .top).clipped()
+    if let snapshot = tab.snapshot {
+      FileImage(uri: snapshot, points: max(cardWidth, cardHeight)) { image in
+        image.resizable().scaledToFill().frame(width: cardWidth, height: cardHeight, alignment: .top).clipped()
+      } placeholder: { failed in
+        if failed, !tab.url.isEmpty { SiteIcon(url: tab.url, size: 32) } else { Color.clear }
+      }
     } else if !tab.url.isEmpty {
       SiteIcon(url: tab.url, size: 32)
     } else {

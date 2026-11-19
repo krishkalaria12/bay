@@ -1,4 +1,4 @@
-//! Replays `fixtures/settings.jsonl` (scripts/settings-vector.mjs): the TypeScript Settings' pages, index values and
+//! Replays `fixtures/settings.jsonl` (recorded before the Expo app was removed): the TypeScript Settings' pages, index values and
 //! search for a range of states in every language. Each row's action is compared with the call the TypeScript row's
 //! callback made.
 
@@ -96,10 +96,12 @@ fn plain(sections: &[SettingsSection]) -> Value {
         .collect()
 }
 
-/// Rows only the native apps have or show differently: the font for all websites, and the fonts pages can show in
-/// (which the Expo app never bundled; Inter was its Android UI font).
-const NATIVE_ROWS: [&str; 6] = [
+/// Rows only one side has: the font for all websites and the fonts pages can show in (which the Expo app never bundled;
+/// Inter was its Android UI font), and the Expo app's own frameworks, which the native apps don't ship.
+const NATIVE_ROWS: [&str; 8] = [
     "siteFont",
+    "credit.React Native, Expo",
+    "credit.HeroUI Native",
     "credit.Inter",
     "credit.Literata",
     "credit.Nunito",

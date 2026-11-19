@@ -4,3 +4,6 @@ build/
 local.properties
 *.iml
 .idea/
+.engine/
+.engine-download/
+.engine.tmp/

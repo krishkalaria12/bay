@@ -11,9 +11,10 @@
 #                       Cobalt and Bridge, Bay's first icon)
 #   new-tab-bay.svg     the mark in one colour, for tabs with no page yet
 #
-# Each renders through headless Chrome at 1024 and downsamples with Lanczos. Mobile and web
-# touch icons are drawn full-bleed (the squircle clip and edge come off; the OS masks them).
-# The Bridge's mobile PNGs are kept as they were drawn for the first launch and aren't rebuilt.
+# Each renders through headless Chrome at 1024 and downsamples with Lanczos. The phone apps'
+# icons (apps/ios, apps/android) and the web's touch icon are drawn full-bleed (the squircle clip
+# and edge come off; the OS masks them). The Bridge's phone PNGs are kept as they were drawn for
+# the first launch and aren't rebuilt.
 #
 # Needs Google Chrome to render and ImageMagick to scale.
 
@@ -24,7 +25,9 @@ assets="$root/apps/browser/assets"
 catalog="$root/apps/browser/macos/Bay-macOS/Assets.xcassets"
 set_dir="$catalog/AppIcon.appiconset"
 web="$root/apps/web"
-mobile="$root/apps/mobile/assets/images"
+ios="$root/apps/ios/Bay/Resources"
+xcassets="$ios/Assets.xcassets"
+res="$root/apps/android/app/src/main/res"
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -32,14 +35,13 @@ trap 'rm -rf "$tmp"' EXIT
 command -v magick >/dev/null || { echo "magick not found (brew install imagemagick)" >&2; exit 1; }
 [ -x "$chrome" ] || { echo "no Chrome at $chrome" >&2; exit 1; }
 
-# The alternates: file name, the name the apps show and use as the icon's id (PascalCase for
-# iOS and Android), and the Android adaptive background (the bottom of the variant's sky).
+# The alternates: file name, and the name the apps show and use as the icon's id.
 alternates=(
-  "navy Navy #141831"
-  "coral Coral #D9482A"
-  "noir Noir #050505"
-  "cobalt Cobalt #14286B"
-  "bridge Bridge #151C36"
+  "navy Navy"
+  "coral Coral"
+  "noir Noir"
+  "cobalt Cobalt"
+  "bridge Bridge"
 )
 
 render() {
@@ -55,17 +57,17 @@ full_bleed() {
   sed -e 's| clip-path="url(#squircle)"||' -e '/id="edge"/d' "$1" > "$2"
 }
 
+# size <source png> <size> <out>
+emit() {
+  magick "$1" -filter Lanczos -resize "$2x$2" -strip "$3"
+}
+
 adaptive() {
   # adaptive <svg> <out.svg>: full-bleed, the mark shrunk into Android's adaptive safe zone (the
   # middle 66 of 108dp) and centred on its own middle (the sun and lines sit at y 320-858).
   full_bleed "$1" "$tmp/bleed.svg"
   sed -e 's|<rect width="1024" height="1024" fill="url(#sky)"/>|&<g transform="translate(512 512) scale(.85) translate(-512 -589)">|' \
     -e 's|^  </g>$|  </g></g>|' "$tmp/bleed.svg" > "$2"
-}
-
-# size <source png> <size> <out>
-emit() {
-  magick "$1" -filter Lanczos -resize "$2x$2" -strip "$3"
 }
 
 # opaque <source png> <size> <out>: for icons that mustn't carry an alpha channel (iOS)
@@ -109,15 +111,30 @@ cp "$assets/app-icon.png" "$web/src/assets/app-icon.png"
 echo "videos: the icon in the release videos' intros"
 cp "$assets/app-icon.png" "$root/apps/videos/public/app-icon.png"
 
-echo "mobile: app icon, Android foreground, the mark for the welcome and the web favicon"
-opaque "$tmp/bleed.png" 1024 "$mobile/icon.png"
-opaque "$tmp/adaptive.png" 1024 "$mobile/adaptive-icon.png"
-emit "$tmp/full.png" 512 "$mobile/bay-mark.png"
-opaque "$tmp/small.png" 48 "$mobile/favicon.png"
+# phone <bleed png> <adaptive png> <Name> <file>: one icon in both phone apps. iOS gets the
+# full-bleed icon (the default in AppIcon, an alternate in <Name>.appiconset); Android gets the
+# adaptive foreground at each density, over the colour in res/values/colors.xml (minSdk 29 always
+# draws the adaptive icon). Both get the 192px preview Settings › Appearance shows.
+phone() {
+  local set="AppIcon" image="App-Icon-1024x1024@1x.png" foreground="ic_launcher_foreground"
+  if [ "$3" != Paper ]; then set="$3" image="$4-1024.png" foreground="ic_launcher_foreground_$4"; fi
+  opaque "$1" 1024 "$xcassets/$set.appiconset/$image"
+  opaque "$1" 192 "$xcassets/AppIconPreviews/$3.imageset/$3.png"
+  opaque "$1" 192 "$res/drawable-nodpi/app_icon_$4.png"
+  local density size
+  for density in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
+    size=${density#*:}
+    opaque "$2" "$size" "$res/mipmap-${density%:*}/$foreground.png"
+  done
+}
 
-mkdir -p "$mobile/app-icons"
+echo "phones: the app icon, its Android foreground and the welcome's mark"
+phone "$tmp/bleed.png" "$tmp/adaptive.png" Paper paper
+emit "$tmp/full.png" 512 "$ios/bay-mark.png"
+emit "$tmp/full.png" 512 "$res/drawable-nodpi/bay_mark.png"
+
 for entry in "${alternates[@]}"; do
-  read -r file name _ <<<"$entry"
+  read -r file name <<<"$entry"
   echo "alternate: $name"
   render "$assets/app-icons/$file.svg" "$tmp/$file.png"
   # The desktop picks it up by name from the asset catalog (AppIcon<Name>), in the app and in
@@ -138,8 +155,7 @@ JSON
   [ "$file" = bridge ] && continue
   full_bleed "$assets/app-icons/$file.svg" "$tmp/alt-bleed.svg" && render "$tmp/alt-bleed.svg" "$tmp/alt-bleed.png"
   adaptive "$assets/app-icons/$file.svg" "$tmp/alt-adaptive.svg" && render "$tmp/alt-adaptive.svg" "$tmp/alt-adaptive.png"
-  opaque "$tmp/alt-bleed.png" 1024 "$mobile/app-icons/$file.png"
-  opaque "$tmp/alt-adaptive.png" 1024 "$mobile/app-icons/$file-adaptive.png"
+  phone "$tmp/alt-bleed.png" "$tmp/alt-adaptive.png" "$name" "$file"
 done
 
 echo "done"

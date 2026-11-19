@@ -11,8 +11,7 @@ import kotlin.coroutines.suspendCoroutine
 
 /**
  * What every page view shares: content blocking, private browsing, spaces' website data, downloads, media controls,
- * voice search and saved images. The Expo module's functions (`BayEngineModule`), called from Kotlin. Call from the
- * main thread.
+ * voice search and saved images. Call from the main thread.
  */
 object Engine {
   private var hostRef: WeakReference<EngineHost>? = null

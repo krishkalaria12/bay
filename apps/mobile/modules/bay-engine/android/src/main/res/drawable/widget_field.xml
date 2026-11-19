@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- A capsule on the widget: the search field and the bar's buttons. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/widget_field" />
-    <corners android:radius="24dp" />
-</shape>

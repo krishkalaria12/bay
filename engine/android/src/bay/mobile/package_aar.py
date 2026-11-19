@@ -8,7 +8,7 @@ R classes (org.chromium.ui.R, …) that Chromium only generates when it builds a
 
   * adds the engine's data files (its resource pack, ICU data, V8 snapshot) under assets/;
   * writes bay-engine/r-packages.txt: each package whose R class the engine's code uses and the AAR doesn't contain.
-    The app's Gradle build generates those classes from the AAR's R.txt (apps/mobile/modules/bay-engine);
+    The app's Gradle build generates those classes from the AAR's R.txt (apps/android/engine);
   * writes bay-engine/app-classes.txt: the packages of classes the engine uses but the AAR leaves for the app's own
     dependencies to supply (AndroidX and the like), so a missing one is a build error rather than a crash;
   * keeps only classes, service registrations and the engine's own packages' files in classes.jar. Other files there

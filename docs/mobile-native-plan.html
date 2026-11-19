@@ -725,11 +725,10 @@
               <tr>
                 <th><span class="id">D11</span>Strings</th>
                 <td>
-                  One source catalog, <code>packages/mobile-core/strings/&lt;locale&gt;.json</code>, written from the TS tables by
-                  <code>scripts/import-expo-strings.mjs</code> (re-run until cutover) and compiled into the core. The core's <code>i18n</code> module gives each
-                  app a locale's whole catalog (English behind missing keys), matches device tags, and fills <code>{name}</code> placeholders. Each app keeps
-                  the table in an observable <code>Strings</code> object. Revised in N0: this replaced generated <code>xcstrings</code> and
-                  <code>strings.xml</code>.
+                  One source catalog, <code>packages/mobile-core/strings/&lt;locale&gt;.json</code>, written from the TS tables by a script once (removed with
+                  the Expo app at N8; the JSON is the catalog now) and compiled into the core. The core's <code>i18n</code> module gives each app a locale's
+                  whole catalog (English behind missing keys), matches device tags, and fills <code>{name}</code> placeholders. Each app keeps the table in an
+                  observable <code>Strings</code> object. Revised in N0: this replaced generated <code>xcstrings</code> and <code>strings.xml</code>.
                 </td>
                 <td>
                   Settings › Language switches the whole app at once, without a restart, as the Expo app does. Native resource files follow the system's per-app
@@ -750,9 +749,9 @@
                 <td>
                   They stay JavaScript in <code>packages/mobile-pagescripts</code>. A build step writes every script into one resource file
                   (<code>resources/pagescripts.json</code>) that both apps bundle; a script with arguments reads them from <code>args</code>, declared ahead of
-                  it as JSON. The scripts stay in the Expo app's <code>src/pagescripts</code> until the cut-over and the build reads them there, so there is one
-                  copy; a test fails when the resource is out of date. They aren't minified: no minifier is in the repo, and only Readability is large, which is
-                  compact already. Their jsdom tests keep running under Node.
+                  it as JSON. The scripts are TypeScript in <code>packages/mobile-pagescripts/src</code> (moved from the Expo app at N8), one copy; a test fails
+                  when the resource is out of date. They aren't minified: no minifier is in the repo, and only Readability is large, which is compact already.
+                  Their jsdom tests keep running under Node.
                 </td>
                 <td>They run inside the page, so they can't be native. Sharing them as files keeps one copy.</td>
               </tr>
@@ -941,7 +940,7 @@ packages/mobile-core/        Rust: Cargo workspace (from uniffi-starter)
 packages/mobile-pagescripts/ JS page scripts + jsdom tests (D13)
 apps/ios/                    Tuist: Project.swift, Bay/, BayEngine/, BayDesign/, BayShare/, BayWidget/
 apps/android/                Gradle: build-logic/, app/, engine/, core/{model,designsystem,core-bindings}/, feature/*
-apps/mobile/                 Expo app, fixes only until cutover (N8)</pre>
+apps/mobile-e2e/             Argent e2e flows and the pages they open, for both apps</pre>
 
         <h3 id="crates">4.1 Rust crates for the core</h3>
         <p>
@@ -1296,7 +1295,7 @@ impl BrowserStore {
                 Strings: the 35 TS tables become <code>strings/*.json</code>, served by the core's <code>i18n</code> module (D11). Tokens:
                 <code>tokens.json</code> → Swift/Kotlin, built with the design system in N4.
               </li>
-              <li>CI: <code>cargo test</code>, iOS simulator build, <code>:app:assembleDebug</code> against the api-stub engine.</li>
+              <li>CI: <code>cargo test</code>, iOS simulator build, <code>:app:assembleDebug</code> against the pinned engine.</li>
             </ul>
             <h4>Done when</h4>
             <p>
@@ -1327,7 +1326,8 @@ impl BrowserStore {
               <li>
                 Differential fixtures (done): <code>scripts/record-fixtures.mjs store</code> wraps the TS model with a Node load hook while the Expo app's whole
                 test suite and <code>scripts/store-scenarios.test.ts</code> run, and writes each distinct call to <code>fixtures/store.jsonl</code>.
-                <code>tests/store_fixtures.rs</code> replays all 446 against the Rust port: same next state, same no-op, same repairs.
+                <code>tests/store_fixtures.rs</code> replays all 446 against the Rust port: same next state, same no-op, same repairs. The recorders went with
+                the Expo app at N8, so the fixtures are frozen: a deliberate change to an answer changes its fixture by hand.
               </li>
             </ul>
             <h4>Done when</h4>
@@ -1541,14 +1541,14 @@ impl BrowserStore {
               ID or the fingerprint first), and "Make Bay default" (Android's role dialog, iOS's Default Apps). Settings shows whether Bay is the default.
               Search opens when Bay starts if asked, and a long time away starts on a fresh start page (the core's <code>startFresh</code>). Links from other
               apps, <code>bay://</code> commands, quick actions (iOS) and app shortcuts (Android), the share extension and Android's share target, the search
-              widget (Android, moved into the app under Expo's receiver name so placed widgets survive the update), and voice search from the search card's
-              microphone or the widget. <code>fresh-start</code> passes on Android. Report a problem shares the crashes Bay kept (the core's
-              <code>CrashLog</code> on disk, filled by MetricKit and uncaught exceptions on iOS and the uncaught-exception handler on Android). Every locale was
-              screenshot-checked on the main screens of both apps (fixes: Hindi text measurement on Android, the page menu's security line, Japanese wording,
-              French apostrophes); the largest Dynamic Type and font scale 2.0, dark mode and reduced motion were checked and fixed where they broke.
-              Accessibility audits run as tests: XCUITest's <code>performAccessibilityAudit</code> (<code>BayUITests</code>) and the Accessibility Test
-              Framework's checks (<code>AccessibilityAuditTest</code>), both passing after the fixes they found (touch targets, labels, text over wallpapers).
-              Android 10 runs the app and <code>smoke</code> passes there; its pages stay black (see Known gaps).
+              widget (Android, moved into the app), and voice search from the search card's microphone or the widget. <code>fresh-start</code> passes on
+              Android. Report a problem shares the crashes Bay kept (the core's <code>CrashLog</code> on disk, filled by MetricKit and uncaught exceptions on
+              iOS and the uncaught-exception handler on Android). Every locale was screenshot-checked on the main screens of both apps (fixes: Hindi text
+              measurement on Android, the page menu's security line, Japanese wording, French apostrophes); the largest Dynamic Type and font scale 2.0, dark
+              mode and reduced motion were checked and fixed where they broke. Accessibility audits run as tests: XCUITest's
+              <code>performAccessibilityAudit</code> (<code>BayUITests</code>) and the Accessibility Test Framework's checks
+              (<code>AccessibilityAuditTest</code>), both passing after the fixes they found (touch targets, labels, text over wallpapers). Android 10 runs the
+              app and <code>smoke</code> passes there; its pages stay black (see Known gaps).
             </p>
             <ul>
               <li>
@@ -1611,6 +1611,13 @@ impl BrowserStore {
             </ul>
             <h4>Done when</h4>
             <p>A public test build of each native app is out, and the Expo app is gone from <code>main</code>.</p>
+            <p>
+              Status: <code>apps/mobile</code> is removed. The flows and their pages are in <code>apps/mobile-e2e</code> (<code>run</code> serves the pages on
+              port 8099 and runs the flows), the page scripts are their own workspace package, the engine pin and its fetch script are in
+              <code>apps/android</code>, the android-engine workflow builds <code>apps/android</code>, and <code>docs/mobile-releasing.md</code> describes the
+              native builds. N7's migration proof is moot (the mobile app never shipped, so there is no Expo data to carry over). Not done yet: the first public
+              test builds.
+            </p>
           </div>
         </details>
       </section>
@@ -1805,9 +1812,8 @@ impl BrowserStore {
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            The e2e flows live in a scratch copy of <code>apps/mobile/.argent</code> (pages served at Metro's <code>/assets/.argent/pages/</code> paths on port
-            8081). N4's flows pass on Android; two steps there had to change for the native labels: an archived row's label is "Open &lt;title&gt;" with the
-            site as its state, and a bare title also matches the row's Remove button.
+            The e2e flows are in <code>apps/mobile-e2e</code>; all 18 pass on Android. Two steps changed for the native labels: an archived row's label is "Open
+            &lt;title&gt;" with the site as its state, and a bare title also matches the row's Remove button.
           </li>
           <li>
             iOS 15 and 16 weren't run: Xcode 27.2 offers no simulator runtime older than iOS 27. The app compiles for the 15.0 deployment target, and the iOS 15
@@ -1873,7 +1879,7 @@ impl BrowserStore {
             <a href="https://developer.apple.com/support/xcode/">Xcode support matrix</a>
           </li>
           <li>
-            In-repo: PR #27, <code>apps/mobile/AGENTS.md</code>, <code>docs/mobile-plan.html</code>, <code>docs/android-chromium-plan.html</code>,
+            In-repo: PR #27, <code>docs/mobile-plan.html</code>, <code>docs/android-chromium-plan.html</code>,
             <code>docs/mobile-effect-plan.html</code>
           </li>
         </ul>

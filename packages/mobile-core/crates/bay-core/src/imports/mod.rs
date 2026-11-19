@@ -1,7 +1,7 @@
 //! Importing from other browsers: what their export files hold (a Netscape bookmarks file, Safari's and Takeout's
 //! History.json), what an import adds, the browsers a phone may have, and the links in a shared tab list. The Expo
 //! app's `src/import/{exports,apply,browsers}.ts` and `src/browser/importTabs.ts`, checked against
-//! `fixtures/import.jsonl` (`scripts/record-fixtures.mjs import`). Unpacking archives stays native: the apps hand the
+//! `fixtures/import.jsonl` (recorded from the Expo app before it was removed). Unpacking archives stays native: the apps hand the
 //! core each file's name and text.
 
 mod apply;

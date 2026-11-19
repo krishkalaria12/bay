@@ -18,7 +18,7 @@ import org.chromium.ui.base.ResourceBundle;
 /**
  * Process setup the app's {@link Application} must run. Android starts the app's Application class in every process,
  * including the engine's sandboxed renderers and its GPU process, so the app calls {@link #attachBaseContext} first
- * and skips its own startup (React Native, Expo) wherever it returns false.
+ * and skips its own startup wherever it returns false.
  */
 public final class BayEngineApplication {
     /** Data lives under the app's {@code app_bay_engine} directory. */
