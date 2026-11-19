@@ -139,10 +139,8 @@ struct SearchCard: View {
 
   private var colors: ScopeColors? { ScopeColors(hex: scope?.color) }
 
-  /// The page search was opened over, shown as a card above the sheet; none for a new tab.
-  private var pageTab: BrowserTab? {
-    browser.searchInNewTab || !browser.hasPage ? nil : browser.activeTab
-  }
+  /// Search was opened over a page, not for a new tab.
+  private var overPage: Bool { !browser.searchInNewTab && browser.hasPage }
 
   private var text: Color { privately ? Color(RGBA(0xF4, 0xF4, 0xF5)) : BayColor.foreground }
   private var secondary: Color { privately ? Color(RGBA(0xA1, 0xA1, 0xAA)) : BayColor.muted }
@@ -151,18 +149,17 @@ struct SearchCard: View {
     let completion = suppressed || scope != nil ? "" : result.completion
     let rows = rows
     ZStack(alignment: .bottom) {
-      if let tab = pageTab {
-        PageCard(tab: tab, rgb: browser.pageColors[tab.id], onBack: dismiss)
-      } else {
-        Color.black.opacity(0.2).ignoresSafeArea().allowsHitTesting(false)
+      // The page stays where it is, blurred and dimmed behind the sheet.
+      if overPage {
+        Rectangle().fill(.ultraThinMaterial).ignoresSafeArea().allowsHitTesting(false)
       }
+      Color.black.opacity(0.2).ignoresSafeArea().allowsHitTesting(false)
       Color.clear.contentShape(Rectangle()).ignoresSafeArea()
         .onTapGesture(perform: dismiss)
         .accessibilityElement()
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: strings.t("search.close")))
         .accessibilityIdentifier("search-dismiss")
-        .allowsHitTesting(pageTab == nil)
       VStack(spacing: 0) {
         field(completion: completion, rows: rows)
           .padding(.top, SearchSheet.topInset)
@@ -470,81 +467,6 @@ struct SearchCard: View {
     case .result(_, _, _, let url): return .url(url)
     case .scope(let site): return .url(site.home)
     case .emoji, .create: return .url("")
-    }
-  }
-}
-
-/// The page search was opened over, shrunk into a card above the sheet with its title over it, on a wash of the
-/// page's colour. It grows out of the whole screen as search opens; tapping it goes back to the page.
-private struct PageCard: View {
-  @EnvironmentObject private var strings: Strings
-  let tab: BrowserTab
-  let rgb: [Double]?
-  let onBack: () -> Void
-  @State private var shrunk = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  /// The card's largest width, as a part of the screen's.
-  private static let largest: CGFloat = 0.42
-  /// The title's line over the card.
-  private static let titleHeight: CGFloat = 20
-
-  var body: some View {
-    GeometryReader { geometry in
-      let screen = geometry.size
-      let aspect = screen.height / max(screen.width, 1)
-      // The room between the top and the sheet, less a gap at each end and the title. The keyboard's height is already
-      // out of the screen here: SwiftUI keeps views above it.
-      let sheetTop = screen.height - SearchSheet.height()
-      let height = max(0, min(screen.width * Self.largest * aspect, sheetTop - 2 * Space.lg - Self.titleHeight - Space.xs))
-      let width = height / aspect
-      let scale = width / max(screen.width, 1)
-      let centre = CGPoint(x: screen.width / 2, y: sheetTop / 2)
-      ZStack {
-        wash.ignoresSafeArea()
-        VStack(spacing: Space.xs) {
-          HStack(spacing: Space.xs) {
-            SiteIcon(url: tab.url, size: 16, bare: true)
-            BayText(tab.title.isEmpty ? displayUrl(url: tab.url) : tab.title, variant: .footnote, weight: .medium).lineLimit(1)
-          }
-          .frame(maxWidth: width + Space.xxl)
-          .opacity(shrunk ? 1 : 0)
-          Button(action: onBack) {
-            picture
-              .frame(width: width, height: height)
-              .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-              .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
-          }
-          .buttonStyle(.pressFeedback)
-          .accessibilityLabel(Text(verbatim: strings.t("search.close")))
-          .accessibilityIdentifier("search-page-card")
-        }
-        .scaleEffect(shrunk ? 1 : 1 / max(scale, 0.1))
-        .position(shrunk ? centre : CGPoint(x: screen.width / 2, y: screen.height / 2))
-      }
-    }
-    .onAppear {
-      if reduceMotion {
-        shrunk = true
-      } else {
-        withAnimation(Motion.settle.animation) { shrunk = true }
-      }
-    }
-  }
-
-  private var wash: some View {
-    let color = rgb.map { Color(red: $0[0] / 255, green: $0[1] / 255, blue: $0[2] / 255) } ?? BayColor.background
-    return LinearGradient(colors: [color, BayColor.background], startPoint: .top, endPoint: .bottom)
-  }
-
-  @ViewBuilder private var picture: some View {
-    if let snapshot = tab.snapshot.flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: snapshot.path) {
-      Image(uiImage: image).resizable().scaledToFill()
-    } else {
-      ZStack {
-        BayColor.background
-        SiteIcon(url: tab.url, size: 40)
-      }
     }
   }
 }

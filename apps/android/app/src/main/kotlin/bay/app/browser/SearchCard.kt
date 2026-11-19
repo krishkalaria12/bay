@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -131,63 +130,6 @@ private const val SHORTCUT_PLACES = 5
 
 /** How long Go waits for the keyboard's last edits. */
 private const val GO_SETTLE_MS = 80L
-
-/**
- * The page search was opened over, shrunk into a card above the sheet with its title over it, on a wash of the page's
- * colour. It grows out of the whole screen as search opens; tapping it goes back to the page.
- */
-@Composable
-private fun PageCard(app: AppModel, strings: Strings, tab: bay.core.BrowserTab, rgb: List<Double>?, onBack: () -> Unit) {
-    val page = rgb?.takeIf { it.size >= 3 }?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) }
-    val wash = page ?: Theme.colors.background
-    var shrunk by remember { mutableStateOf(false) }
-    val reduced = bay.design.reducedMotion()
-    LaunchedEffect(Unit) { shrunk = true }
-    val progress by animateFloatAsState(if (shrunk || reduced) 1f else 0f, Motion.settle.spec(), label = "page-card")
-    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(wash, Theme.colors.background)))) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().navigationBarsPadding()) {
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = Space.lg), contentAlignment = Alignment.Center) {
-                val screen = androidx.compose.ui.platform.LocalConfiguration.current
-                val aspect = screen.screenHeightDp.toFloat() / screen.screenWidthDp.coerceAtLeast(1)
-                // As large as fits under its title, and never past 42% of the screen's width.
-                val height = minOf(maxWidth * 0.42f * aspect, maxHeight - 24.dp).coerceAtLeast(0.dp)
-                val width = height / aspect
-                val pixels = with(LocalDensity.current) { width.roundToPx() }
-                val picture = rememberFileImage(tab.snapshot, pixels)
-                Column(
-                    Modifier.graphicsLayer {
-                        val grow = 1f / 0.42f
-                        scaleX = grow + (1f - grow) * progress
-                        scaleY = scaleX
-                    },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
-                ) {
-                    Row(
-                        Modifier.graphicsLayer { alpha = progress }.width(width + Space.xxl),
-                        horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SiteIcon(app, tab.url, size = 16.dp, bare = true)
-                        BayText(tab.title.ifEmpty { displayUrl(tab.url) }, variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, maxLines = 1)
-                    }
-                    Box(
-                        Modifier.size(width, height)
-                            .clip(RoundedCornerShape(Radius.card))
-                            .background(Theme.colors.background)
-                            .testTag("search-page-card")
-                            .pressFeedback(onClickLabel = strings.t("search.close"), onClick = onBack),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (picture != null) Image(picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        else SiteIcon(app, tab.url, size = 40.dp)
-                    }
-                }
-            }
-            androidx.compose.foundation.layout.Spacer(Modifier.height(SearchSheet.height))
-        }
-    }
-}
 
 /** A site's chip colours: its own colour, and black or white on it, whichever reads. */
 private class ScopeColors(val fill: Color) {
@@ -381,17 +323,15 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         }
     }
 
-    // The page search was opened over, shown as a card above the sheet; none for a new tab.
-    val pageTab = if (browser.searchInNewTab || !browser.hasPage) null else browser.activeTab
     Box(Modifier.fillMaxSize().testTag("search-card")) {
-        if (pageTab == null) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+        // The page stays where it is, blurred behind (BrowserScreen) and dimmed here.
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
         Box(
             Modifier.fillMaxSize()
                 .testTag("search-dismiss")
                 .semantics { contentDescription = strings.t("search.close"); role = Role.Button }
                 .clickable(remember { MutableInteractionSource() }, null) { dismiss() },
         )
-        if (pageTab != null) PageCard(app, strings, pageTab, browser.pageColors[pageTab.id], ::dismiss)
         Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()

@@ -567,18 +567,17 @@
           <figcaption>The empty sheet</figcaption>
         </figure>
         <div>
-          <h3>1a · The page shrinks into a card above the sheet <span class="pill new">new</span></h3>
+          <h3>1a · The page stays still, blurred behind the sheet <span class="pill new">new</span></h3>
           <p>
-            When search opens over a page, the page shrinks into a card above the sheet, with its title over it ("Lens – Wikipedia"). Behind it is a wash of the
-            page's own colour. Today the page just dims behind the sheet.
+            When search opens over a page, the page stays exactly where it is, blurred and a little dimmed behind the sheet. (A first try shrank it into a card
+            above the sheet; it moved the page out of place, so it's gone.)
           </p>
           <ul>
+            <li>iPhone: a thin material over the page, which blurs WebKit's view where it stands.</li>
             <li>
-              Use the tab's saved picture, the same one the switcher already decodes. On iOS animate it with <code>matchedGeometryEffect</code>, on Android with
-              a shared bounds transition, reusing the springs in <code>TabZoom</code>.
+              Android: our Chromium draws on a SurfaceView that no blur in the app reaches, so search takes a fresh picture of the page and draws it blurred in
+              the same place. Private tabs keep no picture, so they're dimmed only; so is everything before Android 12.
             </li>
-            <li>Tapping the card closes search and brings the page back, the same as tapping the backdrop does now.</li>
-            <li>Colour the wash from the page's top colour, which <code>BrowserScreen</code> already samples for the status bar strip.</li>
           </ul>
 
           <h3>1b · Light or dark to match the page <span class="pill new">new</span></h3>
@@ -1457,7 +1456,7 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
         </li>
         <li>
           <b>R2 done:</b> the "Search IMDb" row, the chip (by a row, a shortcut, or a keyword and a space), the site's colour, the site's own results with
-          posters, the shortcut row, bangs, the page shrinking into a card above the sheet, the sheet going dark over a dark page, and bookmark rows saying
+          posters, the shortcut row, bangs, the page staying still and blurred behind the sheet, the sheet going dark over a dark page, and bookmark rows saying
           where they're saved ("Personal · Watchlist"), from every space, opening in theirs.
         </li>
         <li>

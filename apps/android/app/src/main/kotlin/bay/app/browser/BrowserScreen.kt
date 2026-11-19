@@ -1,5 +1,6 @@
 package bay.app.browser
 
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -122,6 +123,18 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
             }
             PagesHost(browser, shown && !behind, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered), visible = shown)
+            // Under the search sheet the page stays put, frosted: the engine draws on a SurfaceView, which no blur in the
+            // app reaches, so its picture is drawn over it, blurred (Android 12 and later; dimmed only before that).
+            if (browser.overlay == Overlay.SEARCH && !browser.searchInNewTab) {
+                val pixels = with(androidx.compose.ui.platform.LocalDensity.current) { 240.dp.roundToPx() }
+                rememberFileImage(browser.activeTab?.snapshot, pixels)?.let { picture ->
+                    androidx.compose.foundation.Image(
+                        picture, null,
+                        Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered).blur(24.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                }
+            }
         }
         if (browser.overlay == Overlay.TABS) {
             Wallpaper(app.preferences.wallpaper)
