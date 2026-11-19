@@ -61,6 +61,8 @@ export const settings = {
   "site.bayHere": "Here",
   "site.settings": "Bay Settings",
   "site.zoom.reset": "Back to Bay's {size}%",
+  // A percentage (page zoom, text size): German, Spanish and French put a space before the sign.
+  "format.percent": "{value}%",
 
   // Sync with your other devices (src/sync).
   "settings.page.sync": "Sync",

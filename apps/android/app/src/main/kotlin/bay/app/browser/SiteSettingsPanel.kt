@@ -205,14 +205,14 @@ private fun SiteZoomRow(strings: Strings, zoom: Int?, global: Int, onChange: (In
                 Modifier.widthIn(min = 52.dp).heightIn(min = 36.dp).testTag("site-zoom-value")
                     .clearAndSetSemantics {
                         contentDescription = strings.t("site.zoom.reset", mapOf("size" to "$global"))
-                        stateDescription = "$value%"
+                        stateDescription = strings.percent(value)
                         role = Role.Button
                     }
                     .pressFeedback(enabled = zoom != null) { onChange(null) },
                 contentAlignment = Alignment.Center,
             ) {
                 BayText(
-                    "$value%",
+                    strings.percent(value),
                     variant = TextVariant.SUBHEAD,
                     weight = if (zoom == null) FontWeight.Normal else FontWeight.SemiBold,
                     tone = if (zoom == null) TextTone.MUTED else TextTone.DEFAULT,

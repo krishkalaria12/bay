@@ -167,7 +167,7 @@ private fun TextSizeBody(settings: SettingsModel) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically) {
             ZoomButton(settings, "text-size-smaller", strings.t("settings.zoom.out"), 16, value, -TEXT_STEP, Modifier.weight(1f))
-            BayText("$value%", Modifier.width(64.dp).testTag("text-size-value"), variant = TextVariant.HEADLINE, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            BayText(strings.percent(value), Modifier.width(64.dp).testTag("text-size-value"), variant = TextVariant.HEADLINE, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             ZoomButton(settings, "text-size-larger", strings.t("settings.zoom.in"), 26, value, TEXT_STEP, Modifier.weight(1f))
         }
         if (value != 100) {

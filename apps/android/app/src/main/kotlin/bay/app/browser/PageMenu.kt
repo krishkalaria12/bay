@@ -143,7 +143,7 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                 strings.t("pageMenu.displayOptions"),
                 "page-display-options",
                 icon = BayIcon.TEXT_SIZE,
-                value = if (zoom == 100) null else "$zoom%",
+                value = if (zoom == 100) null else strings.percent(zoom),
                 chevron = !display,
             ) { display = !display }
             if (display) {
@@ -265,7 +265,7 @@ private fun ZoomRow(strings: Strings, zoom: Int, onZoom: (Int) -> Unit) {
     ) {
         BayIconView(BayIcon.TEXT_SIZE, size = IconSize.control)
         BayText(strings.t("site.zoom"), Modifier.weight(1f))
-        BayText("$zoom%", Modifier.testTag("page-zoom-value"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED)
+        BayText(strings.percent(zoom), Modifier.testTag("page-zoom-value"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED)
         Row(Modifier.background(Theme.colors.fill, RoundedCornerShape(Radius.control))) {
             ZoomStep("−", "page-zoom-out", strings.t("site.zoom.out"), zoom > ZOOM_MIN) { step(false) }
             ZoomStep("+", "page-zoom-in", strings.t("site.zoom.in"), zoom < ZOOM_MAX) { step(true) }

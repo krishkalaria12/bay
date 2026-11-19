@@ -57,6 +57,7 @@
   "find.noMatches": "Keine Treffer",
   "find.placeholder": "Auf der Seite suchen",
   "find.previous": "Vorheriger Treffer",
+  "format.percent": "{value} %",
   "history.clear": "Verlauf löschen",
   "history.clearAll": "Gesamten Verlauf löschen",
   "history.clearAll.detail": "Tabs, Archiv, Pins und Lesezeichen bleiben.",

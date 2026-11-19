@@ -57,6 +57,7 @@
   "find.noMatches": "Aucun résultat",
   "find.placeholder": "Rechercher dans la page",
   "find.previous": "Résultat précédent",
+  "format.percent": "{value} %",
   "history.clear": "Effacer l’historique",
   "history.clearAll": "Effacer tout l’historique",
   "history.clearAll.detail": "Les onglets, l’archive, les épingles et les signets restent.",

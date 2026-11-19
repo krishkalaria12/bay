@@ -139,7 +139,7 @@ private struct TextSizeBody: View {
       .background(BayColor.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
       HStack(spacing: Space.md) {
         step(-TextSizeLimits.step, label: strings.t("settings.zoom.out"), id: "text-size-smaller", size: 16, value: value)
-        BayText("\(value)%", variant: .headline).frame(width: 64).accessibilityIdentifier("text-size-value")
+        BayText(strings.percent(value), variant: .headline).frame(width: 64).accessibilityIdentifier("text-size-value")
         step(TextSizeLimits.step, label: strings.t("settings.zoom.in"), id: "text-size-larger", size: 26, value: value)
       }
       if value != 100 {

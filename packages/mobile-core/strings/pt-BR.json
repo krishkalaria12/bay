@@ -57,6 +57,7 @@
   "find.noMatches": "Nenhum resultado",
   "find.placeholder": "Buscar na página",
   "find.previous": "Resultado anterior",
+  "format.percent": "{value}%",
   "history.clear": "Limpar histórico",
   "history.clearAll": "Limpar todo o histórico",
   "history.clearAll.detail": "Abas, arquivo, fixados e favoritos ficam.",

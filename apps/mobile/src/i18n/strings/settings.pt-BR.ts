@@ -55,6 +55,7 @@ export const settingsPtBR: SettingsStrings = {
   "site.bayHere": "Aqui",
   "site.settings": "Ajustes do Bay",
   "site.zoom.reset": "Voltar aos {size}% do Bay",
+  "format.percent": "{value}%",
 
   // Sync with your other devices.
   "settings.page.sync": "Sincronização",

@@ -166,14 +166,14 @@ private struct SiteZoomRow: View {
           onChange(Swift.max(Zoom.min, value - Zoom.step))
         }
         Button { onChange(nil) } label: {
-          BayText("\(value)%", variant: .subhead, weight: zoom == nil ? .regular : .semibold, tone: zoom == nil ? .muted : .default)
+          BayText(strings.percent(value), variant: .subhead, weight: zoom == nil ? .regular : .semibold, tone: zoom == nil ? .muted : .default)
             .frame(minWidth: 52, minHeight: 36)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(zoom == nil)
         .accessibilityLabel(Text(verbatim: strings.t("site.zoom.reset", ["size": "\(global)"])))
-        .accessibilityValue(Text(verbatim: "\(value)%"))
+        .accessibilityValue(Text(verbatim: strings.percent(value)))
         .accessibilityIdentifier("site-zoom-value")
         step(.add, id: "site-zoom-larger", label: strings.t("site.zoom.in"), disabled: value >= Zoom.max) {
           onChange(Swift.min(Zoom.max, value + Zoom.step))

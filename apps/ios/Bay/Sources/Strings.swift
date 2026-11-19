@@ -45,4 +45,9 @@ final class Strings: ObservableObject {
     let template = table[key] ?? key
     return params.isEmpty ? template : formatMessage(template: template, params: params)
   }
+
+  /// A percentage written the language's way ("100%", "100 %").
+  func percent(_ value: Int) -> String {
+    t("format.percent", ["value": "\(value)"])
+  }
 }

@@ -57,6 +57,7 @@
   "find.noMatches": "一致なし",
   "find.placeholder": "ページ内を検索",
   "find.previous": "前の一致",
+  "format.percent": "{value}%",
   "history.clear": "履歴を消去",
   "history.clearAll": "すべての履歴を消去",
   "history.clearAll.detail": "タブ、アーカイブ、ピン留め、ブックマークは残ります。",

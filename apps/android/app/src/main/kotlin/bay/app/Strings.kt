@@ -44,6 +44,9 @@ class Strings(context: Context? = null) {
         return if (params.isEmpty()) template else formatMessage(template, params)
     }
 
+    /** A percentage written the language's way ("100%", "100 %"). */
+    fun percent(value: Int): String = t("format.percent", mapOf("value" to "$value"))
+
     private companion object {
         const val SAVED = "locale"
     }

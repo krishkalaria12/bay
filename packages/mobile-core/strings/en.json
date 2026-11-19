@@ -57,6 +57,7 @@
   "find.noMatches": "No matches",
   "find.placeholder": "Find on page",
   "find.previous": "Previous match",
+  "format.percent": "{value}%",
   "history.clear": "Clear history",
   "history.clearAll": "Clear all history",
   "history.clearAll.detail": "Tabs, archive, pins and bookmarks stay.",

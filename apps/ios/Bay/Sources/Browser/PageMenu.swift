@@ -87,7 +87,7 @@ struct PageMenu: View {
 
       RowGroup {
         ActionRow(
-          strings.t("pageMenu.displayOptions"), testID: "page-display-options", icon: .textSize, value: zoom == 100 ? nil : "\(zoom)%",
+          strings.t("pageMenu.displayOptions"), testID: "page-display-options", icon: .textSize, value: zoom == 100 ? nil : strings.percent(zoom),
           chevron: !display
         ) { withAnimation(.easeOut(duration: 0.2)) { display.toggle() } }
         if display {
@@ -215,7 +215,7 @@ private struct ZoomRow: View {
       BayIconView(.textSize, size: IconSize.control)
       BayText(strings.t("site.zoom"))
       Spacer(minLength: 0)
-      BayText("\(zoom)%", variant: .subhead, tone: .muted).accessibilityIdentifier("page-zoom-value")
+      BayText(strings.percent(zoom), variant: .subhead, tone: .muted).accessibilityIdentifier("page-zoom-value")
       HStack(spacing: 0) {
         step("−", id: "page-zoom-out", label: strings.t("site.zoom.out"), disabled: zoom <= MenuLayout.zoomMin, up: false)
         step("+", id: "page-zoom-in", label: strings.t("site.zoom.in"), disabled: zoom >= MenuLayout.zoomMax, up: true)

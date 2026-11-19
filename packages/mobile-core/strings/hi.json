@@ -57,6 +57,7 @@
   "find.noMatches": "कोई मिलान नहीं",
   "find.placeholder": "पेज पर खोजें",
   "find.previous": "पिछला मिलान",
+  "format.percent": "{value}%",
   "history.clear": "इतिहास मिटाएँ",
   "history.clearAll": "सारा इतिहास मिटाएँ",
   "history.clearAll.detail": "टैब, संग्रह, पिन और बुकमार्क बने रहते हैं।",
