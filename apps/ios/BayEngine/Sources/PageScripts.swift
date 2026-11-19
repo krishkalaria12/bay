@@ -8,11 +8,13 @@ public enum PageScript: String, CaseIterable, Sendable {
   case find
   case findClear = "find-clear"
   case findStep = "find-step"
+  case forceDark = "force-dark"
   case hideElements = "hide-elements"
   case inspect
   case markdown
   case openReader = "open-reader"
   case pageColor = "page-color"
+  case pageFont = "page-font"
   case pageTweaks = "page-tweaks"
   case pauseMedia = "pause-media"
   case pickParent = "pick-parent"
