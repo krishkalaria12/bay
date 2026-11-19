@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** The words a sheet's chrome needs, in the app's language (the design system has no catalog of its own). */
@@ -217,6 +218,9 @@ fun ActionRow(
     enabled: Boolean = true,
     /** Takes the icon's place: another app's own icon, say. */
     leading: (@Composable () -> Unit)? = null,
+    /** Its sides and the space after the icon: a card's by default, a list's own where it sits under list rows. */
+    inset: Dp = ROW_INSET,
+    gap: Dp = ROW_GAP,
     onClick: () -> Unit,
 ) {
     val colors = Theme.colors
@@ -231,8 +235,8 @@ fun ActionRow(
             }
             .pressFeedback(enabled = enabled, onClick = onClick)
             .heightIn(min = RowHeightToken)
-            .padding(horizontal = ROW_INSET, vertical = Space.md),
-        horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
+            .padding(horizontal = inset, vertical = Space.md),
+        horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leading != null) {

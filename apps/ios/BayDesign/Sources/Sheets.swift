@@ -221,15 +221,20 @@ public struct ActionRow: View {
   private let testID: String
   /// Takes the icon's place: another app's initial, say.
   private let leading: AnyView?
+  /// Its sides and the space after the icon: a card's by default, a list's own where it sits under list rows.
+  private let inset: CGFloat
+  private let gap: CGFloat
   private let action: () -> Void
   @Environment(\.dynamicTypeSize) private var sizeCategory
 
   public init(
     _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, value: String? = nil,
     chevron: Bool = false, toggle: Bool? = nil, selected: Bool = false, destructive: Bool = false, disabled: Bool = false,
-    leading: AnyView? = nil, action: @escaping () -> Void
+    leading: AnyView? = nil, inset: CGFloat? = nil, gap: CGFloat? = nil, action: @escaping () -> Void
   ) {
     self.leading = leading
+    self.inset = inset ?? rowInset
+    self.gap = gap ?? rowGap
     self.label = label
     self.testID = testID
     self.icon = icon
@@ -246,7 +251,7 @@ public struct ActionRow: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(spacing: rowGap) {
+      HStack(spacing: gap) {
         if let leading {
           leading
         } else if let icon, let tint {
@@ -267,7 +272,7 @@ public struct ActionRow: View {
         if let value, !stacksValue { valueText(value).fixedSize().hidden() }
         trailing
       }
-      .padding(.horizontal, rowInset)
+      .padding(.horizontal, inset)
       .padding(.vertical, Space.md)
       .frame(minHeight: Row.height)
       .contentShape(Rectangle())
@@ -282,11 +287,11 @@ public struct ActionRow: View {
     .overlay(alignment: .trailing) {
       // A button reads as one element, so the value it shows is its own element here, with its own identifier.
       if let value, !stacksValue {
-        HStack(spacing: rowGap) {
+        HStack(spacing: gap) {
           valueText(value).accessibilityIdentifier("\(testID)-value")
           trailing.hidden()
         }
-        .padding(.horizontal, rowInset)
+        .padding(.horizontal, inset)
         .opacity(disabled ? 0.4 : 1)
         .allowsHitTesting(false)
       }

@@ -550,15 +550,19 @@ private struct ClearFooter: View {
   let onClear: () -> Void
 
   var body: some View {
+    // Lined up with the rows above it: the icon in the site icon's column, the words where their titles start.
+    let trash = AnyView(BayIconView(.delete, size: IconSize.control, color: BayColor.danger).frame(width: 28, height: 28))
     VStack(spacing: 0) {
       if confirming {
-        ActionRow(confirmLabel, testID: "\(testID)-confirm", icon: .delete, detail: detail, destructive: true) {
+        ActionRow(confirmLabel, testID: "\(testID)-confirm", detail: detail, destructive: true, leading: trash, inset: 0, gap: Space.md) {
           confirming = false
           onClear()
         }
-        ActionRow(keepLabel, testID: "\(testID)-cancel") { confirming = false }
+        ActionRow(keepLabel, testID: "\(testID)-cancel", leading: AnyView(Color.clear.frame(width: 28, height: 28)), inset: 0, gap: Space.md) {
+          confirming = false
+        }
       } else {
-        ActionRow(label, testID: testID, icon: .delete, destructive: true) { confirming = true }
+        ActionRow(label, testID: testID, destructive: true, leading: trash, inset: 0, gap: Space.md) { confirming = true }
       }
     }
     .padding(.top, Space.lg)

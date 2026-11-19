@@ -609,15 +609,21 @@ private fun ClearFooter(
     testID: String,
     onClear: () -> Unit,
 ) {
+    // Lined up with the rows above it: the icon in the site icon's column, the words where their titles start.
+    val trash: @Composable () -> Unit = {
+        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+            BayIconView(BayIcon.DELETE, size = IconSize.control, color = Theme.colors.danger)
+        }
+    }
     Column(Modifier.fillMaxWidth().padding(top = Space.lg)) {
         if (confirming) {
-            ActionRow(confirmLabel, "$testID-confirm", icon = BayIcon.DELETE, detail = detail, destructive = true) {
+            ActionRow(confirmLabel, "$testID-confirm", detail = detail, destructive = true, leading = trash, inset = 0.dp, gap = Space.md) {
                 setConfirming(false)
                 onClear()
             }
-            ActionRow(keepLabel, "$testID-cancel") { setConfirming(false) }
+            ActionRow(keepLabel, "$testID-cancel", leading = { Box(Modifier.size(28.dp)) }, inset = 0.dp, gap = Space.md) { setConfirming(false) }
         } else {
-            ActionRow(label, testID, icon = BayIcon.DELETE, destructive = true) { setConfirming(true) }
+            ActionRow(label, testID, destructive = true, leading = trash, inset = 0.dp, gap = Space.md) { setConfirming(true) }
         }
     }
 }
