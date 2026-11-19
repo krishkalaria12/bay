@@ -949,13 +949,12 @@ struct BookmarksDrawer: View {
       app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: target.id, index: nil))
       open.insert(target.id)
     } else {
-      let folder = parent(of: target, in: rows)
-      // The folder's saved order, which the drawer shows with its folders first.
-      let order = app.store.bookmarkListing(spaceId: space, folderId: folder, query: "").rows.map(\.node.id)
-      let rest = order.filter { $0 != id }
-      guard var at = rest.firstIndex(of: target.id) else { return false }
-      if let from = order.firstIndex(of: id), let to = order.firstIndex(of: target.id), from < to { at += 1 }
-      app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: folder, index: Int64(at)))
+      // After the target when dragged down to it, before it when dragged up.
+      let from = rows.firstIndex { $0.id == id }
+      let to = rows.firstIndex { $0.id == target.id }
+      let after = from.flatMap { from in to.map { from < $0 } } ?? false
+      guard let place = app.store.bookmarkDrop(spaceId: space, id: id, target: target.id, after: after) else { return false }
+      app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: place.parentId, index: place.index))
     }
     Haptics.tick()
     return true
