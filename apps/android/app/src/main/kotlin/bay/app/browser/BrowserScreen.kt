@@ -169,6 +169,11 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
         }
         androidx.compose.animation.AnimatedVisibility(
+            browser.drawerOpen,
+            enter = androidx.compose.animation.slideInHorizontally { it } + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally { it } + androidx.compose.animation.fadeOut(),
+        ) { BookmarksDrawer(browser, strings) }
+        androidx.compose.animation.AnimatedVisibility(
             browser.topNote != null,
             Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = Space.xs),
             enter = androidx.compose.animation.slideInVertically { -it } + androidx.compose.animation.fadeIn(),

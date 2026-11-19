@@ -98,7 +98,7 @@ struct PageMenu: View {
           ZoomRow(zoom: zoom, onZoom: browser.setZoom)
         }
         RowGroup {
-          ActionRow(strings.t("pageMenu.bookmarks"), testID: "page-bookmarks", icon: .bookmark, chevron: true) { browser.panel = .bookmarks }
+          ActionRow(strings.t("pageMenu.bookmarks"), testID: "page-bookmarks", icon: .bookmark, chevron: true) { browser.openDrawer() }
           RowDivider()
           ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true) { browser.panel = .history }
           RowDivider()

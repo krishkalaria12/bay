@@ -183,9 +183,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         private set
 
     var toast by mutableStateOf<ToastMessage?>(null)
+        private set
     var topNote by mutableStateOf<TopNote?>(null)
         private set
     private var topNoteTimer: Job? = null
+    /** The bookmarks drawer is out, opened on `drawerFolder` when it has one. */
+    var drawerOpen by mutableStateOf(false)
+        private set
+    var drawerFolder: String? = null
         private set
 
     /** The bar is scrolled away while the page scrolls down. */
@@ -455,11 +460,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** Switches space and says so at the top: for switching from a page, where nothing else shows which space it is. */
-    fun switchSpace(id: String) {
+    fun switchSpace(id: String, announce: Boolean = true) {
         if (id == app.activeSpaceId) return
         val space = app.spaces.firstOrNull { it.id == id } ?: return
         selectSpace(id)
-        showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
+        // Not where the screen already shows the space (the bookmarks drawer).
+        if (announce) showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
+    }
+
+    /** Slides the bookmarks drawer out over the page, with `folder` open in it. */
+    fun openDrawer(folder: String? = null) {
+        panel = null
+        drawerFolder = folder
+        drawerOpen = true
+    }
+
+    fun closeDrawer() {
+        drawerOpen = false
     }
 
     /** A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't. */

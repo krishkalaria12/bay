@@ -824,8 +824,182 @@ struct SavePanel: View {
     let chosen = app.spaces.first { $0.id == space }
     let folderTitle = app.store.bookmarkFolders(spaceId: space).first { $0.id == folder && $0.id != "bookmarks" }?.title
     let place = folderTitle ?? chosen.map { spaceName($0, strings) } ?? ""
+    let opened = folder
     browser.showTopNote(TopNote(text: strings.t("save.addedTo", ["place": place]), space: chosen) { [weak browser] in
-      browser?.panel = .bookmarks
+      browser?.openDrawer(folder: opened)
     })
+  }
+}
+
+/// The bookmarks drawer: a dark panel the height of the screen sliding out over the page from the right, a sliver of
+/// the page still showing at its left. On top, the space chips; below, the space's bookmarks, folders opening where
+/// they sit; a + at its foot to save the page here. Its wash is the space's colour. A sideways swipe moves to the next
+/// space (switching to it); a tap on the sliver, or VoiceOver's escape, puts it away.
+struct BookmarksDrawer: View {
+  @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
+  @ObservedObject var browser: BrowserModel
+  @State private var open: Set<String> = []
+  @State private var shift: CGFloat = 0
+
+  /// How much of the screen the panel covers; the rest is the page's sliver.
+  private static let width: CGFloat = 0.86
+
+  var body: some View {
+    let space = app.spaces.first { $0.id == app.activeSpaceId } ?? app.spaces.first
+    let color = space.map { spaceColor($0.color) } ?? BayColor.muted
+    let rows = app.store.bookmarkTreeRows(spaceId: app.activeSpaceId, open: Array(open))
+    GeometryReader { geometry in
+      HStack(spacing: 0) {
+        Color.black.opacity(0.35)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: browser.closeDrawer)
+          .accessibilityLabel(Text(verbatim: strings.t("drawer.close")))
+          .accessibilityAddTraits(.isButton)
+          .accessibilityIdentifier("drawer-close")
+        VStack(alignment: .leading, spacing: Space.md) {
+          SpaceChips(spaces: app.spaces, chosen: app.activeSpaceId) { browser.switchSpace($0, announce: false) }
+            .padding(.horizontal, Space.lg)
+          ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 2) {
+              if rows.isEmpty, let space {
+                empty(spaceName(space, strings))
+              }
+              ForEach(rows, id: \.id) { row in
+                DrawerRow(row: row, current: row.url == browser.activeUrl, open: open.contains(row.id)) {
+                  if row.folder {
+                    withAnimation(Motion.settle.animation) {
+                      if open.contains(row.id) { open.remove(row.id) } else { open.insert(row.id) }
+                    }
+                  } else {
+                    browser.closeDrawer()
+                    browser.open(.url(row.url), privately: false)
+                  }
+                } remove: {
+                  app.dispatch(.removeBookmark(spaceId: app.activeSpaceId, id: row.id))
+                } share: {
+                  browser.share(row.url)
+                }
+              }
+            }
+            .padding(.horizontal, Space.sm)
+            .padding(.bottom, 80)
+          }
+        }
+        .padding(.top, geometry.safeAreaInsets.top + Space.sm)
+        .frame(width: geometry.size.width * Self.width)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(
+          ZStack {
+            Color(RGBA(0x10, 0x10, 0x12))
+            LinearGradient(colors: [color.opacity(0.45), color.opacity(0.12), .clear], startPoint: .top, endPoint: .bottom)
+          }
+          .animation(.easeOut(duration: 0.25), value: app.activeSpaceId)
+        )
+        .overlay(alignment: .bottomTrailing) {
+          Button {
+            browser.closeDrawer()
+            browser.panel = .save
+          } label: {
+            BayIconView(.add, size: IconSize.control, color: BayColor.foreground)
+              .frame(width: 52, height: 52)
+              .background(BayColor.fill, in: Circle())
+          }
+          .buttonStyle(.pressFeedback)
+          .accessibilityLabel(Text(verbatim: strings.t("drawer.saveHere")))
+          .accessibilityIdentifier("drawer-add")
+          .padding(Space.lg)
+          .padding(.bottom, geometry.safeAreaInsets.bottom)
+        }
+        .offset(x: shift * 0.3)
+        .gesture(spaceSwipe)
+        .environment(\.colorScheme, .dark)
+      }
+      .ignoresSafeArea()
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityAddTraits(.isModal)
+    .accessibilityAction(.escape, browser.closeDrawer)
+    .accessibilityIdentifier("bookmarks-drawer")
+    .onAppear {
+      if let folder = browser.drawerFolder { open.insert(folder) }
+    }
+  }
+
+  /// Nothing saved in this space: say so, and offer to save the page here.
+  private func empty(_ name: String) -> some View {
+    VStack(alignment: .leading, spacing: Space.md) {
+      BayText(strings.t("drawer.empty", ["space": name]), variant: .callout, tone: .muted)
+      PillButton(strings.t("drawer.saveHere")) {
+        browser.closeDrawer()
+        browser.panel = .save
+      }
+      .accessibilityIdentifier("drawer-empty-save")
+    }
+    .padding(Space.lg)
+  }
+
+  /// Sideways across the list: the space before or after, switched to.
+  private var spaceSwipe: some Gesture {
+    DragGesture(minimumDistance: 24)
+      .onChanged { value in
+        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+        shift = value.translation.width
+      }
+      .onEnded { value in
+        defer { withAnimation(Motion.settle.animation) { shift = 0 } }
+        guard abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) > 80,
+          let index = app.spaces.firstIndex(where: { $0.id == app.activeSpaceId })
+        else { return }
+        let next = index + (value.translation.width < 0 ? 1 : -1)
+        guard app.spaces.indices.contains(next) else { return }
+        open = []
+        browser.switchSpace(app.spaces[next].id, announce: false)
+      }
+  }
+}
+
+/// One row of the drawer: a folder with its count, turning to show it's open, or a link with its site's icon. The page
+/// showing sits on a light wash. Holding a link offers sharing it; holding either, removing it.
+private struct DrawerRow: View {
+  @EnvironmentObject private var strings: Strings
+  let row: BookmarkTreeRow
+  let current: Bool
+  let open: Bool
+  let action: () -> Void
+  let remove: () -> Void
+  let share: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: Space.md) {
+        if row.folder {
+          BayIconView(.folder, size: IconSize.row, color: BayColor.foreground).frame(width: 24)
+        } else {
+          SiteIcon(url: row.url, size: 24, bare: true)
+        }
+        BayText(row.title.isEmpty ? displayUrl(url: row.url) : row.title, weight: row.folder ? .semibold : .regular).lineLimit(1)
+        Spacer(minLength: 0)
+        if row.folder {
+          if row.links > 0 { BayText("\(row.links)", variant: .footnote, tone: .muted) }
+          BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
+        }
+      }
+      .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
+      .padding(.trailing, Space.md)
+      .frame(minHeight: 46)
+      .background(current ? Color.white.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.pressFeedback)
+    .contextMenu {
+      if !row.folder {
+        Button(strings.t("drawer.share"), action: share)
+      }
+      Button(strings.t("drawer.remove"), role: .destructive, action: remove)
+    }
+    .accessibilityLabel(Text(verbatim: row.folder ? "\(row.title), \(row.links == 1 ? strings.t("drawer.linksOne") : strings.t("drawer.links", ["count": "\(row.links)"]))" : row.title))
+    .accessibilityHint(Text(verbatim: row.folder ? strings.t(open ? "drawer.closeFolder" : "drawer.openFolder", ["title": row.title]) : ""))
+    .accessibilityIdentifier("drawer-row-\(row.id)")
   }
 }

@@ -1,5 +1,16 @@
 package bay.app.browser
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -154,7 +165,8 @@ fun SavePanel(browser: BrowserModel, strings: Strings, visible: Boolean) {
         val chosen = app.spaces.firstOrNull { it.id == space }
         val folderTitle = app.store.bookmarkFolders(space).firstOrNull { it.id == folder && it.id != TOP }?.title
         val place = folderTitle ?: chosen?.let { spaceName(it, strings) }.orEmpty()
-        browser.showTopNote(TopNote(System.nanoTime(), strings.t("save.addedTo", mapOf("place" to place)), chosen) { browser.panel = Panel.BOOKMARKS })
+        val opened = folder
+        browser.showTopNote(TopNote(System.nanoTime(), strings.t("save.addedTo", mapOf("place" to place)), chosen) { browser.openDrawer(opened) })
     }
 
     fun makeFolder() {
@@ -268,4 +280,165 @@ private fun Field(
             },
         )
     }
+}
+
+/** How much of the screen the drawer's panel covers; the rest is the page's sliver. */
+private const val DRAWER_WIDTH = 0.86f
+
+/**
+ * The bookmarks drawer: a dark panel the height of the screen sliding out over the page from the right, a sliver of the
+ * page still showing at its left. On top, the space chips; below, the space's bookmarks, folders opening where they
+ * sit; a + at its foot to save the page here. Its wash is the space's colour. A sideways swipe moves to the next space
+ * (switching to it); a tap on the sliver, or Back, puts it away.
+ */
+@Composable
+fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
+    val app = browser.app
+    var open by remember { mutableStateOf(setOfNotNull(browser.drawerFolder)) }
+    var swipe by remember { mutableStateOf(0f) }
+    androidx.activity.compose.BackHandler(onBack = browser::closeDrawer)
+    val space = app.spaces.firstOrNull { it.id == app.activeSpaceId } ?: app.spaces.firstOrNull()
+    val color = space?.let { spaceColor(it.color) } ?: Theme.colors.muted
+    val wash by androidx.compose.animation.animateColorAsState(color, label = "drawer-wash")
+    val rows = app.store.bookmarkTreeRows(app.activeSpaceId, open.toList())
+    Row(Modifier.fillMaxSize().testTag("bookmarks-drawer")) {
+        Box(
+            Modifier.weight(1f - DRAWER_WIDTH).fillMaxHeight().background(Color.Black.copy(alpha = 0.35f)).testTag("drawer-close")
+                .clearAndSetSemantics { contentDescription = strings.t("drawer.close"); role = Role.Button }
+                .pressFeedback(onClick = browser::closeDrawer),
+        )
+        bay.design.BayTheme(dark = true) {
+            Box(
+                Modifier.weight(DRAWER_WIDTH).fillMaxHeight()
+                    .background(Color(0xFF101012))
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(wash.copy(alpha = 0.45f), wash.copy(alpha = 0.12f), Color.Transparent)))
+                    .pointerInput(app.activeSpaceId) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                val index = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+                                val next = index + if (swipe < 0) 1 else -1
+                                if (kotlin.math.abs(swipe) > 80.dp.toPx() && next in app.spaces.indices) {
+                                    open = emptySet()
+                                    browser.switchSpace(app.spaces[next].id, announce = false)
+                                }
+                                swipe = 0f
+                            },
+                            onDragCancel = { swipe = 0f },
+                            onHorizontalDrag = { _, amount -> swipe += amount },
+                        )
+                    }
+                    .statusBarsPadding().navigationBarsPadding(),
+            ) {
+                Column(Modifier.fillMaxSize().padding(top = Space.sm), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                    Box(Modifier.padding(horizontal = Space.lg)) {
+                        SpaceChips(app.spaces, app.activeSpaceId, strings, onChoose = { browser.switchSpace(it, announce = false) })
+                    }
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.sm).padding(bottom = 80.dp)) {
+                        if (rows.isEmpty() && space != null) {
+                            Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                                BayText(strings.t("drawer.empty", mapOf("space" to spaceName(space, strings))), variant = TextVariant.CALLOUT, color = Theme.colors.muted)
+                                bay.design.PillButton(strings.t("drawer.saveHere"), Modifier.testTag("drawer-empty-save")) {
+                                    browser.closeDrawer()
+                                    browser.panel = Panel.SAVE
+                                }
+                            }
+                        }
+                        rows.forEach { row ->
+                            DrawerRow(app, strings, row, row.url == browser.activeUrl, row.id in open,
+                                onTap = {
+                                    if (row.folder) {
+                                        open = if (row.id in open) open - row.id else open + row.id
+                                    } else {
+                                        browser.closeDrawer()
+                                        browser.open(OpenTarget.Url(row.url), false)
+                                    }
+                                },
+                                onRemove = { app.dispatch(Action.RemoveBookmark(app.activeSpaceId, row.id)) },
+                                onShare = { browser.share(row.url) },
+                            )
+                        }
+                    }
+                }
+                Box(
+                    Modifier.align(Alignment.BottomEnd).padding(Space.lg).size(52.dp).testTag("drawer-add")
+                        .clearAndSetSemantics { contentDescription = strings.t("drawer.saveHere"); role = Role.Button }
+                        .pressFeedback {
+                            browser.closeDrawer()
+                            browser.panel = Panel.SAVE
+                        }
+                        .background(Theme.colors.fill, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { BayIconView(BayIcon.ADD, size = IconSize.control) }
+            }
+        }
+    }
+}
+
+/**
+ * One row of the drawer: a folder with its count, turning to show it's open, or a link with its site's icon. The page
+ * showing sits on a light wash. Holding a row offers sharing a link and removing either.
+ */
+@Composable
+private fun DrawerRow(
+    app: AppModel,
+    strings: Strings,
+    row: bay.core.BookmarkTreeRow,
+    current: Boolean,
+    open: Boolean,
+    onTap: () -> Unit,
+    onRemove: () -> Unit,
+    onShare: () -> Unit,
+) {
+    val colors = Theme.colors
+    var menu by remember { mutableStateOf(false) }
+    val title = row.title.ifEmpty { displayUrl(row.url) }
+    val label = if (row.folder) {
+        "$title, ${if (row.links.toInt() == 1) strings.t("drawer.linksOne") else strings.t("drawer.links", mapOf("count" to "${row.links}"))}"
+    } else {
+        title
+    }
+    Box {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("drawer-row-${row.id}")
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (current) Color.White.copy(alpha = 0.1f) else Color.Transparent)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = label
+                    role = Role.Button
+                }
+                .combinedClickable(onLongClick = { menu = true }, onClick = onTap)
+                .padding(start = Space.md + Space.lg * row.depth.toInt(), end = Space.md),
+            horizontalArrangement = Arrangement.spacedBy(Space.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (row.folder) {
+                BayIconView(BayIcon.FOLDER, size = IconSize.row, color = colors.foreground)
+            } else {
+                SiteIcon(app, row.url, 24.dp, bare = true)
+            }
+            BayText(title, Modifier.weight(1f), weight = if (row.folder) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+            if (row.folder) {
+                if (row.links > 0u) BayText("${row.links}", variant = TextVariant.FOOTNOTE, color = colors.muted)
+                BayIconView(BayIcon.CHEVRON, size = IconSize.inline, color = colors.muted, modifier = Modifier.graphicsLayer { rotationZ = if (open) 90f else 0f })
+            }
+        }
+        if (menu) {
+            androidx.compose.ui.window.Popup(alignment = Alignment.TopEnd, onDismissRequest = { menu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+                Column(Modifier.width(200.dp).background(colors.surface, RoundedCornerShape(12.dp)).padding(vertical = Space.xs)) {
+                    if (!row.folder) MenuChoice(strings.t("drawer.share")) { menu = false; onShare() }
+                    MenuChoice(strings.t("drawer.remove"), destructive = true) { menu = false; onRemove() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuChoice(label: String, destructive: Boolean = false, onClick: () -> Unit) {
+    BayText(
+        label,
+        Modifier.fillMaxWidth().heightIn(min = 44.dp).pressFeedback(onClick = onClick).padding(horizontal = Space.lg, vertical = Space.md),
+        color = if (destructive) Theme.colors.danger else Theme.colors.foreground,
+        maxLines = 1,
+    )
 }

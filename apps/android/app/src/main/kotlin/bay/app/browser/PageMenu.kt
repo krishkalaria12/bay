@@ -148,7 +148,7 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                 ZoomRow(strings, browser.pageZoom, browser::setZoom)
             }
             RowGroup {
-                ActionRow(strings.t("pageMenu.bookmarks"), "page-bookmarks", icon = BayIcon.BOOKMARK, chevron = true) { browser.panel = Panel.BOOKMARKS }
+                ActionRow(strings.t("pageMenu.bookmarks"), "page-bookmarks", icon = BayIcon.BOOKMARK, chevron = true) { browser.openDrawer() }
                 ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true) { browser.panel = Panel.HISTORY }
                 ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true) { browser.panel = Panel.DOWNLOADS }
                 ActionRow(strings.t("pageMenu.settings"), "page-settings", icon = BayIcon.SETTINGS, chevron = true, onClick = act(onSettings))

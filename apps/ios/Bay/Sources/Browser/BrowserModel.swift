@@ -89,6 +89,9 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var zoom: (tab: BrowserTab, frame: CGRect)?
   @Published private(set) var toast: ToastMessage?
   @Published private(set) var topNote: TopNote?
+  /// The bookmarks drawer is out, opened on `drawerFolder` when it has one.
+  @Published private(set) var drawerOpen = false
+  private(set) var drawerFolder: String?
   private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
@@ -345,12 +348,24 @@ final class BrowserModel: ObservableObject {
     topNote = nil
   }
 
+  /// Slides the bookmarks drawer out over the page, with `folder` open in it.
+  func openDrawer(folder: String? = nil) {
+    panel = nil
+    drawerFolder = folder
+    drawerOpen = true
+  }
+
+  func closeDrawer() {
+    drawerOpen = false
+  }
+
   /// Switches space and says so at the top: for switching from a page, where nothing else shows which space it is.
-  func switchSpace(_ id: String) {
+  /// `announce` false where the screen already shows the space (the bookmarks drawer).
+  func switchSpace(_ id: String, announce: Bool = true) {
     guard id != app.activeSpaceId, let space = app.spaces.first(where: { $0.id == id }) else { return }
     Haptics.tick()
     selectSpace(id)
-    showTopNote(TopNote(text: spaceName(space, strings), space: space))
+    if announce { showTopNote(TopNote(text: spaceName(space, strings), space: space)) }
   }
 
   /// A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't.
