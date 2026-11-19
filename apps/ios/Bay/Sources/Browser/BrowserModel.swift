@@ -95,6 +95,8 @@ final class BrowserModel: ObservableObject {
   private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
+  /// Tabs whose page wouldn't take Bay's font, and shows in the phone's instead.
+  @Published private(set) var fontBlocked: Set<String> = []
   /// The bar is back for a moment on a site that keeps it hidden, after a tap on the screen's bottom edge.
   @Published private(set) var fullscreenPeek = false
   private var peekTimer: Task<Void, Never>?
@@ -1343,7 +1345,12 @@ extension BrowserModel {
     Task { [weak self] in
       let result = try? await view.runScript(.pageTweaks, args: ["textSize": zoom, "skipAmp": skipAmp])
       if result == "\"amp\"" { self?.ampLeft[tabId, default: []].insert(url) }
-      _ = try? await view.runScript(.pageFont, args: ["family": face.family, "faces": SiteFonts.faces(face)])
+      let font = try? await view.runScript(.pageFont, args: ["family": face.family, "faces": SiteFonts.faces(face)])
+      if font == "\"blocked\"" {
+        self?.fontBlocked.insert(tabId)
+      } else if font != nil {
+        self?.fontBlocked.remove(tabId)
+      }
       let dark = try? await view.runScript(.forceDark, args: ["on": forceDark])
       // Darkened or put back: the strip behind the status bar takes the page's new colour.
       if dark != "\"off\"" || self?.pageColors[tabId] != nil {

@@ -152,6 +152,13 @@ struct SiteSettingsPanel: View {
     return PanelSheet(
       title: title, testID: "site-settings", words: strings.sheetWords(title), onClose: { browser.panel = nil }, onBack: { page = .main }
     ) {
+      // The page wouldn't take the font chosen: said here rather than failing without a word.
+      if browser.fontBlocked.contains(app.activeTabId) {
+        BayText(strings.t("site.font.blocked"), variant: .footnote, tone: .muted)
+          .padding(.horizontal, Space.lg)
+          .padding(.bottom, Space.sm)
+          .accessibilityIdentifier("site-font-blocked")
+      }
       RowGroup {
         FontRow(
           name: strings.t("site.font.sameAs", ["font": strings.t(siteFontLabel(font: app.preferences.siteFont))]), font: .system(size: TextVariant.body.size),

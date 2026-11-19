@@ -716,7 +716,7 @@ struct SavePanel: View {
 /// they sit; a + at its foot to save the page here. Its wash is the space's colour. A sideways swipe moves to the next
 /// space (switching to it); a tap on the sliver, or VoiceOver's escape, puts it away. Pulling the list down shows a
 /// search through every bookmark of the space. Holding a row offers renaming it in place, moving it to another folder
-/// and removing it; holding and dragging it drops it into a folder, or beside another bookmark.
+/// and removing it; holding and dragging it drops a link into a folder, or puts a row beside another.
 struct BookmarksDrawer: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -940,12 +940,14 @@ struct BookmarksDrawer: View {
     return rows[..<index].last { $0.depth == row.depth - 1 }?.id ?? bookmarksRoot
   }
 
-  /// A dragged row let go over `target`: into it when it's a folder, else beside it, after it when dragged down.
+  /// A dragged row let go over `target`: a link over a folder goes into it; otherwise it goes beside the target, after
+  /// it when dragged down, so folders reorder among folders (Move puts one inside another).
   private func drop(onto target: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> Bool {
     defer { dragging = nil }
     guard let id = dragging, id != target.id else { return false }
     let space = app.activeSpaceId
-    if target.folder {
+    let draggedFolder = rows.first { $0.id == id }?.folder ?? false
+    if target.folder, !draggedFolder {
       app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: target.id, index: nil))
       open.insert(target.id)
     } else {
