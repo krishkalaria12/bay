@@ -327,6 +327,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     // Actions
 
     fun search(inNewTab: Boolean, privately: Boolean = false) {
+        // A fresh picture of the page, for the card it shrinks into above the search sheet.
+        if (!inNewTab && hasPage) capture(app.activeTabId)
         searchInNewTab = inNewTab
         searchPrivately = privately
         overlay = Overlay.SEARCH

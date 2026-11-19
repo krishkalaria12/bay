@@ -1,5 +1,6 @@
 package bay.app.browser
 
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -146,7 +147,13 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             if (!pickerOnTop) bottom()
         } else {
             val active = browser.activeTab
-            SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
+            // Search opened over a dark page is dark too, so the sheet doesn't glare over it.
+            val pageRgb = if (browser.searchInNewTab) null else browser.pageColors[app.activeTabId]
+            val overDark = pageRgb != null && pageRgb.size >= 3 &&
+                androidx.compose.ui.graphics.Color(pageRgb[0].toFloat() / 255, pageRgb[1].toFloat() / 255, pageRgb[2].toFloat() / 255).luminance() <= 0.4f
+            bay.design.BayTheme(dark = overDark || androidx.compose.foundation.isSystemInDarkTheme()) {
+                SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
+            }
         }
         }
         SpaceEditPanel(browser, strings, browser.activeSpace, browser.panel == Panel.SPACE_EDIT)

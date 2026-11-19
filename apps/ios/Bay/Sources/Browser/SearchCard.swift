@@ -58,6 +58,16 @@ final class TypingFetch<Item>: ObservableObject {
   }
 }
 
+/// Whether white text reads better than black on a colour (0–255 channels): its relative luminance, as WCAG works it
+/// out, is 0.4 or less.
+func isDarkColor(red: Double, green: Double, blue: Double) -> Bool {
+  func channel(_ c: Double) -> Double {
+    let v = c / 255
+    return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+  }
+  return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue) <= 0.4
+}
+
 /// A site's chip colours: its own colour, and black or white on it, whichever reads.
 struct ScopeColors {
   let fill: Color
@@ -69,12 +79,7 @@ struct ScopeColors {
     guard let hex, hex.count == 7, hex.hasPrefix("#"), let value = UInt32(hex.dropFirst(), radix: 16) else { return nil }
     let red = Double((value >> 16) & 0xFF), green = Double((value >> 8) & 0xFF), blue = Double(value & 0xFF)
     fill = Color(RGBA(red, green, blue))
-    // Relative luminance, as WCAG works it out; past 0.4 black text reads better than white.
-    func channel(_ c: Double) -> Double {
-      let v = c / 255
-      return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
-    }
-    light = 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue) > 0.4
+    light = !isDarkColor(red: red, green: green, blue: blue)
     ink = light ? .black : .white
   }
 }
@@ -134,6 +139,11 @@ struct SearchCard: View {
 
   private var colors: ScopeColors? { ScopeColors(hex: scope?.color) }
 
+  /// The page search was opened over, shown as a card above the sheet; none for a new tab.
+  private var pageTab: BrowserTab? {
+    browser.searchInNewTab || !browser.hasPage ? nil : browser.activeTab
+  }
+
   private var text: Color { privately ? Color(RGBA(0xF4, 0xF4, 0xF5)) : BayColor.foreground }
   private var secondary: Color { privately ? Color(RGBA(0xA1, 0xA1, 0xAA)) : BayColor.muted }
 
@@ -141,13 +151,18 @@ struct SearchCard: View {
     let completion = suppressed || scope != nil ? "" : result.completion
     let rows = rows
     ZStack(alignment: .bottom) {
-      Color.black.opacity(0.2).ignoresSafeArea().allowsHitTesting(false)
+      if let tab = pageTab {
+        PageCard(tab: tab, rgb: browser.pageColors[tab.id], onBack: dismiss)
+      } else {
+        Color.black.opacity(0.2).ignoresSafeArea().allowsHitTesting(false)
+      }
       Color.clear.contentShape(Rectangle()).ignoresSafeArea()
         .onTapGesture(perform: dismiss)
         .accessibilityElement()
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: strings.t("search.close")))
         .accessibilityIdentifier("search-dismiss")
+        .allowsHitTesting(pageTab == nil)
       VStack(spacing: 0) {
         field(completion: completion, rows: rows)
           .padding(.top, SearchSheet.topInset)
@@ -313,9 +328,15 @@ struct SearchCard: View {
   }
 
   private func choose(_ row: Suggestion) {
-    if case .scope(let site) = row {
+    switch row {
+    case .scope(let site):
       enter(site)
-    } else {
+    case .page(let url, _, _, nil, nil, _, _, let place?) where place.spaceId != app.activeSpaceId:
+      // A bookmark from another space opens in that space.
+      focused = false
+      browser.selectSpace(place.spaceId)
+      browser.open(.url(url), privately: privately)
+    default:
       open(target(for: row))
     }
   }
@@ -440,7 +461,7 @@ struct SearchCard: View {
 
   private func target(for row: Suggestion) -> OpenTarget {
     switch row {
-    case .page(let url, _, _, let tabId, let cleanedId, _, _):
+    case .page(let url, _, _, let tabId, let cleanedId, _, _, _):
       if let tabId { return .tab(tabId) }
       if let cleanedId { return .archived(cleanedId) }
       return .url(url)
@@ -453,9 +474,85 @@ struct SearchCard: View {
   }
 }
 
+/// The page search was opened over, shrunk into a card above the sheet with its title over it, on a wash of the
+/// page's colour. It grows out of the whole screen as search opens; tapping it goes back to the page.
+private struct PageCard: View {
+  @EnvironmentObject private var strings: Strings
+  let tab: BrowserTab
+  let rgb: [Double]?
+  let onBack: () -> Void
+  @State private var shrunk = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// The card's largest width, as a part of the screen's.
+  private static let largest: CGFloat = 0.42
+  /// The title's line over the card.
+  private static let titleHeight: CGFloat = 20
+
+  var body: some View {
+    GeometryReader { geometry in
+      let screen = geometry.size
+      let aspect = screen.height / max(screen.width, 1)
+      // The room between the top and the sheet, less a gap at each end and the title. The keyboard's height is already
+      // out of the screen here: SwiftUI keeps views above it.
+      let sheetTop = screen.height - SearchSheet.height()
+      let height = max(0, min(screen.width * Self.largest * aspect, sheetTop - 2 * Space.lg - Self.titleHeight - Space.xs))
+      let width = height / aspect
+      let scale = width / max(screen.width, 1)
+      let centre = CGPoint(x: screen.width / 2, y: sheetTop / 2)
+      ZStack {
+        wash.ignoresSafeArea()
+        VStack(spacing: Space.xs) {
+          HStack(spacing: Space.xs) {
+            SiteIcon(url: tab.url, size: 16, bare: true)
+            BayText(tab.title.isEmpty ? displayUrl(url: tab.url) : tab.title, variant: .footnote, weight: .medium).lineLimit(1)
+          }
+          .frame(maxWidth: width + Space.xxl)
+          .opacity(shrunk ? 1 : 0)
+          Button(action: onBack) {
+            picture
+              .frame(width: width, height: height)
+              .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+              .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+          }
+          .buttonStyle(.pressFeedback)
+          .accessibilityLabel(Text(verbatim: strings.t("search.close")))
+          .accessibilityIdentifier("search-page-card")
+        }
+        .scaleEffect(shrunk ? 1 : 1 / max(scale, 0.1))
+        .position(shrunk ? centre : CGPoint(x: screen.width / 2, y: screen.height / 2))
+      }
+    }
+    .onAppear {
+      if reduceMotion {
+        shrunk = true
+      } else {
+        withAnimation(Motion.settle.animation) { shrunk = true }
+      }
+    }
+  }
+
+  private var wash: some View {
+    let color = rgb.map { Color(red: $0[0] / 255, green: $0[1] / 255, blue: $0[2] / 255) } ?? BayColor.background
+    return LinearGradient(colors: [color, BayColor.background], startPoint: .top, endPoint: .bottom)
+  }
+
+  @ViewBuilder private var picture: some View {
+    if let snapshot = tab.snapshot.flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: snapshot.path) {
+      Image(uiImage: image).resizable().scaledToFill()
+    } else {
+      ZStack {
+        BayColor.background
+        SiteIcon(url: tab.url, size: 40)
+      }
+    }
+  }
+}
+
 /// One suggestion: a page, a search or a sum, with a button that fills its text into the field.
 private struct SuggestionRow: View {
   @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
   let row: Suggestion
   let index: Int
   let engineName: String
@@ -487,7 +584,12 @@ private struct SuggestionRow: View {
         .frame(width: 28)
         VStack(alignment: .leading, spacing: 0) {
           BayText(title, color: text).lineLimit(1)
-          BayText(detail, variant: .footnote, color: secondary).lineLimit(1)
+          HStack(spacing: Space.xs) {
+            if place != nil {
+              BayIconView(.bookmarked, size: IconSize.inline, color: secondary)
+            }
+            BayText(detail, variant: .footnote, color: secondary).lineLimit(1)
+          }
         }
         .padding(.vertical, 6)
         Spacer(minLength: 0)
@@ -512,14 +614,19 @@ private struct SuggestionRow: View {
     .accessibilityIdentifier("suggestion-\(index)")
   }
 
+  /// Where the row's page is saved as a bookmark: "Personal · Watchlist", or the space alone at its top level.
+  private var place: String? {
+    guard case .page(_, _, _, nil, _, _, _, let place?) = row else { return nil }
+    let space = app.spaces.first { $0.id == place.spaceId }.map { spaceName($0, strings) } ?? ""
+    return [space, place.folder].filter { !$0.isEmpty }.joined(separator: " · ")
+  }
+
   private var parts: (String, String, String?, String?) {
     switch row {
-    case .page(let url, let title, _, let tabId, _, _, _):
+    case .page(let url, let title, _, let tabId, _, _, _, _):
       let address = displayUrl(url: url)
-      return (
-        title.isEmpty ? address : title,
-        tabId == nil ? address : strings.t("search.switchToTab", ["address": address]), url, url
-      )
+      let detail = tabId == nil ? (place ?? address) : strings.t("search.switchToTab", ["address": address])
+      return (title.isEmpty ? address : title, detail, url, url)
     case .search(let query, _, let engine, _):
       return (query, strings.t("search.withEngine", ["engine": engine.isEmpty ? engineName : engine]), query, nil)
     case .calc(let expression, let value, _):

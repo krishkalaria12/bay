@@ -7,6 +7,7 @@ import SwiftUI
 struct BrowserScreen: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
+  @Environment(\.colorScheme) private var scheme
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
   /// The stand-in check screens, for testing.
@@ -95,6 +96,7 @@ struct BrowserScreen: View {
           browser: browser, initialText: browser.searchInNewTab ? "" : (browser.activeTab?.url ?? ""),
           // A new tab starts as a normal one unless asked for private; editing a private tab's address stays private.
           privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)))
+        .environment(\.colorScheme, searchOverDarkPage ? .dark : scheme)
       }
     }
     .background(
@@ -147,6 +149,12 @@ struct BrowserScreen: View {
     .onAppear(perform: browser.refreshMounted)
     .onChange(of: app.activeTabId) { _ in browser.refreshMounted() }
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }
+  }
+
+  /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
+  private var searchOverDarkPage: Bool {
+    guard !browser.searchInNewTab, let rgb = browser.pageColors[app.activeTabId], rgb.count >= 3 else { return false }
+    return isDarkColor(red: rgb[0], green: rgb[1], blue: rgb[2])
   }
 
   /// The strip behind the status bar, in the colour at the top of the page, so the page seems to run under it.

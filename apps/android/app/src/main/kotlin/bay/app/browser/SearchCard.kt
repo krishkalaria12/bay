@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -130,6 +131,63 @@ private const val SHORTCUT_PLACES = 5
 
 /** How long Go waits for the keyboard's last edits. */
 private const val GO_SETTLE_MS = 80L
+
+/**
+ * The page search was opened over, shrunk into a card above the sheet with its title over it, on a wash of the page's
+ * colour. It grows out of the whole screen as search opens; tapping it goes back to the page.
+ */
+@Composable
+private fun PageCard(app: AppModel, strings: Strings, tab: bay.core.BrowserTab, rgb: List<Double>?, onBack: () -> Unit) {
+    val page = rgb?.takeIf { it.size >= 3 }?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) }
+    val wash = page ?: Theme.colors.background
+    var shrunk by remember { mutableStateOf(false) }
+    val reduced = bay.design.reducedMotion()
+    LaunchedEffect(Unit) { shrunk = true }
+    val progress by animateFloatAsState(if (shrunk || reduced) 1f else 0f, Motion.settle.spec(), label = "page-card")
+    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(wash, Theme.colors.background)))) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().navigationBarsPadding()) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = Space.lg), contentAlignment = Alignment.Center) {
+                val screen = androidx.compose.ui.platform.LocalConfiguration.current
+                val aspect = screen.screenHeightDp.toFloat() / screen.screenWidthDp.coerceAtLeast(1)
+                // As large as fits under its title, and never past 42% of the screen's width.
+                val height = minOf(maxWidth * 0.42f * aspect, maxHeight - 24.dp).coerceAtLeast(0.dp)
+                val width = height / aspect
+                val pixels = with(LocalDensity.current) { width.roundToPx() }
+                val picture = rememberFileImage(tab.snapshot, pixels)
+                Column(
+                    Modifier.graphicsLayer {
+                        val grow = 1f / 0.42f
+                        scaleX = grow + (1f - grow) * progress
+                        scaleY = scaleX
+                    },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Space.xs),
+                ) {
+                    Row(
+                        Modifier.graphicsLayer { alpha = progress }.width(width + Space.xxl),
+                        horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SiteIcon(app, tab.url, size = 16.dp, bare = true)
+                        BayText(tab.title.ifEmpty { displayUrl(tab.url) }, variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, maxLines = 1)
+                    }
+                    Box(
+                        Modifier.size(width, height)
+                            .clip(RoundedCornerShape(Radius.card))
+                            .background(Theme.colors.background)
+                            .testTag("search-page-card")
+                            .pressFeedback(onClickLabel = strings.t("search.close"), onClick = onBack),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (picture != null) Image(picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        else SiteIcon(app, tab.url, size = 40.dp)
+                    }
+                }
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.height(SearchSheet.height))
+        }
+    }
+}
 
 /** A site's chip colours: its own colour, and black or white on it, whichever reads. */
 private class ScopeColors(val fill: Color) {
@@ -280,7 +338,17 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     }
 
     fun choose(row: Suggestion) {
-        if (row is Suggestion.Scope) enter(row.scope) else open(targetFor(row))
+        val place = (row as? Suggestion.Page)?.takeIf { it.tabId == null && it.cleanedId == null }?.location
+        when {
+            row is Suggestion.Scope -> enter(row.scope)
+            // A bookmark from another space opens in that space.
+            place != null && place.spaceId != app.activeSpaceId && row is Suggestion.Page -> {
+                keyboard?.hide()
+                browser.selectSpace(place.spaceId)
+                browser.open(OpenTarget.Url(row.url), privately)
+            }
+            else -> open(targetFor(row))
+        }
     }
 
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -313,14 +381,17 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         }
     }
 
+    // The page search was opened over, shown as a card above the sheet; none for a new tab.
+    val pageTab = if (browser.searchInNewTab || !browser.hasPage) null else browser.activeTab
     Box(Modifier.fillMaxSize().testTag("search-card")) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+        if (pageTab == null) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
         Box(
             Modifier.fillMaxSize()
                 .testTag("search-dismiss")
                 .semantics { contentDescription = strings.t("search.close"); role = Role.Button }
                 .clickable(remember { MutableInteractionSource() }, null) { dismiss() },
         )
+        if (pageTab != null) PageCard(app, strings, pageTab, browser.pageColors[pageTab.id], ::dismiss)
         Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -504,10 +575,16 @@ private fun SuggestionRow(
     open: () -> Unit,
     fill: (String) -> Unit,
 ) {
+    // Where the row's page is saved as a bookmark: "Personal · Watchlist", or the space alone at its top level.
+    val place = (row as? Suggestion.Page)?.takeIf { it.tabId == null }?.location?.let { place ->
+        val space = app.spaces.firstOrNull { it.id == place.spaceId }?.let { spaceName(it, strings) }.orEmpty()
+        listOf(space, place.folder).filter { it.isNotEmpty() }.joinToString(" · ")
+    }
     val (title, detail, fillText) = when (row) {
         is Suggestion.Page -> {
             val address = displayUrl(row.url)
-            Triple(row.title.ifEmpty { address }, if (row.tabId == null) address else strings.t("search.switchToTab", mapOf("address" to address)), row.url)
+            val detail = if (row.tabId == null) place ?: address else strings.t("search.switchToTab", mapOf("address" to address))
+            Triple(row.title.ifEmpty { address }, detail, row.url)
         }
         is Suggestion.Search -> Triple(row.query, strings.t("search.withEngine", mapOf("engine" to row.engine.ifEmpty { engineName })), row.query)
         is Suggestion.Calc -> Triple("= ${row.value}", row.expression, null)
@@ -543,7 +620,10 @@ private fun SuggestionRow(
         }
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
             BayText(title, color = text, maxLines = 1)
-            BayText(detail, variant = TextVariant.FOOTNOTE, color = secondary, maxLines = 1)
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
+                if (place != null) BayIconView(BayIcon.BOOKMARKED, size = IconSize.inline, color = secondary)
+                BayText(detail, variant = TextVariant.FOOTNOTE, color = secondary, maxLines = 1)
+            }
         }
         if (fillText != null) {
             FieldButton("suggestion-fill-$index", strings.t("search.fillIn", mapOf("title" to title)), BayIcon.FILL, secondary, IconSize.small) { fill(fillText) }

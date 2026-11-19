@@ -234,6 +234,8 @@ final class BrowserModel: ObservableObject {
   // MARK: Actions
 
   func search(inNewTab: Bool, privately: Bool = false, listening: Bool = false) {
+    // A fresh picture of the page, for the card it shrinks into above the search sheet.
+    if !inNewTab, hasPage { capture(app.activeTabId) }
     searchInNewTab = inNewTab
     searchPrivately = privately
     searchListening = listening
