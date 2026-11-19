@@ -219,11 +219,24 @@ let project = Project(
         "SWIFT_STRICT_CONCURRENCY": "minimal",
       ])
     ),
+    // Accessibility audits of the main screens (XCUIApplication.performAccessibilityAudit, iOS 17+), run with the Bay
+    // scheme's test action on a simulator.
+    .target(
+      name: "BayUITests",
+      destinations: [.iPhone],
+      product: .uiTests,
+      bundleId: "\(bundleId).uitests",
+      deploymentTargets: .iOS("17.0"),
+      infoPlist: .default,
+      sources: ["BayUITests/**"],
+      dependencies: [.target(name: "Bay")]
+    ),
   ],
   schemes: [
     .scheme(
       name: "Bay",
       buildAction: .buildAction(targets: ["Bay"]),
+      testAction: .targets(["BayUITests"], configuration: .debug),
       runAction: .runAction(configuration: .debug, executable: "Bay"),
       archiveAction: .archiveAction(configuration: .release)
     ),

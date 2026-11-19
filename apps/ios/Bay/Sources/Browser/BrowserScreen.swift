@@ -72,7 +72,9 @@ struct BrowserScreen: View {
               // The ring round the capsule the tip means.
               .overlay {
                 if browser.tip == .bar {
-                  Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: 184, height: 62).allowsHitTesting(false)
+                  // The capsule is narrower over the start page, where it holds only the magnifier.
+                  Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: browser.hasPage ? 184 : 140, height: 62)
+                    .allowsHitTesting(false)
                 }
               }
           }
@@ -172,14 +174,24 @@ struct BrowserScreen: View {
             Haptics.tick()
             browser.unpin(site)
           })
-        VStack(spacing: 2) {
-          BayText(strings.t("start.tapToSearch"), variant: .subhead, weight: .medium, tone: .muted)
-          BayIconView(.down, size: IconSize.small, color: BayColor.muted)
+        // The bar's tip covers it, keeping its place.
+        if browser.tip == .bar {
+          searchHint.hidden()
+        } else {
+          searchHint
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
       }
       .padding(.bottom, Self.barHeight + Space.xxl)
     }
+  }
+
+  /// "Tap to search", pointing down at the bar.
+  private var searchHint: some View {
+    VStack(spacing: 2) {
+      BayText(strings.t("start.tapToSearch"), variant: .subhead, weight: .medium, tone: .muted)
+      BayIconView(.down, size: IconSize.small, color: BayColor.muted)
+    }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
   }
 }

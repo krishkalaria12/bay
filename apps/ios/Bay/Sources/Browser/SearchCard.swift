@@ -62,6 +62,7 @@ final class RemoteSuggestions: ObservableObject {
 struct SearchCard: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
+  @Environment(\.dynamicTypeSize) private var sizeCategory
   @ObservedObject var browser: BrowserModel
   @StateObject private var remote: RemoteSuggestions
   @State private var query: String
@@ -178,14 +179,14 @@ struct SearchCard: View {
       ZStack(alignment: .leading) {
         if !completion.isEmpty {
           Text(completionText(completion))
-            .font(TextVariant.headline.font(weight: .regular))
+            .font(TextVariant.headline.font(weight: .regular, sizeCategory: sizeCategory))
             .lineLimit(1)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .accessibilityIdentifier("address-completion")
         }
         TextField(strings.t("search.placeholder"), text: $query)
-          .font(TextVariant.headline.font(weight: .regular))
+          .font(TextVariant.headline.font(weight: .regular, sizeCategory: sizeCategory))
           .foregroundColor(text)
           .keyboardType(.webSearch)
           .textInputAutocapitalization(.never)
@@ -234,7 +235,7 @@ struct SearchCard: View {
 
   private func iconButton(_ icon: BayIcon, label: String, color: Color, size: CGFloat = IconSize.row, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      BayIconView(icon, size: size, color: color).frame(width: 44, height: 44)
+      BayIconView(icon, size: size, color: color).frame(width: 44, height: 44).contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel(Text(verbatim: label))
@@ -321,7 +322,7 @@ private struct SuggestionRow: View {
           Button {
             fill(fillText)
           } label: {
-            BayIconView(.fill, size: IconSize.small, color: secondary).frame(width: 44, height: 44)
+            BayIconView(.fill, size: IconSize.small, color: secondary).frame(width: 44, height: 44).contentShape(Rectangle())
           }
           .buttonStyle(.plain)
           .accessibilityLabel(Text(verbatim: strings.t("search.fillIn", ["title": title])))

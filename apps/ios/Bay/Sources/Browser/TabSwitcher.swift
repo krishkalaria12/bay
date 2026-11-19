@@ -222,6 +222,8 @@ struct TabSwitcher: View {
           browser.archiveAll()
         } label: {
           BayText(strings.t("tabs.clear"), variant: .footnote, weight: .medium, tone: .muted)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.pressFeedback)
         .accessibilityLabel(Text(verbatim: strings.t("tabs.archiveAllCount", ["count": "\(count)"])))
@@ -340,9 +342,11 @@ private struct TabCard: View {
           BayIconView(.close, size: 12, color: .white)
             .frame(width: 22, height: 22)
             .background(Color.black.opacity(0.45), in: Circle())
+            // The badge stays small on the card; the finger gets the room round it.
+            .frame(width: 34, height: 34)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(6)
         .accessibilityLabel(Text(verbatim: strings.t("tabs.closeLabel", ["title": title])))
         .accessibilityIdentifier("tab-close-\(index)")
         // The card says it's private already; the badge shows it.

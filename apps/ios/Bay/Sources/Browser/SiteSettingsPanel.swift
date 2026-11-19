@@ -168,6 +168,7 @@ private struct SiteZoomRow: View {
         Button { onChange(nil) } label: {
           BayText("\(value)%", variant: .subhead, weight: zoom == nil ? .regular : .semibold, tone: zoom == nil ? .muted : .default)
             .frame(minWidth: 52, minHeight: 36)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(zoom == nil)

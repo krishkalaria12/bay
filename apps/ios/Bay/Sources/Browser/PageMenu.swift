@@ -300,12 +300,12 @@ private struct SiteHeader: View {
     HStack(spacing: Space.md) {
       if !url.isEmpty { SiteIcon(url: url, size: 44) }
       VStack(alignment: .leading, spacing: 0) {
-        BayText(title.isEmpty ? url : title, variant: .headline).lineLimit(1).accessibilityAddTraits(.isHeader)
-        BayText(url, variant: .footnote, tone: .muted).lineLimit(1).accessibilityIdentifier("page-menu-url")
+        BayText(title.isEmpty ? url : title, variant: .headline).lineLimit(2).accessibilityAddTraits(.isHeader)
+        BayText(url, variant: .footnote, tone: .muted).lineLimit(1).truncationMode(.middle).accessibilityIdentifier("page-menu-url")
         if !status.isEmpty {
           HStack(spacing: Space.xs) {
             if web { BayIconView(insecure ? .error : .lock, size: IconSize.inline - 2, color: insecure ? BayColor.danger : BayColor.muted) }
-            BayText(status, variant: .caption, weight: .regular, tone: insecure ? .danger : .muted).lineLimit(1)
+            BayText(status, variant: .caption, weight: .regular, tone: insecure ? .danger : .muted).lineLimit(2)
           }
           .padding(.top, Space.xxs)
           .accessibilityElement(children: .ignore)

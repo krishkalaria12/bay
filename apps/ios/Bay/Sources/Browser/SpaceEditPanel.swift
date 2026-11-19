@@ -14,6 +14,7 @@ extension Strings {
 struct SpaceEditPanel: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
+  @Environment(\.dynamicTypeSize) private var sizeCategory
   @ObservedObject var browser: BrowserModel
   let space: BrowserSpace
   @State private var name: String
@@ -36,7 +37,7 @@ struct SpaceEditPanel: View {
     PanelSheet(title: title, testID: "space-edit", words: strings.sheetWords(title), onClose: { browser.panel = nil }) {
       SectionLabel(strings.t("space.edit.name"))
       TextField(strings.t("space.edit.name"), text: $name)
-        .font(TextVariant.body.font())
+        .font(TextVariant.body.font(sizeCategory: sizeCategory))
         .submitLabel(.done)
         .onSubmit(saveName)
         .padding(.horizontal, Space.lg)

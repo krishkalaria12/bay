@@ -78,6 +78,7 @@ struct MiniPlayer: View {
   private func control(_ icon: BayIcon, _ label: String, _ id: String, strong: Bool = false, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       BayIconView(icon, size: strong ? 22 : 20, color: strong ? BayColor.foreground : BayColor.muted).frame(width: 44, height: 44)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel(Text(verbatim: label))

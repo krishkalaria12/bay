@@ -222,6 +222,7 @@ public struct ActionRow: View {
   /// Takes the icon's place: another app's initial, say.
   private let leading: AnyView?
   private let action: () -> Void
+  @Environment(\.dynamicTypeSize) private var sizeCategory
 
   public init(
     _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, value: String? = nil,
@@ -257,11 +258,13 @@ public struct ActionRow: View {
         }
         VStack(alignment: .leading, spacing: 1) {
           BayText(label, tone: destructive ? .danger : .default)
+          // At the largest text sizes the value goes under the name, which would have no room beside it.
+          if let value, stacksValue { valueText(value).accessibilityIdentifier("\(testID)-value") }
           if let detail { BayText(detail, variant: .subhead, tone: .muted).lineLimit(2) }
         }
         Spacer(minLength: 0)
-        // Drawn again over the row, where tests can read it; this copy only holds its place.
-        if let value { valueText(value).hidden() }
+        // Drawn again over the row, where tests can read it; this copy only holds its place, at its full width.
+        if let value, !stacksValue { valueText(value).fixedSize().hidden() }
         trailing
       }
       .padding(.horizontal, rowInset)
@@ -278,7 +281,7 @@ public struct ActionRow: View {
     .accessibilityIdentifier(testID)
     .overlay(alignment: .trailing) {
       // A button reads as one element, so the value it shows is its own element here, with its own identifier.
-      if let value {
+      if let value, !stacksValue {
         HStack(spacing: rowGap) {
           valueText(value).accessibilityIdentifier("\(testID)-value")
           trailing.hidden()
@@ -289,6 +292,8 @@ public struct ActionRow: View {
       }
     }
   }
+
+  private var stacksValue: Bool { sizeCategory.isAccessibilitySize }
 
   private func valueText(_ value: String) -> some View {
     BayText(value, variant: .subhead, tone: .muted).lineLimit(1)

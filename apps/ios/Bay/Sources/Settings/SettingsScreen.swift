@@ -51,6 +51,7 @@ private struct SettingsIndex: View {
   @ObservedObject var settings: SettingsModel
   let context: SettingsContext
   @State private var query = ""
+  @Environment(\.dynamicTypeSize) private var sizeCategory
 
   var body: some View {
     ScrollView {
@@ -96,6 +97,7 @@ private struct SettingsIndex: View {
     HStack(spacing: Space.sm) {
       BayIconView(.search, size: IconSize.small, color: BayColor.muted)
       TextField(strings.t("settings.search.placeholder"), text: $query)
+        .font(TextVariant.body.font(sizeCategory: sizeCategory))
         .textInputAutocapitalization(.never)
         .disableAutocorrection(true)
         .submitLabel(.search)
@@ -103,8 +105,11 @@ private struct SettingsIndex: View {
       if !query.isEmpty {
         Button { query = "" } label: {
           BayIconView(.close, size: IconSize.inline).frame(width: 24, height: 24).background(BayColor.foreground.opacity(0.15), in: Circle())
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.trailing, -10)
         .accessibilityLabel(Text(verbatim: strings.t("settings.search.clear")))
         .accessibilityIdentifier("settings-search-clear")
       }
