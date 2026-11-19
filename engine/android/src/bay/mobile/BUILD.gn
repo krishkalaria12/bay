@@ -150,6 +150,9 @@ android_library("java") {
     "//components/embedder_support/android:content_view_java",
     "//components/embedder_support/android:view_java",
     "//components/embedder_support/android:web_contents_delegate_java",
+    # The GPU process's begin-frame source on Android before 11 (content shell's APK lists it too); without it the
+    # compositor crashes there and pages stay black.
+    "//components/viz/service:service_java",
     "//components/webauthn/android:java",
     "//content/public/android:content_java",
     "//net/android:net_java",
