@@ -1306,30 +1306,29 @@
               can offer the same fonts.
             </li>
           </ul>
-          <h4>How pages get the fonts (check this first in R6)</h4>
+          <h4>How pages get the fonts (settled in R6)</h4>
           <ul>
             <li>
-              <span class="kotlin">Android:</span> the best way is to have our Chromium treat the app's font folder as installed fonts, by adding it to Skia's
-              font manager. Pages then use them with <code>local()</code>: nothing is fetched, and a site's Content-Security-Policy can't block them. This is an
-              engine change in <code>modules/bay-engine</code>, so it goes with the next engine build.
+              Both apps the same way: the page script (<code>page-font</code> in <code>apps/mobile/src/pagescripts/fonts.ts</code>) gets the chosen font's files
+              from the app as base64 and adds them with the FontFace API. A FontFace made from bytes fetches nothing, so a site's Content-Security-Policy
+              <code>font-src</code> can't block it: it shows on GitHub as on Wikipedia, with no engine change and no URL scheme.
             </li>
             <li>
-              <span class="swift">iOS:</span> fonts the app registers aren't visible to WKWebView, which renders in a separate process. So the page script adds
-              an <code>@font-face</code> rule pointing at a Bay URL scheme (<code>WKURLSchemeHandler</code>) that serves the bundled file with
-              <code>Access-Control-Allow-Origin: *</code>. If WebKit won't load a custom scheme from https pages, fall back to a <code>data:</code> URL for just
-              the font chosen, kept in the injected script.
+              Only the chosen font goes in (Literata and Inter are about 180 KB each per style, pinned to text size on their optical size axis), read from the
+              app once and kept. The family names the phone's font after the bundled one, so Hindi or Japanese text keeps the phone's font.
             </li>
             <li>
-              A site whose Content-Security-Policy <code>font-src</code> blocks both falls back to System. The picker then says "This site doesn't allow other
-              fonts" instead of failing without a word. Make a list of strict sites (GitHub, Google, banks) and test against it.
+              The core says which files a font needs and its family (<code>browser/fonts.rs</code>: <code>site_font_face</code>), and which font a page shows in
+              (<code>store.site_font(url)</code>: the site's own, else the one for all websites). <code>scripts/subset-fonts.sh</code> rebuilds the set.
             </li>
           </ul>
 
           <h3>Force dark</h3>
           <ul>
             <li>
-              <span class="kotlin">Android:</span> our Chromium can turn on Blink's own forced dark mode (<code>force_dark_mode_enabled</code>) per tab. It
-              needs an engine API in <code>modules/bay-engine</code> and possibly an engine rebuild, like <code>forSpace</code> needed.
+              <span class="kotlin">Android:</span> our Chromium turns on Blink's own forced dark mode (<code>force_dark_mode_enabled</code>) per tab:
+              <code>BayTab.setForceDark</code>, in android-engine-18. The strips behind the status bar and the bar follow it, since the page's own colours still
+              read light.
             </li>
             <li>
               <span class="swift">iOS:</span> WebKit has no forced dark mode. The first version is a page script: if the page already supports dark mode, ask
@@ -1508,27 +1507,43 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
         <li>
           <b>R3 done:</b> the three-button bar; switching spaces by holding Tabs and sliding up the column of spaces, with the space named at the top after; the
           page menu with the address on top, the tiles, Developer tools a step away, and Site settings, Downloads and Settings as rows; every sheet without a
-          close button, floating glass on iPhone and Android's own bottom sheet on Android, no taller than 62% and scrolling. Still to do from R3: the tab
-          view's sideways swipe following the finger, and the page sliding in from the side its space sits on.
+          close button, floating glass on iPhone and Android's own bottom sheet on Android, no taller than 62% and scrolling. The tab view's sideways swipe
+          follows the finger (the next space's name coming in from that side, the colours blending, a stretch at the first and last space), and after a switch
+          from a page, the page slides in from the side its space sits on.
         </li>
         <li>
           <b>R4 done:</b> the save sheet (the space chips, the space's folders, a new folder, Remove), saving, moving and renaming in the core, and "Added to …"
           at the top, which opens the drawer on that folder.
         </li>
         <li>
-          <b>R5 in part:</b> the drawer: the space's colour, the chips, folders opening where they sit, the page showing highlighted, a sideways swipe to the
-          next space, holding a row to share or remove it, + to save the page here, and the empty note. Still to do: renaming and moving a row from the drawer,
-          dragging rows into a new order, and search when the list is pulled down. <code>BookmarksPanel</code> stays for Settings ▸ Bookmarks until those are
-          in.
+          <b>R5 done:</b> the drawer: the space's colour, the chips, folders opening where they sit, the page showing highlighted, a sideways swipe to the next
+          space, + to save the page here, the empty note; holding a row lifts it to drag it to a new place (a link dropped on a folder goes in), and holding
+          without moving offers Share, Rename, Move and Remove; pulling the list down shows a search through the space's bookmarks. Settings ▸ Bookmarks and the
+          bookmarked toast open the drawer, and <code>BookmarksPanel</code> is gone from both apps.
         </li>
         <li>
-          <b>Gap:</b> the bang list doesn't refresh daily yet; the phone uses the bundled list until the core fetches and checks <code>bangs.json</code> as the
-          desktop does.
+          <b>R6 done:</b> the bundled fonts (<code>packages/mobile-core/design/fonts</code>, 1.4 MB, credited in About), a font per site and one for all
+          websites (Settings ▸ Appearance), Always fullscreen (a tap on the bottom edge brings the bar back for a moment), Force dark (Blink's own on Android,
+          android-engine-18; a page script marked Beta on iPhone), Mini player per site, Swipe anywhere as a switch, and the site sheet in the video's order. A
+          site that won't take a font says so in its sheet.
         </li>
         <li>
-          <b>Gap:</b> on iPhone, backspace in an empty field doesn't give the chip back, since SwiftUI's field doesn't report it; tap the chip or the clear
-          button. Android does.
+          <b>Bang list:</b> refreshed once a day from Helium's <code>bangs.json</code> as the desktop does it (<code>input/bang_list.rs</code>): cut down,
+          checked, saved beside the store with its version, and sent back so an unchanged list answers 304. The bundled list is used until then.
         </li>
+        <li>
+          <b>Engine:</b> GitHub's pages ask for installed related apps, which our Chromium didn't answer, so Chromium killed the renderer and the page reloaded
+          over and over. Fixed in android-engine-19 (an answer of none); the app's pin moves to it once that build is published.
+        </li>
+        <li><b>Gap:</b> folders reorder only among folders and links among links, since the drawer lists folders first; Move puts a folder inside another.</li>
+        <li>
+          <b>Gap:</b> dropping a link beside another link isn't confirmed on the iPhone simulator, whose simulated drags kept opening the row's menu; it works
+          on Android.
+        </li>
+        <li>
+          <b>Gap:</b> the spaces either side of the tab view's swipe are drawn live (their name, and their tabs on iPhone) rather than from saved pictures.
+        </li>
+        <li><b>Gap:</b> the mini player off switch is checked on iPhone only (soundhelix.com); the Android emulator had no media to play in that run.</li>
         <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.
