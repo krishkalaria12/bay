@@ -533,6 +533,7 @@
   "site.desktop": "Desktopversion",
   "site.downloaded": "Hier geladen",
   "site.font": "Schrift",
+  "site.font.blocked": "Diese Website lässt keine anderen Schriften zu, sie erscheint in der Schrift des Telefons.",
   "site.font.same": "Wie alle Websites",
   "site.font.sameAs": "Wie alle Websites ({font})",
   "site.forceDark": "Dunkelmodus erzwingen",

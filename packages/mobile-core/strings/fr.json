@@ -533,6 +533,7 @@
   "site.desktop": "Version ordinateur",
   "site.downloaded": "Téléchargé ici",
   "site.font": "Police",
+  "site.font.blocked": "Ce site n’accepte pas d’autres polices : il s’affiche dans celle du téléphone.",
   "site.font.same": "Comme tous les sites",
   "site.font.sameAs": "Comme tous les sites ({font})",
   "site.forceDark": "Forcer le mode sombre",

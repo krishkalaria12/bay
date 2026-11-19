@@ -533,6 +533,7 @@
   "site.desktop": "Sitio de escritorio",
   "site.downloaded": "Descargado aquí",
   "site.font": "Fuente",
+  "site.font.blocked": "Este sitio no admite otras fuentes, así que se ve con la del teléfono.",
   "site.font.same": "Igual que todos los sitios",
   "site.font.sameAs": "Igual que todos los sitios ({font})",
   "site.forceDark": "Forzar modo oscuro",

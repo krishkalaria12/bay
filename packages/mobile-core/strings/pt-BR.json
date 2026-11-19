@@ -533,6 +533,7 @@
   "site.desktop": "Site para computador",
   "site.downloaded": "Baixado aqui",
   "site.font": "Fonte",
+  "site.font.blocked": "Este site não aceita outras fontes, então aparece com a fonte do celular.",
   "site.font.same": "Igual a todos os sites",
   "site.font.sameAs": "Igual a todos os sites ({font})",
   "site.forceDark": "Forçar modo escuro",

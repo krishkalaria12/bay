@@ -533,6 +533,7 @@
   "site.desktop": "デスクトップ用サイト",
   "site.downloaded": "ここからのダウンロード",
   "site.font": "フォント",
+  "site.font.blocked": "このサイトは他のフォントを使えないため、端末のフォントで表示されます。",
   "site.font.same": "すべてのサイトと同じ",
   "site.font.sameAs": "すべてのサイトと同じ（{font}）",
   "site.forceDark": "ダークモードを強制",

@@ -40,6 +40,9 @@ const report = (event) => {
   });
 };
 for (const type of ["play", "playing", "pause", "ended", "emptied"]) document.addEventListener(type, report, true);
+// Media that started before the watch did (a file that plays by itself as it opens) never sends its play event again.
+const playing = [...document.querySelectorAll("video, audio")].find((media) => !media.paused && !media.ended);
+if (playing) report({ type: "playing", target: playing });
 return true;
 `;
 

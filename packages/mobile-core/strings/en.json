@@ -533,6 +533,7 @@
   "site.desktop": "Desktop site",
   "site.downloaded": "Downloaded here",
   "site.font": "Font",
+  "site.font.blocked": "This site doesn’t allow other fonts, so it shows in the phone’s font.",
   "site.font.same": "Same as all websites",
   "site.font.sameAs": "Same as all websites ({font})",
   "site.forceDark": "Force dark mode",

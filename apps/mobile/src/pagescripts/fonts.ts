@@ -4,23 +4,29 @@ import { withArgs } from "./args.ts";
  * Shows the page in one of Bay's fonts (`args.family`, a CSS font-family; empty puts the site's own back). The font's
  * files come in `args.faces` as base64 woff2 with their style and weight, and go in through the FontFace API, which
  * fetches nothing, so a site's font-src policy can't block them. Code, keyboard keys, maths, SVG and icon fonts keep
- * their own. Safe to run more than once per page: each file is added once, and the rule is replaced.
+ * their own. Safe to run more than once per page: each file is added once, and the rule is replaced. Answers "ok", or
+ * "blocked" when the page wouldn't take a file (the phone's font, next in the family, shows instead).
  */
 export const PAGE_FONT_SCRIPT = `
-const state = (window[Symbol.for("bay.font")] ??= { added: new Set() });
+const state = (window[Symbol.for("bay.font")] ??= { added: new Map() });
 let style = document.getElementById("bay-site-font");
 if (!args.family) {
   style?.remove();
   return "ok";
 }
 const name = /^"([^"]+)"/.exec(args.family);
+const faces = [];
 for (const face of args.faces || []) {
   const key = (name ? name[1] : "") + " " + face.weight + (face.italic ? " italic" : "");
-  if (!name || state.added.has(key)) continue;
-  const bytes = Uint8Array.from(atob(face.data), (char) => char.charCodeAt(0));
-  const font = new FontFace(name[1], bytes, { style: face.italic ? "italic" : "normal", weight: face.weight, display: "swap" });
-  document.fonts.add(font);
-  state.added.add(key);
+  if (!name) continue;
+  let font = state.added.get(key);
+  if (!font) {
+    const bytes = Uint8Array.from(atob(face.data), (char) => char.charCodeAt(0));
+    font = new FontFace(name[1], bytes, { style: face.italic ? "italic" : "normal", weight: face.weight, display: "swap" });
+    document.fonts.add(font);
+    state.added.set(key, font);
+  }
+  faces.push(font);
 }
 if (!style) {
   style = document.createElement("style");
@@ -30,7 +36,8 @@ if (!style) {
 // :where keeps the rule's weight at nothing, so only !important lifts it over the page's own.
 const keep = 'code, pre, pre *, kbd, samp, tt, var, math, math *, svg, svg *, i:empty, [class*="icon" i], [class*="fa-"], [class*="material-"], [class*="glyph" i], [class*="symbol" i], [aria-hidden="true"]:empty';
 style.textContent = ":where(html, body, body *:not(" + keep + ")) { font-family: " + args.family + " !important; }";
-return "ok";
+const loaded = await Promise.all(faces.map((font) => font.load().then(() => true, () => false)));
+return loaded.every(Boolean) ? "ok" : "blocked";
 `;
 
 export function pageFontScript({ family, faces }: { family: string; faces: readonly { data: string; italic: boolean; weight: string }[] }): string {
