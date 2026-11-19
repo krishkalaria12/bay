@@ -1376,6 +1376,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** Tabs given one of Bay's fonts on their current page, so a change back to the site's own takes it off again. */
     private val fontedTabs = HashSet<String>()
 
+    /** Tabs whose page wouldn't take Bay's font, and shows in the phone's instead; Site settings says so. */
+    val fontBlocked = androidx.compose.runtime.mutableStateListOf<String>()
+
     /** The site's font (else the one for all websites) on the page a tab shows; nothing to do for the site's own. */
     private fun applyFont(tabId: String, view: BayEngineView, url: String) {
         val face = siteFontFace(app.store.siteFont(url))
@@ -1390,7 +1393,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                     data?.let { mapOf("data" to it, "italic" to file.italic, "weight" to file.weight) }
                 }
             }
-            runCatching { view.runScript(PageScript.PAGE_FONT, mapOf("family" to face.family, "faces" to faces)) }
+            val result = runCatching { view.runScript(PageScript.PAGE_FONT, mapOf("family" to face.family, "faces" to faces)) }.getOrNull()
+            if (result == "\"blocked\"") {
+                if (tabId !in fontBlocked) fontBlocked += tabId
+            } else if (result != null) {
+                fontBlocked -= tabId
+            }
         }
     }
 

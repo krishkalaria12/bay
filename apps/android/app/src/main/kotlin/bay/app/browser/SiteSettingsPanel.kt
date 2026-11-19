@@ -116,6 +116,15 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            // The page wouldn't take the font chosen: said here rather than failing without a word.
+            if (app.activeTabId in browser.fontBlocked) {
+                BayText(
+                    strings.t("site.font.blocked"),
+                    Modifier.padding(horizontal = Space.lg).testTag("site-font-blocked"),
+                    variant = TextVariant.FOOTNOTE,
+                    tone = TextTone.MUTED,
+                )
+            }
             RowGroup {
                 ActionRow(
                     strings.t("site.font"), "site-font", icon = BayIcon.FONT,
