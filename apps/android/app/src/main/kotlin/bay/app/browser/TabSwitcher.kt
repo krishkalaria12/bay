@@ -2,6 +2,9 @@ package bay.app.browser
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -151,26 +154,66 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     val essentials = app.pins.filter { it.kind == PinKind.ESSENTIAL }
     val rows = app.pins.filter { it.kind == PinKind.ROW }
     val activeUrl = browser.activeTab?.url
-    var shift by remember { mutableFloatStateOf(0f) }
+    // How far the space has been pulled sideways, following the finger; the next space comes in from that side.
+    val shift = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableFloatStateOf(1f) }
+    val index = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+    val incoming = when {
+        shift.value < 0 -> app.spaces.getOrNull(index + 1)
+        shift.value > 0 -> app.spaces.getOrNull(index - 1)
+        else -> null
+    }
+    val progress = (abs(shift.value) / width).coerceIn(0f, 1f)
+    val wash = if (incoming != null) androidx.compose.ui.graphics.lerp(color, spaceColor(incoming.color), progress) else color
     Box(
-        Modifier.fillMaxSize().testTag("tab-switcher").pointerInput(app.spaces.size, app.activeSpaceId) {
+        Modifier.fillMaxSize().testTag("tab-switcher").onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(app.spaces.size, app.activeSpaceId) {
             detectHorizontalDragGestures(
                 onDragEnd = {
-                    val index = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
-                    val next = index + if (shift < 0) 1 else -1
-                    if (abs(shift) > 80.dp.toPx() * 0.35f && next in app.spaces.indices) {
-                        Haptics.tick(view)
-                        browser.selectSpace(app.spaces[next].id)
+                    val at = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+                    val step = if (shift.value < 0) 1 else -1
+                    val next = app.spaces.getOrNull(at + step)
+                    scope.launch {
+                        if (next != null && abs(shift.value) > width * 0.25f) {
+                            Haptics.tick(view)
+                            // Out the rest of the way, then the new space slides in from the side it came from.
+                            shift.animateTo(-step * width, tween(160))
+                            browser.selectSpace(next.id)
+                            shift.snapTo(step * width * 0.35f)
+                            shift.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f))
+                        } else {
+                            shift.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
+                        }
                     }
-                    shift = 0f
                 },
-                onDragCancel = { shift = 0f },
-                onHorizontalDrag = { _, amount -> if (app.spaces.size > 1) shift += amount * 0.35f },
+                onDragCancel = { scope.launch { shift.animateTo(0f) } },
+                onHorizontalDrag = { change, amount ->
+                    change.consume()
+                    val target = shift.value + amount
+                    val ahead = if (target < 0) app.spaces.getOrNull(index + 1) else app.spaces.getOrNull(index - 1)
+                    // A stretch at the first and last space: it gives a little and comes back.
+                    scope.launch { shift.snapTo(if (ahead != null) target else shift.value + amount * 0.3f) }
+                },
             )
         },
     ) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to color.copy(alpha = 0.34f), 0.55f to color.copy(alpha = 0.08f), 1f to Color.Transparent)))
-        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift }) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to wash.copy(alpha = 0.34f), 0.55f to wash.copy(alpha = 0.08f), 1f to Color.Transparent)))
+        // The space coming in: its name at the top, a page's width beyond the edge it's pulled from.
+        if (incoming != null) {
+            val name = spaceName(incoming, strings)
+            Row(
+                Modifier.statusBarsPadding().padding(horizontal = Space.gutter).padding(top = Space.sm).heightIn(min = 44.dp)
+                    .graphicsLayer { translationX = shift.value + if (shift.value < 0) width else -width }
+                    .clearAndSetSemantics {},
+                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SpaceGlyph(incoming, name, 30.dp)
+                BayText(name, variant = TextVariant.TITLE, maxLines = 1)
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift.value }) {
             val inner = maxWidth - Space.gutter * 2
             // Half a point narrower than an exact fit, so rounding never wraps the last card onto a row of its own.
             val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS - 0.5.dp

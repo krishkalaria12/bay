@@ -1,5 +1,7 @@
 package bay.app.browser
 
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -131,7 +133,26 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
             // A fullscreen site takes the status bar's place too.
             val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
-            PagesHost(browser, shown && !behind, Modifier.fillMaxSize().then(top).padding(bottom = covered), visible = shown)
+            // After a switch from a page, the new space's page comes in from the side its space sits on.
+            val slide = remember { androidx.compose.animation.core.Animatable(0f) }
+            val spaceIndex = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+            var lastSpace by remember { androidx.compose.runtime.mutableIntStateOf(spaceIndex) }
+            val pageWidth = with(LocalDensity.current) { androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx() }
+            LaunchedEffect(spaceIndex) {
+                val from = lastSpace
+                lastSpace = spaceIndex
+                if (from < 0 || spaceIndex < 0 || from == spaceIndex || browser.overlay != Overlay.NONE) return@LaunchedEffect
+                slide.snapTo((if (spaceIndex > from) 1 else -1) * pageWidth * 0.5f)
+                slide.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 380f))
+            }
+            PagesHost(
+                browser, shown && !behind,
+                Modifier.fillMaxSize().then(top).padding(bottom = covered).graphicsLayer {
+                    translationX = slide.value
+                    alpha = 1f - (kotlin.math.abs(slide.value) / pageWidth).coerceIn(0f, 0.6f)
+                },
+                visible = shown,
+            )
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
             if (browser.fullscreen) {
                 Box(
