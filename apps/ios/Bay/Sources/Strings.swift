@@ -43,8 +43,17 @@ final class Strings: ObservableObject {
   /// The message under `key`, with `{name}` placeholders filled from `params`. An unknown key shows itself.
   func t(_ key: String, _ params: [String: String] = [:]) -> String {
     let template = table[key] ?? key
-    return params.isEmpty ? template : formatMessage(template: template, params: params)
+    if params.isEmpty { return template }
+    // Filled in by the core, a call across the FFI: views ask for the same few each frame, so they're kept.
+    let asked = ([template] + params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }).joined(separator: "\u{0}")
+    if let done = formatted[asked] { return done }
+    let done = formatMessage(template: template, params: params)
+    if formatted.count >= 512 { formatted.removeAll(keepingCapacity: true) }
+    formatted[asked] = done
+    return done
   }
+
+  private var formatted: [String: String] = [:]
 
   /// A percentage written the language's way ("100%", "100 %").
   func percent(_ value: Int) -> String {

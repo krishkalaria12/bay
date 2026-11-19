@@ -41,8 +41,16 @@ class Strings(context: Context? = null) {
     /** The message under [key], with `{name}` placeholders filled from [params]. An unknown key shows itself. */
     fun t(key: String, params: Map<String, String> = emptyMap()): String {
         val template = table[key] ?: key
-        return if (params.isEmpty()) template else formatMessage(template, params)
+        if (params.isEmpty()) return template
+        // Filled in by the core, a call across the FFI: views ask for the same few each frame, so they're kept.
+        val asked = buildString {
+            append(template)
+            params.entries.sortedBy { it.key }.forEach { (name, value) -> append('\u0000').append(name).append('=').append(value) }
+        }
+        return formatted.get(asked) ?: formatMessage(template, params).also { formatted.put(asked, it) }
     }
+
+    private val formatted = android.util.LruCache<String, String>(512)
 
     /** A percentage written the language's way ("100%", "100 %"). */
     fun percent(value: Int): String = t("format.percent", mapOf("value" to "$value"))
