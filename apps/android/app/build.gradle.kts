@@ -46,7 +46,17 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // Release's code (R8, no interpreter) under the debug app's id and key, and profileable: what the profiler
+        // measures (a debuggable build runs Kotlin interpreted, which swamps the timings). `./gradlew :app:assembleProfile`.
+        create("profile") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".native"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
     }
+    // The debug app's shortcuts, which name its package.
+    sourceSets.getByName("profile").res.srcDir("src/debug/res")
 }
 
 tasks.named("preBuild") { dependsOn(":engine:generateEngineRClasses") }
