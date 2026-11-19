@@ -1,6 +1,7 @@
 package bay.app
 
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
@@ -21,7 +22,10 @@ fun View.announceContentChangesToUiAutomator() {
     val announce = Runnable {
         pending = false
         if (!accessibility.isEnabled) return@Runnable
-        val event = AccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED).apply {
+        val type = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        // The constructor came in Android 11; Android 10 has only the pooled `obtain`.
+        @Suppress("DEPRECATION")
+        val event = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) AccessibilityEvent(type) else AccessibilityEvent.obtain(type)).apply {
             contentChangeTypes = AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE
             setSource(this@announceContentChangesToUiAutomator)
         }
