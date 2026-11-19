@@ -1173,7 +1173,7 @@ pub(super) fn sections_in(
                             start_page_label(*hours, words),
                             prefs.start_page_after_hours == *hours,
                             change(PreferencesUpdate {
-                                start_page_after_hours: Some(*hours),
+                                start_page_after_hours: Some((*hours).into()),
                                 ..Default::default()
                             }),
                         )

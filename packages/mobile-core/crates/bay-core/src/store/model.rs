@@ -324,6 +324,36 @@ pub struct SiteSettingInput {
     pub swipe: Option<SwipeMode>,
 }
 
+/// When Bay opens on a fresh start page: never, or after this many hours away. Its own type rather than an optional
+/// number inside the update's option, which Kotlin can't tell from "no change" (`Long??` is `Long?`). Stored as the
+/// preference is: `null` for never, else the hours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StartPageAfter {
+    Never,
+    Hours { hours: i64 },
+}
+
+impl From<Option<i64>> for StartPageAfter {
+    fn from(hours: Option<i64>) -> Self {
+        hours.map_or(Self::Never, |hours| Self::Hours { hours })
+    }
+}
+
+impl Serialize for StartPageAfter {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Never => serializer.serialize_none(),
+            Self::Hours { hours } => serializer.serialize_some(hours),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StartPageAfter {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Option::<i64>::deserialize(deserializer).map(Self::from)
+    }
+}
+
 /// Preferences the settings screen changes in one step. An absent field stays.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
 #[serde(rename_all = "camelCase")]
@@ -338,12 +368,8 @@ pub struct PreferencesUpdate {
     pub skip_amp: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_to_refresh: Option<bool>,
-    #[serde(
-        default,
-        deserialize_with = "double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub start_page_after_hours: Option<Option<i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_page_after_hours: Option<StartPageAfter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub youtube: Option<YouTubeCleanup>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -574,7 +574,9 @@ mod tests {
         assert!(!store.start_fresh(10 + 100 * hour, "fresh".into()));
         store.dispatch(Action::Preferences {
             update: super::super::model::PreferencesUpdate {
-                start_page_after_hours: Some(Some(4)),
+                start_page_after_hours: Some(super::super::model::StartPageAfter::Hours {
+                    hours: 4,
+                }),
                 ..Default::default()
             },
         });
@@ -584,6 +586,14 @@ mod tests {
         // On the start page already: nothing more.
         assert!(!store.start_fresh(10 + 5 * hour, "again".into()));
         assert_eq!(store.tabs().len(), 2);
+        // "Never" turns it off again.
+        assert!(store.dispatch(Action::Preferences {
+            update: super::super::model::PreferencesUpdate {
+                start_page_after_hours: Some(super::super::model::StartPageAfter::Never),
+                ..Default::default()
+            },
+        }));
+        assert_eq!(store.preferences().start_page_after_hours, None);
     }
 
     #[test]
