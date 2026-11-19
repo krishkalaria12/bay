@@ -1035,11 +1035,17 @@ extension BrowserModel {
   }
 
   /// The page through Google Translate, into the app's language.
+  /// The page translated into Bay's language.
   func translate() {
+    translate(to: strings.locale)
+  }
+
+  /// The page translated into `locale` (one of Bay's: "pt-BR" translates into Portuguese).
+  func translate(to locale: String) {
     let url = activeUrl
     guard !url.isEmpty else { return }
     if url.range(of: #"^https://[^/]+\.translate\.goog/"#, options: .regularExpression) != nil { return }
-    let language = strings.locale.split(separator: "-").first.map(String.init) ?? "en"
+    let language = locale.split(separator: "-").first.map(String.init) ?? "en"
     let encoded = url.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? url
     navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=\(language)&u=\(encoded)")
   }

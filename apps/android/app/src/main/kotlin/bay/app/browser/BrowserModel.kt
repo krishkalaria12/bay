@@ -1062,10 +1062,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** The page through Google Translate, into the app's language. */
-    fun translate() {
+    /** The page translated into Bay's language. */
+    fun translate() = translate(strings.locale)
+
+    /** The page translated into `locale` (one of Bay's: "pt-BR" translates into Portuguese). */
+    fun translate(locale: String) {
         val url = activeUrl
         if (url.isEmpty() || Regex("^https://[^/]+\\.translate\\.goog/").containsMatchIn(url)) return
-        val language = strings.locale.substringBefore('-').ifEmpty { "en" }
+        val language = locale.substringBefore('-').ifEmpty { "en" }
         navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=$language&u=${Uri.encode(url)}")
     }
 

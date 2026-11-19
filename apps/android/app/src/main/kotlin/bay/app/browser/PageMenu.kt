@@ -1,5 +1,10 @@
 package bay.app.browser
 
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,30 +64,24 @@ import bay.design.baySurface
 import bay.design.pressFeedback
 import bay.design.style
 
-private val CAPSULE_HEIGHT = 47.dp
-private val TILES_GAP = 17.dp
-private val TILE_SPACING = 16.dp
-private val TILE_HEIGHT = 64.dp
-private val TILE_RADIUS = 22.dp
-private val ROW_HEIGHT = 48.dp
+private val ADDRESS_HEIGHT = 48.dp
+private val TILE_HEIGHT = 76.dp
+private val ROW_HEIGHT = 52.dp
+private val FOOTER_BUTTON = 52.dp
+/** The room the floating footer takes over the rows' end, so the last row can scroll out from under it. */
+private val FOOTER_ROOM = 72.dp
 private const val ZOOM_MIN = 80
 private const val ZOOM_MAX = 200
 
 /**
- * What to do with the page showing (bar-more): where to go, the four things done most, display options, this site, the
- * page's tools one step away, and what blocking did on it.
+ * What to do with the page showing (bar-more), as one floating sheet: the address with back, forward, copy and reload on
+ * top; Share, Pin, Save and Find; Developer tools a step away; Reader, Hide elements, Translate and the page's zoom;
+ * Bookmarks and History; and a footer floating over the rows with Downloads, this site's settings and Bay's.
  */
 @Composable
 fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettings: () -> Unit) {
-    // Rarely used page tools sit one step away, and the display options open in place, so the menu fits.
     var tools by remember { mutableStateOf(false) }
-    var display by remember { mutableStateOf(false) }
-    LaunchedEffect(visible) {
-        if (visible) {
-            tools = false
-            display = false
-        }
-    }
+    LaunchedEffect(visible) { if (visible) tools = false }
     val close = { browser.panel = null }
     // Closes the menu, then does what was picked.
     fun act(action: () -> Unit): () -> Unit = {
@@ -90,14 +89,14 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         action()
     }
     if (tools) {
-        val title = strings.t("pageMenu.toolsTitle")
+        val title = strings.t("pageMenu.developerTools")
         PanelSheet(visible, title, "page-menu", strings.sheetWords(title), onClose = close, onBack = { tools = false }, maxFraction = 0.8f) {
             ToolsRows(browser, strings, ::act)
         }
         return
     }
     val title = strings.t("pageMenu.title")
-    val blocking = browser.blocking
+    val app = browser.app
     PanelSheet(
         visible,
         title,
@@ -105,86 +104,63 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         strings.sheetWords(title),
         onClose = close,
         maxFraction = 0.88f,
-        header = { SiteHeader(browser, strings, blocking) },
-        accessory = {
-            SheetIconButton(BayIcon.SETTINGS, strings.t("pageMenu.settings"), Modifier.testTag("page-settings"), muted = false, onClick = act(onSettings))
-        },
+        header = { AddressRow(browser, strings, ::act) },
+        footer = { Footer(browser, strings, Modifier.align(Alignment.BottomCenter), act(onSettings)) },
     ) {
-        val navigation = browser.activeNavigation
-        // The address capsule's controls: where to go, and a fresh tab.
-        Row(Modifier.padding(top = Space.xs).fillMaxWidth().background(Theme.colors.fill, CircleShape).padding(horizontal = Space.xs)) {
-            NavigationAction("page-back", BayIcon.BACK, strings.t("pageMenu.back"), navigation.canGoBack, act(browser::goBack))
-            NavigationAction("page-forward", BayIcon.FORWARD, strings.t("pageMenu.forward"), navigation.canGoForward, act(browser::goForward))
-            if (navigation.isLoading) {
-                NavigationAction("page-stop", BayIcon.CLOSE, strings.t("pageMenu.stop"), true, act(browser::stop))
-            } else {
-                NavigationAction("page-reload", BayIcon.RELOAD, strings.t("pageMenu.reload"), true, act(browser::reload))
-            }
-            NavigationAction("page-new-tab", BayIcon.ADD, strings.t("pageMenu.newTab"), true, act { browser.search(inNewTab = true) })
-        }
-        Row(Modifier.padding(top = TILES_GAP), horizontalArrangement = Arrangement.spacedBy(TILE_SPACING)) {
-            Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
-            val reading = browser.readerTab == browser.app.activeTabId
-            Tile("page-reader", BayIcon.READER, strings.t("pageMenu.reader"), strings.t(if (reading) "pageMenu.readerSettings" else "pageMenu.reader"), reading) { browser.openReader() }
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
+            Tile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
+            val pinned = browser.isPinned
+            Tile(
+                "page-pin", if (pinned) BayIcon.UNPIN else BayIcon.PIN, strings.t("pageMenu.pin"),
+                strings.t(if (pinned) "pageMenu.unpin" else "pageMenu.pinToStart"), pinned, act(browser::togglePin),
+            )
             val bookmarked = browser.isBookmarked
             Tile(
-                "page-bookmark",
-                if (bookmarked) BayIcon.BOOKMARKED else BayIcon.BOOKMARK,
-                strings.t("pageMenu.bookmark"),
-                if (bookmarked) strings.t("pageMenu.removeBookmark") else strings.t("pageMenu.bookmark"),
-                bookmarked,
-                act(browser::toggleBookmark),
+                "page-bookmark", if (bookmarked) BayIcon.BOOKMARKED else BayIcon.BOOKMARK, strings.t("pageMenu.save"),
+                strings.t(if (bookmarked) "pageMenu.removeBookmark" else "pageMenu.bookmark"), bookmarked, act(browser::toggleBookmark),
             )
-            Tile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
+            Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
         }
-        val zoom = browser.pageZoom
-        RowGroup(modifier = Modifier.padding(top = Space.lg)) {
-            ActionRow(
-                strings.t("pageMenu.displayOptions"),
-                "page-display-options",
-                icon = BayIcon.TEXT_SIZE,
-                value = if (zoom == 100) null else strings.percent(zoom),
-                chevron = !display,
-            ) { display = !display }
-            if (display) {
-                RowDivider()
-                ActionRow(strings.t("pageMenu.translate"), "page-translate", icon = BayIcon.TRANSLATE, onClick = act(browser::translate))
-                RowDivider()
-                ZoomRow(strings, zoom, browser::setZoom)
-                RowDivider()
-                val desktop = browser.siteSetting.desktopMode
-                ActionRow(strings.t("site.desktop"), "page-desktop", icon = BayIcon.DESKTOP, toggle = desktop) { browser.setDesktop(!desktop) }
+        Column(Modifier.padding(top = Space.md, bottom = FOOTER_ROOM), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            RowGroup {
+                ActionRow(strings.t("pageMenu.developerTools"), "page-more-tools", icon = BayIcon.TOOLS, chevron = true) { tools = true }
             }
-            RowDivider()
-            ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, chevron = true) { browser.panel = Panel.SITE_SETTINGS }
-            RowDivider()
-            ActionRow(strings.t("pageMenu.tools"), "page-more-tools", icon = BayIcon.MORE, chevron = true) { tools = true }
+            RowGroup {
+                val reading = browser.readerTab == app.activeTabId
+                val readerHere = browser.siteSetting.reader
+                val readerLabel = strings.t(if (reading) "pageMenu.readerSettings" else "pageMenu.showReader")
+                ListRow(
+                    readerLabel, "page-reader", BayIcon.READER, { browser.openReader() },
+                    buildList {
+                        add(Choice(readerLabel) { browser.openReader() })
+                        if (reading) add(Choice(strings.t("reader.exit"), onPick = act(browser::exitReader)))
+                        add(Choice(strings.t("site.reader"), checked = readerHere) { browser.changeSiteSetting { it.copy(reader = !readerHere) } })
+                    },
+                )
+                RowDivider()
+                ActionRow(strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, onClick = act { browser.startPicking(PickMode.HIDE) })
+                RowDivider()
+                val languages = bay.core.locales().let { all -> all.filter { it.id == strings.locale } + all.filter { it.id != strings.locale } }
+                ListRow(
+                    strings.t("pageMenu.translatePage"), "page-translate", BayIcon.TRANSLATE, act(browser::translate),
+                    languages.map { language -> Choice(language.name, onPick = act { browser.translate(language.id) }) },
+                )
+                RowDivider()
+                ZoomRow(strings, browser.pageZoom, browser::setZoom)
+            }
+            RowGroup {
+                ActionRow(strings.t("pageMenu.bookmarks"), "page-bookmarks", icon = BayIcon.BOOKMARK, chevron = true) { browser.panel = Panel.BOOKMARKS }
+                RowDivider()
+                ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true) { browser.panel = Panel.HISTORY }
+            }
         }
-        if (blocking != PageBlocking.OFF) BlockingCard(browser, strings, blocking, act(browser::restoreOriginal))
     }
 }
 
 @Composable
 private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit) -> () -> Unit) {
-    val pinned = browser.isPinned
-    Column(verticalArrangement = Arrangement.spacedBy(Space.lg)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         RowGroup {
-            ActionRow(
-                if (pinned) strings.t("pageMenu.unpin") else strings.t("pageMenu.pinToStart"),
-                "page-pin",
-                icon = if (pinned) BayIcon.UNPIN else BayIcon.PIN,
-                onClick = act(browser::togglePin),
-            )
-            RowDivider()
-            ActionRow(strings.t("pageMenu.copyLink"), "page-copy", icon = BayIcon.LINK, onClick = act(browser::copyLink))
-            RowDivider()
-            ActionRow(strings.t("pageMenu.privateTab"), "page-new-private", icon = BayIcon.PRIVATE, onClick = act { browser.search(inNewTab = true, privately = true) })
-            RowDivider()
-            ActionRow(
-                strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, detail = strings.t("pageMenu.hideElements.detail"),
-                onClick = act { browser.startPicking(PickMode.HIDE) },
-            )
-            RowDivider()
             ActionRow(
                 strings.t("pageMenu.inspect"), "page-inspect", icon = BayIcon.INSPECT, detail = strings.t("pageMenu.inspect.detail"),
                 onClick = act { browser.startPicking(PickMode.INSPECT) },
@@ -201,54 +177,191 @@ private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit)
             }
             RowDivider()
             ActionRow(
-                strings.t("pageMenu.markdown"),
-                "page-markdown",
-                icon = BayIcon.MARKDOWN,
-                detail = strings.t("pageMenu.markdown.detail"),
+                strings.t("pageMenu.markdown"), "page-markdown", icon = BayIcon.MARKDOWN, detail = strings.t("pageMenu.markdown.detail"),
                 onClick = act(browser::copyMarkdown),
             )
         }
         RowGroup {
-            ActionRow(strings.t("pageMenu.history"), "page-history", icon = BayIcon.HISTORY, chevron = true) { browser.panel = Panel.HISTORY }
-            RowDivider()
-            ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true) { browser.panel = Panel.DOWNLOADS }
+            ActionRow(strings.t("pageMenu.privateTab"), "page-new-private", icon = BayIcon.PRIVATE, onClick = act { browser.search(inNewTab = true, privately = true) })
             RowDivider()
             ActionRow(strings.t("pageMenu.archiveTab"), "page-close-tab", icon = BayIcon.ARCHIVE, onClick = act { browser.archive(browser.app.activeTabId) })
         }
     }
 }
 
-/** A round icon button for the navigation row: the icons say enough on their own. */
+/**
+ * The page's address in one capsule: back and forward at its left, the lock (or a warning) and the address cut short at
+ * its end, and copy and reload (or stop) at its right. Tapping the address opens search with it filled in.
+ */
 @Composable
-private fun RowScope.NavigationAction(id: String, icon: BayIcon, label: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.weight(1f).height(CAPSULE_HEIGHT).alpha(if (enabled) 1f else 0.35f).testTag(id)
-            .semantics { contentDescription = label }
-            .pressFeedback(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { BayIconView(icon, size = IconSize.control) }
+private fun RowScope.AddressRow(browser: BrowserModel, strings: Strings, act: (() -> Unit) -> () -> Unit) {
+    val navigation = browser.activeNavigation
+    val url = browser.activeUrl
+    val insecure = url.startsWith("http:")
+    val colors = Theme.colors
+    Row(
+        Modifier.weight(1f).height(ADDRESS_HEIGHT).background(colors.background, CircleShape)
+            .border(1.dp, colors.hairline, CircleShape).padding(horizontal = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AddressIcon("page-back", BayIcon.BACK, strings.t("pageMenu.back"), navigation.canGoBack, act(browser::goBack))
+        AddressIcon("page-forward", BayIcon.FORWARD, strings.t("pageMenu.forward"), navigation.canGoForward, act(browser::goForward))
+        Row(
+            Modifier.weight(1f).height(ADDRESS_HEIGHT).testTag("page-menu-url")
+                .clearAndSetSemantics {
+                    contentDescription = "${strings.t(if (insecure) "pageMenu.notSecure" else "pageMenu.secure")}, $url"
+                    role = androidx.compose.ui.semantics.Role.Button
+                }
+                .pressFeedback(onClick = act { browser.search(inNewTab = false) }),
+            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BayIconView(if (insecure) BayIcon.ERROR else BayIcon.LOCK, size = IconSize.inline, color = if (insecure) colors.danger else colors.muted)
+            BayText(displayUrl(url), variant = TextVariant.CALLOUT, maxLines = 1)
+        }
+        AddressIcon("page-copy", BayIcon.LINK, strings.t("pageMenu.copyLink"), true, act(browser::copyLink))
+        if (navigation.isLoading) {
+            AddressIcon("page-stop", BayIcon.CLOSE, strings.t("pageMenu.stop"), true, act(browser::stop))
+        } else {
+            AddressIcon("page-reload", BayIcon.RELOAD, strings.t("pageMenu.reload"), true, act(browser::reload))
+        }
+    }
 }
 
-/** A square with an icon and its label under it, four to a row. */
+@Composable
+private fun AddressIcon(id: String, icon: BayIcon, label: String, enabled: Boolean, onClick: () -> Unit) {
+    val colors = Theme.colors
+    Box(
+        Modifier.size(40.dp, ADDRESS_HEIGHT).testTag(id)
+            .clearAndSetSemantics { contentDescription = label; role = androidx.compose.ui.semantics.Role.Button }
+            .pressFeedback(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { BayIconView(icon, size = IconSize.row, color = if (enabled) colors.foreground else colors.muted.copy(alpha = 0.5f)) }
+}
+
+/** A rounded square with an icon over its label, four to a row. */
 @Composable
 private fun RowScope.Tile(id: String, icon: BayIcon, label: String, description: String = label, active: Boolean = false, onClick: () -> Unit) {
     val colors = Theme.colors
     Column(
-        Modifier.weight(1f).testTag(id)
-            .pressFeedback(onClick = onClick)
+        Modifier.weight(1f).height(TILE_HEIGHT).testTag(id)
             .clearAndSetSemantics {
                 contentDescription = description
+                role = androidx.compose.ui.semantics.Role.Button
                 if (active) selected = true
-            },
+            }
+            .pressFeedback(onClick = onClick)
+            .background(if (active) colors.accent.copy(alpha = 0.15f) else colors.fill, RoundedCornerShape(Radius.tile)),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Space.sm),
+        verticalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterVertically),
     ) {
-        Box(
-            Modifier.fillMaxWidth().height(TILE_HEIGHT).background(if (active) colors.accent.copy(alpha = 0.15f) else colors.fill, RoundedCornerShape(TILE_RADIUS)),
-            contentAlignment = Alignment.Center,
-        ) { BayIconView(icon, size = IconSize.control + 2.dp, color = if (active) colors.accent else colors.foreground) }
-        BayText(label, variant = TextVariant.CAPTION, tone = if (active) TextTone.ACCENT else TextTone.DEFAULT, maxLines = 1)
+        BayIconView(icon, size = IconSize.control, color = if (active) colors.accent else colors.foreground)
+        BayText(label, variant = TextVariant.CAPTION, weight = FontWeight.Medium, tone = if (active) TextTone.ACCENT else TextTone.DEFAULT, maxLines = 1)
     }
+}
+
+/** One choice behind a row's ⌃⌄. */
+private class Choice(val label: String, val checked: Boolean = false, val onPick: () -> Unit)
+
+/**
+ * A row that does its main thing when tapped and offers a short list behind ⌃⌄ (Reader's choices, Translate's
+ * languages); TalkBack gets the list as the row's actions.
+ */
+@Composable
+private fun ListRow(label: String, testID: String, icon: BayIcon, primary: () -> Unit, choices: List<Choice>) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT)
+            .semantics {
+                customActions = choices.map { choice ->
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(choice.label) {
+                        choice.onPick()
+                        true
+                    }
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.weight(1f).heightIn(min = ROW_HEIGHT).testTag(testID)
+                .clearAndSetSemantics { contentDescription = label; role = androidx.compose.ui.semantics.Role.Button }
+                .pressFeedback(onClick = primary).padding(start = Space.lg),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BayIconView(icon, size = IconSize.control)
+            BayText(label, maxLines = 1)
+        }
+        Box {
+            Box(
+                Modifier.size(52.dp, ROW_HEIGHT).testTag("$testID-choices")
+                    .clearAndSetSemantics { contentDescription = label; role = androidx.compose.ui.semantics.Role.DropdownList }
+                    .pressFeedback { open = true },
+                contentAlignment = Alignment.Center,
+            ) { BayIconView(BayIcon.UNFOLD, size = IconSize.small, color = Theme.colors.muted) }
+            if (open) {
+                androidx.compose.ui.window.Popup(
+                    alignment = Alignment.TopEnd,
+                    onDismissRequest = { open = false },
+                    properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                ) {
+                    Column(Modifier.width(240.dp).baySurface(Radius.card).padding(vertical = Space.xs)) {
+                        choices.forEach { choice ->
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                    .pressFeedback {
+                                        open = false
+                                        choice.onPick()
+                                    }
+                                    .padding(horizontal = Space.lg),
+                                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                BayText(choice.label, Modifier.weight(1f), maxLines = 1)
+                                if (choice.checked) BayIconView(BayIcon.CHECK, size = IconSize.small, color = Theme.colors.accent)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Downloads, this site's settings and Bay's Settings, floating over the rows' end. */
+@Composable
+private fun Footer(browser: BrowserModel, strings: Strings, modifier: Modifier, onSettings: () -> Unit) {
+    val colors = Theme.colors
+    Row(modifier.fillMaxWidth().padding(horizontal = Space.gutter).padding(bottom = Space.md), verticalAlignment = Alignment.CenterVertically) {
+        FooterButton("page-downloads", BayIcon.DOWNLOAD, strings.t("pageMenu.downloads")) { browser.panel = Panel.DOWNLOADS }
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        Row(
+            Modifier.height(FOOTER_BUTTON).testTag("page-site-settings")
+                .clearAndSetSemantics { contentDescription = strings.t("pageMenu.siteSettings"); role = androidx.compose.ui.semantics.Role.Button }
+                .pressFeedback { browser.panel = Panel.SITE_SETTINGS }
+                .shadow(8.dp, CircleShape, clip = false).background(colors.background, CircleShape).border(1.dp, colors.hairline, CircleShape)
+                .padding(horizontal = Space.lg),
+            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (browser.activeUrl.isNotEmpty()) SiteIcon(browser.app, browser.activeUrl, 20.dp, bare = true)
+            BayText(strings.t("pageMenu.siteSettings"), variant = TextVariant.SUBHEAD, weight = FontWeight.SemiBold, maxLines = 1)
+        }
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        FooterButton("page-settings", BayIcon.SETTINGS, strings.t("pageMenu.settings"), onSettings)
+    }
+}
+
+@Composable
+private fun FooterButton(id: String, icon: BayIcon, label: String, onClick: () -> Unit) {
+    val colors = Theme.colors
+    Box(
+        Modifier.size(FOOTER_BUTTON).testTag(id)
+            .clearAndSetSemantics { contentDescription = label; role = androidx.compose.ui.semantics.Role.Button }
+            .pressFeedback(onClick = onClick)
+            .shadow(8.dp, CircleShape, clip = false).background(colors.background, CircleShape).border(1.dp, colors.hairline, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { BayIconView(icon, size = IconSize.control) }
 }
 
 /** Page zoom, a tenth at a time, kept for this site. */
@@ -288,7 +401,7 @@ private fun ZoomStep(glyph: String, id: String, label: String, enabled: Boolean,
  * page as the site made it when blocking broke something.
  */
 @Composable
-private fun BlockingCard(browser: BrowserModel, strings: Strings, blocking: PageBlocking, onRestore: () -> Unit) {
+fun BlockingCard(browser: BrowserModel, strings: Strings, blocking: PageBlocking, onRestore: () -> Unit) {
     val count = browser.blocked[browser.app.activeTabId] ?: 0
     val counted = blocking == PageBlocking.ON && count > 0
     val label = when {
@@ -301,7 +414,7 @@ private fun BlockingCard(browser: BrowserModel, strings: Strings, blocking: Page
         PageBlocking.RESTORED -> strings.t("pageMenu.blocking.restored")
         else -> strings.t("pageMenu.blocking.on")
     }
-    RowGroup(modifier = Modifier.padding(top = Space.lg)) {
+    RowGroup {
         ActionRow(label, "page-blocking", icon = BayIcon.SHIELD, detail = detail, toggle = blocking == PageBlocking.ON, onClick = browser::toggleBlocking)
         if (blocking == PageBlocking.ON) {
             RowDivider()
@@ -313,41 +426,6 @@ private fun BlockingCard(browser: BrowserModel, strings: Strings, blocking: Page
             ) {
                 BayIconView(BayIcon.RELOAD, size = IconSize.control)
                 BayText(strings.t("pageMenu.restore"), Modifier.weight(1f), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED)
-            }
-        }
-    }
-}
-
-/** The page's title and address, its site behind a lock (or a warning when it isn't encrypted), and what's blocked. */
-@Composable
-private fun RowScope.SiteHeader(browser: BrowserModel, strings: Strings, blocking: PageBlocking) {
-    val url = browser.activeUrl
-    val title = browser.activeNavigation.title.ifEmpty { browser.activeTab?.title.orEmpty() }
-    val web = url.startsWith("http:") || url.startsWith("https:")
-    val insecure = url.startsWith("http:")
-    val status = listOf(
-        if (!web) "" else if (insecure) strings.t("pageMenu.notSecure") else strings.t("pageMenu.secure"),
-        when (blocking) {
-            PageBlocking.ON -> strings.t("pageMenu.blocked")
-            PageBlocking.OFF -> ""
-            else -> strings.t("pageMenu.blockingPaused")
-        },
-    ).filter { it.isNotEmpty() }.joinToString(" · ")
-    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically) {
-        if (url.isNotEmpty()) SiteIcon(browser.app, url, 44.dp)
-        Column(Modifier.weight(1f)) {
-            BayText(title.ifEmpty { url }, Modifier.semantics { heading() }, variant = TextVariant.HEADLINE, maxLines = 1)
-            BayText(url, Modifier.testTag("page-menu-url"), variant = TextVariant.FOOTNOTE, tone = TextTone.MUTED, maxLines = 1)
-            if (status.isNotEmpty()) {
-                Row(
-                    Modifier.padding(top = Space.xxs).clearAndSetSemantics { contentDescription = status },
-                    horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val colors = Theme.colors
-                    if (web) BayIconView(if (insecure) BayIcon.ERROR else BayIcon.LOCK, size = IconSize.inline - 2.dp, color = if (insecure) colors.danger else colors.muted)
-                    BayText(status, variant = TextVariant.CAPTION, weight = FontWeight.Normal, tone = if (insecure) TextTone.DANGER else TextTone.MUTED, maxLines = 2)
-                }
             }
         }
     }

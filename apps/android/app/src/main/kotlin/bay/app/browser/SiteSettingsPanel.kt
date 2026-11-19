@@ -123,18 +123,12 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
                 ActionRow(strings.t("site.desktop"), "site-desktop", icon = BayIcon.DESKTOP, tint = RowTint.language, toggle = setting.desktopMode) {
                     browser.setDesktop(!setting.desktopMode)
                 }
-                if (blocking != PageBlocking.OFF) {
-                    RowDivider()
-                    ActionRow(
-                        strings.t("pageMenu.blocking"), "site-blocking", icon = BayIcon.SHIELD, tint = RowTint.blocking,
-                        detail = when (blocking) {
-                            PageBlocking.PAUSED -> strings.t("pageMenu.blocking.paused")
-                            PageBlocking.RESTORED -> strings.t("pageMenu.blocking.restored")
-                            else -> null
-                        },
-                        toggle = blocking == PageBlocking.ON,
-                        onClick = browser::toggleBlocking,
-                    )
+            }
+            // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
+            if (blocking != PageBlocking.OFF) {
+                BlockingCard(browser, strings, blocking) {
+                    browser.panel = null
+                    browser.restoreOriginal()
                 }
             }
             if (blocking == PageBlocking.ON) {

@@ -53,13 +53,12 @@ struct SiteSettingsPanel: View {
           ActionRow(strings.t("site.desktop"), testID: "site-desktop", icon: .desktop, tint: RowTint.language, toggle: setting.desktopMode) {
             browser.setDesktop(!setting.desktopMode)
           }
-          if blocking != .off {
-            RowDivider()
-            ActionRow(
-              strings.t("pageMenu.blocking"), testID: "site-blocking", icon: .shield, tint: RowTint.blocking,
-              detail: blocking == .paused
-                ? strings.t("pageMenu.blocking.paused") : blocking == .restored ? strings.t("pageMenu.blocking.restored") : nil,
-              toggle: blocking == .on, action: browser.toggleBlocking)
+        }
+        // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
+        if blocking != .off {
+          BlockingCard(browser: browser, blocking: blocking) {
+            browser.panel = nil
+            browser.restoreOriginal()
           }
         }
         if blocking == .on {

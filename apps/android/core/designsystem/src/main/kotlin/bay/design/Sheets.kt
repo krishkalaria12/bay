@@ -82,6 +82,8 @@ fun PanelSheet(
     /** Takes the title's place on the sheet's first page (the page menu's site, say). */
     header: (@Composable RowScope.() -> Unit)? = null,
     accessory: @Composable RowScope.() -> Unit = {},
+    /** Buttons floating over the rows' end (the page menu's): the rows leave room for them themselves. */
+    footer: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val state = remember { MutableTransitionState(false) }
@@ -158,10 +160,13 @@ fun PanelSheet(
                         }
                     }
                 }
-                Column(
-                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(bottom = Space.gutter + Space.md),
-                    content = content,
-                )
+                Box(Modifier.weight(1f, fill = false)) {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(bottom = Space.gutter + Space.md),
+                        content = content,
+                    )
+                    footer?.invoke(this)
+                }
             }
         }
     }
