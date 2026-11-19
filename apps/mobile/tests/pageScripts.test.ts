@@ -277,9 +277,14 @@ test("the top colour comes from the background under the top edge, then theme-co
   assert.deepEqual(page.run(PAGE_COLOR_SCRIPT), [10, 20, 30]);
   const plain = fixture('<meta name="theme-color" content="rgb(200, 100, 50)"><p id="link">Hi</p>');
   assert.deepEqual(plain.run(PAGE_COLOR_SCRIPT), [200, 100, 50]);
-  // Half-transparent backgrounds don't count: the page behind them shows through.
+  // Half-transparent backgrounds don't count: the page behind them shows through, down to the browser's canvas.
   const faint = fixture('<div id="link" style="background: rgba(0, 0, 0, 0.3)">Hi</div>');
-  assert.equal(faint.run(PAGE_COLOR_SCRIPT), null);
+  assert.deepEqual(faint.run(PAGE_COLOR_SCRIPT), [255, 255, 255]);
+});
+
+test("the bottom colour (for behind the native bar) skips theme-color, which describes a page's top", () => {
+  const plain = fixture('<meta name="theme-color" content="rgb(200, 100, 50)"><p id="link">Hi</p>');
+  assert.deepEqual(plain.run(`const args = ${JSON.stringify({ edge: "bottom" })};\n${PAGE_COLOR_SCRIPT}`), [255, 255, 255]);
 });
 
 test("the image watcher arms once and reports long presses on bare images only", () => {
