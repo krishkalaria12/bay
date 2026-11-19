@@ -37,7 +37,6 @@ import bay.app.Strings
 import bay.core.HistoryEntry
 import bay.core.PinKind
 import bay.core.PinnedSite
-import bay.core.siteName
 import bay.design.BayText
 import bay.design.Radius
 import bay.design.Row as RowToken

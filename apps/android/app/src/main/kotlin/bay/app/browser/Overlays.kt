@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import bay.app.Strings
 import bay.core.BrowserTab
-import bay.core.hostOf
 import bay.design.BayIcon
 import bay.design.BayIconView
 import bay.design.BayText
@@ -177,11 +176,18 @@ fun TipCard(title: String, body: String, gotIt: String, onDone: () -> Unit) {
  */
 @Composable
 fun TabZoom(zoom: Zoom, onDone: () -> Unit) {
-    val bitmap = remember(zoom.tab.snapshot) {
-        zoom.tab.snapshot?.let { Uri.parse(it).path }?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() }
+    // The card's picture, at the card's size: already in memory from the switcher.
+    val bitmap = rememberFileImage(zoom.tab.snapshot, zoom.frame.width.toInt())
+    if (zoom.tab.snapshot == null) {
+        LaunchedEffect(zoom) { onDone() }
+        return
     }
     if (bitmap == null) {
-        LaunchedEffect(zoom) { onDone() }
+        // Still decoding, or the file is gone: a picture that hasn't come in a moment isn't waited for.
+        LaunchedEffect(zoom) {
+            kotlinx.coroutines.delay(300)
+            onDone()
+        }
         return
     }
     val progress = remember { Animatable(0f) }
@@ -202,7 +208,7 @@ fun TabZoom(zoom: Zoom, onDone: () -> Unit) {
         )
         with(density) {
             Image(
-                bitmap.asImageBitmap(),
+                bitmap,
                 null,
                 Modifier.offset { IntOffset(rect.left.toInt(), rect.top.toInt()) }
                     .size(rect.width.toDp(), rect.height.toDp())

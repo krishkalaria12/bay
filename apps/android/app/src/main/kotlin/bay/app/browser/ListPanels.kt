@@ -69,7 +69,6 @@ import bay.core.DownloadState
 import bay.core.downloadInterrupted
 import bay.core.groupByDay
 import bay.core.pageTitle
-import bay.core.siteName
 import bay.design.ActionRow
 import bay.design.BayIcon
 import bay.design.BayIconView

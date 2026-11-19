@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import bay.app.Strings
 import bay.core.BrowserTab
 import bay.core.PinKind
-import bay.core.displayUrl
 import bay.design.ActionRow
 import bay.design.BayIcon
 import bay.design.PanelSheet

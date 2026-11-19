@@ -73,7 +73,6 @@ import bay.core.PageErrorId
 import bay.core.PageErrorKind
 import bay.core.WallpaperId
 import bay.core.describePageError
-import bay.core.hostOf
 import bay.core.pageErrorId
 import bay.design.BayIcon
 import bay.design.BayIconView
@@ -140,19 +139,20 @@ private val tints = listOf(0xFFDCE8F5, 0xFFF3E2D6, 0xFFE3EEDF, 0xFFECE1F2, 0xFFF
 fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false, color: Color? = null) {
     val host = hostOf(url)
     val file = app.favicons[host]
-    val bitmap = remember(file) { file?.let { Uri.parse(it).path }?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() } }
+    val pixels = with(LocalDensity.current) { size.roundToPx() }
+    val bitmap = remember(file, pixels) { fileImageNow(file, pixels) }
     val corner = RoundedCornerShape(size * 0.28f)
     val modifier = Modifier.clearAndSetSemantics {}
     if (bitmap != null) {
         if (bare) {
-            Image(bitmap.asImageBitmap(), null, modifier.size(size).clip(RoundedCornerShape(size * 0.14f)))
+            Image(bitmap, null, modifier.size(size).clip(RoundedCornerShape(size * 0.14f)))
         } else {
             Box(
                 modifier.size(size).background(if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color.White, corner)
                     .border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
                 contentAlignment = Alignment.Center,
             ) {
-                Image(bitmap.asImageBitmap(), null, Modifier.size(size * 0.72f).clip(RoundedCornerShape(size * 0.14f)))
+                Image(bitmap, null, Modifier.size(size * 0.72f).clip(RoundedCornerShape(size * 0.14f)))
             }
         }
         return

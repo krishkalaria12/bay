@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import bay.app.Strings
 import bay.core.SiteBlockGroup
 import bay.core.SwipeMode
-import bay.core.siteName
 import bay.design.ActionRow
 import bay.design.BayIcon
 import bay.design.BayIconView

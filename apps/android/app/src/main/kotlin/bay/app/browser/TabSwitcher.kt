@@ -70,7 +70,6 @@ import bay.core.BrowserTab
 import bay.core.PinKind
 import bay.core.PinnedSite
 import bay.core.SpaceColor
-import bay.core.displayUrl
 import bay.design.BayIcon
 import bay.design.BayIconView
 import bay.design.BayText
@@ -360,9 +359,11 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                     .border(if (active) 2.5.dp else 1.dp, if (active) Theme.colors.accent else Theme.colors.hairline, shape),
                 contentAlignment = Alignment.Center,
             ) {
-                val bitmap = remember(tab.snapshot) { tab.snapshot?.let { Uri.parse(it).path }?.let { runCatching { BitmapFactory.decodeFile(it) }.getOrNull() } }
+                val bitmap = rememberFileImage(tab.snapshot, with(LocalDensity.current) { width.roundToPx() })
                 when {
-                    bitmap != null -> Image(bitmap.asImageBitmap(), null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = ContentScale.Crop)
+                    bitmap != null -> Image(bitmap, null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = ContentScale.Crop)
+                    // The picture is on its way: the card's own surface until it lands.
+                    tab.snapshot != null -> Unit
                     tab.url.isNotEmpty() -> SiteIcon(app, tab.url, 32.dp)
                     else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                         // A new tab shows the start page, so its card shows the wallpaper.

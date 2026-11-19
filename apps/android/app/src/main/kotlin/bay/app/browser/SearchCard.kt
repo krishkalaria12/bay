@@ -66,7 +66,6 @@ import bay.app.Strings
 import bay.core.HttpRequest
 import bay.core.Suggestion
 import bay.core.addressFor
-import bay.core.displayUrl
 import bay.core.parseSuggestionsBody
 import bay.core.suggestionsRequestUrl
 import bay.design.BayIcon
