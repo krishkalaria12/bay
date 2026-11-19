@@ -16,6 +16,9 @@ struct BrowserScreen: View {
   private static let barHeight: CGFloat = 52
   /// The screen's bottom safe area (the home indicator), which the bar sits above.
   @State private var safeBottom: CGFloat = 0
+  /// The space whose page shows, and how far the page is still to slide in after a switch to another.
+  @State private var shownSpace = ""
+  @State private var pageSlide: CGFloat = 0
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
   private var coveredBottom: CGFloat {
@@ -30,6 +33,7 @@ struct BrowserScreen: View {
         let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
         PagesHost(browser: browser, shown: shown, coveredBottom: coveredBottom)
           .ignoresSafeArea(edges: .bottom)
+          .offset(x: pageSlide)
           .opacity(shown ? 1 : 0)
           .allowsHitTesting(shown)
       }
@@ -42,7 +46,7 @@ struct BrowserScreen: View {
         }
         statusStrip
       } else if browser.overlay == .none {
-        startScreen
+        startScreen.offset(x: pageSlide)
       }
       if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path, let image = UIImage(contentsOfFile: path) {
         TabZoom(snapshot: image, from: zoom.frame, onDone: browser.zoomFinished)
@@ -175,7 +179,11 @@ struct BrowserScreen: View {
     }
     .onChange(of: app.preferences) { _ in browser.preferencesChanged() }
     .onChange(of: browser.tip) { browser.tipShown($0) }
-    .onAppear(perform: browser.refreshMounted)
+    .onAppear {
+      shownSpace = app.activeSpaceId
+      browser.refreshMounted()
+    }
+    .onChange(of: app.activeSpaceId, perform: spaceSwitched)
     .onChange(of: app.activeTabId) { _ in
       browser.refreshMounted()
       browser.pauseMediaLeft()
@@ -183,6 +191,19 @@ struct BrowserScreen: View {
     .onChange(of: browser.overlay) { _ in browser.pauseMediaLeft() }
     .statusBarHidden(browser.fullscreen)
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }
+  }
+
+  /// Another space from a page: its page slides in from the side the space sits on, the next one from the right.
+  private func spaceSwitched(_ id: String) {
+    defer { shownSpace = id }
+    guard browser.overlay == .none, !UIAccessibility.isReduceMotionEnabled,
+      let from = app.spaces.firstIndex(where: { $0.id == shownSpace }), let to = app.spaces.firstIndex(where: { $0.id == id })
+    else { return }
+    pageSlide = (to > from ? 1 : -1) * UIScreen.main.bounds.width
+    // A turn later, so the page is drawn at its start before it moves.
+    DispatchQueue.main.async {
+      withAnimation(Motion.settle.animation) { pageSlide = 0 }
+    }
   }
 
   /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
