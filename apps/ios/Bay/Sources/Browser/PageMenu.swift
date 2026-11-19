@@ -56,8 +56,8 @@ struct PageMenu: View {
         let bookmarked = browser.isBookmarked
         Tile(
           id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.save"),
-          accessibilityLabel: strings.t(bookmarked ? "pageMenu.removeBookmark" : "pageMenu.bookmark"), active: bookmarked,
-          action: act(browser.toggleBookmark))
+          accessibilityLabel: strings.t("pageMenu.bookmark"), active: bookmarked,
+          action: { browser.panel = .save })
         Tile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
       }
 

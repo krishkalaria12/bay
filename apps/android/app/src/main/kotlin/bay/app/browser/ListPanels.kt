@@ -107,6 +107,7 @@ fun ListPanels(browser: BrowserModel, strings: Strings) {
     HistoryPanel(browser, strings, browser.panel == Panel.HISTORY)
     ArchivePanel(browser, strings, browser.panel == Panel.ARCHIVE)
     BookmarksPanel(browser, strings, browser.panel == Panel.BOOKMARKS)
+    SavePanel(browser, strings, browser.panel == Panel.SAVE)
     DownloadsPanel(browser, strings, browser.panel == Panel.DOWNLOADS)
     ImportPanel(browser, strings, browser.panel == Panel.IMPORT)
 }

@@ -610,3 +610,222 @@ struct DownloadToast: View {
     .transition(.move(edge: .bottom).combined(with: .opacity))
   }
 }
+
+/// The spaces in a row of chips: the one chosen as a capsule in its colour with its glyph and name, the others as
+/// their glyph on a wash of their colour, and a + for a new space. For saving a bookmark into a space, and the
+/// bookmarks drawer.
+struct SpaceChips: View {
+  @EnvironmentObject private var strings: Strings
+  let spaces: [BrowserSpace]
+  let chosen: String
+  let onChoose: (String) -> Void
+  var onAdd: (() -> Void)?
+
+  var body: some View {
+    ScrollViewReader { reader in
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: Space.sm) {
+          ForEach(spaces, id: \.id) { space in
+            let name = spaceName(space, strings)
+            let selected = space.id == chosen
+            Button {
+              Haptics.press()
+              onChoose(space.id)
+            } label: {
+              HStack(spacing: Space.xs) {
+                SpaceGlyph(space: space, name: name, size: 22)
+                if selected {
+                  BayText(name, variant: .subhead, weight: .semibold, color: .white).lineLimit(1)
+                }
+              }
+              .padding(.horizontal, selected ? Space.md : Space.sm)
+              .frame(height: 40)
+              .background(selected ? spaceColor(space.color) : spaceColor(space.color).opacity(0.2), in: Capsule())
+            }
+            .buttonStyle(.pressFeedback)
+            .id(space.id)
+            .accessibilityLabel(Text(verbatim: name))
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier("space-chip-\(space.id)")
+          }
+          if let onAdd {
+            Button(action: onAdd) {
+              BayIconView(.add, size: IconSize.small, color: BayColor.muted)
+                .frame(width: 40, height: 40)
+                .background(BayColor.fill, in: Circle())
+            }
+            .buttonStyle(.pressFeedback)
+            .accessibilityLabel(Text(verbatim: strings.t("save.newSpace")))
+            .accessibilityIdentifier("space-chip-add")
+          }
+        }
+        .animation(Motion.settle.animation, value: chosen)
+      }
+      .onAppear { reader.scrollTo(chosen, anchor: .center) }
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("space-chips")
+  }
+}
+
+/// Saving the page as a bookmark: its title and address, the space it goes in, and the folder, as a form with Cancel
+/// and Save at its top. A page already saved opens where it is, and Save moves or renames it there; Remove takes it out.
+struct SavePanel: View {
+  @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
+  @ObservedObject var browser: BrowserModel
+  @State private var title = ""
+  @State private var url = ""
+  @State private var space = ""
+  @State private var folder = ""
+  @State private var naming = false
+  @State private var folderName = ""
+  @State private var saved: BookmarkLocation?
+
+  var body: some View {
+    let heading = strings.t("save.title")
+    let folders = app.store.bookmarkFolders(spaceId: space)
+    PanelSheet(
+      title: heading, testID: "save-sheet", words: strings.sheetWords(heading), onClose: { browser.panel = nil },
+      header: AnyView(formHeader(heading).environmentObject(strings))
+    ) {
+      VStack(spacing: Space.md) {
+        RowGroup {
+          HStack(spacing: Space.md) {
+            SiteIcon(url: url, size: 28)
+            TextField(strings.t("save.titleField"), text: $title)
+              .font(TextVariant.body.font())
+              .accessibilityIdentifier("save-title")
+          }
+          .padding(.horizontal, Space.lg)
+          .frame(minHeight: 52)
+          RowDivider()
+          HStack(spacing: Space.md) {
+            BayIconView(.link, size: IconSize.row, color: BayColor.muted).frame(width: 28)
+            TextField(strings.t("save.addressField"), text: $url)
+              .font(TextVariant.subhead.font())
+              .foregroundColor(BayColor.muted)
+              .keyboardType(.URL)
+              .textInputAutocapitalization(.never)
+              .disableAutocorrection(true)
+              .accessibilityIdentifier("save-url")
+          }
+          .padding(.horizontal, Space.lg)
+          .frame(minHeight: 48)
+        }
+        SpaceChips(spaces: app.spaces, chosen: space, onChoose: choose) {
+          browser.panel = nil
+          browser.newSpace()
+        }
+        RowGroup {
+          ForEach(Array(folders.enumerated()), id: \.element.id) { index, choice in
+            if index > 0 { RowDivider() }
+            let top = choice.id == "bookmarks"
+            ActionRow(
+              top ? strings.t("save.topOfList") : choice.title, testID: "save-folder-\(choice.id)", icon: top ? .bookmark : .folder,
+              selected: choice.id == folder
+            ) { folder = choice.id }
+            .padding(.leading, CGFloat(max(0, Int(choice.depth) - 1)) * Space.lg)
+          }
+          RowDivider()
+          if naming {
+            HStack(spacing: 14) {
+              BayIconView(.folder, size: IconSize.control, color: BayColor.muted)
+              TextField(strings.t("save.folderName"), text: $folderName)
+                .submitLabel(.done)
+                .onSubmit(makeFolder)
+                .accessibilityIdentifier("save-folder-name")
+            }
+            .padding(.horizontal, Space.lg)
+            .frame(minHeight: 52)
+          } else {
+            ActionRow(strings.t("save.newFolder"), testID: "save-new-folder", icon: .add) { naming = true }
+          }
+        }
+        if let saved {
+          RowGroup {
+            ActionRow(strings.t("pageMenu.removeBookmark"), testID: "save-remove", icon: .delete, destructive: true) {
+              app.dispatch(.removeBookmark(spaceId: saved.spaceId, id: saved.id))
+              browser.panel = nil
+            }
+          }
+        }
+      }
+    }
+    .onAppear(perform: start)
+  }
+
+  /// ✕ to leave without saving, the title, ✓ to save.
+  private func formHeader(_ heading: String) -> some View {
+    HStack {
+      SheetIconButton(.close, label: strings.t("save.cancel")) { browser.panel = nil }
+        .accessibilityIdentifier("save-cancel")
+      Spacer(minLength: 0)
+      BayText(heading, variant: .headline, weight: .semibold).accessibilityAddTraits(.isHeader)
+      Spacer(minLength: 0)
+      Button(action: save) {
+        BayIconView(.tick, size: IconSize.small, color: BayColor.accentForeground)
+          .frame(width: 36, height: 36)
+          .background(BayColor.accentFill, in: Circle())
+      }
+      .buttonStyle(.pressFeedback)
+      .accessibilityLabel(Text(verbatim: strings.t("save.done")))
+      .accessibilityIdentifier("save-done")
+    }
+  }
+
+  /// The page's title and address, and where it's saved now, or the space showing and its last folder.
+  private func start() {
+    let tab = browser.activeTab
+    url = browser.activeUrl
+    saved = app.store.bookmarkLocation(url: url)
+    title = saved?.title ?? (tab?.title.isEmpty == false ? tab!.title : siteName(url: url))
+    space = saved?.spaceId ?? app.activeSpaceId
+    folder = saved?.parentId ?? app.store.lastBookmarkFolder(spaceId: space)
+  }
+
+  /// Another space: its last folder, or where the page is saved in it.
+  private func choose(_ id: String) {
+    space = id
+    folder = saved?.spaceId == id ? saved!.parentId : app.store.lastBookmarkFolder(spaceId: id)
+  }
+
+  private func makeFolder() {
+    let name = folderName.trimmingCharacters(in: .whitespaces)
+    naming = false
+    folderName = ""
+    guard !name.isEmpty else { return }
+    let id = UUID().uuidString
+    app.dispatch(
+      .addBookmarks(
+        spaceId: space,
+        nodes: [.folder(id: id, parentId: "bookmarks", title: name, children: [], addedAt: AppModel.now())]))
+    folder = id
+  }
+
+  /// Saves into the space and folder chosen, moving the page out of another space it was in, and says where it went.
+  private func save() {
+    let address = url.trimmingCharacters(in: .whitespaces)
+    guard !address.isEmpty else { return }
+    if let saved, saved.spaceId != space {
+      app.dispatch(.removeBookmark(spaceId: saved.spaceId, id: saved.id))
+    }
+    if let saved, saved.spaceId == space {
+      app.dispatch(.moveBookmark(spaceId: space, id: saved.id, parentId: folder, index: nil))
+      app.dispatch(.renameBookmark(spaceId: space, id: saved.id, title: title, url: address))
+    } else {
+      app.dispatch(
+        .saveBookmark(
+          spaceId: space,
+          bookmark: .url(id: UUID().uuidString, parentId: folder, title: title.isEmpty ? address : title, url: address, addedAt: AppModel.now())))
+    }
+    Haptics.done()
+    browser.panel = nil
+    let chosen = app.spaces.first { $0.id == space }
+    let folderTitle = app.store.bookmarkFolders(spaceId: space).first { $0.id == folder && $0.id != "bookmarks" }?.title
+    let place = folderTitle ?? chosen.map { spaceName($0, strings) } ?? ""
+    browser.showTopNote(TopNote(text: strings.t("save.addedTo", ["place": place]), space: chosen) { [weak browser] in
+      browser?.panel = .bookmarks
+    })
+  }
+}

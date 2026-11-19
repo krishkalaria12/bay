@@ -126,6 +126,8 @@ struct BrowserScreen: View {
           HistoryPanel(browser: browser)
         case .bookmarks:
           BookmarksPanel(browser: browser)
+        case .save:
+          SavePanel(browser: browser)
         case .downloads:
           DownloadsPanel(browser: browser)
         case .import:

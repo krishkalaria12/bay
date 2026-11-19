@@ -115,8 +115,8 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
             val bookmarked = browser.isBookmarked
             Tile(
                 "page-bookmark", if (bookmarked) BayIcon.BOOKMARKED else BayIcon.BOOKMARK, strings.t("pageMenu.save"),
-                strings.t(if (bookmarked) "pageMenu.removeBookmark" else "pageMenu.bookmark"), bookmarked, act(browser::toggleBookmark),
-            )
+                strings.t("pageMenu.bookmark"), bookmarked,
+            ) { browser.panel = Panel.SAVE }
             Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
         }
         Column(Modifier.padding(top = Space.md)) {

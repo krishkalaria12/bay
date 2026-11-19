@@ -92,7 +92,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -106,14 +106,14 @@ data class FindState(val query: String = "", val count: Int? = null, val index: 
 /** A card growing into its page: the tab and where its card sat on screen, in pixels. */
 data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rect)
 
-/** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
-/** A short message above the bar; a reading tool's notice (Inspect, Reader, the element picker) has its own id. */
 /**
  * A short notice at the top of the screen, under the status bar: the space just switched to, where a bookmark went.
  * Tapping it does `action`, when it has one.
  */
 data class TopNote(val id: Long, val text: String, val space: BrowserSpace? = null, val action: (() -> Unit)? = null)
 
+/** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
+/** A short message above the bar; a reading tool's notice (Inspect, Reader, the element picker) has its own id. */
 data class ToastMessage(val id: Long, val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null, val notice: Boolean = false)
 
 /** What a tab's media last reported, and when. */
