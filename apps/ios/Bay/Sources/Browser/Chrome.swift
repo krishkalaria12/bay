@@ -188,8 +188,17 @@ struct BrowserBar: View {
         .overlay(alignment: .topTrailing) { TabCount(count: count) }
         .accessibilityIdentifier("bar-tabs")
         capsule
-        GlassIconButton(.more, label: strings.t("bar.more")) { browser.panel = .page }
-          .accessibilityIdentifier("bar-more")
+        GlassIconButton(.more, label: strings.t("bar.more")) {
+          browser.app.dispatch(.tipSeen(id: .blocking))
+          browser.panel = .page
+        }
+        .accessibilityIdentifier("bar-more")
+        // The ring round the button the blocking tip means.
+        .overlay {
+          if browser.tip == .blocking {
+            Circle().stroke(BayColor.accent, lineWidth: 2.5).padding(-4).allowsHitTesting(false)
+          }
+        }
       } else {
         GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.panel = .archive }
           .accessibilityIdentifier("bar-archive")

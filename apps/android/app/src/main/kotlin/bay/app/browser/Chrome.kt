@@ -293,7 +293,14 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
                 TabCount(count, Modifier.align(Alignment.TopEnd))
             }
             Capsule(browser, strings)
-            BarButton("bar-more", strings.t("bar.more"), { browser.panel = Panel.PAGE }) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+            Box(contentAlignment = Alignment.Center) {
+                BarButton("bar-more", strings.t("bar.more"), {
+                    app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BLOCKING))
+                    browser.panel = Panel.PAGE
+                }) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+                // The ring round the button the blocking tip means.
+                if (browser.tip == bay.core.TipId.BLOCKING) Box(Modifier.size(60.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
+            }
         } else {
             BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             Capsule(browser, strings)

@@ -62,6 +62,8 @@ struct BrowserScreen: View {
           }
           if browser.tip == .bar {
             TipCard(title: strings.t("tip.bar.title"), body_: strings.t("tip.bar.body")) { app.dispatch(.tipSeen(id: .bar)) }
+          } else if browser.tip == .blocking {
+            TipCard(title: strings.t("tip.blocking.title"), body_: strings.t("tip.blocking.body")) { app.dispatch(.tipSeen(id: .blocking)) }
           }
           if let mode = browser.picking, browser.hasPage {
             PickerCard(browser: browser, mode: mode)

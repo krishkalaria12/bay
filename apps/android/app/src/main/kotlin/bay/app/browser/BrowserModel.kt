@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import bay.app.AppModel
+import bay.app.BlockerStatus
 import bay.app.Strings
 import bay.core.Action
 import bay.core.BayCommand
@@ -534,10 +535,18 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     // Tips
 
-    /** The first-run tip showing, if any: the bar's swipe, once two pages are open. */
+    /**
+     * The first-run tip showing, if any, one at a time and never while anything else is up: what blocking did, over the
+     * first page that finishes loading with it on, then the bar's swipe once two pages are open.
+     */
     val tip: TipId?
         get() {
-            if (overlay != Overlay.NONE || panel != null || locked || TipId.BAR in app.preferences.tipsSeen) return null
+            if (overlay != Overlay.NONE || panel != null || locked || covered || link != null || find != null) return null
+            val seen = app.preferences.tipsSeen
+            if (TipId.BLOCKING !in seen && hasPage && !activeNavigation.isLoading && blocking == PageBlocking.ON && app.blockerStatus is BlockerStatus.Ready) {
+                return TipId.BLOCKING
+            }
+            if (TipId.BAR in seen) return null
             return if (app.tabs.count { it.url.isNotEmpty() && !it.private } > 1) TipId.BAR else null
         }
 

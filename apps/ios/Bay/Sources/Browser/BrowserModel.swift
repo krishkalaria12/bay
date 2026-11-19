@@ -448,9 +448,16 @@ final class BrowserModel: ObservableObject {
 
   // MARK: Tips
 
-  /// The first-run tip showing, if any: the bar's swipe, once two pages are open. It goes after a while unanswered.
+  /// The first-run tip showing, if any, one at a time and never while anything else is up: what blocking did, over the
+  /// first page that finishes loading with it on, then the bar's swipe once two pages are open. It goes after a while
+  /// unanswered.
   var tip: TipId? {
-    guard overlay == .none, panel == nil, !locked, !app.preferences.tipsSeen.contains(.bar) else { return nil }
+    guard overlay == .none, panel == nil, !locked, !covered, link == nil, find == nil else { return nil }
+    let seen = app.preferences.tipsSeen
+    if !seen.contains(.blocking), hasPage, !activeNavigation.isLoading, blocking == .on, case .ready = app.blockerStatus {
+      return .blocking
+    }
+    guard !seen.contains(.bar) else { return nil }
     return app.tabs.filter { !$0.url.isEmpty && !$0.private }.count > 1 ? .bar : nil
   }
 

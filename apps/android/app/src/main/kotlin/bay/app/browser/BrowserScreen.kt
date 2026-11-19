@@ -81,8 +81,9 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 // Under Settings the toast shows on Settings instead (SettingsScreen).
                 if (!browser.covered) browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
                 val tip = browser.tip
-                if (tip == TipId.BAR) {
-                    TipCard(strings.t("tip.bar.title"), strings.t("tip.bar.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(TipId.BAR)) }
+                if (tip != null) {
+                    val key = if (tip == TipId.BLOCKING) "tip.blocking" else "tip.bar"
+                    TipCard(strings.t("$key.title"), strings.t("$key.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(tip)) }
                     // An unanswered tip goes after a while; it has been seen.
                     LaunchedEffect(tip) {
                         kotlinx.coroutines.delay(12_000)
