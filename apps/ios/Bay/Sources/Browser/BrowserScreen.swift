@@ -19,7 +19,7 @@ struct BrowserScreen: View {
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
   private var coveredBottom: CGFloat {
-    browser.barHidden && browser.overlay == .none ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
+    browser.barAway ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
   }
 
   var body: some View {
@@ -87,9 +87,22 @@ struct BrowserScreen: View {
         .padding(.horizontal, Space.edge)
         .padding(.bottom, Space.xs)
         // Scrolled away while the page scrolls down; the toast and player go with it.
-        .offset(y: browser.barHidden && browser.overlay == .none ? 140 : 0)
-        .animation(.easeOut(duration: 0.2), value: browser.barHidden)
+        .offset(y: browser.barAway ? 140 : 0)
+        .animation(.easeOut(duration: 0.2), value: browser.barAway)
         .animation(.easeOut(duration: 0.2), value: browser.toast?.id)
+      }
+      if browser.fullscreen {
+        // The screen's bottom edge on a fullscreen site: a tap brings the bar back for a moment.
+        Color.clear
+          .frame(height: max(safeBottom, Space.md) + Space.xl)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: browser.peekBar)
+          .ignoresSafeArea(edges: .bottom)
+          .accessibilityElement()
+          .accessibilityAddTraits(.isButton)
+          .accessibilityLabel(Text(verbatim: strings.t("site.fullscreen")))
+          .accessibilityHint(Text(verbatim: strings.t("site.fullscreen.note")))
+          .accessibilityIdentifier("fullscreen-edge")
       }
       if browser.overlay == .search {
         SearchCard(
@@ -164,7 +177,12 @@ struct BrowserScreen: View {
     .onChange(of: app.preferences) { _ in browser.preferencesChanged() }
     .onChange(of: browser.tip) { browser.tipShown($0) }
     .onAppear(perform: browser.refreshMounted)
-    .onChange(of: app.activeTabId) { _ in browser.refreshMounted() }
+    .onChange(of: app.activeTabId) { _ in
+      browser.refreshMounted()
+      browser.pauseMediaLeft()
+    }
+    .onChange(of: browser.overlay) { _ in browser.pauseMediaLeft() }
+    .statusBarHidden(browser.fullscreen)
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }
   }
 

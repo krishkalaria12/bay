@@ -613,14 +613,14 @@ extension PreferencesUpdate {
   static func openSearchOnLaunch(_ on: Bool) -> PreferencesUpdate {
     PreferencesUpdate(
       theme: nil, textSize: nil, searchSuggestions: nil, skipAmp: nil, pullToRefresh: nil, startPageAfterHours: nil, youtube: nil,
-      welcomed: nil, openSearchOnLaunch: on, swipeToNavigate: nil, appLinks: nil)
+      welcomed: nil, openSearchOnLaunch: on, swipeToNavigate: nil, appLinks: nil, siteFont: nil)
   }
 
   /// An update that marks the welcome done.
   static var welcomedNow: PreferencesUpdate {
     PreferencesUpdate(
       theme: nil, textSize: nil, searchSuggestions: nil, skipAmp: nil, pullToRefresh: nil, startPageAfterHours: nil, youtube: nil,
-      welcomed: true, openSearchOnLaunch: nil, swipeToNavigate: nil, appLinks: nil)
+      welcomed: true, openSearchOnLaunch: nil, swipeToNavigate: nil, appLinks: nil, siteFont: nil)
   }
 }
 

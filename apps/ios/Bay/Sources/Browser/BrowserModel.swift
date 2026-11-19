@@ -95,6 +95,9 @@ final class BrowserModel: ObservableObject {
   private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
+  /// The bar is back for a moment on a site that keeps it hidden, after a tap on the screen's bottom edge.
+  @Published private(set) var fullscreenPeek = false
+  private var peekTimer: Task<Void, Never>?
   /// Media playing (or paused) in each tab, as its page reports it.
   @Published private(set) var media: [String: TabMedia] = [:]
   /// Private tabs are covered once Bay has been in the background, until the owner unlocks them.
@@ -398,6 +401,29 @@ final class BrowserModel: ObservableObject {
     activate(app.tabs[index + step].id)
   }
 
+  /// The page showing is on a site that keeps the bar and status bar hidden, and the bar isn't back for a moment. Find
+  /// and the element picker bring it back while they're open.
+  var fullscreen: Bool {
+    overlay == .none && hasPage && !covered && find == nil && picking == nil && !fullscreenPeek && siteSetting.fullscreen
+  }
+
+  /// The bar is out of sight: scrolled away, or on a fullscreen site.
+  var barAway: Bool {
+    (barHidden && overlay == .none) || fullscreen
+  }
+
+  /// A tap on the bottom edge of a fullscreen site: the bar for a few seconds.
+  func peekBar() {
+    fullscreenPeek = true
+    barHidden = false
+    peekTimer?.cancel()
+    peekTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 4_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.fullscreenPeek = false
+    }
+  }
+
   private func scrolled(_ tabId: String, offsetY: Double, deltaY: Double) {
     guard tabId == app.activeTabId else { return }
     if offsetY < 24 || deltaY < -8 {
@@ -409,10 +435,21 @@ final class BrowserModel: ObservableObject {
 
   // MARK: Media
 
-  /// The tab whose media the mini player shows: the latest playing one that isn't on screen.
+  /// The tab whose media the mini player shows: the latest playing one that isn't on screen, from a site that keeps
+  /// its mini player.
   var player: (tab: BrowserTab, media: TabMedia)? {
     let onScreen = overlay == .none && hasPage ? app.activeTabId : nil
-    return latestMedia { $0.id != onScreen && !(locked && $0.private) }
+    return latestMedia { $0.id != onScreen && !(locked && $0.private) && app.store.siteSetting(url: $0.url).miniPlayer }
+  }
+
+  /// Media from a site with its mini player turned off pauses once its tab is left (another tab, or the tab view).
+  func pauseMediaLeft() {
+    let onScreen = overlay != .tabs && hasPage ? app.activeTabId : nil
+    let tabs = app.allTabs
+    for (id, state) in media where state.report.playing && id != onScreen {
+      guard let tab = tabs.first(where: { $0.id == id }), !app.store.siteSetting(url: tab.url).miniPlayer else { continue }
+      command(id, .pauseMedia)
+    }
   }
 
   private func latestMedia(where include: (BrowserTab) -> Bool) -> (tab: BrowserTab, media: TabMedia)? {
@@ -480,6 +517,7 @@ final class BrowserModel: ObservableObject {
     stopped.remove(tabId)
     media[tabId] = TabMedia(report: report, at: Date())
     updateMediaSession()
+    if report.playing { pauseMediaLeft() }
   }
 
   /// A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from.
@@ -1266,7 +1304,7 @@ extension BrowserModel {
     let setting = siteSetting
     var input = SiteSettingInput(
       textSize: setting.textSize.map(Double.init), reader: setting.reader, desktopMode: setting.desktopMode, blockOff: setting.blockOff,
-      swipe: setting.swipe)
+      swipe: setting.swipe, font: setting.font, fullscreen: setting.fullscreen, forceDark: setting.forceDark, miniPlayer: setting.miniPlayer)
     change(&input)
     app.dispatch(.siteSettings(host: host, update: input))
     preferencesChanged()
@@ -1282,25 +1320,36 @@ extension BrowserModel {
     applyBlockingPauses()
   }
 
-  /// The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices.
+  /// The page view's settings for the page it shows: its site's desktop mode, swipe and dark look, and Bay's own choices.
   private func configure(_ view: EngineView, url: String) {
     let preferences = app.preferences
-    let setting = url.isEmpty ? SiteSetting(textSize: nil, reader: false, desktopMode: false, blockOff: [], swipe: nil) : app.store.siteSetting(url: url)
+    let setting = app.store.siteSetting(url: url)
     view.desktopMode = setting.desktopMode
+    // Forced dark asks the page for its own dark look first; the page script darkens a page that has none.
+    view.overrideUserInterfaceStyle = setting.forceDark ? .dark : .unspecified
     view.swipeMode = setting.swipe ?? preferences.swipeToNavigate
     view.pullToRefreshEnabled = preferences.pullToRefresh
     view.appLinks = preferences.appLinks
   }
 
-  /// Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows.
+  /// Bay's page zoom (the site's own first), the AMP swap, the font and forced dark, on the page a tab shows.
   private func applyTweaks(_ tabId: String, url: String) {
     guard let view = views[tabId], isWebUrl(value: url) else { return }
     let setting = app.store.siteSetting(url: url)
     let zoom = setting.textSize ?? app.preferences.textSize
     let skipAmp = app.preferences.skipAmp && !(ampLeft[tabId]?.contains(url) ?? false)
+    let face = siteFontFace(font: app.store.siteFont(url: url))
+    let forceDark = setting.forceDark
     Task { [weak self] in
       let result = try? await view.runScript(.pageTweaks, args: ["textSize": zoom, "skipAmp": skipAmp])
       if result == "\"amp\"" { self?.ampLeft[tabId, default: []].insert(url) }
+      _ = try? await view.runScript(.pageFont, args: ["family": face.family, "faces": SiteFonts.faces(face)])
+      let dark = try? await view.runScript(.forceDark, args: ["on": forceDark])
+      // Darkened or put back: the strip behind the status bar takes the page's new colour.
+      if dark != "\"off\"" || self?.pageColors[tabId] != nil {
+        let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
+        self?.pageColors[tabId] = color
+      }
     }
   }
 

@@ -7,7 +7,7 @@ extension PreferencesUpdate {
   static func textSize(_ value: Double) -> PreferencesUpdate {
     PreferencesUpdate(
       theme: nil, textSize: value, searchSuggestions: nil, skipAmp: nil, pullToRefresh: nil, startPageAfterHours: nil, youtube: nil,
-      welcomed: nil, openSearchOnLaunch: nil, swipeToNavigate: nil, appLinks: nil)
+      welcomed: nil, openSearchOnLaunch: nil, swipeToNavigate: nil, appLinks: nil, siteFont: nil)
   }
 }
 

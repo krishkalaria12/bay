@@ -218,6 +218,8 @@ public struct ActionRow: View {
   private let icon: BayIcon?
   private let tint: Color?
   private let detail: String?
+  /// A short tag after the label ("Beta").
+  private let badge: String?
   private let value: String?
   private let chevron: Bool
   private let toggle: Bool?
@@ -234,7 +236,7 @@ public struct ActionRow: View {
   @Environment(\.dynamicTypeSize) private var sizeCategory
 
   public init(
-    _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, value: String? = nil,
+    _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, badge: String? = nil, value: String? = nil,
     chevron: Bool = false, toggle: Bool? = nil, selected: Bool = false, destructive: Bool = false, disabled: Bool = false,
     leading: AnyView? = nil, inset: CGFloat? = nil, gap: CGFloat? = nil, action: @escaping () -> Void
   ) {
@@ -246,6 +248,7 @@ public struct ActionRow: View {
     self.icon = icon
     self.tint = tint
     self.detail = detail
+    self.badge = badge
     self.value = value
     self.chevron = chevron
     self.toggle = toggle
@@ -268,7 +271,15 @@ public struct ActionRow: View {
           BayIconView(icon, size: IconSize.control, color: destructive ? BayColor.danger : BayColor.foreground)
         }
         VStack(alignment: .leading, spacing: 1) {
-          BayText(label, tone: destructive ? .danger : .default)
+          HStack(spacing: Space.sm) {
+            BayText(label, tone: destructive ? .danger : .default)
+            if let badge {
+              BayText(badge, variant: .caption, weight: .semibold, tone: .muted)
+                .padding(.horizontal, Space.sm)
+                .padding(.vertical, 2)
+                .background(BayColor.fill, in: Capsule())
+            }
+          }
           // At the largest text sizes the value goes under the name, which would have no room beside it.
           if let value, stacksValue { valueText(value).accessibilityIdentifier("\(testID)-value") }
           if let detail { BayText(detail, variant: .subhead, tone: .muted).lineLimit(2) }
@@ -286,7 +297,7 @@ public struct ActionRow: View {
     .buttonStyle(.pressFeedback)
     .disabled(disabled)
     .opacity(disabled ? 0.4 : 1)
-    .accessibilityLabel(Text(verbatim: label))
+    .accessibilityLabel(Text(verbatim: [label, badge].compactMap { $0 }.joined(separator: ", ")))
     .accessibilityValue(Text(verbatim: [value, detail].compactMap { $0 }.joined(separator: ", ")))
     .accessibilityAddTraits(selected || toggle == true ? .isSelected : [])
     .accessibilityIdentifier(testID)
