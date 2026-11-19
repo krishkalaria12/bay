@@ -9,6 +9,16 @@ use serde_json::{Map, Value};
 
 /// Absent and null mean the same in the saved document, as does a `private` flag that is false, and 5 and 5.0 are
 /// one number.
+/// Settings only the native apps have, at the value the Expo app's state means: it never had them.
+fn native_default(key: &str, value: &Value) -> bool {
+    match key {
+        "siteFont" => value == "original",
+        "fullscreen" | "forceDark" => *value == Value::Bool(false),
+        "miniPlayer" => *value == Value::Bool(true),
+        _ => false,
+    }
+}
+
 fn normalize(value: &Value) -> Value {
     match value {
         Value::Object(map) => Value::Object(
@@ -16,6 +26,7 @@ fn normalize(value: &Value) -> Value {
                 .filter(|(key, value)| {
                     !value.is_null()
                         && !(key.as_str() == "private" && **value == Value::Bool(false))
+                        && !native_default(key, value)
                 })
                 .map(|(key, value)| (key.clone(), normalize(value)))
                 .collect::<Map<_, _>>(),

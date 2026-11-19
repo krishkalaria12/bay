@@ -310,6 +310,18 @@ pub struct SiteSetting {
     pub block_off: Vec<SiteBlockGroup>,
     /// Swipe to navigate on this site, or none for Bay's own choice.
     pub swipe: Option<SwipeMode>,
+    /// The font pages here show in, or none for the one set for all websites.
+    #[serde(default)]
+    pub font: Option<SiteFont>,
+    /// The bar and the status bar stay hidden here.
+    #[serde(default)]
+    pub fullscreen: bool,
+    /// Pages here show dark even when they have no dark look of their own.
+    #[serde(default)]
+    pub force_dark: bool,
+    /// Media from here keeps playing in the mini player after its tab is left. On unless turned off.
+    #[serde(default = "on")]
+    pub mini_player: bool,
 }
 
 impl SiteSetting {
@@ -319,6 +331,10 @@ impl SiteSetting {
         desktop_mode: false,
         block_off: Vec::new(),
         swipe: None,
+        font: None,
+        fullscreen: false,
+        force_dark: false,
+        mini_player: true,
     };
 
     pub fn is_default(&self) -> bool {
@@ -327,7 +343,31 @@ impl SiteSetting {
             && !self.desktop_mode
             && self.block_off.is_empty()
             && self.swipe.is_none()
+            && self.font.is_none()
+            && !self.fullscreen
+            && !self.force_dark
+            && self.mini_player
     }
+}
+
+fn on() -> bool {
+    true
+}
+
+/// A font Bay can show pages in. Bay bundles the same files in both apps, so a site set to one looks the same on each.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "lowercase")]
+pub enum SiteFont {
+    /// The site's own fonts, nothing changed.
+    #[default]
+    Original,
+    /// The phone's own font: San Francisco on iPhone, Roboto on Android.
+    System,
+    Literata,
+    Inter,
+    Nunito,
+    Charis,
+    Lora,
 }
 
 /// What to hide on YouTube, with Brave's lists.
@@ -375,6 +415,9 @@ pub struct BrowserPreferences {
     pub tips_seen: Vec<TipId>,
     pub swipe_to_navigate: SwipeMode,
     pub app_links: AppLinks,
+    /// The font every website shows in, unless the site has its own.
+    #[serde(default)]
+    pub site_font: SiteFont,
 }
 
 impl Default for BrowserPreferences {
@@ -407,6 +450,7 @@ impl Default for BrowserPreferences {
             tips_seen: Vec::new(),
             swipe_to_navigate: SwipeMode::Anywhere,
             app_links: AppLinks::App,
+            site_font: SiteFont::Original,
         }
     }
 }

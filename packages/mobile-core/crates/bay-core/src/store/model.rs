@@ -322,6 +322,18 @@ pub struct SiteSettingInput {
     pub desktop_mode: bool,
     pub block_off: Vec<SiteBlockGroup>,
     pub swipe: Option<SwipeMode>,
+    #[serde(default)]
+    pub font: Option<SiteFont>,
+    #[serde(default)]
+    pub fullscreen: bool,
+    #[serde(default)]
+    pub force_dark: bool,
+    #[serde(default = "on")]
+    pub mini_player: bool,
+}
+
+fn on() -> bool {
+    true
 }
 
 /// When Bay opens on a fresh start page: never, or after this many hours away. Its own type rather than an optional
@@ -380,6 +392,8 @@ pub struct PreferencesUpdate {
     pub swipe_to_navigate: Option<SwipeMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_links: Option<AppLinks>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_font: Option<SiteFont>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]

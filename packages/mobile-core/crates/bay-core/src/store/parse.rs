@@ -118,6 +118,11 @@ pub fn parse_site_setting(value: &Value) -> SiteSetting {
             })
             .collect(),
         swipe: enum_value(setting.get("swipe")),
+        font: enum_value(setting.get("font")),
+        fullscreen: setting.get("fullscreen") == Some(&Value::Bool(true)),
+        force_dark: setting.get("forceDark") == Some(&Value::Bool(true)),
+        // On unless turned off, so settings saved before it existed keep the player.
+        mini_player: setting.get("miniPlayer") != Some(&Value::Bool(false)),
     }
 }
 
@@ -231,6 +236,7 @@ pub fn parse_preferences(saved: &Map<String, Value>) -> BrowserPreferences {
         } else {
             AppLinks::App
         },
+        site_font: enum_value(get("siteFont")).unwrap_or(defaults.site_font),
     }
 }
 

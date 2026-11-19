@@ -172,6 +172,7 @@ pub(super) fn page_title(page: SettingsPage) -> &'static str {
         P::Wallpaper => "settings.wallpaper",
         P::AppIcon => "settings.group.appIcon",
         P::TextSize => "settings.pageZoom",
+        P::SiteFont => "settings.siteFont",
         P::Archive => "settings.archiveInactive",
         P::StartPage => "settings.startPageAfter",
         P::SyncJoin => "settings.page.syncJoin",
@@ -802,6 +803,14 @@ pub(super) fn sections_in(
                         )
                         .icon("textSize")
                         .value(Some(format!("{}%", prefs.text_size))),
+                        opens(
+                            "siteFont",
+                            "settings-site-font",
+                            t("settings.siteFont"),
+                            P::SiteFont,
+                        )
+                        .icon("font")
+                        .value(Some(t(&crate::browser::site_font_label(prefs.site_font)))),
                     ],
                 )
                 .title(Some(t("settings.group.startPage"))),
@@ -1112,6 +1121,29 @@ pub(super) fn sections_in(
                     .collect(),
             )
             .footer(t("settings.swipe.note")),
+        ],
+
+        P::SiteFont => vec![
+            section(
+                "siteFont",
+                crate::browser::SITE_FONTS
+                    .iter()
+                    .map(|(font, label)| {
+                        let id = tag(font);
+                        choice(
+                            id.clone(),
+                            format!("settings-site-font-{id}"),
+                            t(label),
+                            prefs.site_font == *font,
+                            change(PreferencesUpdate {
+                                site_font: Some(*font),
+                                ..Default::default()
+                            }),
+                        )
+                    })
+                    .collect(),
+            )
+            .footer(t("settings.siteFont.note")),
         ],
 
         P::AppLinks => vec![

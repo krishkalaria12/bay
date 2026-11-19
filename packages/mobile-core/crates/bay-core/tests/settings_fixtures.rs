@@ -96,6 +96,25 @@ fn plain(sections: &[SettingsSection]) -> Value {
         .collect()
 }
 
+/// Drops the rows only the native apps have (the font for all websites), which the Expo app's settings never had.
+fn without_native_rows(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .filter(|item| item.get("id") != Some(&json!("siteFont")))
+                .map(without_native_rows)
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, without_native_rows(value)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 #[test]
 fn settings_says_and_does_what_the_typescript_settings_does() {
     let mut contexts: HashMap<u64, SettingsContext> = HashMap::new();
@@ -144,6 +163,7 @@ fn settings_says_and_does_what_the_typescript_settings_does() {
             }
             other => panic!("unknown fn {other}"),
         };
+        let got = without_native_rows(got);
         checked += 1;
         if got != line["result"] {
             failures.push(format!(

@@ -386,6 +386,17 @@ impl BrowserStore {
             .unwrap_or(SiteSetting::EMPTY)
     }
 
+    /// The font a page shows in: its site's own, else the one set for all websites.
+    pub fn site_font(&self, url: String) -> SiteFont {
+        let state = lock(&self.state);
+        let preferences = &state.data.preferences;
+        preferences
+            .site_settings
+            .get(&site_host(&url))
+            .and_then(|setting| setting.font)
+            .unwrap_or(preferences.site_font)
+    }
+
     /// The elements hidden on a page's site, as selectors.
     pub fn hidden_selectors(&self, url: String) -> Vec<String> {
         let host = crate::input::url::host_of(&url);
@@ -537,7 +548,7 @@ impl BrowserStore {
 #[cfg(test)]
 mod tests {
     use super::super::bookmarks::BOOKMARKS_ROOT;
-    use super::super::model::SiteSettingInput;
+    use super::super::model::{PreferencesUpdate, SiteSettingInput};
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -676,13 +687,45 @@ mod tests {
                 desktop_mode: true,
                 block_off: Vec::new(),
                 swipe: None,
+                font: Some(SiteFont::Lora),
+                fullscreen: false,
+                force_dark: true,
+                mini_player: false,
             },
         });
         let setting = store.site_setting("https://www.Example.com/a".into());
         assert_eq!((setting.text_size, setting.desktop_mode), (Some(120), true));
         assert_eq!(
+            (setting.force_dark, setting.mini_player, setting.fullscreen),
+            (true, false, false)
+        );
+        assert_eq!(
             store.site_setting("https://other.org/".into()),
             SiteSetting::EMPTY
+        );
+
+        // The site's font comes first, then the one for all websites.
+        assert_eq!(
+            store.site_font("https://example.com/".into()),
+            SiteFont::Lora
+        );
+        assert_eq!(
+            store.site_font("https://other.org/".into()),
+            SiteFont::Original
+        );
+        store.dispatch(Action::Preferences {
+            update: PreferencesUpdate {
+                site_font: Some(SiteFont::Inter),
+                ..Default::default()
+            },
+        });
+        assert_eq!(
+            store.site_font("https://other.org/".into()),
+            SiteFont::Inter
+        );
+        assert_eq!(
+            store.site_font("https://example.com/".into()),
+            SiteFont::Lora
         );
 
         let url = "https://example.com/a";
