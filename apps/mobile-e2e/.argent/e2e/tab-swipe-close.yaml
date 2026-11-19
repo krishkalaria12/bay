@@ -44,5 +44,5 @@ steps:
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
   - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/second.html" }, timeout: 10000 }
-  - tap: { id: page-menu-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }

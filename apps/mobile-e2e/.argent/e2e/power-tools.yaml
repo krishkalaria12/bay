@@ -58,7 +58,7 @@ steps:
   - await: { text: { in: { id: inspect-name }, contains: "div" }, timeout: 10000 }
   - tap: { id: inspect-copy }
   - await: { text: { in: { id: reading-notice }, contains: "Copied for a coding agent" }, timeout: 10000 }
-  - tap: { id: inspect-panel-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: inspect-panel }, timeout: 10000 }
   - tap: { id: inspect-done }
   - await: { hidden: { id: inspect-instructions }, timeout: 10000 }

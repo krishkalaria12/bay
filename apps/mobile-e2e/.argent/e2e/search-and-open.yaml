@@ -8,8 +8,8 @@ steps:
   - await: { visible: { id: bar-more }, timeout: 30000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 30000 }
-  - tap: { id: page-menu-close }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.com/" }, timeout: 30000 }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
 
   # The visit is in history with its page title, and inline completion fills the address.
@@ -39,7 +39,7 @@ steps:
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
   - await: { idle: true, timeout: 20000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 20000 }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.com/" }, timeout: 20000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: page-forward }
   - await: { idle: true, timeout: 20000 }

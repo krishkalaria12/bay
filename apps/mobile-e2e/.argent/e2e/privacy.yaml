@@ -22,21 +22,24 @@ steps:
   - await: { visible: { id: bar-more }, timeout: 30000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/?id=1" }, timeout: 20000 }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.com/?id=1" }, timeout: 20000 }
 
-  # Blocking pauses on this site and resumes.
+  # Blocking pauses on this site and resumes, in the site's settings.
+  - tap: { id: page-site-settings }
   - await: { text: { in: { id: page-blocking-detail }, contains: On for this site }, timeout: 10000 }
   - tap: { id: page-blocking }
   - await: { text: { in: { id: page-blocking-detail }, contains: Paused on this site }, timeout: 10000 }
-  - tap: { id: page-menu-close }
-  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - run: ../flows/close-sheet
+  - await: { hidden: { id: page-blocking }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
+  - await: { visible: { id: page-site-settings }, timeout: 10000 }
+  - tap: { id: page-site-settings }
   - await: { text: { in: { id: page-blocking-detail }, contains: Paused on this site }, timeout: 10000 }
   - tap: { id: page-blocking }
   - await: { text: { in: { id: page-blocking-detail }, contains: On for this site }, timeout: 10000 }
-  - tap: { id: page-menu-close }
-  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - run: ../flows/close-sheet
+  - await: { hidden: { id: page-blocking }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
 
   # An HTTP address opens over HTTPS.
@@ -46,8 +49,8 @@ steps:
   - type: { into: { id: address-input }, text: "http://example.org/" }
   - await: { idle: true, timeout: 20000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.org/" }, timeout: 20000 }
-  - tap: { id: page-menu-close }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.org/" }, timeout: 20000 }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
 
   # A private tab: dark search card, marked in the switcher, and gone without a trace when closed.

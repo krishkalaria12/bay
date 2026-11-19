@@ -36,12 +36,15 @@ steps:
   - await: { text: { in: { id: inspect-size }, matches: '^\d+ × \d+$' }, timeout: 10000 }
 
   # Close the panel. The picker stays open with the paragraph picked, so it can be measured again.
-  - tap: { id: inspect-panel-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: inspect-panel }, timeout: 10000 }
 
   # The zoom lives in Settings, under Appearance.
   - tap: { id: bar-more }
-  - await: { visible: { id: page-settings }, timeout: 10000 }
+  - await: { visible: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  # Settings is the page menu's last row, below its fold.
+  - scroll-to: { target: { id: page-settings }, direction: down }
   - tap: { id: page-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
@@ -82,7 +85,7 @@ steps:
   - tap: { id: page-site-settings }
   - await: { visible: { id: site-zoom-value }, timeout: 10000 }
   - await: { text: { in: { id: site-zoom-value }, contains: "200%" }, timeout: 10000 }
-  - tap: { id: site-settings-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: site-settings }, timeout: 10000 }
 
   # And the page really is drawn at the new zoom: the same paragraph, measured again, is much taller.
@@ -92,10 +95,13 @@ steps:
   - await: { text: { in: { id: inspect-size }, matches: '^\d+ × (?:1[5-9]\d|[2-9]\d\d|\d{4,})$' }, timeout: 10000 }
 
   # Put the zoom back, so the next run starts as it did.
-  - tap: { id: inspect-panel-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: inspect-panel }, timeout: 10000 }
   - tap: { id: bar-more }
-  - await: { visible: { id: page-settings }, timeout: 10000 }
+  - await: { visible: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  # Settings is the page menu's last row, below its fold.
+  - scroll-to: { target: { id: page-settings }, direction: down }
   - tap: { id: page-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }

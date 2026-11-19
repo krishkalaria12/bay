@@ -1812,13 +1812,8 @@ impl BrowserStore {
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            The e2e flows are in <code>apps/mobile-e2e</code>. N4's flows pass on Android; two steps there changed for the native labels: an archived row's
-            label is "Open &lt;title&gt;" with the site as its state, and a bare title also matches the row's Remove button.
-          </li>
-          <li>
-            The e2e flows predate the longer page menu: <code>fresh-start</code> waits for <code>page-settings</code>, which is now below the menu's fold, and
-            <code>start-page</code> taps <code>page-pin</code> before the sheet has settled. <code>smoke</code> passes; the flows that open the page menu need a
-            scroll and a settle step.
+            The e2e flows are in <code>apps/mobile-e2e</code>; all 18 pass on Android. Two steps changed for the native labels: an archived row's label is "Open
+            &lt;title&gt;" with the site as its state, and a bare title also matches the row's Remove button.
           </li>
           <li>
             iOS 15 and 16 weren't run: Xcode 27.2 offers no simulator runtime older than iOS 27. The app compiles for the 15.0 deployment target, and the iOS 15

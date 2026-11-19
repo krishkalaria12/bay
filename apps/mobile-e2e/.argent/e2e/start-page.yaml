@@ -31,17 +31,16 @@ steps:
   - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/start.html" }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
 
-  # Pin it from the page menu's tools; the row turns into Unpin.
-  - tap: { id: page-more-tools }
+  # Pin it from the page menu's tiles; the tile turns into Unpin. Archive is in Developer tools.
   - await: { visible: { id: page-pin }, timeout: 10000 }
   - tap: { id: page-pin }
   - await: { text: { in: { id: toast }, contains: "Pinned" }, timeout: 10000 }
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
   - tap: { id: bar-more }
-  - tap: { id: page-more-tools }
-  - await: { visible: { id: page-close-tab }, timeout: 10000 }
   - await: { text: { in: { id: page-pin }, contains: "Unpin" }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-more-tools }
+  - await: { visible: { id: page-close-tab }, timeout: 10000 }
   - tap: { id: page-close-tab }
 
   # Back on the start page, the site is a pin and has left the recent pages.

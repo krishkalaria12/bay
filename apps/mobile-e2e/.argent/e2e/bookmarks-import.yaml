@@ -1,9 +1,10 @@
-# Bookmarks and the import sheet: a page bookmarked from its menu shows in Bookmarks and goes again with its remove
-# button; an empty Bookmarks sheet offers the import, which lists the ways in and walks through a bookmarks file
-# (the system's file picker is the phone's own and isn't driven here); a pasted list of tabs goes to the archive.
+# Bookmarks and the import sheet: a page saved from its menu goes into the space's bookmarks (the note saying where
+# opens the drawer with it in) and goes again with the save sheet's Remove, leaving the drawer empty; the import sheet,
+# from Settings, lists the ways in and walks through a bookmarks file (the system's file picker is the phone's own and
+# isn't driven here); a pasted list of tabs goes to the archive.
 #
-# The page is .argent/pages/second.html, served by apps/mobile-e2e/run (which both devices reach at 127.0.0.1:8099), so the test
-# needs no network. The pasted links are never opened: they go to the archive.
+# The page is .argent/pages/second.html, served by apps/mobile-e2e/run (which both devices reach at 127.0.0.1:8099), so
+# the test needs no network. The pasted links are never opened: they go to the archive.
 steps:
   - run: ../flows/fresh-start
   - tap: { id: start-screen }
@@ -13,20 +14,51 @@ steps:
   - await: { hidden: { id: page-progress }, timeout: 30000 }
   - await: { idle: true, timeout: 15000 }
 
-  # Bookmark the page from its menu; the toast's Show opens Bookmarks with it in.
+  # Save the page from its menu; the note saying where it went opens the drawer with it in.
   - tap: { id: bar-more }
   - await: { visible: { id: page-bookmark }, timeout: 10000 }
   - tap: { id: page-bookmark }
-  - await: { visible: { id: toast-action }, timeout: 10000 }
-  - tap: { id: toast-action }
-  - await: { visible: { id: bookmarks-screen-close }, timeout: 10000 }
-  - await: { visible: { id: "bookmark-open-http://127.0.0.1:8099/.argent/pages/second.html" }, timeout: 10000 }
-
-  # Remove it: the sheet is empty, and offers the import.
-  - tap: { id: "bookmark-remove-http://127.0.0.1:8099/.argent/pages/second.html" }
-  - await: { visible: { id: bookmarks-empty }, timeout: 10000 }
+  - await: { visible: { id: save-done }, timeout: 10000 }
   - await: { idle: true, timeout: 10000 }
-  - tap: { id: bookmarks-import }
+  - tap: { id: save-done }
+  - await: { visible: { id: top-note }, timeout: 10000 }
+  - tap: { id: top-note }
+  - await: { visible: { id: bookmarks-drawer }, timeout: 10000 }
+  - await: { visible: { text: "Bay second tab test" }, timeout: 10000 }
+  - tap: { id: drawer-close }
+  - await: { hidden: { id: bookmarks-drawer }, timeout: 10000 }
+  - await: { idle: true, timeout: 10000 }
+
+  # Remove it from the save sheet: the drawer is empty again.
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-bookmark }, timeout: 10000 }
+  - tap: { id: page-bookmark }
+  - await: { visible: { id: save-remove }, timeout: 10000 }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: save-remove }
+  - await: { hidden: { id: save-remove }, timeout: 10000 }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - scroll-to: { target: { id: page-bookmarks }, direction: down }
+  - tap: { id: page-bookmarks }
+  - await: { visible: { id: drawer-empty-save }, timeout: 10000 }
+  - tap: { id: drawer-close }
+  - await: { hidden: { id: bookmarks-drawer }, timeout: 10000 }
+  - await: { idle: true, timeout: 10000 }
+
+  # The import sheet, from Settings.
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  # Settings is the page menu's last row, below its fold.
+  - scroll-to: { target: { id: page-settings }, direction: down }
+  - tap: { id: page-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - scroll-to: { target: { id: settings-import }, direction: down }
+  - tap: { id: settings-import }
   - await: { visible: { id: import-browser-other }, timeout: 10000 }
   - await: { visible: { id: import-passwords }, timeout: 10000 }
   - await: { idle: true, timeout: 10000 }

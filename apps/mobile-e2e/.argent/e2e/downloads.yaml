@@ -30,7 +30,7 @@ steps:
     steps:
       - tap: { id: downloads-clear }
   - await: { visible: { id: downloads-empty }, timeout: 10000 }
-  - tap: { id: downloads-panel-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: downloads-panel }, timeout: 10000 }
   # Downloads opened over Settings, which is still there.
   - tap: { id: settings-screen-close }

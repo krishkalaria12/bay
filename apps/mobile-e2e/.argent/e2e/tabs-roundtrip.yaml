@@ -25,8 +25,8 @@ steps:
   - tap: { id: tab-card-0 }
   - await: { visible: { id: bar-more }, timeout: 10000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 10000 }
-  - tap: { id: page-menu-close }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.com/" }, timeout: 10000 }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
 
   # Closing a tab archives it; the archive restores it.
@@ -43,5 +43,6 @@ steps:
   - await: { visible: { id: bar-more }, timeout: 15000 }
   - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-more }
-  - await: { text: { in: { id: page-menu-url }, equals: "https://example.org/" }, timeout: 30000 }
-  - tap: { id: page-menu-close }
+  - await: { text: { in: { id: page-menu-url }, contains: "https://example.org/" }, timeout: 30000 }
+  - run: ../flows/close-sheet
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }

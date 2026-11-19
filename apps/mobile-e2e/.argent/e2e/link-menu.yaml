@@ -48,5 +48,5 @@ steps:
   - await: { visible: { id: link-destination }, timeout: 10000 }
   - tap: { id: link-destination }
   - await: { text: { in: { id: link-destination-result }, contains: "iana.org/help/example-domains" }, timeout: 20000 }
-  - tap: { id: link-menu-close }
+  - run: ../flows/close-sheet
   - await: { hidden: { id: link-menu-url }, timeout: 10000 }
