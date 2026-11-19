@@ -1821,10 +1821,6 @@ impl BrowserStore {
             scroll and a settle step.
           </li>
           <li>
-            <code>scripts/make-icon.sh</code> no longer writes the phone apps' icons: their sets (iOS app icons and previews, Android's mipmaps, adaptive
-            foregrounds and pickers) were converted once from the Expo app's renders. A change to an icon's SVG has to be carried into both apps by hand.
-          </li>
-          <li>
             The Android engine's own sources (<code>engine/android/src</code>) still describe the Expo app in a few comments; they're left until the next engine
             change, since any edit there changes the engine id and needs an <code>android-engine-N</code> run.
           </li>
