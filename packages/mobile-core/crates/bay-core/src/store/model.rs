@@ -637,6 +637,18 @@ fn with_space_bookmarks(
     Some(next)
 }
 
+/// Whether a bookmark's title is only its page's address (nothing, the address, or the address without its scheme or
+/// `www.`), as when it was saved before the page had a title.
+fn is_address_title(title: &str, url: &str) -> bool {
+    let bare = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let bare = bare.strip_prefix("www.").unwrap_or(bare);
+    let title = title.trim().trim_end_matches('/');
+    title.is_empty()
+        || title == url.trim_end_matches('/')
+        || title == bare.trim_end_matches('/')
+        || title.strip_prefix("www.") == Some(bare.trim_end_matches('/'))
+}
+
 /// The next state after `action`, or `None` when it changes nothing.
 pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
     let mut next = data.clone();
@@ -857,13 +869,32 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
         }
 
         Action::PageTitle { url, title } => {
-            // Titles often arrive after the load finishes and the visit is saved.
+            // Titles often arrive after the load finishes and the visit is saved, or after the page is bookmarked; a
+            // bookmark saved before then holds the address in place of a title, and takes the page's. A title someone
+            // gave it stays.
             let stale = |entry: &HistoryEntry| &entry.url == url && &entry.title != title;
-            if title.is_empty() || !data.history.iter().any(stale) {
+            let placeholder = |node: &BookmarkNode| {
+                matches!(node, BookmarkNode::Url { url: saved, title: named, .. }
+                    if saved == url && named != title && is_address_title(named, url))
+            };
+            let renames = data
+                .bookmarks
+                .values()
+                .any(|tree| tree.values().any(placeholder));
+            if title.is_empty() || (!data.history.iter().any(stale) && !renames) {
                 return None;
             }
             for entry in next.history.iter_mut().filter(|entry| stale(entry)) {
                 entry.title = title.clone();
+            }
+            for tree in next.bookmarks.values_mut() {
+                for node in tree.values_mut() {
+                    if placeholder(node)
+                        && let BookmarkNode::Url { title: named, .. } = node
+                    {
+                        *named = title.clone();
+                    }
+                }
             }
         }
 

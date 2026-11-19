@@ -282,4 +282,42 @@ mod tests {
         );
         assert_eq!(listing.rows.len(), 1);
     }
+
+    #[test]
+    fn a_bookmark_saved_before_its_title_takes_the_page_title() {
+        let store = store("titles");
+        let url = "https://en.wikipedia.org/wiki/Bay";
+        let save = |id: &str, title: &str, url: &str| {
+            store.dispatch(Action::ToggleBookmark {
+                space_id: PERSONAL_SPACE_ID.into(),
+                bookmark: BookmarkNode::Url {
+                    id: id.into(),
+                    parent_id: BOOKMARKS_ROOT.into(),
+                    title: title.into(),
+                    url: url.into(),
+                    added_at: 1,
+                },
+            })
+        };
+        assert!(save("bare", "en.wikipedia.org/wiki/Bay", url));
+        assert!(save("named", "My bay", "https://bay.example/"));
+        store.dispatch(Action::PageTitle {
+            url: url.into(),
+            title: "Bay - Wikipedia".into(),
+        });
+        store.dispatch(Action::PageTitle {
+            url: "https://bay.example/".into(),
+            title: "Bay Example".into(),
+        });
+        let titles: std::collections::HashMap<String, String> = store
+            .bookmarks(PERSONAL_SPACE_ID.into())
+            .into_values()
+            .filter_map(|node| match node {
+                BookmarkNode::Url { id, title, .. } => Some((id, title)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(titles["bare"], "Bay - Wikipedia");
+        assert_eq!(titles["named"], "My bay");
+    }
 }
