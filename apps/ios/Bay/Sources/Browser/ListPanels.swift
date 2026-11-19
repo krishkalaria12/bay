@@ -2,7 +2,6 @@ import BayCore
 import BayDesign
 import BayEngine
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// How many history entries the sheet lists at once.
 private let historyShown: UInt32 = 200
@@ -731,8 +730,14 @@ struct BookmarksDrawer: View {
   @State private var renaming: String?
   /// The row whose new folder is being picked.
   @State private var moving: BookmarkTreeRow?
-  /// The row being dragged to a new place.
+  /// The row being dragged to a new place, how far it has come, and the row it would land on.
   @State private var dragging: String?
+  @State private var lift: CGFloat = 0
+  @State private var dropTarget: String?
+  /// Where each row sits in the list, to know which one a dragged row is over.
+  @State private var frames: [String: CGRect] = [:]
+  /// The row held without moving, whose actions are offered.
+  @State private var actionsFor: BookmarkTreeRow?
   /// The list is scrolled to its top, where pulling it down brings the search.
   @State private var atTop = true
 
@@ -783,6 +788,7 @@ struct BookmarksDrawer: View {
             .padding(.bottom, 80)
           }
           .coordinateSpace(name: "drawer-list")
+          .onPreferenceChange(DrawerRowFrames.self) { frames = $0 }
           .onPreferenceChange(DrawerPull.self) { top in
             atTop = top > -2
             if top > Self.pullToSearch { showSearch() }
@@ -827,6 +833,15 @@ struct BookmarksDrawer: View {
     .onAppear {
       if let folder = browser.drawerFolder { open.insert(folder) }
     }
+    .confirmationDialog(
+      actionsFor.map { $0.title.isEmpty ? displayUrl(url: $0.url) : $0.title } ?? "",
+      isPresented: Binding(get: { actionsFor != nil }, set: { if !$0 { actionsFor = nil } }), titleVisibility: .visible,
+      presenting: actionsFor
+    ) { row in
+      ForEach(DrawerRowAction.offered(for: row), id: \.self) { action in
+        Button(strings.t(action.label), role: action == .remove ? .destructive : nil) { perform(action, on: row) }
+      }
+    }
     .baySheet(isPresented: Binding(get: { moving != nil }, set: { if !$0 { moving = nil } }), maxFraction: 0.62) {
       if let moving {
         DrawerMoveSheet(row: moving, from: parent(of: moving, in: rows)) { folder in
@@ -842,9 +857,12 @@ struct BookmarksDrawer: View {
   }
 
   private func drawerRow(_ row: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> some View {
-    DrawerRow(
-      row: row, current: row.url == browser.activeUrl, open: open.contains(row.id), renaming: renaming == row.id
+    let moving = dragging == row.id
+    return DrawerRow(
+      row: row, current: row.url == browser.activeUrl, open: open.contains(row.id), renaming: renaming == row.id,
+      targeted: dropTarget == row.id, lifted: moving
     ) {
+      guard dragging == nil, actionsFor == nil else { return }
       if row.folder {
         withAnimation(Motion.settle.animation) {
           if open.contains(row.id) { open.remove(row.id) } else { open.insert(row.id) }
@@ -858,17 +876,64 @@ struct BookmarksDrawer: View {
       let title = name.trimmingCharacters(in: .whitespaces)
       guard let title = title.isEmpty ? nil : title, title != row.title else { return }
       app.dispatch(.renameBookmark(spaceId: app.activeSpaceId, id: row.id, title: title, url: nil))
-    } menu: { action in
-      switch action {
-      case .share: browser.share(row.url)
-      case .rename: renaming = row.id
-      case .move: moving = row
-      case .remove: app.dispatch(.removeBookmark(spaceId: app.activeSpaceId, id: row.id))
+    } perform: { action in
+      perform(action, on: row)
+    }
+    .offset(y: moving ? lift : 0)
+    .zIndex(moving ? 1 : 0)
+    .background(GeometryReader { proxy in
+      Color.clear.preference(key: DrawerRowFrames.self, value: [row.id: proxy.frame(in: .named("drawer-list"))])
+    })
+    .gesture(hold(row, rows: rows))
+  }
+
+  /// Holding a row: lifted and moved, it goes where it's let go; let go where it was, its actions are offered.
+  private func hold(_ row: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> some Gesture {
+    LongPressGesture(minimumDuration: 0.4)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("drawer-list")))
+      .onChanged { value in
+        guard case .second(true, let drag) = value else { return }
+        guard let drag else {
+          Haptics.press()
+          return
+        }
+        if dragging == nil, abs(drag.translation.height) > 8 {
+          dragging = row.id
+          Haptics.tick()
+        }
+        guard dragging == row.id else { return }
+        lift = drag.translation.height
+        let over = frames.first { $0.key != row.id && $0.value.minY <= drag.location.y && drag.location.y < $0.value.maxY }?.key
+        if over != dropTarget {
+          dropTarget = over
+          if over != nil { Haptics.tick() }
+        }
       }
-    } drag: {
-      dragging = row.id
-    } drop: {
-      drop(onto: row, rows: rows)
+      .onEnded { value in
+        guard case .second(true, _) = value else { return }
+        if dragging == row.id {
+          if let target = dropTarget.flatMap({ id in rows.first { $0.id == id } }) {
+            _ = drop(row.id, onto: target, rows: rows)
+          }
+          withAnimation(Motion.settle.animation) {
+            lift = 0
+            dragging = nil
+            dropTarget = nil
+          }
+        } else {
+          actionsFor = row
+        }
+      }
+  }
+
+  /// One of a row's actions, from its menu or VoiceOver.
+  private func perform(_ action: DrawerRowAction, on row: BookmarkTreeRow) {
+    switch action {
+    case .share: browser.share(row.url)
+    case .rename: renaming = row.id
+    // After the menu has gone, so the sheet can come up.
+    case .move: DispatchQueue.main.async { moving = row }
+    case .remove: app.dispatch(.removeBookmark(spaceId: app.activeSpaceId, id: row.id))
     }
   }
 
@@ -942,9 +1007,8 @@ struct BookmarksDrawer: View {
 
   /// A dragged row let go over `target`: a link over a folder goes into it; otherwise it goes beside the target, after
   /// it when dragged down, so folders reorder among folders (Move puts one inside another).
-  private func drop(onto target: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> Bool {
-    defer { dragging = nil }
-    guard let id = dragging, id != target.id else { return false }
+  private func drop(_ id: String, onto target: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> Bool {
+    guard id != target.id else { return false }
     let space = app.activeSpaceId
     let draggedFolder = rows.first { $0.id == id }?.folder ?? false
     if target.folder, !draggedFolder {
@@ -979,6 +1043,8 @@ struct BookmarksDrawer: View {
   private var spaceSwipe: some Gesture {
     DragGesture(minimumDistance: 24)
       .onChanged { value in
+        // A row being moved keeps the drag to itself.
+        guard dragging == nil else { return }
         guard abs(value.translation.width) > abs(value.translation.height) else {
           if atTop, value.translation.height > Self.pullToSearch { showSearch() }
           return
@@ -987,7 +1053,7 @@ struct BookmarksDrawer: View {
       }
       .onEnded { value in
         defer { withAnimation(Motion.settle.animation) { shift = 0 } }
-        guard abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) > 80,
+        guard dragging == nil, abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) > 80,
           let index = app.spaces.firstIndex(where: { $0.id == app.activeSpaceId })
         else { return }
         let next = index + (value.translation.width < 0 ? 1 : -1)
@@ -1008,71 +1074,77 @@ private struct DrawerPull: PreferenceKey {
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
+/// Where each drawer row sits in the list.
+private struct DrawerRowFrames: PreferenceKey {
+  static let defaultValue: [String: CGRect] = [:]
+  static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+    value.merge(nextValue()) { $1 }
+  }
+}
+
 /// What holding a drawer row offers.
-private enum DrawerRowAction { case share, rename, move, remove }
+private enum DrawerRowAction: CaseIterable {
+  case share, rename, move, remove
+
+  var label: String {
+    switch self {
+    case .share: return "drawer.share"
+    case .rename: return "drawer.rename"
+    case .move: return "drawer.move"
+    case .remove: return "drawer.remove"
+    }
+  }
+
+  /// A link can be shared; anything can be renamed, moved or removed.
+  static func offered(for row: BookmarkTreeRow) -> [DrawerRowAction] {
+    allCases.filter { $0 != .share || !row.folder }
+  }
+}
 
 /// One row of the drawer: a folder with its count, turning to show it's open, or a link with its site's icon. The page
-/// showing sits on a light wash. Holding a link offers sharing it; holding either, renaming, moving or removing it, and
-/// dragging it puts it somewhere else. While it's being renamed its name is a field.
+/// showing sits on a light wash; a row being moved is lifted, and the row it would land on is lit. While it's being
+/// renamed its name is a field. Its hold (the menu, moving it) is the drawer's; VoiceOver gets the same actions by name.
 private struct DrawerRow: View {
   @EnvironmentObject private var strings: Strings
   let row: BookmarkTreeRow
   let current: Bool
   let open: Bool
   let renaming: Bool
+  var targeted = false
+  var lifted = false
   let action: () -> Void
   var rename: (String) -> Void = { _ in }
   /// Nil for a row that only opens (a folder the search found).
-  var menu: ((DrawerRowAction) -> Void)?
-  var drag: () -> Void = {}
-  var drop: () -> Bool = { false }
+  var perform: ((DrawerRowAction) -> Void)?
   @State private var name = ""
-  @State private var targeted = false
   @FocusState private var naming: Bool
 
   var body: some View {
     let title = row.title.isEmpty ? displayUrl(url: row.url) : row.title
-    Group {
-      if renaming {
-        HStack(spacing: Space.md) {
-          icon
-          TextField(title, text: $name)
-            .focused($naming)
-            .submitLabel(.done)
-            .onSubmit { rename(name) }
-            .accessibilityLabel(Text(verbatim: strings.t("drawer.rename")))
-            .accessibilityIdentifier("drawer-rename-field")
-        }
-        .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
-        .padding(.trailing, Space.md)
-        .frame(minHeight: 46)
-        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        .onAppear {
-          name = row.title
-          DispatchQueue.main.async { naming = true }
-        }
-        // Tapping elsewhere keeps the name typed so far.
-        .onChange(of: naming) { focused in
-          if !focused { rename(name) }
-        }
-      } else if let menu {
-        button(title)
-          .contextMenu {
-            if !row.folder {
-              Button(strings.t("drawer.share")) { menu(.share) }
-            }
-            Button(strings.t("drawer.rename")) { menu(.rename) }
-            Button(strings.t("drawer.move")) { menu(.move) }
-            Button(strings.t("drawer.remove"), role: .destructive) { menu(.remove) }
-          }
-          .onDrag {
-            drag()
-            return NSItemProvider(object: row.id as NSString)
-          }
-          .onDrop(of: [.plainText], isTargeted: $targeted) { _ in drop() }
-      } else {
-        button(title)
+    if renaming {
+      HStack(spacing: Space.md) {
+        icon
+        TextField(title, text: $name)
+          .focused($naming)
+          .submitLabel(.done)
+          .onSubmit { rename(name) }
+          .accessibilityLabel(Text(verbatim: strings.t("drawer.rename")))
+          .accessibilityIdentifier("drawer-rename-field")
       }
+      .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
+      .padding(.trailing, Space.md)
+      .frame(minHeight: 46)
+      .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+      .onAppear {
+        name = row.title
+        DispatchQueue.main.async { naming = true }
+      }
+      // Tapping elsewhere keeps the name typed so far.
+      .onChange(of: naming) { focused in
+        if !focused { rename(name) }
+      }
+    } else {
+      content(title)
     }
   }
 
@@ -1084,30 +1156,51 @@ private struct DrawerRow: View {
     }
   }
 
-  private func button(_ title: String) -> some View {
-    Button(action: action) {
-      HStack(spacing: Space.md) {
-        icon
-        BayText(title, weight: row.folder ? .semibold : .regular).lineLimit(1)
-        Spacer(minLength: 0)
-        if row.folder {
-          if row.links > 0 { BayText("\(row.links)", variant: .footnote, tone: .muted) }
-          BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
-        }
+  private func content(_ title: String) -> some View {
+    HStack(spacing: Space.md) {
+      icon
+      BayText(title, weight: row.folder ? .semibold : .regular).lineLimit(1)
+      Spacer(minLength: 0)
+      if row.folder {
+        if row.links > 0 { BayText("\(row.links)", variant: .footnote, tone: .muted) }
+        BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
       }
-      .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
-      .padding(.trailing, Space.md)
-      .frame(minHeight: 46)
-      .background(
-        targeted ? BayColor.accent.opacity(0.3) : current ? Color.white.opacity(0.1) : .clear,
-        in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-      )
-      .contentShape(Rectangle())
     }
-    .buttonStyle(.pressFeedback)
+    .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
+    .padding(.trailing, Space.md)
+    .frame(minHeight: 46)
+    .background(
+      targeted ? BayColor.accent.opacity(0.3) : lifted ? Color(RGBA(0x2A, 0x2A, 0x2E)) : current ? Color.white.opacity(0.1) : .clear,
+      in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+    )
+    .scaleEffect(lifted ? 1.03 : 1)
+    .shadow(color: .black.opacity(lifted ? 0.4 : 0), radius: 12, y: 6)
+    .contentShape(Rectangle())
+    .onTapGesture(perform: action)
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(.isButton)
     .accessibilityLabel(Text(verbatim: row.folder ? "\(row.title), \(row.links == 1 ? strings.t("drawer.linksOne") : strings.t("drawer.links", ["count": "\(row.links)"]))" : row.title))
     .accessibilityHint(Text(verbatim: row.folder ? strings.t(open ? "drawer.closeFolder" : "drawer.openFolder", ["title": row.title]) : ""))
+    .accessibilityAction(.default, action)
+    .modifier(DrawerRowActions(row: row, perform: perform))
     .accessibilityIdentifier("drawer-row-\(row.id)")
+  }
+}
+
+/// A row's actions for VoiceOver, by name, where the row has them.
+private struct DrawerRowActions: ViewModifier {
+  @EnvironmentObject private var strings: Strings
+  let row: BookmarkTreeRow
+  let perform: ((DrawerRowAction) -> Void)?
+
+  func body(content: Content) -> some View {
+    if let perform {
+      DrawerRowAction.offered(for: row).reduce(AnyView(content)) { view, action in
+        AnyView(view.accessibilityAction(named: Text(verbatim: strings.t(action.label))) { perform(action) })
+      }
+    } else {
+      content
+    }
   }
 }
 
