@@ -1,6 +1,7 @@
 //! The rows under the search field, ranked as the desktop ranks them: the typed address or a matching site first,
 //! the search, open tabs, history, bookmarks and archived tabs by match and frecency, the engine's suggestions, and
-//! the calculator, emoji and quick-create rows. Bang searches, site scopes and commands are the desktop's alone.
+//! the calculator, emoji and quick-create rows. Sites to search and bangs are added over these by the phone's
+//! search field (`search_field.rs`); commands are the desktop's alone.
 
 use std::collections::{HashMap, HashSet};
 
@@ -132,6 +133,17 @@ pub enum Suggestion {
         title: String,
         url: String,
         site: String,
+    },
+    /// "Search IMDb": a site the typed text names. Choosing it turns the field into the site's chip.
+    Scope {
+        scope: super::site_search::SearchScope,
+    },
+    /// A result from the site being searched (an IMDb title, a Wikipedia article), opened directly.
+    Result {
+        title: String,
+        detail: String,
+        image: Option<String>,
+        url: String,
     },
 }
 
@@ -527,6 +539,8 @@ fn suggestion_key(s: &Suggestion) -> String {
         Suggestion::Calc { expression, .. } => format!("calc:{expression}"),
         Suggestion::Emoji { value, .. } => format!("emoji:{value}"),
         Suggestion::Create { id, .. } => format!("create:{id}"),
+        Suggestion::Scope { scope } => format!("scope:{}", scope.host),
+        Suggestion::Result { url, .. } => format!("result:{url}"),
     }
 }
 
