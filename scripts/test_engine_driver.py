@@ -480,13 +480,14 @@ class BuildTests(unittest.TestCase):
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
              mock.patch.object(engine, "build_adblock"), \
              mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
-             mock.patch.object(engine, "run_until", return_value=False) as run_until:
+             mock.patch.object(engine, "run_until", return_value=False) as run_until, \
+             mock.patch.object(engine.time, "monotonic", side_effect=[1000.0, 1060.0]):
             root = Path(directory)
             self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
             self.assertEqual(first.call_args.args[1:4], (engine.LOCK["outputDirectory"], ["chrome"], 4))
             self.assertEqual(first.call_args.args[5], 5)
             self.assertEqual(run_until.call_args.args[0], ["autoninja", "-C", engine.LOCK["outputDirectory"], "-j", "4", "chrome"])
-            self.assertLessEqual(run_until.call_args.args[3], 5)
+            self.assertEqual(run_until.call_args.args[3], 4)
             self.assertFalse((root / "bay-engine-build.json").exists())
 
     def test_timed_build_stops_before_the_full_build_when_changes_fail_or_use_the_time(self):
