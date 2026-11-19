@@ -264,6 +264,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The page view for a tab, made the first time it is shown and kept while it stays loaded. */
     fun view(tab: BrowserTab): BayEngineView = views.getOrPut(tab.id) {
         BayEngineView(context).apply {
+            // Off screen until the page host shows it: a view made active by default takes the window's one compositor
+            // when its tab is created, so a tab restored behind a link opened at launch drew over nothing and the link's
+            // page stayed blank.
+            isActive = false
             isPrivate = tab.private
             profile = tab.spaceId
             // Private tabs keep no saved state.

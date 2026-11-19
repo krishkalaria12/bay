@@ -144,7 +144,12 @@ class AppModel(context: Context, barTitle: String) {
         refresh()
     }
 
-    fun dispatch(action: Action): Boolean = store.dispatch(action)
+    /**
+     * The model follows the change at once, so the code that dispatched it reads the new state: the store's own notice
+     * comes a turn later. A tab opened from a link at launch read the old active tab and mounted it, and that tab's
+     * page took the window's compositor from the link's for a frame, which left the link's page blank.
+     */
+    fun dispatch(action: Action): Boolean = store.dispatch(action).also { changed -> if (changed) refresh() }
 
     /** Saves at once: as the app leaves the foreground. */
     fun flush() {

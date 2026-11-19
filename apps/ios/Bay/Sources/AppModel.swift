@@ -87,8 +87,12 @@ final class AppModel: ObservableObject {
   }
 
   @discardableResult
+  /// The model follows the change at once, so the code that dispatched it reads the new state: the store's own notice
+  /// comes a turn later.
   func dispatch(_ action: Action) -> Bool {
-    store.dispatch(action: action)
+    let changed = store.dispatch(action: action)
+    if changed { refresh() }
+    return changed
   }
 
   /// Follows a link's redirects without opening it, as the link menu will.
