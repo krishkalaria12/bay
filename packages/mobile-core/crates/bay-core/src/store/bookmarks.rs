@@ -749,3 +749,142 @@ mod save_tests {
         );
     }
 }
+
+/// One row of the bookmarks drawer: a folder (open or closed, with how many links it holds) or a link, and how deep.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkTreeRow {
+    pub id: String,
+    pub folder: bool,
+    pub title: String,
+    /// A link's address; empty for a folder.
+    pub url: String,
+    pub depth: u32,
+    /// A folder's links, however deep.
+    pub links: u32,
+    pub open: bool,
+}
+
+/// A tree as the drawer lists it: the top's folders and links in their order, and inside each folder in `open` its
+/// own, one step deeper. Folders come before links at each level, as the reference lists them.
+pub fn bookmark_tree_rows(bookmarks: &Bookmarks, open: &[String]) -> Vec<BookmarkTreeRow> {
+    fn walk(
+        bookmarks: &Bookmarks,
+        id: &str,
+        depth: u32,
+        open: &[String],
+        out: &mut Vec<BookmarkTreeRow>,
+        seen: &mut HashSet<String>,
+    ) {
+        if !seen.insert(id.to_owned()) {
+            return;
+        }
+        let Some(children) = folder_children(bookmarks, id) else {
+            return;
+        };
+        let nodes: Vec<&BookmarkNode> = children
+            .iter()
+            .filter_map(|child| bookmarks.get(child))
+            .collect();
+        let (folders, links): (Vec<&BookmarkNode>, Vec<&BookmarkNode>) = nodes
+            .into_iter()
+            .partition(|node| matches!(node, BookmarkNode::Folder { .. }));
+        for node in folders.into_iter().chain(links) {
+            match node {
+                BookmarkNode::Folder { id, title, .. } => {
+                    let is_open = open.iter().any(|open| open == id);
+                    out.push(BookmarkTreeRow {
+                        id: id.clone(),
+                        folder: true,
+                        title: title.clone(),
+                        url: String::new(),
+                        depth,
+                        links: bookmark_links(bookmarks, id).len() as u32,
+                        open: is_open,
+                    });
+                    if is_open {
+                        walk(bookmarks, id, depth + 1, open, out, seen);
+                    }
+                }
+                BookmarkNode::Url { id, title, url, .. } => out.push(BookmarkTreeRow {
+                    id: id.clone(),
+                    folder: false,
+                    title: title.clone(),
+                    url: url.clone(),
+                    depth,
+                    links: 0,
+                    open: false,
+                }),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(
+        bookmarks,
+        BOOKMARKS_ROOT,
+        0,
+        open,
+        &mut out,
+        &mut HashSet::new(),
+    );
+    out
+}
+
+#[cfg(test)]
+mod tree_rows_tests {
+    use super::*;
+
+    #[test]
+    fn the_drawer_lists_folders_first_and_opens_only_the_open_ones() {
+        let folder = |id: &str, parent: &str, children: &[&str]| BookmarkNode::Folder {
+            id: id.into(),
+            parent_id: Some(parent.into()),
+            title: id.into(),
+            children: children.iter().map(|c| (*c).to_owned()).collect(),
+            added_at: 1,
+        };
+        let link = |id: &str, parent: &str| BookmarkNode::Url {
+            id: id.into(),
+            parent_id: parent.into(),
+            title: id.into(),
+            url: format!("https://{id}.example/"),
+            added_at: 1,
+        };
+        let tree = add_bookmarks(
+            &empty_bookmarks(),
+            &[
+                link("top", BOOKMARKS_ROOT),
+                folder("watch", BOOKMARKS_ROOT, &["a", "b"]),
+                link("a", "watch"),
+                link("b", "watch"),
+                folder("trips", BOOKMARKS_ROOT, &[]),
+            ],
+        )
+        .unwrap();
+        let shut: Vec<(String, u32, u32)> = bookmark_tree_rows(&tree, &[])
+            .into_iter()
+            .map(|r| (r.id, r.depth, r.links))
+            .collect();
+        assert_eq!(
+            shut,
+            [
+                ("watch".into(), 0, 2),
+                ("trips".into(), 0, 0),
+                ("top".into(), 0, 0)
+            ]
+        );
+        let open: Vec<(String, u32)> = bookmark_tree_rows(&tree, &["watch".into()])
+            .into_iter()
+            .map(|r| (r.id, r.depth))
+            .collect();
+        assert_eq!(
+            open,
+            [
+                ("watch".into(), 0),
+                ("a".into(), 1),
+                ("b".into(), 1),
+                ("trips".into(), 0),
+                ("top".into(), 0)
+            ]
+        );
+    }
+}

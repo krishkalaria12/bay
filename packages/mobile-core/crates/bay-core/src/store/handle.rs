@@ -407,6 +407,19 @@ impl BrowserStore {
             .is_some_and(|bookmarks| is_bookmarked(bookmarks, &url))
     }
 
+    /// A space's bookmarks as the drawer lists them, with the folders in `open` opened.
+    pub fn bookmark_tree_rows(
+        &self,
+        space_id: String,
+        open: Vec<String>,
+    ) -> Vec<super::bookmarks::BookmarkTreeRow> {
+        let state = lock(&self.state);
+        match state.data.bookmarks.get(&space_id) {
+            Some(tree) => super::bookmarks::bookmark_tree_rows(tree, &open),
+            None => Vec::new(),
+        }
+    }
+
     /// A space's folders to save a bookmark into, the top first.
     pub fn bookmark_folders(&self, space_id: String) -> Vec<BookmarkFolderChoice> {
         let state = lock(&self.state);
