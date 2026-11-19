@@ -114,7 +114,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 strings.t(appIcon.label),
                 LanguageState(strings.saved, strings.locale, strings.device),
                 bay.app.welcome.DefaultBrowserStatus.current(appContext),
-                app.store.tabs().size.toUInt(),
+                app.allTabs.size.toUInt(),
                 logins,
                 clearStage,
                 app.syncView,
@@ -219,7 +219,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
 
     /** The open tabs' addresses, one a line, without their tracking parameters; private tabs stay out. */
     private fun exportTabs() {
-        val urls = app.store.tabs().filter { it.url.isNotEmpty() && !it.private }.map { cleanUrl(it.url) }
+        val urls = app.allTabs.filter { it.url.isNotEmpty() && !it.private }.map { cleanUrl(it.url) }
         if (urls.isEmpty()) return
         share(urls.joinToString("\n"))
     }

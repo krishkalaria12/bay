@@ -290,7 +290,7 @@ final class BrowserModel: ObservableObject {
 
   /// Closes a tab into the archive (private tabs are simply gone). A space left without tabs gets a blank one.
   func close(_ id: String) {
-    let spaceId = app.store.tabs().first { $0.id == id }?.spaceId ?? app.activeSpaceId
+    let spaceId = app.allTabs.first { $0.id == id }?.spaceId ?? app.activeSpaceId
     app.dispatch(.closeTab(id: id, now: AppModel.now(), fallback: Self.blankTab(spaceId: spaceId)))
     visited[id] = nil
     refreshMounted()
@@ -298,7 +298,7 @@ final class BrowserModel: ObservableObject {
 
   /// Closes a tab into the archive, with a toast to bring it straight back.
   func archive(_ id: String) {
-    let tab = app.store.tabs().first { $0.id == id }
+    let tab = app.allTabs.first { $0.id == id }
     close(id)
     guard let tab, !tab.url.isEmpty, !tab.private else { return }
     showToast(strings.t("toast.tabArchived"), actionLabel: strings.t("toast.undo")) { [weak self] in self?.restore(id) }
@@ -365,7 +365,7 @@ final class BrowserModel: ObservableObject {
   }
 
   private func latestMedia(where include: (BrowserTab) -> Bool) -> (tab: BrowserTab, media: TabMedia)? {
-    let tabs = app.store.tabs()
+    let tabs = app.allTabs
     return media.compactMap { id, state -> (BrowserTab, TabMedia)? in
       guard let tab = tabs.first(where: { $0.id == id }), include(tab) else { return nil }
       return (tab, state)
@@ -513,7 +513,7 @@ final class BrowserModel: ObservableObject {
 
   /// Bay left the foreground: private tabs lock, when the owner asked for that and there are any.
   func appLeft() {
-    if app.preferences.lockPrivateTabs, app.store.tabs().contains(where: \.private) { locked = true }
+    if app.preferences.lockPrivateTabs, app.allTabs.contains(where: \.private) { locked = true }
   }
 
   /// Face ID, Touch ID or the passcode unlocks the private tabs.
@@ -563,14 +563,14 @@ final class BrowserModel: ObservableObject {
       guard let self else { return }
       for id in archived { self.restore(id) }
       // Closing every tab left a blank one behind.
-      for tab in self.app.store.tabs() where tab.url.isEmpty && tab.spaceId == self.app.activeSpaceId { self.close(tab.id) }
+      for tab in self.app.allTabs where tab.url.isEmpty && tab.spaceId == self.app.activeSpaceId { self.close(tab.id) }
     }
   }
 
   /// Switches to a space: the tab it was last on (or a fresh one) becomes current.
   func selectSpace(_ id: String) {
     guard id != app.activeSpaceId else { return }
-    let hasTab = app.store.tabs().contains { $0.spaceId == id }
+    let hasTab = app.allTabs.contains { $0.spaceId == id }
     app.dispatch(.selectSpace(id: id, blankTab: hasTab ? nil : Self.blankTab(spaceId: id)))
     refreshMounted()
   }
@@ -628,7 +628,7 @@ final class BrowserModel: ObservableObject {
 
   /// A pin's page: its tab in the space when one is open there, else a new one.
   func openPin(_ site: PinnedSite) {
-    if let open = app.store.tabs().first(where: { $0.spaceId == site.spaceId && $0.url == site.url }) {
+    if let open = app.allTabs.first(where: { $0.spaceId == site.spaceId && $0.url == site.url }) {
       activate(open.id)
       return
     }
@@ -893,7 +893,7 @@ final class BrowserModel: ObservableObject {
       // The site's icon, unless the tab is private: its icon would say what was opened privately.
       if !isPrivate(tabId) { fetchIcon(view, pageUrl: state.url) }
     }
-    let rules = app.store.tabs().first { $0.id == tabId }.map { pageHidden($0, url: state.url) } ?? []
+    let rules = app.allTabs.first { $0.id == tabId }.map { pageHidden($0, url: state.url) } ?? []
     let plan = scriptsFor(
       timing: timing[tabId] ?? initialTiming(),
       state: NavigationReport(url: state.url, progress: state.progress, isLoading: state.isLoading), hasRules: !rules.isEmpty)
@@ -924,7 +924,7 @@ final class BrowserModel: ObservableObject {
         update: TabUpdate(
           url: state.url, title: state.title.isEmpty ? nil : state.title, favicon: nil, lastVisit: nil, snapshot: nil)))
     // Private pages stay out of history.
-    guard let tab = app.store.tabs().first(where: { $0.id == tabId }), !tab.private else { return }
+    guard let tab = app.allTabs.first(where: { $0.id == tabId }), !tab.private else { return }
     if !state.title.isEmpty, visited[tabId] == state.url {
       app.dispatch(.pageTitle(url: state.url, title: state.title))
     }
@@ -1026,7 +1026,7 @@ extension BrowserModel {
   /// A change to Settings > YouTube reaches the YouTube pages already open.
   private func applyHiddenToOpenPages() {
     for (tabId, view) in views {
-      guard let tab = app.store.tabs().first(where: { $0.id == tabId }) else { continue }
+      guard let tab = app.allTabs.first(where: { $0.id == tabId }) else { continue }
       let reported = navigation[tabId]?.url ?? ""
       hide(pageHidden(tab, url: reported.isEmpty ? tab.url : reported), in: view)
     }

@@ -67,6 +67,13 @@ class AppModel(context: Context, barTitle: String) {
     /** The tabs of the space showing, in list order. */
     var tabs by mutableStateOf(emptyList<BrowserTab>())
         private set
+
+    /**
+     * Every space's tabs, read once a change: decoding them from the store costs a pass over every tab, which code that
+     * asks often (a page's events, the mini player) shouldn't pay each time.
+     */
+    var allTabs = emptyList<BrowserTab>()
+        private set
     var preferences by mutableStateOf<BrowserPreferences>(store.preferences())
         private set
     var syncView by mutableStateOf<SyncView>(sync.view())
@@ -210,7 +217,8 @@ class AppModel(context: Context, barTitle: String) {
     }
 
     private fun storeChanged() {
-        refresh()
+        // A change dispatched from here has been followed already.
+        if (store.revision() != revision) refresh()
         // A change to what syncs: a cycle a moment later, once a burst of changes has settled.
         kick?.cancel()
         kick = scope.launch {
@@ -220,6 +228,8 @@ class AppModel(context: Context, barTitle: String) {
     }
 
     private fun refresh() {
+        // Noted first: a change landing while this reads still moves the revision past it, so its notice reads again.
+        val seen = store.revision()
         spaces = store.spaces()
         activeSpaceId = store.activeSpaceId()
         activeTabId = store.activeTabId()
@@ -234,8 +244,9 @@ class AppModel(context: Context, barTitle: String) {
         // Clearing history or browsing data drops icons: their files go too.
         if (icons.size < favicons.size) iconFetcher.forgetDropped()
         favicons = icons
-        revision = store.revision()
-        val hasPrivate = store.tabs().any { it.private }
+        revision = seen
+        allTabs = store.tabs()
+        val hasPrivate = allTabs.any { it.private }
         if (hasPrivate != privateSession) {
             privateSession = hasPrivate
             Engine.setPrivateSessionActive(hasPrivate)

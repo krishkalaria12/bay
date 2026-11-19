@@ -48,7 +48,6 @@ import bay.core.TabUpdate
 import bay.core.TipId
 import bay.core.bayCommand
 import bay.core.cleanUrl
-import bay.core.hostOf
 import bay.core.incomingLink
 import bay.core.initialTiming
 import bay.core.isWebUrl
@@ -407,7 +406,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** Closes a tab into the archive (private tabs are simply gone). A space left without tabs gets a blank one. */
     fun close(id: String) {
-        val spaceId = app.store.tabs().firstOrNull { it.id == id }?.spaceId ?: app.activeSpaceId
+        val spaceId = app.allTabs.firstOrNull { it.id == id }?.spaceId ?: app.activeSpaceId
         app.dispatch(Action.CloseTab(id, AppModel.now(), blankTab(spaceId)))
         visited.remove(id)
         refreshMounted()
@@ -415,7 +414,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** Closes a tab into the archive, with a toast to bring it straight back. */
     fun archive(id: String) {
-        val tab = app.store.tabs().firstOrNull { it.id == id }
+        val tab = app.allTabs.firstOrNull { it.id == id }
         close(id)
         if (tab == null || tab.url.isEmpty() || tab.private) return
         showToast(strings.t("toast.tabArchived"), strings.t("toast.undo")) { restore(id) }
@@ -472,7 +471,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
 
     private fun latestMedia(include: (BrowserTab) -> Boolean): Pair<BrowserTab, TabMedia>? {
-        val tabs = app.store.tabs()
+        val tabs = app.allTabs
         return media.mapNotNull { (id, state) -> tabs.firstOrNull { it.id == id }?.takeIf(include)?.let { it to state } }
             .maxWithOrNull(compareBy<Pair<BrowserTab, TabMedia>> { it.second.report.playing }.thenBy { it.second.at })
     }
@@ -590,7 +589,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** Bay left the foreground: private tabs lock, when the owner asked for that and there are any. */
     fun appLeft() {
-        if (app.preferences.lockPrivateTabs && app.store.tabs().any { it.private }) locked = true
+        if (app.preferences.lockPrivateTabs && app.allTabs.any { it.private }) locked = true
     }
 
     /** The fingerprint, face or screen lock unlocks the private tabs. */
@@ -644,14 +643,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         showToast(text, strings.t("toast.undo")) {
             archived.forEach(::restore)
             // Closing every tab left a blank one behind.
-            app.store.tabs().filter { it.url.isEmpty() && it.spaceId == app.activeSpaceId }.forEach { close(it.id) }
+            app.allTabs.filter { it.url.isEmpty() && it.spaceId == app.activeSpaceId }.forEach { close(it.id) }
         }
     }
 
     /** Switches to a space: the tab it was last on (or a fresh one) becomes current. */
     fun selectSpace(id: String) {
         if (id == app.activeSpaceId) return
-        val hasTab = app.store.tabs().any { it.spaceId == id }
+        val hasTab = app.allTabs.any { it.spaceId == id }
         app.dispatch(Action.SelectSpace(id, if (hasTab) null else blankTab(id)))
         refreshMounted()
     }
@@ -756,7 +755,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** A pin's page: its tab in the space when one is open there, else a new one. */
     fun openPin(site: PinnedSite) {
-        val open = app.store.tabs().firstOrNull { it.spaceId == site.spaceId && it.url == site.url }
+        val open = app.allTabs.firstOrNull { it.spaceId == site.spaceId && it.url == site.url }
         if (open != null) {
             activate(open.id)
             return
@@ -918,7 +917,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             // The site's icon, unless the tab is private: its icon would say what was opened privately.
             if (!isPrivate(tabId)) fetchIcon(view, state.url)
         }
-        val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { pageHidden(it, state.url) }.orEmpty()
+        val rules = app.allTabs.firstOrNull { it.id == tabId }?.let { pageHidden(it, state.url) }.orEmpty()
         val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), rules.isNotEmpty())
         timing[tabId] = plan.timing
         if (plan.hideElements && view != null) hide(rules, view)
@@ -939,7 +938,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         app.dispatch(Action.UpdateTab(tabId, TabUpdate(state.url, state.title.ifEmpty { null }, null, null, null)))
         // Private pages stay out of history.
-        val tab = app.store.tabs().firstOrNull { it.id == tabId } ?: return
+        val tab = app.allTabs.firstOrNull { it.id == tabId } ?: return
         if (tab.private) return
         if (state.title.isNotEmpty() && visited[tabId] == state.url) app.dispatch(Action.PageTitle(state.url, state.title))
         if (!state.isLoading && visited[tabId] != state.url) {
@@ -1049,7 +1048,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     private fun applyHiddenToOpenPages() {
         for ((tabId, view) in views) {
-            val tab = app.tabs.firstOrNull { it.id == tabId } ?: app.store.tabs().firstOrNull { it.id == tabId } ?: continue
+            val tab = app.allTabs.firstOrNull { it.id == tabId } ?: continue
             hide(pageHidden(tab, navigation[tabId]?.url?.ifEmpty { null } ?: tab.url), view)
         }
     }

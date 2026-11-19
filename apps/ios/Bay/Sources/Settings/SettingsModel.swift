@@ -69,7 +69,7 @@ final class SettingsModel: ObservableObject {
       appIconName: appIcon.map { strings.t($0.label) },
       language: LanguageState(saved: strings.saved, current: strings.locale, device: strings.device),
       defaultBrowser: DefaultBrowserStatus.current,
-      openTabCount: UInt32(app.store.tabs().count),
+      openTabCount: UInt32(app.allTabs.count),
       logins: logins,
       clearStage: clearStage,
       sync: app.syncView,
@@ -165,7 +165,7 @@ final class SettingsModel: ObservableObject {
 
   /// The open tabs' addresses, one a line, without their tracking parameters; private tabs stay out.
   private func exportTabs() {
-    let urls = app.store.tabs().filter { !$0.url.isEmpty && !$0.private }.map { cleanUrl(url: $0.url) }
+    let urls = app.allTabs.filter { !$0.url.isEmpty && !$0.private }.map { cleanUrl(url: $0.url) }
     guard !urls.isEmpty else { return }
     present(UIActivityViewController(activityItems: [urls.joined(separator: "\n")], applicationActivities: nil))
   }

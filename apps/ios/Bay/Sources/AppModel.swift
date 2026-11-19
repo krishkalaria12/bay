@@ -20,6 +20,9 @@ final class AppModel: ObservableObject {
   @Published private(set) var activeTabId = ""
   /// The tabs of the space showing, in list order.
   @Published private(set) var tabs: [BrowserTab] = []
+  /// Every space's tabs, read once a change: decoding them from the store costs a pass over every tab, which code that
+  /// asks often (a page's events, the mini player) shouldn't pay each time.
+  private(set) var allTabs: [BrowserTab] = []
   @Published private(set) var preferences: BrowserPreferences
   @Published private(set) var syncView: SyncView
   /// Where the link check's link ended, while the stand-in screens prove the HTTP client.
@@ -167,7 +170,8 @@ final class AppModel: ObservableObject {
   // MARK: Changes
 
   fileprivate func storeChanged() {
-    refresh()
+    // A change dispatched from here has been followed already.
+    if store.revision() != revision { refresh() }
     // A change to what syncs: a cycle a moment later, once a burst of changes has settled.
     kick?.cancel()
     kick = Task { [sync] in
@@ -182,6 +186,8 @@ final class AppModel: ObservableObject {
   }
 
   private func refresh() {
+    // Noted first: a change landing while this reads still moves the revision past it, so its notice reads again.
+    let seen = store.revision()
     spaces = store.spaces()
     activeSpaceId = store.activeSpaceId()
     activeTabId = store.activeTabId()
@@ -196,8 +202,9 @@ final class AppModel: ObservableObject {
     // Clearing history or browsing data drops icons: their files go too.
     if icons.count < favicons.count { iconFetcher.forgetDropped() }
     favicons = icons
-    revision = store.revision()
-    let hasPrivate = store.tabs().contains { $0.private }
+    revision = seen
+    allTabs = store.tabs()
+    let hasPrivate = allTabs.contains { $0.private }
     if hasPrivate != privateSession {
       privateSession = hasPrivate
       Engine.setPrivateSessionActive(hasPrivate)
