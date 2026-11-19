@@ -42,7 +42,8 @@ final class ScreenTourTests: XCTestCase {
     app.buttons["bar-more"].tap()
     XCTAssertTrue(app.buttons["page-settings"].waitForExistence(timeout: 5))
     shot("page-menu")
-    app.buttons["page-menu-close"].tap()
+    // Sheets have no close button: a drag down closes them.
+    app.otherElements["page-menu"].swipeDown()
 
     app.buttons["bar-tabs"].tap()
     let settings = app.buttons["tab-switcher-settings"]

@@ -65,9 +65,10 @@ import androidx.compose.ui.unit.dp
 data class SheetWords(val close: String, val back: String)
 
 /**
- * A panel: a solid sheet rising from the bottom over a dim backdrop, sized to what it holds up to `maxFraction` of the
- * screen. Its header holds the title (or a back arrow and a sub-page's title), round buttons and the close button;
- * the rows below scroll when they're taller. A tap on the backdrop, a drag down by the header or Back closes it.
+ * A panel: a card floating over a dim backdrop, inset from the screen's sides and bottom with every corner rounded,
+ * sized to what it holds up to `maxFraction` of the screen. Its top has a small centred title (with a round back
+ * button on a sub-page) and the sheet's own round buttons on the right; the rows below scroll when they're taller.
+ * There's no close button: a tap on the backdrop, a drag down by the top, or Back closes it.
  */
 @Composable
 fun PanelSheet(
@@ -108,10 +109,11 @@ fun PanelSheet(
             Column(
                 Modifier.fillMaxWidth()
                     .graphicsLayer { translationY = dragged }
-                    .heightIn(max = tallest + 1.dp)
-                    .background(colors.surface, RoundedCornerShape(topStart = Radius.sheet, topEnd = Radius.sheet))
-                    // Above the navigation bar, and above the keyboard while a field in the sheet has it.
+                    // Above the navigation bar, and above the keyboard while a field in the sheet has it, floating.
                     .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+                    .padding(horizontal = Space.sm).padding(bottom = Space.sm)
+                    .heightIn(max = tallest + 1.dp)
+                    .background(colors.surface, RoundedCornerShape(Radius.sheet))
                     .testTag(testID),
             ) {
                 // The grabber and header take the drag; the rows keep their own scrolling and taps.
@@ -130,21 +132,30 @@ fun PanelSheet(
                     Box(Modifier.fillMaxWidth().padding(top = Space.sm, bottom = Space.xs), contentAlignment = Alignment.Center) {
                         Box(Modifier.size(36.dp, 5.dp).background(colors.foreground.copy(alpha = 0.2f), CircleShape))
                     }
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md),
-                        horizontalArrangement = Arrangement.spacedBy(Space.md),
-                        verticalAlignment = if (header != null && onBack == null) Alignment.Top else Alignment.CenterVertically,
-                    ) {
-                        if (header != null && onBack == null) {
+                    if (header != null && onBack == null) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md),
+                            horizontalArrangement = Arrangement.spacedBy(Space.md),
+                            verticalAlignment = Alignment.Top,
+                        ) {
                             header()
-                        } else {
-                            if (onBack != null) {
-                                SheetIconButton(BayIcon.BACK, words.back, Modifier.testTag("$testID-back"), muted = false, onClick = onBack)
-                            }
-                            BayText(title, Modifier.weight(1f).semantics { heading() }, variant = TextVariant.TITLE, maxLines = 1)
+                            accessory()
                         }
-                        accessory()
-                        SheetIconButton(BayIcon.CLOSE, words.close, Modifier.testTag("$testID-close"), onClick = onClose)
+                    } else {
+                        // The title centred over the sheet, the back button at its left and the sheet's own buttons at its right.
+                        Box(Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md)) {
+                            BayText(
+                                title,
+                                Modifier.align(Alignment.Center).padding(horizontal = 52.dp).semantics { heading() },
+                                variant = TextVariant.HEADLINE,
+                                weight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            if (onBack != null) {
+                                SheetIconButton(BayIcon.BACK, words.back, Modifier.align(Alignment.CenterStart).testTag("$testID-back"), muted = false, onClick = onBack)
+                            }
+                            Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(Space.sm), content = accessory)
+                        }
                     }
                 }
                 Column(
