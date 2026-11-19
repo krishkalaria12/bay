@@ -54,3 +54,30 @@ fun fileImageNow(uri: String?, width: Int): ImageBitmap? {
     val key = uri?.let { "$it@$width" } ?: return null
     return decoded.get(key) ?: decode(uri, width)?.also { decoded.put(key, it) }
 }
+
+/** Pictures from the web (a site's result posters), kept in memory for the session; never written to disk. */
+private val fetched = object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+}
+
+/** The picture at an https `url`, fetched once through Bay's own client and decoded off the main thread. */
+@Composable
+fun rememberWebImage(app: bay.app.AppModel, url: String?, width: Int): ImageBitmap? {
+    val key = url?.let { "$it@$width" }
+    var image by remember(key) { mutableStateOf(key?.let(fetched::get)) }
+    LaunchedEffect(key) {
+        if (url == null || key == null || image != null || !url.startsWith("https://")) return@LaunchedEffect
+        val request = bay.core.HttpRequest("GET", url, emptyMap(), null, true, 4000u)
+        val body = runCatching { app.http.send(request) }.getOrNull()?.takeIf { it.status.toInt() == 200 }?.body ?: return@LaunchedEffect
+        image = withContext(Dispatchers.Default) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(body, 0, body.size, bounds)
+                var sample = 1
+                while (width > 0 && bounds.outWidth / (sample * 2) >= width) sample *= 2
+                BitmapFactory.decodeByteArray(body, 0, body.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+            }.getOrNull()
+        }?.also { fetched.put(key, it) }
+    }
+    return image
+}

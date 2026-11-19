@@ -363,6 +363,7 @@
         <a href="#site">7 · Site settings and fonts</a>
         <a href="#core">Core API</a>
         <a href="#rounds">Order of work</a>
+        <a href="#progress">Progress</a>
         <a href="#decisions">Decisions</a>
         <a href="#verify">Testing</a>
       </nav>
@@ -1445,6 +1446,33 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           which uses each platform's own font. See section 7 for sizes and how pages get them.
         </dd>
       </dl>
+
+      <h2 id="progress">Progress and known gaps</h2>
+      <p class="muted">Updated in the commit that finds each gap.</p>
+      <ul>
+        <li>
+          <b>R1 done:</b> <code>input/site_search.rs</code>, <code>input/bangs.rs</code> (the bundled list, <code>data/bangs.txt</code>) and
+          <code>input/scope_suggest.rs</code> (IMDb, Wikipedia, YouTube), wired into the store's <code>suggestions</code>, <code>search_scope</code>,
+          <code>scoped_suggestions</code> and <code>scope_shortcuts</code>.
+        </li>
+        <li>
+          <b>R2 in part:</b> the "Search IMDb" row, the chip (by a row, a shortcut, or a keyword and a space), the site's colour, the site's own results with
+          posters, the shortcut row, and bangs, on iPhone and Android. Still to do: the page shrinking into a card (1a), the sheet matching a dark page (1b),
+          and where a bookmark is saved on its row (1d).
+        </li>
+        <li>
+          <b>Gap:</b> the bang list doesn't refresh daily yet; the phone uses the bundled list until the core fetches and checks <code>bangs.json</code> as the
+          desktop does.
+        </li>
+        <li>
+          <b>Gap:</b> on iPhone, backspace in an empty field doesn't give the chip back, since SwiftUI's field doesn't report it; tap the chip or the clear
+          button. Android does.
+        </li>
+        <li>
+          <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
+          an address still goes there.
+        </li>
+      </ul>
 
       <h2 id="verify">Testing</h2>
       <ul>

@@ -20,25 +20,25 @@ enum SearchSheet {
   }
 }
 
-/// The engine's suggestions for what's typed: asked a moment after typing stops, the latest answer kept.
+/// Answers that follow typing, asked a moment after it stops with the latest kept: the engine's suggestions, or the
+/// site's own results while the field shows its chip (IMDb's titles, Wikipedia's articles).
 @MainActor
-final class RemoteSuggestions: ObservableObject {
-  @Published private(set) var items: [String] = []
+final class TypingFetch<Item>: ObservableObject {
+  @Published private(set) var items: [Item] = []
   private var task: Task<Void, Never>?
   private let http: HttpClient
 
-  /// How long typing has to pause before the engine is asked.
-  private static let delay: UInt64 = 120_000_000
+  /// How long typing has to pause before anything is asked.
+  private static var delay: UInt64 { 120_000_000 }
 
   init(http: HttpClient) {
     self.http = http
   }
 
-  func request(_ query: String, engine: SearchEngine, enabled: Bool) {
+  /// Asks `url`, reading its answer with `parse`; no address (nothing typed, suggestions off) clears the answer.
+  func request(_ url: String?, parse: @escaping @Sendable (String) -> [Item]) {
     task?.cancel()
-    guard enabled, !query.trimmingCharacters(in: .whitespaces).isEmpty,
-          let url = suggestionsRequestUrl(engine: engine, query: query)
-    else {
+    guard let url else {
       items = []
       return
     }
@@ -49,7 +49,7 @@ final class RemoteSuggestions: ObservableObject {
       guard let response = try? await http.send(request: request), response.status == 200,
             let body = String(data: response.body, encoding: .utf8), !Task.isCancelled
       else { return }
-      items = parseSuggestionsBody(body: body)
+      items = parse(body)
     }
   }
 
@@ -58,14 +58,43 @@ final class RemoteSuggestions: ObservableObject {
   }
 }
 
+/// A site's chip colours: its own colour, and black or white on it, whichever reads.
+struct ScopeColors {
+  let fill: Color
+  let ink: Color
+  /// A light colour (Wikipedia's white) needs an edge to show on a light sheet.
+  let light: Bool
+
+  init?(hex: String?) {
+    guard let hex, hex.count == 7, hex.hasPrefix("#"), let value = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+    let red = Double((value >> 16) & 0xFF), green = Double((value >> 8) & 0xFF), blue = Double(value & 0xFF)
+    fill = Color(RGBA(red, green, blue))
+    // Relative luminance, as WCAG works it out; past 0.4 black text reads better than white.
+    func channel(_ c: Double) -> Double {
+      let v = c / 255
+      return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+    }
+    light = 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue) > 0.4
+    ink = light ? .black : .white
+  }
+}
+
 /// The search card: a field that grows out of the bar's capsule, with the rows for what's typed, on the keyboard.
+/// Typing a site's name offers it ("Search IMDb"); choosing it, or a space after its keyword ("yt "), turns the field
+/// into the site's chip, and the rows become the site's own.
 struct SearchCard: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @Environment(\.dynamicTypeSize) private var sizeCategory
   @ObservedObject var browser: BrowserModel
-  @StateObject private var remote: RemoteSuggestions
+  @StateObject private var remote: TypingFetch<String>
+  @StateObject private var siteResults: TypingFetch<Suggestion>
   @State private var query: String
+  /// The site the field searches, shown as a chip at its start.
+  @State private var scope: SearchScope?
+  /// The chip has just arrived: the field shows the site's colour in full for a moment.
+  @State private var flash = false
+  @State private var shortcuts: [SearchScope] = []
   @State private var privately: Bool
   /// No inline completion over a prefilled address, or straight after deleting.
   @State private var suppressed: Bool
@@ -78,7 +107,8 @@ struct SearchCard: View {
   init(browser: BrowserModel, initialText: String, privately: Bool) {
     self.browser = browser
     self.initialText = initialText
-    _remote = StateObject(wrappedValue: RemoteSuggestions(http: browser.app.http))
+    _remote = StateObject(wrappedValue: TypingFetch(http: browser.app.http))
+    _siteResults = StateObject(wrappedValue: TypingFetch(http: browser.app.http))
     _query = State(initialValue: initialText)
     _privately = State(initialValue: privately)
     _suppressed = State(initialValue: !initialText.isEmpty)
@@ -91,20 +121,24 @@ struct SearchCard: View {
   }
 
   private var rows: [Suggestion] {
-    result.items.filter {
+    if let scope {
+      return app.store.scopedSuggestions(scope: scope, query: query, results: siteResults.items, now: Double(AppModel.now()))
+    }
+    return result.items.filter {
       switch $0 {
-      case .page, .search, .calc: return true
+      case .page, .search, .calc, .scope: return true
       default: return false
       }
     }
   }
 
+  private var colors: ScopeColors? { ScopeColors(hex: scope?.color) }
+
   private var text: Color { privately ? Color(RGBA(0xF4, 0xF4, 0xF5)) : BayColor.foreground }
   private var secondary: Color { privately ? Color(RGBA(0xA1, 0xA1, 0xAA)) : BayColor.muted }
 
   var body: some View {
-    let result = result
-    let completion = suppressed ? "" : result.completion
+    let completion = suppressed || scope != nil ? "" : result.completion
     let rows = rows
     ZStack(alignment: .bottom) {
       Color.black.opacity(0.2).ignoresSafeArea().allowsHitTesting(false)
@@ -135,9 +169,12 @@ struct SearchCard: View {
                 .padding(.leading, Space.lg).padding(.top, 2)
                 .accessibilityIdentifier("private-notice")
             }
+            if scope == nil, query.isEmpty, !shortcuts.isEmpty {
+              shortcutRow
+            }
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
               SuggestionRow(row: row, index: index, engineName: browser.engine.name, text: text, secondary: secondary) {
-                open(target(for: row))
+                choose(row)
               } fill: { fill($0) }
             }
           }
@@ -169,13 +206,126 @@ struct SearchCard: View {
       }
       // Opened from the widget's microphone: listening at once, as if the mic had been tapped.
       if browser.searchListening { listen() }
+      shortcuts = app.store.scopeShortcuts(limit: UInt32(Self.shortcutPlaces))
     }
-    .onChange(of: query) { remote.request($0, engine: browser.engine, enabled: app.preferences.searchSuggestions) }
-    .onDisappear { remote.cancel() }
+    .onChange(of: query) { next in
+      // A space after a site's keyword or name ("yt ", "imdb ", "!w ") turns the field into its chip.
+      if scope == nil, next.hasSuffix(" "), !next.dropLast().contains(" "), let found = app.store.searchScope(text: String(next.dropLast())) {
+        enter(found)
+        return
+      }
+      let enabled = app.preferences.searchSuggestions
+      if let scope {
+        siteResults.request(enabled ? scopeSuggestRequest(scope: scope, query: next) : nil) {
+          parseScopeSuggestions(scope: scope, body: $0)
+        }
+      } else {
+        remote.request(enabled ? suggestionsRequestUrl(engine: browser.engine, query: next) : nil) { parseSuggestionsBody(body: $0) }
+      }
+    }
+    .onDisappear {
+      remote.cancel()
+      siteResults.cancel()
+    }
+  }
+
+  /// How many sites the row under the empty field holds.
+  private static let shortcutPlaces = 5
+
+  /// The sites the field can search, before anything is typed: a tap brings the site's chip, holding opens the site.
+  private var shortcutRow: some View {
+    HStack(spacing: Space.sm) {
+      ForEach(shortcuts, id: \.host) { site in
+        Button {
+          enter(site)
+        } label: {
+          SiteIcon(url: site.home, size: 26, bare: true)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(privately ? Color.white.opacity(0.1) : BayColor.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressFeedback)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+          Haptics.tick()
+          open(.url(site.home))
+        })
+        .accessibilityLabel(Text(verbatim: strings.t("search.withEngine", ["engine": site.name])))
+        .accessibilityHint(Text(verbatim: strings.t("search.shortcutHint")))
+        .accessibilityIdentifier("search-shortcut-\(site.host)")
+      }
+      // Always five places, so one site's tile is as wide as five sites' tiles.
+      ForEach(shortcuts.count..<Self.shortcutPlaces, id: \.self) { _ in
+        Color.clear.frame(maxWidth: .infinity, minHeight: 44).accessibilityHidden(true)
+      }
+    }
+    .padding(.horizontal, Space.sm)
+    .padding(.vertical, Space.xs)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("search-shortcuts")
+  }
+
+  /// The site's chip at the field's start; tapping it goes back to searching everything.
+  private func chip(_ scope: SearchScope) -> some View {
+    let colors = colors
+    // A light chip (or none) gets an edge, so it shows on a light field.
+    let edged = colors?.light ?? true
+    return Button(action: leave) {
+      HStack(spacing: 6) {
+        SiteIcon(url: scope.home, size: 18, bare: true)
+        Text(verbatim: scope.name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+      }
+      .foregroundColor(colors?.ink ?? text)
+      .padding(.leading, 8)
+      .padding(.trailing, 12)
+      .frame(height: 32)
+      .background(colors?.fill ?? (privately ? Color.white.opacity(0.18) : BayColor.background), in: Capsule())
+      .overlay(Capsule().stroke(Color.black.opacity(edged ? 0.1 : 0), lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .padding(.leading, 8)
+    .accessibilityLabel(Text(verbatim: strings.t("search.leaveSite", ["name": scope.name])))
+    .accessibilityIdentifier("scope-chip")
+  }
+
+  /// The field's background: the site's colour, in full as the chip arrives, then a light wash of it.
+  private var fieldFill: Color {
+    if let colors { return colors.fill.opacity(flash ? 0.85 : 0.2) }
+    return privately ? Color.white.opacity(0.1) : BayColor.fill
+  }
+
+  private func enter(_ site: SearchScope) {
+    Haptics.press()
+    suppressed = true
+    remote.cancel()
+    flash = true
+    withAnimation(Motion.settle.animation) {
+      scope = site
+      query = ""
+    }
+    focused = true
+    withAnimation(.easeOut(duration: 0.6).delay(0.25)) { flash = false }
+  }
+
+  private func leave() {
+    siteResults.cancel()
+    withAnimation(Motion.settle.animation) { scope = nil }
+    focused = true
+  }
+
+  private func choose(_ row: Suggestion) {
+    if case .scope(let site) = row {
+      enter(site)
+    } else {
+      open(target(for: row))
+    }
   }
 
   private func field(completion: String, rows: [Suggestion]) -> some View {
-    HStack(spacing: 0) {
+    let placeholder = scope.map { strings.t("search.withEngine", ["engine": $0.name]) } ?? strings.t("search.placeholder")
+    return HStack(spacing: 0) {
+      if let scope {
+        chip(scope).transition(.scale(scale: 0.6).combined(with: .opacity))
+      }
       ZStack(alignment: .leading) {
         if !completion.isEmpty {
           Text(completionText(completion))
@@ -185,7 +335,7 @@ struct SearchCard: View {
             .accessibilityHidden(true)
             .accessibilityIdentifier("address-completion")
         }
-        TextField(strings.t("search.placeholder"), text: $query)
+        TextField(placeholder, text: $query)
           .font(TextVariant.headline.font(weight: .regular, sizeCategory: sizeCategory))
           .foregroundColor(text)
           .keyboardType(.webSearch)
@@ -198,13 +348,16 @@ struct SearchCard: View {
             // Deleting shows what's left without completing it again.
             suppressed = next.count < query.count
           }
-          .accessibilityLabel(Text(verbatim: strings.t("search.placeholder")))
+          .accessibilityLabel(Text(verbatim: placeholder))
           .accessibilityIdentifier("address-input")
       }
-      .padding(.leading, Space.lg)
-      if !query.isEmpty {
-        iconButton(.close, label: strings.t("search.clear"), color: secondary) { fill("") }
-          .accessibilityIdentifier("clear-address")
+      .padding(.leading, scope == nil ? Space.lg : Space.sm)
+      // Clears the words first, then the chip.
+      if !query.isEmpty || scope != nil {
+        iconButton(.close, label: strings.t("search.clear"), color: secondary) {
+          if query.isEmpty { leave() } else { fill("") }
+        }
+        .accessibilityIdentifier("clear-address")
       }
       iconButton(.mic, label: strings.t(listening ? "search.listening" : "search.voice"), color: listening ? text : secondary, size: IconSize.control) {
         listen()
@@ -218,7 +371,7 @@ struct SearchCard: View {
       .accessibilityIdentifier("private-toggle")
     }
     .frame(height: SearchSheet.fieldHeight)
-    .background(privately ? Color.white.opacity(0.1) : BayColor.fill, in: Capsule())
+    .background(fieldFill, in: Capsule())
     .scaleEffect(x: grown ? 1 : 0.5, y: 1)
     .opacity(grown ? 1 : 0)
   }
@@ -264,8 +417,17 @@ struct SearchCard: View {
   }
 
   private func submit(completion: String, rows: [Suggestion]) {
+    if let scope {
+      open(.url(scopedSearchUrl(scope: scope, query: query, defaultEngineUrl: browser.engine.url)))
+      return
+    }
     if !completion.isEmpty, let first = rows.first {
       open(target(for: first))
+      return
+    }
+    // A bang ("font !w") goes where its row says.
+    if case .search(_, let url, let engine, false) = rows.first, engine != browser.engine.name, query.contains("!") {
+      open(.url(url))
       return
     }
     if let url = addressFor(input: query, engine: browser.engine) { open(.url(url)) }
@@ -284,6 +446,8 @@ struct SearchCard: View {
       return .url(url)
     case .search(_, let url, _, _): return .url(url)
     case .calc(_, _, let url): return .url(url)
+    case .result(_, _, _, let url): return .url(url)
+    case .scope(let site): return .url(site.home)
     case .emoji, .create: return .url("")
     }
   }
@@ -305,7 +469,16 @@ private struct SuggestionRow: View {
     Button(action: open) {
       HStack(spacing: Space.md) {
         Group {
-          if let url {
+          if case .result(_, _, let image?, let link) = row, let address = URL(string: image) {
+            AsyncImage(url: address) { picture in
+              picture.resizable().scaledToFill()
+            } placeholder: {
+              SiteIcon(url: link)
+            }
+            .frame(width: 28, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .accessibilityHidden(true)
+          } else if let url {
             SiteIcon(url: url)
           } else {
             BayIconView(.search, size: IconSize.row, color: secondary)
@@ -347,10 +520,14 @@ private struct SuggestionRow: View {
         title.isEmpty ? address : title,
         tabId == nil ? address : strings.t("search.switchToTab", ["address": address]), url, url
       )
-    case .search(let query, _, _, _):
-      return (query, strings.t("search.withEngine", ["engine": engineName]), query, nil)
+    case .search(let query, _, let engine, _):
+      return (query, strings.t("search.withEngine", ["engine": engine.isEmpty ? engineName : engine]), query, nil)
     case .calc(let expression, let value, _):
       return ("= \(value)", expression, nil, nil)
+    case .scope(let site):
+      return (strings.t("search.withEngine", ["engine": site.name]), displayUrl(url: site.home), nil, site.home)
+    case .result(let title, let detail, _, let url):
+      return (title, detail.isEmpty ? displayUrl(url: url) : detail, nil, url)
     case .emoji(let value, let name): return (value, name, nil, nil)
     case .create(_, let title, _, let site): return (title, site, nil, nil)
     }
