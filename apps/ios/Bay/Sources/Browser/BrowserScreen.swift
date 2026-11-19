@@ -65,9 +65,11 @@ struct BrowserScreen: View {
           } else if browser.tip == .blocking {
             TipCard(title: strings.t("tip.blocking.title"), body_: strings.t("tip.blocking.body")) { app.dispatch(.tipSeen(id: .blocking)) }
           }
+          // The picker's card sits over the bar, which stays: Settings and the page menu are still in reach.
           if let mode = browser.picking, browser.hasPage {
             PickerCard(browser: browser, mode: mode)
-          } else if browser.find != nil, browser.hasPage {
+          }
+          if browser.find != nil, browser.hasPage {
             FindBar(browser: browser)
           } else {
             BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)

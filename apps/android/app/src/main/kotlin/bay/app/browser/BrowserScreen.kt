@@ -90,10 +90,10 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                         app.dispatch(bay.core.Action.TipSeen(tip))
                     }
                 }
+                // The picker's card sits over the bar, which stays: Settings and the page menu are still in reach.
                 val picking = browser.picking
-                if (picking != null && browser.hasPage) {
-                    PickerCard(browser, strings, picking)
-                } else if (browser.find != null && browser.hasPage) {
+                if (picking != null && browser.hasPage) PickerCard(browser, strings, picking)
+                if (browser.find != null && browser.hasPage) {
                     FindBar(browser, strings)
                 } else {
                     Box(contentAlignment = Alignment.Center) {
