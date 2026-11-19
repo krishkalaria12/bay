@@ -62,7 +62,7 @@ struct StartPage: View {
       let date = formatter.string(from: context.date)
       VStack(alignment: .leading, spacing: 0) {
         BayText(strings.t(key), variant: .display)
-        BayText(date, variant: .subhead, weight: .medium, tone: .muted)
+        BayText(date, variant: .subhead, weight: .medium, tone: .overWallpaper)
       }
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(Text(verbatim: "\(strings.t(key)), \(date)"))
@@ -97,7 +97,7 @@ struct StartPage: View {
 
   private func recentList(_ recent: [HistoryEntry]) -> some View {
     VStack(alignment: .leading, spacing: Space.sm) {
-      BayText(strings.t("start.recent"), variant: .footnote, weight: .semibold, tone: .muted)
+      BayText(strings.t("start.recent"), variant: .footnote, weight: .semibold, tone: .overWallpaper)
       VStack(spacing: 0) {
         ForEach(Array(recent.enumerated()), id: \.element.url) { index, entry in
           if index > 0 {

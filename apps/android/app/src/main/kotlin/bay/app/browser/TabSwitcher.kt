@@ -217,7 +217,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                 }
                 if (rows.isNotEmpty() || app.folders.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BayText(strings.t("tabs.pinned"), Modifier.padding(bottom = Space.xs), variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, tone = TextTone.MUTED)
+                        BayText(strings.t("tabs.pinned"), Modifier.padding(bottom = Space.xs), variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, color = Theme.colors.overWallpaper)
                         rows.filter { it.folderId == null }.forEach { row -> PinRow(browser, row, row.url == activeUrl, indent = false) }
                         app.folders.forEach { folder ->
                             PinFolder(browser, folder, rows.filter { it.folderId == folder.id }, activeUrl)
@@ -245,7 +245,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                                     },
                                 variant = TextVariant.FOOTNOTE,
                                 weight = FontWeight.Medium,
-                                tone = TextTone.MUTED,
+                                color = Theme.colors.overWallpaper,
                             )
                         }
                     }
@@ -293,7 +293,7 @@ private fun PinFolder(browser: BrowserModel, folder: BrowserFolder, rows: List<P
     ) {
         BayIconView(BayIcon.FOLDER, size = IconSize.small)
         BayText(folder.name, Modifier.weight(1f), variant = TextVariant.CALLOUT, maxLines = 1)
-        if (rows.isNotEmpty()) BayText("${rows.size}", variant = TextVariant.FOOTNOTE, tone = TextTone.MUTED)
+        if (rows.isNotEmpty()) BayText("${rows.size}", variant = TextVariant.FOOTNOTE, color = Theme.colors.overWallpaper)
         BayIconView(BayIcon.CHEVRON, Modifier.graphicsLayer { rotationZ = if (open) 90f else 0f }, size = IconSize.inline, color = Theme.colors.muted)
     }
     if (open) rows.forEach { PinRow(browser, it, it.url == activeUrl, indent = true) }

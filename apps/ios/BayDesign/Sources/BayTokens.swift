@@ -115,7 +115,7 @@ public enum BayColor {
   public static let surfaceSecondary = Color(light: RGBA(239, 239, 240, 1), dark: RGBA(35, 35, 37, 1))
   public static let overlay = Color(light: RGBA(255, 255, 255, 1), dark: RGBA(24, 24, 27, 1))
   public static let backdrop = Color(light: RGBA(0, 0, 0, 0.2), dark: RGBA(0, 0, 0, 0.2))
-  public static let muted = Color(light: RGBA(113, 113, 122, 1), dark: RGBA(159, 159, 169, 1))
+  public static let muted = Color(light: RGBA(82, 82, 92, 1), dark: RGBA(159, 159, 169, 1))
   public static let fill = Color(light: RGBA(24, 24, 27, 0.06), dark: RGBA(255, 255, 255, 0.08))
   public static let accent = Color(light: RGBA(4, 133, 247, 1), dark: RGBA(4, 133, 247, 1))
   public static let accentForeground = Color(light: RGBA(252, 252, 252, 1), dark: RGBA(252, 252, 252, 1))

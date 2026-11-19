@@ -4,6 +4,9 @@ import UIKit
 /// What the text is for, which picks its colour from the theme.
 public enum TextTone: Sendable {
   case `default`, muted, accent, danger
+  /// Secondary text straight on a wallpaper or the space's wash (the start page, the tab switcher): the muted grey is
+  /// tuned for plain surfaces and falls under 4.5:1 on a tint, so this is the foreground, softened.
+  case overWallpaper
 
   var color: Color {
     switch self {
@@ -11,6 +14,7 @@ public enum TextTone: Sendable {
     case .muted: return BayColor.muted
     case .accent: return BayColor.accent
     case .danger: return BayColor.danger
+    case .overWallpaper: return BayColor.foreground.opacity(0.7)
     }
   }
 }

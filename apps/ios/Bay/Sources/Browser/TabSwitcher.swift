@@ -175,7 +175,7 @@ struct TabSwitcher: View {
 
   private func pinnedRows(_ rows: [PinnedSite]) -> some View {
     VStack(alignment: .leading, spacing: 2) {
-      BayText(strings.t("tabs.pinned"), variant: .footnote, weight: .medium, tone: .muted).padding(.bottom, Space.xs)
+      BayText(strings.t("tabs.pinned"), variant: .footnote, weight: .medium, tone: .overWallpaper).padding(.bottom, Space.xs)
       ForEach(rows.filter { $0.folderId == nil }, id: \.id) { row in pinRow(row, indent: false) }
       ForEach(app.folders, id: \.id) { folder in
         PinFolder(folder: folder, rows: rows.filter { $0.folderId == folder.id }, activeUrl: browser.activeTab?.url) { row in
@@ -213,7 +213,7 @@ struct TabSwitcher: View {
 
   private func countRow(_ count: Int) -> some View {
     HStack(spacing: Space.md) {
-      BayText(count == 1 ? strings.t("tabs.one") : strings.t("tabs.count", ["count": "\(count)"]), variant: .footnote, weight: .medium, tone: .muted)
+      BayText(count == 1 ? strings.t("tabs.one") : strings.t("tabs.count", ["count": "\(count)"]), variant: .footnote, weight: .medium, tone: .overWallpaper)
         .accessibilityIdentifier("tab-switcher-count")
       Rectangle().fill(BayColor.foreground.opacity(0.1)).frame(height: 1 / UIScreen.main.scale)
       if count > 1 {
@@ -221,7 +221,7 @@ struct TabSwitcher: View {
           Haptics.tick()
           browser.archiveAll()
         } label: {
-          BayText(strings.t("tabs.clear"), variant: .footnote, weight: .medium, tone: .muted)
+          BayText(strings.t("tabs.clear"), variant: .footnote, weight: .medium, tone: .overWallpaper)
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
         }
@@ -264,7 +264,7 @@ private struct PinFolder<Row: View>: View {
           BayIconView(.folder, size: IconSize.small)
           BayText(folder.name, variant: .callout).lineLimit(1)
           Spacer(minLength: 0)
-          BayText(rows.isEmpty ? "" : "\(rows.count)", variant: .footnote, tone: .muted)
+          BayText(rows.isEmpty ? "" : "\(rows.count)", variant: .footnote, tone: .overWallpaper)
           BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
         }
         .padding(.horizontal, Space.sm)
