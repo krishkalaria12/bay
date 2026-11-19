@@ -496,6 +496,12 @@ test("sealing failures stop retrying and the explicit final failure propagates",
     throw new Error("seal failed");
   };
 
+  // The sync worker times its cycle with Date.now; on a busy machine the 1ms it waits has already passed, and the
+  // cycle's own save would seal again inside this test.
+  const now = Date.now();
+
+  context.mock.method(Date, "now", () => now);
+
   engine.setTypeSynced("history", false);
   await tick();
   await tick();
