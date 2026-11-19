@@ -2,8 +2,9 @@
 //! (`data/bangs.txt`, exported from `@bay/core`'s `bangList.ts`). A port of `@bay/core`'s `bangs.ts`: the same
 //! lookup, the same escaping, and the same check that the words can't move the search to another site.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, RwLock};
 
 use super::{Pattern, pattern};
 use crate::js;
@@ -32,7 +33,7 @@ pub struct BangMatch {
 
 /// A bang list: each trigger to the line that holds it. Lines are only read when a trigger is looked up.
 pub struct BangTable {
-    text: &'static str,
+    text: Cow<'static, str>,
     lines: HashMap<String, usize>,
 }
 
@@ -84,7 +85,8 @@ fn home_of(template: &str) -> String {
 
 impl BangTable {
     /// Indexes a list of `triggers\tname\ttemplate` lines; a trigger in two lines keeps the first.
-    pub fn new(text: &'static str) -> Self {
+    pub fn new(text: impl Into<Cow<'static, str>>) -> Self {
+        let text = text.into();
         let mut lines = HashMap::new();
         let mut at = 0;
         for line in text.split('\n') {
@@ -123,8 +125,28 @@ impl BangTable {
 }
 
 /// The list Bay ships.
-pub static BUNDLED_BANGS: LazyLock<BangTable> =
-    LazyLock::new(|| BangTable::new(include_str!("../../../../data/bangs.txt")));
+pub static BUNDLED_BANGS: LazyLock<Arc<BangTable>> =
+    LazyLock::new(|| Arc::new(BangTable::new(include_str!("../../../../data/bangs.txt"))));
+
+/// The list in use: the one Bay ships, until a newer one is fetched and checked (`bang_list.rs`).
+static CURRENT_BANGS: LazyLock<RwLock<Arc<BangTable>>> =
+    LazyLock::new(|| RwLock::new(Arc::clone(&BUNDLED_BANGS)));
+
+/// The bang list searches use now.
+pub fn current_bangs() -> Arc<BangTable> {
+    Arc::clone(
+        &CURRENT_BANGS
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    )
+}
+
+/// Puts a checked list in use in place of the one before.
+pub fn use_bangs(table: BangTable) {
+    *CURRENT_BANGS
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Arc::new(table);
+}
 
 /// The search escaped for where it goes: after a template's `?` as a query value (spaces as `+`, like Chrome's
 /// engines), else in the path, keeping `/` and escaping what would end the path.

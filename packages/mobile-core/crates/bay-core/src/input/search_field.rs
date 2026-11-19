@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::address::engine_for;
-use super::bangs::{BUNDLED_BANGS, bang_named, find_bang};
+use super::bangs::{bang_named, current_bangs, find_bang};
 use super::engines::{SearchEngine, built_in_engines};
 use super::site_search::{
     SearchScope, bang_scope, find_scope, is_on_site, offered_scope, scope_for_host,
@@ -238,7 +238,7 @@ impl BrowserStore {
         // A bang searches its site at once, first. "!yt" alone, or a site's name, offers the site's chip: first, or
         // second under the page the field is completing to, so typing a site's address still goes there.
         if let Some(found) =
-            find_bang(&query, &BUNDLED_BANGS).filter(|found| !found.query.is_empty())
+            find_bang(&query, &current_bangs()).filter(|found| !found.query.is_empty())
         {
             result.items.insert(
                 0,
@@ -250,7 +250,7 @@ impl BrowserStore {
                 },
             );
             result.completion = String::new();
-        } else if let Some(scope) = bang_named(&query, &BUNDLED_BANGS)
+        } else if let Some(scope) = bang_named(&query, &current_bangs())
             .map(|bang| bang_scope(&bang))
             .or_else(|| offered_scope(&query, &engines(&data), || history_hosts(&data)))
         {
@@ -265,7 +265,7 @@ impl BrowserStore {
     /// The site that typed text names exactly ("yt", "imdb", "github.com", "!w"), for turning the field into its
     /// chip when a space or Tab follows it.
     pub fn search_scope(&self, text: String) -> Option<SearchScope> {
-        if let Some(bang) = bang_named(&text, &BUNDLED_BANGS) {
+        if let Some(bang) = bang_named(&text, &current_bangs()) {
             return Some(bang_scope(&bang));
         }
         let data = self.snapshot();

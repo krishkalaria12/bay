@@ -6,6 +6,7 @@
 
 pub mod address;
 pub mod app_urls;
+pub mod bang_list;
 pub mod bangs;
 pub mod calc;
 pub mod clean;
