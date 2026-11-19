@@ -346,7 +346,7 @@ private fun RowScope.SiteHeader(browser: BrowserModel, strings: Strings, blockin
                 ) {
                     val colors = Theme.colors
                     if (web) BayIconView(if (insecure) BayIcon.ERROR else BayIcon.LOCK, size = IconSize.inline - 2.dp, color = if (insecure) colors.danger else colors.muted)
-                    BayText(status, variant = TextVariant.CAPTION, weight = FontWeight.Normal, tone = if (insecure) TextTone.DANGER else TextTone.MUTED, maxLines = 1)
+                    BayText(status, variant = TextVariant.CAPTION, weight = FontWeight.Normal, tone = if (insecure) TextTone.DANGER else TextTone.MUTED, maxLines = 2)
                 }
             }
         }

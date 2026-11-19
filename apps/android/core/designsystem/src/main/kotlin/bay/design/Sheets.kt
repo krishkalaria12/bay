@@ -18,17 +18,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +45,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -54,6 +57,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /** The words a sheet's chrome needs, in the app's language (the design system has no catalog of its own). */
@@ -87,7 +91,12 @@ fun PanelSheet(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val tallest = maxHeight * maxFraction
         AnimatedVisibility(state, enter = fadeIn(), exit = fadeOut()) {
-            Box(Modifier.fillMaxSize().background(colors.backdrop).clickable(remember { MutableInteractionSource() }, null, onClick = onClose))
+            // TalkBack reads the backdrop as the sheet's other close button, as the system's own sheets do.
+            Box(
+                Modifier.fillMaxSize().background(colors.backdrop)
+                    .semantics { contentDescription = words.close; role = Role.Button }
+                    .clickable(remember { MutableInteractionSource() }, null, onClick = onClose),
+            )
         }
         AnimatedVisibility(
             state,
@@ -235,11 +244,21 @@ fun ActionRow(
         } else if (icon != null) {
             BayIconView(icon, size = IconSize.control, color = if (destructive) colors.danger else colors.foreground)
         }
+        // With a large font the value goes under the label, as iOS does at its accessibility sizes: beside it, the two
+        // squeezed the label into a word (or part of one) a line.
+        val stacked = value != null && LocalDensity.current.fontScale >= STACK_SCALE
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             BayText(label, tone = if (destructive) TextTone.DANGER else TextTone.DEFAULT)
             if (detail != null) BayText(detail, Modifier.testTag("$testID-detail"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED, maxLines = 2)
+            if (stacked) BayText(value, Modifier.testTag("$testID-value"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED)
         }
-        if (value != null) BayText(value, Modifier.testTag("$testID-value"), variant = TextVariant.SUBHEAD, tone = TextTone.MUTED, maxLines = 1)
+        // Beside the label, at most two fifths of the screen: a long translation wraps itself rather than the label.
+        if (value != null && !stacked) {
+            BayText(
+                value, Modifier.widthIn(max = LocalConfiguration.current.screenWidthDp.dp * 0.4f).testTag("$testID-value"),
+                variant = TextVariant.SUBHEAD, tone = TextTone.MUTED, maxLines = 2, textAlign = TextAlign.End,
+            )
+        }
         if (chevron) BayIconView(BayIcon.CHEVRON, size = IconSize.small, color = colors.muted)
         if (toggle != null) BayToggle(toggle, enabled = enabled)
         if (selected) BayIconView(BayIcon.TICK, size = IconSize.row, color = colors.accent)
@@ -247,3 +266,6 @@ fun ActionRow(
 }
 
 private val RowHeightToken = Row.height
+
+/** The font scale from which a row's value goes under its label. */
+private const val STACK_SCALE = 1.5f

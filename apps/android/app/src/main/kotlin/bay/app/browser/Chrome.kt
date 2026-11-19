@@ -10,11 +10,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +30,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -61,6 +63,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -85,6 +88,7 @@ import bay.design.TextVariant
 import bay.design.Theme
 import bay.design.baySurface
 import bay.design.pressFeedback
+import bay.design.style
 import bay.design.wallpaperPalette
 import bay.engine.NavigationState
 
@@ -154,9 +158,11 @@ fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false
         return
     }
     val letter = host.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•"
+    // The monogram follows the tile's size, not the phone's font size, which would push it out of a small tile.
+    val density = LocalDensity.current
     if (bare) {
         Box(modifier.size(size), contentAlignment = Alignment.Center) {
-            BayText(letter, variant = TextVariant.HEADLINE, weight = FontWeight.SemiBold, color = color)
+            Monogram(letter, with(density) { (size * 0.6f).toSp() }, color ?: Theme.colors.foreground)
         }
     } else {
         var hash = 0
@@ -165,9 +171,14 @@ fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false
             modifier.size(size).background(tints[Math.floorMod(hash, tints.size)], corner).border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
             contentAlignment = Alignment.Center,
         ) {
-            BayText(letter, variant = TextVariant.FOOTNOTE, weight = FontWeight.SemiBold, color = Color(0xFF26313D))
+            Monogram(letter, with(density) { (size * 0.46f).toSp() }, Color(0xFF26313D))
         }
     }
+}
+
+@Composable
+private fun Monogram(letter: String, fontSize: TextUnit, color: Color) {
+    BasicText(letter, style = TextVariant.FOOTNOTE.style(FontWeight.SemiBold, color).copy(fontSize = fontSize, lineHeight = fontSize), maxLines = 1, softWrap = false)
 }
 
 /** Bay's start-page wallpaper: a wash under a fine dot grid, the theme's background for Plain. */
@@ -339,7 +350,7 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.widthIn(max = 36.dp * 5).horizontalScroll(rememberScrollState()).pointerInput(app.spaces.size) {
+            Modifier.widthIn(max = SPACE_TARGET * 5).horizontalScroll(rememberScrollState()).pointerInput(app.spaces.size) {
                 fun reach(x: Float) {
                     val index = (x / size.width * app.spaces.size).toInt().coerceIn(0, app.spaces.size - 1)
                     if (index == scrubbed) return
@@ -359,7 +370,7 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
             app.spaces.forEach { space ->
                 val active = space.id == app.activeSpaceId
                 Box(
-                    Modifier.size(36.dp).testTag("bar-space-${space.id}")
+                    Modifier.size(SPACE_TARGET).testTag("bar-space-${space.id}")
                         .pressFeedback {
                             Haptics.press(view)
                             browser.selectSpace(space.id)
@@ -377,7 +388,7 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
             }
         }
         Box(
-            Modifier.size(36.dp).testTag("bar-new-space")
+            Modifier.size(SPACE_TARGET).testTag("bar-new-space")
                 .pressFeedback { browser.newSpace() }
                 .clearAndSetSemantics { contentDescription = strings.t("tabsMenu.newSpace"); role = Role.Button },
             contentAlignment = Alignment.Center,
@@ -385,6 +396,9 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
     }
     }
 }
+
+/** Each space's button in the capsule, and the new-space button: Android's smallest touch target. */
+private val SPACE_TARGET = 48.dp
 
 /** The number of open tabs on the corner of the Tabs button. The button's label says it, so TalkBack skips it. */
 @Composable

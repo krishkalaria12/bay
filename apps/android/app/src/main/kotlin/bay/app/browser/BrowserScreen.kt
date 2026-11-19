@@ -8,20 +8,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +51,7 @@ import bay.design.Space
 import bay.design.TextTone
 import bay.design.TextVariant
 import bay.design.Theme
+import bay.design.overWallpaper
 
 private val BAR_HEIGHT = 52.dp
 
@@ -177,7 +178,7 @@ private fun StartScreen(browser: BrowserModel, strings: Strings) {
             browser.unpin(site)
         })
         Column(Modifier.clearAndSetSemantics {}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            BayText(strings.t("start.tapToSearch"), variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, tone = TextTone.MUTED)
+            BayText(strings.t("start.tapToSearch"), variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, color = Theme.colors.overWallpaper)
             BayIconView(BayIcon.DOWN, size = IconSize.small, color = Theme.colors.muted)
         }
     }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,6 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -80,7 +82,9 @@ import bay.design.Space
 import bay.design.TextTone
 import bay.design.TextVariant
 import bay.design.Theme
+import bay.design.overWallpaper
 import bay.design.pressFeedback
+import bay.design.style
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -98,20 +102,30 @@ fun spaceColor(color: SpaceColor): Color = when (color) {
 fun spaceName(space: BrowserSpace, strings: Strings): String =
     if (space.id == "personal" && space.name == "Personal") strings.t("space.personal") else space.name
 
-/** A space's mark: its emoji, or its first letter on its colour in a rounded square. */
+/**
+ * A space's mark: its emoji, or its first letter on its colour in a rounded square. The mark is drawn to the square's
+ * size rather than the phone's font size, which would push a large emoji out of it (an ellipsis in its place).
+ */
 @Composable
 fun SpaceGlyph(space: BrowserSpace, name: String, size: Dp) {
     val icon = space.icon
+    val density = LocalDensity.current
     if (icon != null) {
         Box(Modifier.size(size).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
-            BayText(icon, variant = TextVariant.TITLE)
+            val glyph = with(density) { (size * 0.73f).toSp() }
+            BasicText(icon, style = TextVariant.TITLE.style().copy(fontSize = glyph, lineHeight = glyph), maxLines = 1, softWrap = false)
         }
     } else {
         Box(
             Modifier.size(size).background(spaceColor(space.color), RoundedCornerShape(size * 0.3f)).clearAndSetSemantics {},
             contentAlignment = Alignment.Center,
         ) {
-            BayText(name.trim().take(1).uppercase().ifEmpty { "•" }, variant = TextVariant.HEADLINE, weight = FontWeight.Bold, color = Color.White)
+            val letter = with(density) { (size * 0.57f).toSp() }
+            BasicText(
+                name.trim().take(1).uppercase().ifEmpty { "•" },
+                style = TextVariant.HEADLINE.style(FontWeight.Bold, Color.White).copy(fontSize = letter, lineHeight = letter),
+                maxLines = 1, softWrap = false,
+            )
         }
     }
 }
@@ -217,7 +231,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                             Modifier.testTag("tab-switcher-count"),
                             variant = TextVariant.FOOTNOTE,
                             weight = FontWeight.Medium,
-                            tone = TextTone.MUTED,
+                            color = Theme.colors.overWallpaper,
                         )
                         Box(Modifier.weight(1f).height(1.dp).background(Theme.colors.foreground.copy(alpha = 0.1f)))
                         if (tabs.size > 1) {

@@ -46,6 +46,7 @@ import bay.design.TextTone
 import bay.design.TextVariant
 import bay.design.Theme
 import bay.design.baySurface
+import bay.design.overWallpaper
 import bay.design.pressFeedback
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -101,7 +102,7 @@ fun StartPage(app: AppModel, strings: Strings, onOpen: (String) -> Unit, onUnpin
         }
         if (recent.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
-                BayText(strings.t("start.recent"), variant = TextVariant.FOOTNOTE, weight = FontWeight.SemiBold, tone = TextTone.MUTED)
+                BayText(strings.t("start.recent"), variant = TextVariant.FOOTNOTE, weight = FontWeight.SemiBold, color = Theme.colors.overWallpaper)
                 Column(Modifier.fillMaxWidth().baySurface(Radius.card).padding(vertical = Space.xs)) {
                     recent.forEachIndexed { index, entry ->
                         if (index > 0) {
@@ -151,6 +152,6 @@ private fun Greeting(strings: Strings) {
     val date = SimpleDateFormat(pattern, locale).format(now)
     Column(Modifier.semantics(mergeDescendants = true) { heading() }.testTag("start-greeting")) {
         BayText(strings.t(key), variant = TextVariant.DISPLAY)
-        BayText(date, variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, tone = TextTone.MUTED)
+        BayText(date, variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, color = Theme.colors.overWallpaper)
     }
 }

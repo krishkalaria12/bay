@@ -292,10 +292,11 @@ private fun targetFor(row: Suggestion): OpenTarget = when (row) {
     else -> OpenTarget.Url("")
 }
 
+/** A button in the field, as big as Android's smallest touch target (48dp) whatever its icon. */
 @Composable
 private fun FieldButton(id: String, label: String, icon: BayIcon, color: Color, size: androidx.compose.ui.unit.Dp, selected: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).testTag(id)
+        Modifier.size(48.dp).testTag(id)
             .semantics { contentDescription = label; this.selected = selected }
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick),
         contentAlignment = Alignment.Center,

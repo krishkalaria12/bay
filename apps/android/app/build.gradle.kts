@@ -14,6 +14,7 @@ android {
         versionName = "1.0.0"
         // Bay's engine is built for arm64 only; JNA's libraries for other ABIs would ship unused.
         ndk { abiFilters += "arm64-v8a" }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // Chromium maps its resource packs, ICU data and snapshots straight out of the APK, so they stay stored.
@@ -59,4 +60,12 @@ dependencies {
     compileOnly("androidx.window.extensions.core:core:1.0.0")
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
+
+    // The accessibility audit (Accessibility Test Framework checks over the main screens).
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.compose.ui.test.junit4.accessibility)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.espresso.core)
 }
