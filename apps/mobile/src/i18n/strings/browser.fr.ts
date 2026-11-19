@@ -14,13 +14,13 @@ export const browserFr: BrowserStrings = {
   "search.close": "Fermer la recherche",
   "search.placeholder": "Recherchez ou saisissez une adresse",
   "search.clear": "Effacer",
-  "search.listening": "À l'écoute",
+  "search.listening": "À l’écoute",
   "search.voice": "Recherche vocale",
   "search.private": "Privé",
-  "search.privateNotice": "Vous naviguez en privé. Rien de ce que vous ouvrez ici n'est enregistré.",
+  "search.privateNotice": "Vous naviguez en privé. Rien de ce que vous ouvrez ici n’est enregistré.",
   "search.pasteAndGo": "Coller et ouvrir",
   "search.fillIn": "Compléter avec {title}",
-  "search.switchToTab": "Passer à l'onglet · {address}",
+  "search.switchToTab": "Passer à l’onglet · {address}",
   "search.withEngine": "Rechercher avec {engine}",
 
   // Tab switcher.
@@ -49,12 +49,12 @@ export const browserFr: BrowserStrings = {
   // Mini player.
   "player.playing": "en lecture",
   "player.paused": "en pause",
-  "player.goToTab": "Aller à l'onglet",
+  "player.goToTab": "Aller à l’onglet",
   "player.backTen": "Reculer de dix secondes",
   "player.forwardTen": "Avancer de dix secondes",
   "player.play": "Lecture",
   "player.pause": "Pause",
-  "player.pictureInPicture": "Image dans l'image",
+  "player.pictureInPicture": "Image dans l’image",
   "player.stopAndClose": "Arrêter et fermer",
 
   // Find bar.
@@ -69,14 +69,14 @@ export const browserFr: BrowserStrings = {
   "pageError.offline.title": "Vous êtes hors ligne",
   "pageError.offline.detail": "Vérifiez votre connexion et réessayez.",
   "pageError.notFound.title": "Ce site est introuvable",
-  "pageError.notFound.detail": "Vérifiez que l'adresse n'a pas de faute.",
+  "pageError.notFound.detail": "Vérifiez que l’adresse n’a pas de faute.",
   "pageError.timeout.title": "Ce site a mis trop de temps",
   "pageError.timeout.detail": "Il est peut-être saturé ou hors service. Réessayez dans un instant.",
   "pageError.refused.title": "Ce site a refusé la connexion",
   "pageError.refused.detail": "Il est peut-être hors service ou bloqué sur ce réseau.",
-  "pageError.certificate.title": "Cette connexion n'est pas privée",
-  "pageError.certificate.detail": "Bay a arrêté de charger parce que le certificat du site n'est pas valide.",
-  "pageError.unknown.title": "Impossible d'ouvrir cette page",
+  "pageError.certificate.title": "Cette connexion n’est pas privée",
+  "pageError.certificate.detail": "Bay a arrêté de charger parce que le certificat du site n’est pas valide.",
+  "pageError.unknown.title": "Impossible d’ouvrir cette page",
   "pageError.tryAgain": "Réessayer",
 
   // Reader.
@@ -98,10 +98,10 @@ export const browserFr: BrowserStrings = {
   "reader.themeDark": "Sombre",
   "reader.themeBlack": "Noir",
 
-  // The picker's card and its notices.
-  "picker.inspectHint": "Touchez un élément pour l'inspecter.",
+  // The picker’s card and its notices.
+  "picker.inspectHint": "Touchez un élément pour l’inspecter.",
   "picker.hideHint": "Touchez un élément pour le masquer.",
-  "picker.linksClosed": "Les liens ne s'ouvrent pas pendant que vous choisissez.",
+  "picker.linksClosed": "Les liens ne s’ouvrent pas pendant que vous choisissez.",
   "picker.parent": "Élément parent",
   "picker.details": "Détails",
   "picker.hide": "Masquer",
@@ -112,17 +112,17 @@ export const browserFr: BrowserStrings = {
   "notice.markdownCopied": "Markdown copié.",
   "notice.copiedForAgent": "Copié pour un agent de code.",
   "notice.noParent": "Aucun élément plus grand à sélectionner.",
-  "notice.unlockFirst": "Déverrouillez d'abord les onglets privés.",
-  "notice.pageNotReady": "La page n'est pas prête.",
+  "notice.unlockFirst": "Déverrouillez d’abord les onglets privés.",
+  "notice.pageNotReady": "La page n’est pas prête.",
   "notice.pageChanged": "La page a changé.",
 
-  // The download's toast.
+  // The download’s toast.
   "downloadToast.downloaded": "{filename} téléchargé",
   "downloadToast.open": "Ouvrir",
   "downloadToast.openLabel": "Ouvrir {filename}",
   "downloadToast.showAll": "{filename}, {status}. Voir les téléchargements",
 
-  // The browser's own toasts.
+  // The browser’s own toasts.
   "toast.linkCopied": "Lien copié",
   "toast.tabArchived": "Onglet archivé",
   "toast.undo": "Annuler",
@@ -138,22 +138,22 @@ export const browserFr: BrowserStrings = {
   "toast.archivedTabs": "{count} onglets archivés",
   "toast.oneTabArchived": "1 onglet archivé",
   "toast.tabsArchived": "{count} onglets archivés",
-  "toast.somethingWrong": "Quelque chose s'est mal passé.",
+  "toast.somethingWrong": "Quelque chose s’est mal passé.",
   "toast.savedToPhotos": "Enregistré dans vos photos",
   "toast.savedToDownloads": "Enregistré dans Téléchargements",
-  "toast.imageNotSaved": "L'image n'a pas pu être enregistrée",
-  "toast.fileNotOpened": "Le fichier n'a pas pu être ouvert.",
+  "toast.imageNotSaved": "L’image n’a pas pu être enregistrée",
+  "toast.fileNotOpened": "Le fichier n’a pas pu être ouvert.",
 
   "lock.title": "Les onglets privés sont verrouillés",
   "lock.unlock": "Déverrouiller",
   "lock.prompt": "Déverrouiller les onglets privés",
   "tabs.position": "Onglet {index} sur {count}",
   "tabs.privatePosition": "Onglet privé {index} sur {count}",
-  "toast.restoredBlocking": "La page s'affiche telle que le site l'a faite. Est-ce réglé ?",
+  "toast.restoredBlocking": "La page s’affiche telle que le site l’a faite. Est-ce réglé ?",
   "toast.keepBlockingOff": "Le laisser désactivé ici",
   "tip.gotIt": "Compris",
   "tip.blocking.title": "Bay a bloqué des publicités et des traqueurs ici",
   "tip.blocking.body": "Dans le menu •••, voyez ce qui est bloqué, ou désactivez-le pour un site qui ne marche plus.",
-  "tip.bar.title": "Balayez la barre pour changer d'onglet",
-  "tip.bar.body": "Sur le côté, vous passez à l'onglet voisin. Faites-la glisser vers le haut pour voir tous vos onglets.",
+  "tip.bar.title": "Balayez la barre pour changer d’onglet",
+  "tip.bar.body": "Sur le côté, vous passez à l’onglet voisin. Faites-la glisser vers le haut pour voir tous vos onglets.",
 };
