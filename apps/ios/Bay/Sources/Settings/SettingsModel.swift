@@ -108,7 +108,10 @@ final class SettingsModel: ObservableObject {
     case .action(let action):
       // The browser's own sheets open over Settings.
       switch action {
-      case .bookmarks: browser.panel = .bookmarks
+      // The drawer slides over the page, so Settings goes first.
+      case .bookmarks:
+        close()
+        browser.openDrawer()
       case .history: browser.panel = .history
       case .downloads: browser.panel = .downloads
       case .import: browser.panel = .import

@@ -94,7 +94,8 @@ struct BrowserScreen: View {
       if browser.fullscreen {
         // The screen's bottom edge on a fullscreen site: a tap brings the bar back for a moment.
         Color.clear
-          .frame(height: max(safeBottom, Space.md) + Space.xl)
+          // The bar's own height at the screen's foot; the bottom inset grows with the keyboard, so it isn't used.
+          .frame(height: Self.barHeight)
           .contentShape(Rectangle())
           .onTapGesture(perform: browser.peekBar)
           .ignoresSafeArea(edges: .bottom)
@@ -145,8 +146,6 @@ struct BrowserScreen: View {
           ArchivePanel(browser: browser)
         case .history:
           HistoryPanel(browser: browser)
-        case .bookmarks:
-          BookmarksPanel(browser: browser)
         case .save:
           SavePanel(browser: browser)
         case .downloads:

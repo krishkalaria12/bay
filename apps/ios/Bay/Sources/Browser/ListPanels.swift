@@ -2,6 +2,7 @@ import BayCore
 import BayDesign
 import BayEngine
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// How many history entries the sheet lists at once.
 private let historyShown: UInt32 = 200
@@ -102,131 +103,10 @@ struct ArchivePanel: View {
 
 // MARK: Bookmarks
 
-/// The space's bookmark tree a folder at a time, in the order it was saved. Search looks through every link, whichever
-/// folder it's in. Removing a folder asks first, since it takes everything inside with it.
-struct BookmarksPanel: View {
-  @EnvironmentObject private var strings: Strings
-  @EnvironmentObject private var app: AppModel
-  @ObservedObject var browser: BrowserModel
-  @State private var folderId = "bookmarks"
-  @State private var query = ""
-  /// The folder whose remove button was tapped: its row asks before anything goes.
-  @State private var confirming: String?
-
-  var body: some View {
-    let space = app.activeSpaceId
-    let listing = app.store.bookmarkListing(spaceId: space, folderId: folderId, query: query)
-    let atRoot = listing.parentId == nil
-    let title = atRoot ? strings.t("bookmarks.title") : (listing.title.isEmpty ? strings.t("bookmarks.untitled") : listing.title)
-    let needle = query.trimmingCharacters(in: .whitespaces)
-    PanelSheet(
-      title: title, testID: "bookmarks-screen", words: strings.sheetWords(title), onClose: { browser.panel = nil },
-      onBack: listing.parentId.map { parent in { enter(parent) } }
-    ) {
-      if listing.nodes == 0 {
-        EmptyNote(title: strings.t("bookmarks.empty"), detail: strings.t("bookmarks.emptyDetail"), testID: "bookmarks-empty")
-        importRow
-      } else {
-        SheetSearchField(text: $query, placeholder: strings.t("bookmarks.search"), testID: "bookmarks-search")
-        if listing.rows.isEmpty {
-          NoMatches(
-            text: needle.isEmpty ? strings.t("bookmarks.folderEmpty") : strings.t("bookmarks.noMatches", ["query": needle]),
-            testID: "bookmarks-no-matches")
-        }
-        ForEach(listing.rows, id: \.node.id) { row in
-          switch row.node {
-          case .url(let id, _, let linkTitle, let url, _):
-            let rowTitle = pageTitle(title: linkTitle, url: url)
-            SiteRow(
-              url: url, title: rowTitle, detail: siteName(url: url),
-              openLabel: strings.t("history.openLabel", ["title": rowTitle]), removeLabel: strings.t("bookmarks.removeLabel", ["title": rowTitle]),
-              testID: "bookmark-open-\(url)", removeTestID: "bookmark-remove-\(url)",
-              onOpen: { browser.openListed(url) },
-              onRemove: { app.dispatch(.removeBookmark(spaceId: space, id: id)) })
-          case .folder(let id, _, let folderTitle, _, _):
-            FolderRow(
-              name: folderTitle.isEmpty ? strings.t("bookmarks.untitled") : folderTitle, links: row.links, confirming: confirming == id,
-              onOpen: { enter(id) }, onAskRemove: { confirming = id },
-              onRemove: {
-                confirming = nil
-                app.dispatch(.removeBookmark(spaceId: space, id: id))
-              },
-              onKeep: { confirming = nil })
-          }
-        }
-        if atRoot && needle.isEmpty { importRow.padding(.top, Space.lg) }
-      }
-    }
-  }
-
-  /// The way to bring bookmarks from another browser, under the list's top.
-  private var importRow: some View {
-    ActionRow(strings.t("bookmarks.import"), testID: "bookmarks-import", icon: .import, chevron: true) { browser.panel = .import }
-  }
-
-  private func enter(_ id: String) {
-    confirming = nil
-    folderId = id
-  }
-}
-
 extension BookmarkNode {
   fileprivate var id: String {
     switch self {
     case .url(let id, _, _, _, _), .folder(let id, _, _, _, _): return id
-    }
-  }
-}
-
-private struct FolderRow: View {
-  @EnvironmentObject private var strings: Strings
-  let name: String
-  let links: UInt32
-  let confirming: Bool
-  let onOpen: () -> Void
-  let onAskRemove: () -> Void
-  let onRemove: () -> Void
-  let onKeep: () -> Void
-
-  var body: some View {
-    let detail =
-      links == 0
-      ? strings.t("bookmarks.folderEmpty") : links == 1 ? strings.t("bookmarks.folderOne") : strings.t("bookmarks.folderCount", ["count": "\(links)"])
-    if confirming {
-      VStack(spacing: 0) {
-        ActionRow(
-          strings.t("bookmarks.removeFolder", ["title": name]), testID: "bookmark-folder-remove-confirm", icon: .delete, detail: detail,
-          destructive: true, action: onRemove)
-        ActionRow(strings.t("bookmarks.keep"), testID: "bookmark-folder-keep", action: onKeep)
-      }
-      .padding(.vertical, Space.sm)
-      .accessibilityElement(children: .contain)
-      .accessibilityIdentifier("bookmark-folder-confirm-\(name)")
-    } else {
-      HStack(spacing: Space.md) {
-        Button(action: onOpen) {
-          HStack(spacing: Space.md) {
-            BayIconView(.folder, size: IconSize.control, color: BayColor.accent).frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 0) {
-              BayText(name, variant: .callout).lineLimit(1)
-              BayText(detail, variant: .footnote, tone: .muted).lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted)
-          }
-          .padding(.vertical, Space.sm)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(PressFeedbackStyle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: strings.t("bookmarks.openFolderLabel", ["title": name])))
-        .accessibilityValue(Text(verbatim: detail))
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("bookmark-folder-\(name)")
-        RemoveButton(label: strings.t("bookmarks.removeLabel", ["title": name]), testID: "bookmark-folder-remove-\(name)", action: onAskRemove)
-      }
-      .frame(minHeight: 56)
-      .overlay(alignment: .bottom) { Hairline() }
     }
   }
 }
@@ -834,21 +714,38 @@ struct SavePanel: View {
 /// The bookmarks drawer: a dark panel the height of the screen sliding out over the page from the right, a sliver of
 /// the page still showing at its left. On top, the space chips; below, the space's bookmarks, folders opening where
 /// they sit; a + at its foot to save the page here. Its wash is the space's colour. A sideways swipe moves to the next
-/// space (switching to it); a tap on the sliver, or VoiceOver's escape, puts it away.
+/// space (switching to it); a tap on the sliver, or VoiceOver's escape, puts it away. Pulling the list down shows a
+/// search through every bookmark of the space. Holding a row offers renaming it in place, moving it to another folder
+/// and removing it; holding and dragging it drops it into a folder, or beside another bookmark.
 struct BookmarksDrawer: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @ObservedObject var browser: BrowserModel
   @State private var open: Set<String> = []
   @State private var shift: CGFloat = 0
+  /// The search field, out once the list has been pulled down, and its words.
+  @State private var searching = false
+  @State private var query = ""
+  @FocusState private var searchFocused: Bool
+  /// The row being renamed where it sits.
+  @State private var renaming: String?
+  /// The row whose new folder is being picked.
+  @State private var moving: BookmarkTreeRow?
+  /// The row being dragged to a new place.
+  @State private var dragging: String?
+  /// The list is scrolled to its top, where pulling it down brings the search.
+  @State private var atTop = true
 
   /// How much of the screen the panel covers; the rest is the page's sliver.
   private static let width: CGFloat = 0.86
+  /// How far past its top the list is pulled before the search shows.
+  private static let pullToSearch: CGFloat = 56
 
   var body: some View {
     let space = app.spaces.first { $0.id == app.activeSpaceId } ?? app.spaces.first
     let color = space.map { spaceColor($0.color) } ?? BayColor.muted
     let rows = app.store.bookmarkTreeRows(spaceId: app.activeSpaceId, open: Array(open))
+    let needle = query.trimmingCharacters(in: .whitespaces)
     GeometryReader { geometry in
       HStack(spacing: 0) {
         Color.black.opacity(0.35)
@@ -858,32 +755,37 @@ struct BookmarksDrawer: View {
           .accessibilityAddTraits(.isButton)
           .accessibilityIdentifier("drawer-close")
         VStack(alignment: .leading, spacing: Space.md) {
-          SpaceChips(spaces: app.spaces, chosen: app.activeSpaceId) { browser.switchSpace($0, announce: false) }
-            .padding(.horizontal, Space.lg)
+          SpaceChips(spaces: app.spaces, chosen: app.activeSpaceId) { id in
+            query = ""
+            browser.switchSpace(id, announce: false)
+          }
+          .padding(.horizontal, Space.lg)
           ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 2) {
-              if rows.isEmpty, let space {
-                empty(spaceName(space, strings))
+              // Where the list's top is, to know when it's pulled down past it.
+              GeometryReader { proxy in
+                Color.clear.preference(key: DrawerPull.self, value: proxy.frame(in: .named("drawer-list")).minY)
               }
-              ForEach(rows, id: \.id) { row in
-                DrawerRow(row: row, current: row.url == browser.activeUrl, open: open.contains(row.id)) {
-                  if row.folder {
-                    withAnimation(Motion.settle.animation) {
-                      if open.contains(row.id) { open.remove(row.id) } else { open.insert(row.id) }
-                    }
-                  } else {
-                    browser.closeDrawer()
-                    browser.open(.url(row.url), privately: false)
-                  }
-                } remove: {
-                  app.dispatch(.removeBookmark(spaceId: app.activeSpaceId, id: row.id))
-                } share: {
-                  browser.share(row.url)
+              .frame(height: 0)
+              if searching { searchField }
+              if searching, !needle.isEmpty {
+                found(needle, rows: rows)
+              } else {
+                if rows.isEmpty, let space {
+                  empty(spaceName(space, strings))
+                }
+                ForEach(rows, id: \.id) { row in
+                  drawerRow(row, rows: rows)
                 }
               }
             }
             .padding(.horizontal, Space.sm)
             .padding(.bottom, 80)
+          }
+          .coordinateSpace(name: "drawer-list")
+          .onPreferenceChange(DrawerPull.self) { top in
+            atTop = top > -2
+            if top > Self.pullToSearch { showSearch() }
           }
         }
         .padding(.top, geometry.safeAreaInsets.top + Space.sm)
@@ -912,7 +814,8 @@ struct BookmarksDrawer: View {
           .padding(.bottom, geometry.safeAreaInsets.bottom)
         }
         .offset(x: shift * 0.3)
-        .gesture(spaceSwipe)
+        // Beside the list's own scrolling, which a plain gesture here would take over.
+        .simultaneousGesture(spaceSwipe)
         .environment(\.colorScheme, .dark)
       }
       .ignoresSafeArea()
@@ -924,6 +827,138 @@ struct BookmarksDrawer: View {
     .onAppear {
       if let folder = browser.drawerFolder { open.insert(folder) }
     }
+    .baySheet(isPresented: Binding(get: { moving != nil }, set: { if !$0 { moving = nil } }), maxFraction: 0.62) {
+      if let moving {
+        DrawerMoveSheet(row: moving, from: parent(of: moving, in: rows)) { folder in
+          app.dispatch(.moveBookmark(spaceId: app.activeSpaceId, id: moving.id, parentId: folder, index: nil))
+          Haptics.done()
+          if folder != bookmarksRoot { open.insert(folder) }
+          self.moving = nil
+        }
+        .environmentObject(strings)
+        .environmentObject(app)
+      }
+    }
+  }
+
+  private func drawerRow(_ row: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> some View {
+    DrawerRow(
+      row: row, current: row.url == browser.activeUrl, open: open.contains(row.id), renaming: renaming == row.id
+    ) {
+      if row.folder {
+        withAnimation(Motion.settle.animation) {
+          if open.contains(row.id) { open.remove(row.id) } else { open.insert(row.id) }
+        }
+      } else {
+        browser.closeDrawer()
+        browser.open(.url(row.url), privately: false)
+      }
+    } rename: { name in
+      renaming = nil
+      let title = name.trimmingCharacters(in: .whitespaces)
+      guard let title = title.isEmpty ? nil : title, title != row.title else { return }
+      app.dispatch(.renameBookmark(spaceId: app.activeSpaceId, id: row.id, title: title, url: nil))
+    } menu: { action in
+      switch action {
+      case .share: browser.share(row.url)
+      case .rename: renaming = row.id
+      case .move: moving = row
+      case .remove: app.dispatch(.removeBookmark(spaceId: app.activeSpaceId, id: row.id))
+      }
+    } drag: {
+      dragging = row.id
+    } drop: {
+      drop(onto: row, rows: rows)
+    }
+  }
+
+  private func showSearch() {
+    guard !searching else { return }
+    Haptics.tick()
+    withAnimation(Motion.settle.animation) { searching = true }
+    searchFocused = true
+  }
+
+  /// The search field over the list, with a button that puts it away again.
+  private var searchField: some View {
+    HStack(spacing: Space.sm) {
+      BayIconView(.search, size: IconSize.small, color: BayColor.muted)
+      TextField(strings.t("bookmarks.search"), text: $query)
+        .focused($searchFocused)
+        .textInputAutocapitalization(.never)
+        .disableAutocorrection(true)
+        .submitLabel(.search)
+        .accessibilityIdentifier("drawer-search")
+      Button {
+        query = ""
+        searchFocused = false
+        withAnimation(Motion.settle.animation) { searching = false }
+      } label: {
+        BayIconView(.close, size: IconSize.small, color: BayColor.muted).frame(width: 32, height: 32).contentShape(Rectangle())
+      }
+      .buttonStyle(.pressFeedback)
+      .accessibilityLabel(Text(verbatim: strings.t("search.clear")))
+      .accessibilityIdentifier("drawer-search-close")
+    }
+    .padding(.leading, Space.lg)
+    .padding(.trailing, Space.xs)
+    .frame(minHeight: 44)
+    .background(BayColor.fill, in: Capsule())
+    .padding(.bottom, Space.sm)
+    .transition(.move(edge: .top).combined(with: .opacity))
+  }
+
+  /// What the search finds in the space, whichever folder it's in; a folder found opens where it sits.
+  @ViewBuilder private func found(_ needle: String, rows: [BookmarkTreeRow]) -> some View {
+    let listing = app.store.bookmarkListing(spaceId: app.activeSpaceId, folderId: bookmarksRoot, query: needle)
+    if listing.rows.isEmpty {
+      BayText(strings.t("bookmarks.noMatches", ["query": needle]), variant: .callout, tone: .muted)
+        .padding(Space.lg)
+        .accessibilityIdentifier("drawer-no-matches")
+    }
+    ForEach(listing.rows, id: \.node.id) { found in
+      switch found.node {
+      case .url(let id, _, let title, let url, _):
+        drawerRow(BookmarkTreeRow(id: id, folder: false, title: title, url: url, depth: 0, links: 0, open: false), rows: rows)
+      case .folder(let id, _, let title, _, _):
+        DrawerRow(
+          row: BookmarkTreeRow(id: id, folder: true, title: title, url: "", depth: 0, links: found.links, open: false), current: false,
+          open: false, renaming: false
+        ) {
+          query = ""
+          searchFocused = false
+          searching = false
+          open.insert(id)
+        }
+      }
+    }
+  }
+
+  /// The folder a row sits in: the nearest folder above it one step out, or the top of the list.
+  private func parent(of row: BookmarkTreeRow, in rows: [BookmarkTreeRow]) -> String {
+    guard row.depth > 0, let index = rows.firstIndex(where: { $0.id == row.id }) else { return bookmarksRoot }
+    return rows[..<index].last { $0.depth == row.depth - 1 }?.id ?? bookmarksRoot
+  }
+
+  /// A dragged row let go over `target`: into it when it's a folder, else beside it, after it when dragged down.
+  private func drop(onto target: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> Bool {
+    defer { dragging = nil }
+    guard let id = dragging, id != target.id else { return false }
+    let space = app.activeSpaceId
+    if target.folder {
+      app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: target.id, index: nil))
+      open.insert(target.id)
+    } else {
+      let folder = parent(of: target, in: rows)
+      // The folder's saved order, which the drawer shows with its folders first.
+      let order = app.store.bookmarkListing(spaceId: space, folderId: folder, query: "").rows.map(\.node.id)
+      let rest = order.filter { $0 != id }
+      guard var at = rest.firstIndex(of: target.id) else { return false }
+      if let from = order.firstIndex(of: id), let to = order.firstIndex(of: target.id), from < to { at += 1 }
+      app.dispatch(.moveBookmark(spaceId: space, id: id, parentId: folder, index: Int64(at)))
+    }
+    Haptics.tick()
+    return true
   }
 
   /// Nothing saved in this space: say so, and offer to save the page here.
@@ -939,11 +974,14 @@ struct BookmarksDrawer: View {
     .padding(Space.lg)
   }
 
-  /// Sideways across the list: the space before or after, switched to.
+  /// Sideways across the list: the space before or after, switched to. Down from the list's top: the search.
   private var spaceSwipe: some Gesture {
     DragGesture(minimumDistance: 24)
       .onChanged { value in
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+        guard abs(value.translation.width) > abs(value.translation.height) else {
+          if atTop, value.translation.height > Self.pullToSearch { showSearch() }
+          return
+        }
         shift = value.translation.width
       }
       .onEnded { value in
@@ -954,31 +992,102 @@ struct BookmarksDrawer: View {
         let next = index + (value.translation.width < 0 ? 1 : -1)
         guard app.spaces.indices.contains(next) else { return }
         open = []
+        query = ""
         browser.switchSpace(app.spaces[next].id, announce: false)
       }
   }
 }
 
+/// The top of a space's bookmarks, the folder everything else sits in.
+private let bookmarksRoot = "bookmarks"
+
+/// How far the drawer's list sits below its top: past zero while it's pulled down.
+private struct DrawerPull: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// What holding a drawer row offers.
+private enum DrawerRowAction { case share, rename, move, remove }
+
 /// One row of the drawer: a folder with its count, turning to show it's open, or a link with its site's icon. The page
-/// showing sits on a light wash. Holding a link offers sharing it; holding either, removing it.
+/// showing sits on a light wash. Holding a link offers sharing it; holding either, renaming, moving or removing it, and
+/// dragging it puts it somewhere else. While it's being renamed its name is a field.
 private struct DrawerRow: View {
   @EnvironmentObject private var strings: Strings
   let row: BookmarkTreeRow
   let current: Bool
   let open: Bool
+  let renaming: Bool
   let action: () -> Void
-  let remove: () -> Void
-  let share: () -> Void
+  var rename: (String) -> Void = { _ in }
+  /// Nil for a row that only opens (a folder the search found).
+  var menu: ((DrawerRowAction) -> Void)?
+  var drag: () -> Void = {}
+  var drop: () -> Bool = { false }
+  @State private var name = ""
+  @State private var targeted = false
+  @FocusState private var naming: Bool
 
   var body: some View {
+    let title = row.title.isEmpty ? displayUrl(url: row.url) : row.title
+    Group {
+      if renaming {
+        HStack(spacing: Space.md) {
+          icon
+          TextField(title, text: $name)
+            .focused($naming)
+            .submitLabel(.done)
+            .onSubmit { rename(name) }
+            .accessibilityLabel(Text(verbatim: strings.t("drawer.rename")))
+            .accessibilityIdentifier("drawer-rename-field")
+        }
+        .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
+        .padding(.trailing, Space.md)
+        .frame(minHeight: 46)
+        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        .onAppear {
+          name = row.title
+          DispatchQueue.main.async { naming = true }
+        }
+        // Tapping elsewhere keeps the name typed so far.
+        .onChange(of: naming) { focused in
+          if !focused { rename(name) }
+        }
+      } else if let menu {
+        button(title)
+          .contextMenu {
+            if !row.folder {
+              Button(strings.t("drawer.share")) { menu(.share) }
+            }
+            Button(strings.t("drawer.rename")) { menu(.rename) }
+            Button(strings.t("drawer.move")) { menu(.move) }
+            Button(strings.t("drawer.remove"), role: .destructive) { menu(.remove) }
+          }
+          .onDrag {
+            drag()
+            return NSItemProvider(object: row.id as NSString)
+          }
+          .onDrop(of: [.plainText], isTargeted: $targeted) { _ in drop() }
+      } else {
+        button(title)
+      }
+    }
+  }
+
+  @ViewBuilder private var icon: some View {
+    if row.folder {
+      BayIconView(.folder, size: IconSize.row, color: BayColor.foreground).frame(width: 24)
+    } else {
+      SiteIcon(url: row.url, size: 24, bare: true)
+    }
+  }
+
+  private func button(_ title: String) -> some View {
     Button(action: action) {
       HStack(spacing: Space.md) {
-        if row.folder {
-          BayIconView(.folder, size: IconSize.row, color: BayColor.foreground).frame(width: 24)
-        } else {
-          SiteIcon(url: row.url, size: 24, bare: true)
-        }
-        BayText(row.title.isEmpty ? displayUrl(url: row.url) : row.title, weight: row.folder ? .semibold : .regular).lineLimit(1)
+        icon
+        BayText(title, weight: row.folder ? .semibold : .regular).lineLimit(1)
         Spacer(minLength: 0)
         if row.folder {
           if row.links > 0 { BayText("\(row.links)", variant: .footnote, tone: .muted) }
@@ -988,18 +1097,57 @@ private struct DrawerRow: View {
       .padding(.leading, Space.md + CGFloat(row.depth) * Space.lg)
       .padding(.trailing, Space.md)
       .frame(minHeight: 46)
-      .background(current ? Color.white.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+      .background(
+        targeted ? BayColor.accent.opacity(0.3) : current ? Color.white.opacity(0.1) : .clear,
+        in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+      )
       .contentShape(Rectangle())
     }
     .buttonStyle(.pressFeedback)
-    .contextMenu {
-      if !row.folder {
-        Button(strings.t("drawer.share"), action: share)
-      }
-      Button(strings.t("drawer.remove"), role: .destructive, action: remove)
-    }
     .accessibilityLabel(Text(verbatim: row.folder ? "\(row.title), \(row.links == 1 ? strings.t("drawer.linksOne") : strings.t("drawer.links", ["count": "\(row.links)"]))" : row.title))
     .accessibilityHint(Text(verbatim: row.folder ? strings.t(open ? "drawer.closeFolder" : "drawer.openFolder", ["title": row.title]) : ""))
     .accessibilityIdentifier("drawer-row-\(row.id)")
+  }
+}
+
+/// Where a drawer row moves to: the space's folders, the one it's in ticked. A folder can't go inside itself.
+private struct DrawerMoveSheet: View {
+  @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
+  let row: BookmarkTreeRow
+  let from: String
+  let onMove: (String) -> Void
+
+  var body: some View {
+    let title = strings.t("drawer.moveTitle")
+    PanelSheet(title: title, testID: "drawer-move", words: strings.sheetWords(title), onClose: { onMove(from) }) {
+      RowGroup {
+        ForEach(Array(targets.enumerated()), id: \.element.id) { index, choice in
+          if index > 0 { RowDivider() }
+          let top = choice.id == bookmarksRoot
+          ActionRow(
+            top ? strings.t("save.topOfList") : choice.title, testID: "drawer-move-\(choice.id)", icon: top ? .bookmark : .folder,
+            selected: choice.id == from
+          ) { onMove(choice.id) }
+          .padding(.leading, CGFloat(max(0, Int(choice.depth) - 1)) * Space.lg)
+        }
+      }
+    }
+  }
+
+  /// The space's folders, less the row itself and what's inside it when it's a folder.
+  private var targets: [BookmarkFolderChoice] {
+    var inside: UInt32?
+    return app.store.bookmarkFolders(spaceId: app.activeSpaceId).filter { choice in
+      if let depth = inside {
+        if choice.depth > depth { return false }
+        inside = nil
+      }
+      if choice.id == row.id {
+        inside = choice.depth
+        return false
+      }
+      return true
+    }
   }
 }

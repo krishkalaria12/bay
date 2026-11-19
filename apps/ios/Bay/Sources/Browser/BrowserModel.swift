@@ -49,7 +49,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, save, downloads, siteSettings, link, tabs, pin, request, reader, inspect, `import`
+    case page, spaceEdit, archive, history, save, downloads, siteSettings, link, tabs, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -1075,7 +1075,7 @@ extension BrowserModel {
     if bookmarked {
       showToast(strings.t("toast.unbookmarked"))
     } else {
-      showToast(strings.t("toast.bookmarked"), actionLabel: strings.t("toast.showBookmarks")) { [weak self] in self?.panel = .bookmarks }
+      showToast(strings.t("toast.bookmarked"), actionLabel: strings.t("toast.showBookmarks")) { [weak self] in self?.openDrawer() }
     }
   }
 
