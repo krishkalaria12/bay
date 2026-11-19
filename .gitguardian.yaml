@@ -1,0 +1,6 @@
+# GitGuardian (ggshield and the PR check): the mobile core's test vectors are recorded runs of the sync and pairing
+# code with fixed, made-up keys (the entropy counts down from c8), which read as secrets but secure nothing.
+version: 2
+secret:
+  ignored_paths:
+    - "packages/mobile-core/fixtures/**"
