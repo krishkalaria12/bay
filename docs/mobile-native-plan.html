@@ -1810,11 +1810,6 @@ impl BrowserStore {
             site as its state, and a bare title also matches the row's Remove button.
           </li>
           <li>
-            Android 10: pages render black. Chromium's GPU process crashes there because <code>bay-engine.aar</code> leaves out
-            <code>org.chromium.components.viz.service.frame_sinks.ExternalBeginFrameSourceAndroid</code>, which older Android takes a path through; it needs an
-            engine build that keeps the class (an <code>android-engine-N</code> run).
-          </li>
-          <li>
             iOS 15 and 16 weren't run: Xcode 27.2 offers no simulator runtime older than iOS 27. The app compiles for the 15.0 deployment target, and the iOS 15
             paths (materials in place of glass, older toggles and sheets) were only read, not run.
           </li>
