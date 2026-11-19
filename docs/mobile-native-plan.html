@@ -1800,8 +1800,9 @@ impl BrowserStore {
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
           <li>
-            N4's done-when flows (smoke, search-and-open, tabs-roundtrip, tab-swipe-close, start-page, page-zoom, wallpaper) start with
-            <code>fresh-start</code> and use N5's panels; now that N5 has landed they can run, but they haven't been re-run on Android yet.
+            The e2e flows live in a scratch copy of <code>apps/mobile/.argent</code> (pages served at Metro's <code>/assets/.argent/pages/</code> paths on port
+            8081). N4's flows pass on Android; two steps there had to change for the native labels: an archived row's label is "Open &lt;title&gt;" with the
+            site as its state, and a bare title also matches the row's Remove button.
           </li>
           <li>
             Android 10: pages render black. Chromium's GPU process crashes there because <code>bay-engine.aar</code> leaves out

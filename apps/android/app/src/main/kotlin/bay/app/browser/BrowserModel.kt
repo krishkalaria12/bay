@@ -728,7 +728,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val login = app.logins.find(request.url) ?: return false
         val view = views[tabId] ?: return false
         signedInSilently += key
-        view.answerPageRequest(request.id, true, null, login.username, login.password)
+        // Chromium asks while it's still making the sign-in, and an answer then fails its check
+        // (`!creating_login_delegate_`): the answer goes on the next turn of the main loop, as a person's would.
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            view.answerPageRequest(request.id, true, null, login.username, login.password)
+        }
         return true
     }
 
