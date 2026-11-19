@@ -14,6 +14,7 @@ pub mod i18n;
 pub mod imports;
 pub mod input;
 pub mod js;
+pub mod logins;
 pub mod onboarding;
 pub mod settings;
 pub mod store;

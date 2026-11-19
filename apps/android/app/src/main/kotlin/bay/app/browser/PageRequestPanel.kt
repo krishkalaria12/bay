@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -60,12 +61,14 @@ private fun RequestBody(browser: BrowserModel, strings: Strings, request: PageRe
     var value by remember { mutableStateOf(request.defaultValue.orEmpty()) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var save by remember { mutableStateOf(false) }
     val submit = {
         browser.answerPageRequest(
             true,
             value.takeIf { request.kind == "prompt" },
             username.takeIf { request.kind == "auth" },
             password.takeIf { request.kind == "auth" },
+            save = request.kind == "auth" && save,
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
@@ -87,6 +90,16 @@ private fun RequestBody(browser: BrowserModel, strings: Strings, request: PageRe
         if (request.kind == "auth") {
             Field(username, { username = it }, strings.t("pageRequest.username"), "page-request-username", onDone = {})
             Field(password, { password = it }, strings.t("pageRequest.password"), "page-request-password", secret = true, onDone = submit)
+            val host = hostOf(request.url).ifEmpty { strings.t("pageRequest.thisSite") }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("page-request-save-password")
+                    .toggleable(save, role = androidx.compose.ui.semantics.Role.Switch) { save = it },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.md),
+            ) {
+                BayText(strings.t("pageRequest.savePassword", mapOf("host" to host)), Modifier.weight(1f), variant = TextVariant.SUBHEAD)
+                bay.design.BayToggle(save)
+            }
         }
         Row(Modifier.fillMaxWidth().padding(top = Space.sm), horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End)) {
             if (request.kind != "alert") {

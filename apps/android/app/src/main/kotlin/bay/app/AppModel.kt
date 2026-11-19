@@ -48,6 +48,9 @@ class AppModel(context: Context, barTitle: String) {
     val http = UrlConnectionHttp()
     val sync = PhoneSync(store, http, KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
 
+    /** Sign-ins saved from the HTTP sign-in sheet, in the keystore. */
+    val logins = bay.core.SavedLogins(KeystoreSecrets(context))
+
     /** The crashes kept for Settings › Report a problem: the one the application records into. */
     val crashLog: CrashLog = (context.applicationContext as BayApplication).crashLog
 

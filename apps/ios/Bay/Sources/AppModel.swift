@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
   /// What the content blocker is doing, for Settings.
   @Published private(set) var blockerStatus: ContentBlocker.Status = .off
   private var blocker: ContentBlocker?
+  /// Sign-ins saved from the HTTP sign-in sheet, in the keychain.
+  let logins: SavedLogins
   /// Whether the engine keeps the private session for tabs whose views are unloaded.
   private var privateSession = false
   /// The store's revision: sheets that read the store directly (history, the archive, bookmarks) redraw when it moves.
@@ -57,6 +59,7 @@ final class AppModel: ObservableObject {
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
     crashLog = CrashLog(documentsDir: documents)
     crashWatch = CrashWatch(log: crashLog)
+    logins = SavedLogins(secrets: KeychainSecrets())
     store = BrowserStore.open(documentsDir: documents, newTabId: UUID().uuidString, now: Self.now())
     sync = PhoneSync(
       store: store, http: http, secrets: KeychainSecrets(), documentsDir: documents,

@@ -13,6 +13,7 @@ struct PageRequestPanel: View {
   @State private var value = ""
   @State private var username = ""
   @State private var password = ""
+  @State private var save = false
 
   var body: some View {
     let host = hostOf(url: request.url)
@@ -33,6 +34,12 @@ struct PageRequestPanel: View {
             .frame(minHeight: 44)
             .background(BayColor.fill, in: Capsule())
             .accessibilityIdentifier("page-request-password")
+          Toggle(isOn: $save) {
+            BayText(strings.t("pageRequest.savePassword", ["host": host.isEmpty ? strings.t("pageRequest.thisSite") : host]), variant: .subhead)
+          }
+          .tint(BayColor.accent)
+          .frame(minHeight: 44)
+          .accessibilityIdentifier("page-request-save-password")
         }
         HStack(spacing: Space.sm) {
           Spacer(minLength: 0)
@@ -107,6 +114,6 @@ struct PageRequestPanel: View {
   private func submit() {
     browser.answerPageRequest(
       accepted: true, value: request.kind == .prompt ? value : nil, username: request.kind == .auth ? username : nil,
-      password: request.kind == .auth ? password : nil)
+      password: request.kind == .auth ? password : nil, save: request.kind == .auth && save)
   }
 }

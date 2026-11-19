@@ -1845,10 +1845,6 @@ impl BrowserStore {
             shortened address. Go waits a moment for pending edits; a slower run can still lose the tail. A person's Go comes from the keyboard, in order.
           </li>
           <li>
-            Saved logins aren't ported: the sign-in sheet has no "Save password" switch, a site with a saved login is still asked, and Settings' Passwords page
-            has nothing to list. iOS offers its own password saving on the sheet's fields meanwhile.
-          </li>
-          <li>
             Android: the link menu has no live preview of the linked page. A second page view drawing over the tab leaves the tab blank once it goes, even after
             the view is disposed (which hands the compositor back), the tab is shown again or re-attached; the engine's hand-back needs fixing before the
             preview can come back. iOS has the preview.

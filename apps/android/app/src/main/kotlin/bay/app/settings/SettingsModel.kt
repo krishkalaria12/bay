@@ -45,6 +45,9 @@ val SettingsPage.id: String
  */
 class SettingsModel(private val appContext: Context, val app: AppModel, val browser: BrowserModel, val strings: Strings) {
     var visible by mutableStateOf(false)
+
+    /** The saved sign-ins Settings › Passwords lists, read when Settings opens and after one is forgotten. */
+    private var logins by mutableStateOf<List<bay.core.LoginSummary>>(emptyList())
         private set
 
     /** The pages over the index, the one in front last. */
@@ -71,6 +74,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     fun open() {
+        logins = app.logins.summaries()
         stack.clear()
         clearStage = ClearStage.IDLE
         visible = true
@@ -111,7 +115,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 LanguageState(strings.saved, strings.locale, strings.device),
                 bay.app.welcome.DefaultBrowserStatus.current(appContext),
                 app.store.tabs().size.toUInt(),
-                null,
+                logins,
                 clearStage,
                 app.syncView,
                 AppModel.now(),
@@ -166,7 +170,10 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
             // The system's own dialog where it can still ask, else Default apps settings.
             SettingsAction.MakeDefault -> makeDefault?.invoke() ?: appContext.startActivity(bay.app.welcome.DefaultBrowserStatus.settings())
             SettingsAction.ExportTabs -> exportTabs()
-            is SettingsAction.ForgetLogin -> {}
+            is SettingsAction.ForgetLogin -> {
+                app.logins.forget(action.login.origin, action.login.username)
+                logins = app.logins.summaries()
+            }
             SettingsAction.AskToClear -> clearStage = ClearStage.CONFIRMING
             SettingsAction.KeepData -> clearStage = ClearStage.IDLE
             SettingsAction.ConfirmClear -> clear()

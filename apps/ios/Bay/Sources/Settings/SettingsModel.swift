@@ -11,6 +11,8 @@ final class SettingsModel: ObservableObject {
   let browser: BrowserModel
   let strings: Strings
   @Published var visible = false
+  /// The saved sign-ins Settings › Passwords lists, read when Settings opens and after one is forgotten.
+  @Published private(set) var logins: [LoginSummary] = []
   /// The pages over the index, the one in front last.
   @Published var stack: [SettingsPage] = []
   @Published private(set) var clearStage: ClearStage = .idle
@@ -36,6 +38,7 @@ final class SettingsModel: ObservableObject {
   }
 
   func open() {
+    logins = app.logins.summaries()
     stack = []
     clearStage = .idle
     visible = true
@@ -67,7 +70,7 @@ final class SettingsModel: ObservableObject {
       language: LanguageState(saved: strings.saved, current: strings.locale, device: strings.device),
       defaultBrowser: DefaultBrowserStatus.current,
       openTabCount: UInt32(app.store.tabs().count),
-      logins: nil,
+      logins: logins,
       clearStage: clearStage,
       sync: app.syncView,
       now: AppModel.now())
@@ -126,7 +129,9 @@ final class SettingsModel: ObservableObject {
     case .setLanguage(let locale): strings.choose(locale)
     case .makeDefault: DefaultBrowserStatus.openSetting()
     case .exportTabs: exportTabs()
-    case .forgetLogin: break
+    case .forgetLogin(let login):
+      app.logins.forget(origin: login.origin, username: login.username)
+      logins = app.logins.summaries()
     case .askToClear: clearStage = .confirming
     case .keepData: clearStage = .idle
     case .confirmClear: clear()

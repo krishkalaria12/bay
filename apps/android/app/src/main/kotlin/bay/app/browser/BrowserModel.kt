@@ -697,12 +697,42 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** Answers the page question on show, then shows the next one waiting, if any. */
-    fun answerPageRequest(accepted: Boolean, value: String? = null, username: String? = null, password: String? = null) {
+    /**
+     * Answers the page question on show, then shows the next one waiting, if any. `save` files the sign-in typed into the
+     * server's HTTP sign-in, never from a private tab.
+     */
+    fun answerPageRequest(accepted: Boolean, value: String? = null, username: String? = null, password: String? = null, save: Boolean = false) {
         if (pageRequests.isEmpty()) return
         val (tabId, request) = pageRequests.removeAt(0)
         views[tabId]?.answerPageRequest(request.id, accepted, value, username, password)
+        if (save && accepted && request.kind == "auth" && username != null && password != null && !isPrivate(tabId)) {
+            app.logins.save(request.url, username, password, AppModel.now())
+        }
         panel = if (pageRequests.isNotEmpty()) Panel.REQUEST else if (panel == Panel.REQUEST) null else panel
     }
+
+    /**
+     * Tabs and sites answered from a saved login whose server hasn't accepted it yet: asking again right after means the
+     * saved password is wrong, so that time the sheet asks.
+     */
+    private val signedInSilently = mutableSetOf<String>()
+
+    /**
+     * Answers a sign-in with the login saved for its site; false when there's none, it just failed, or the tab is private
+     * (its sign-ins stay in the private session).
+     */
+    private fun signInSilently(tabId: String, request: PageRequest): Boolean {
+        val key = "$tabId ${bay.core.originOf(request.url) ?: request.url}"
+        if (signedInSilently.remove(key)) return false
+        if (isPrivate(tabId)) return false
+        val login = app.logins.find(request.url) ?: return false
+        val view = views[tabId] ?: return false
+        signedInSilently += key
+        view.answerPageRequest(request.id, true, null, login.username, login.password)
+        return true
+    }
+
+    private fun isPrivate(tabId: String): Boolean = app.tabs.firstOrNull { it.id == tabId }?.private == true
 
     /** A pin's page: its tab in the space when one is open there, else a new one. */
     fun openPin(site: PinnedSite) {
@@ -822,6 +852,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 panel = Panel.LINK
             }
             is EngineEvent.Request -> {
+                if (event.request.kind == "auth" && signInSilently(tabId, event.request)) return
                 pageRequests += tabId to event.request
                 panel = Panel.REQUEST
             }

@@ -670,12 +670,39 @@ final class BrowserModel: ObservableObject {
     }
   }
 
-  /// Answers the page question on show, then shows the next one waiting, if any.
-  func answerPageRequest(accepted: Bool, value: String? = nil, username: String? = nil, password: String? = nil) {
+  /// Answers the page question on show, then shows the next one waiting, if any. `save` files the sign-in typed into
+  /// the server's HTTP sign-in, never from a private tab.
+  func answerPageRequest(accepted: Bool, value: String? = nil, username: String? = nil, password: String? = nil, save: Bool = false) {
     guard !pageRequests.isEmpty else { return }
     let current = pageRequests.removeFirst()
     views[current.tabId]?.answerPageRequest(id: current.request.id, accepted: accepted, value: value, username: username, password: password)
+    if save, accepted, current.request.kind == .auth, let username, let password, !isPrivate(current.tabId) {
+      _ = app.logins.save(url: current.request.url, username: username, password: password, now: AppModel.now())
+    }
     panel = pageRequests.isEmpty ? (panel == .request ? nil : panel) : .request
+  }
+
+  /// Tabs and sites answered from a saved login whose server hasn't accepted it yet: asking again right after means the
+  /// saved password is wrong, so that time the sheet asks.
+  private var signedInSilently: Set<String> = []
+
+  /// Answers a sign-in with the login saved for its site; false when there's none, it just failed, or the tab is private
+  /// (its sign-ins stay in the private session).
+  private func signInSilently(_ tabId: String, _ request: PageRequest) -> Bool {
+    let key = "\(tabId) \(loginOrigin(request.url))"
+    if signedInSilently.remove(key) != nil { return false }
+    guard !isPrivate(tabId), let login = app.logins.find(url: request.url), let view = views[tabId] else { return false }
+    signedInSilently.insert(key)
+    view.answerPageRequest(id: request.id, accepted: true, value: nil, username: login.username, password: login.password)
+    return true
+  }
+
+  private func loginOrigin(_ url: String) -> String {
+    originOf(value: url) ?? url
+  }
+
+  private func isPrivate(_ tabId: String) -> Bool {
+    app.tabs.first { $0.id == tabId }?.private ?? false
   }
 
   /// Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it.
@@ -812,6 +839,7 @@ final class BrowserModel: ObservableObject {
     case .scroll(let offsetY, let deltaY):
       scrolled(tabId, offsetY: offsetY, deltaY: deltaY)
     case .pageRequest(let request):
+      if request.kind == .auth, signInSilently(tabId, request) { break }
       pageRequests.append((tabId, request))
       panel = .request
     default:
