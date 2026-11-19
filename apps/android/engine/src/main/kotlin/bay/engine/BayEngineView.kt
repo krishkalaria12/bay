@@ -151,6 +151,14 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       tab?.setDesktopMode(value)
     }
 
+  /** Blink's own forced dark mode for this tab: pages without a dark look of their own are drawn dark. */
+  var forceDark = false
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.setForceDark(value)
+    }
+
   /** The tab's saved state (B6): its tab id, or null for private tabs. */
   var stateKey: String? = null
     set(value) {
@@ -188,6 +196,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     tab = created
     created.view.importantForAccessibility = accessibility()
     created.setDesktopMode(desktopMode)
+    created.setForceDark(forceDark)
     created.setVisible(!isSuspended)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     if (isActive) {

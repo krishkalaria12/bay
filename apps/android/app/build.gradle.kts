@@ -27,6 +27,8 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDir(rootDir.resolve("engine/build/generated/source/bayEngineR"))
+            // The fonts pages can show in (packages/mobile-core/design/fonts), the same files the iPhone app bundles.
+            assets.srcDir(rootDir.resolve("../../packages/mobile-core/design/fonts"))
         }
     }
 

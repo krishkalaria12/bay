@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -35,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import bay.app.Strings
 import bay.core.SiteBlockGroup
 import bay.core.SwipeMode
+import bay.core.siteFontLabel
+import bay.core.siteFonts
 import bay.design.ActionRow
 import bay.design.BayIcon
 import bay.design.BayIconView
@@ -43,7 +43,6 @@ import bay.design.IconSize
 import bay.design.PanelSheet
 import bay.design.RowDivider
 import bay.design.RowGroup
-import bay.design.RowTint
 import bay.design.Space
 import bay.design.TextTone
 import bay.design.TextVariant
@@ -63,33 +62,33 @@ private val ROW_HEIGHT = bay.design.Row.height
  */
 @Composable
 fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean, onSettings: () -> Unit) {
-    // Swipe's choices sit one step away, so the sheet fits without scrolling.
-    var swipePage by remember(visible) { mutableStateOf(false) }
+    // The font list sits one step away, so the sheet stays short.
+    var fontPage by remember(visible) { mutableStateOf(false) }
     val app = browser.app
     val url = browser.activeUrl
     val setting = browser.siteSetting
     val close = { browser.panel = null }
-    if (swipePage) {
-        val title = strings.t("settings.swipe")
-        val global = app.preferences.swipeToNavigate
-        PanelSheet(visible, title, "site-settings", strings.sheetWords(title), close, onBack = { swipePage = false }) {
+    val global = app.preferences.siteFont
+    if (fontPage) {
+        val title = strings.t("site.font")
+        PanelSheet(visible, title, "site-settings", strings.sheetWords(title), close, onBack = { fontPage = false }) {
             RowGroup {
                 ActionRow(
-                    strings.t("site.swipe.follow", mapOf("mode" to strings.t("settings.swipe.${global.name.lowercase()}"))),
-                    "site-swipe-follow",
-                    selected = setting.swipe == null,
-                ) { browser.changeSiteSetting { it.copy(swipe = null) } }
-                listOf(SwipeMode.ANYWHERE, SwipeMode.EDGES, SwipeMode.OFF).forEach { mode ->
-                    val name = mode.name.lowercase()
+                    strings.t("site.font.sameAs", mapOf("font" to strings.t(siteFontLabel(global)))),
+                    "site-font-same",
+                    selected = setting.font == null,
+                ) { browser.setSiteFont(null) }
+                siteFonts().forEach { font ->
+                    val name = font.name.lowercase()
                     RowDivider(afterIcon = false)
-                    ActionRow(strings.t("settings.swipe.$name"), "site-swipe-$name", selected = setting.swipe == mode) {
-                        browser.changeSiteSetting { it.copy(swipe = mode) }
+                    ActionRow(strings.t(siteFontLabel(font)), "site-font-$name", selected = setting.font == font) {
+                        browser.setSiteFont(font)
                     }
                 }
             }
             BayText(
-                strings.t("site.swipe.note"),
-                Modifier.padding(horizontal = Space.lg).padding(top = Space.sm).testTag("site-swipe-note"),
+                strings.t("settings.siteFont.note"),
+                Modifier.padding(horizontal = Space.lg).padding(top = Space.sm).testTag("site-font-note"),
                 variant = TextVariant.FOOTNOTE,
                 tone = TextTone.MUTED,
             )
@@ -98,10 +97,12 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
     }
     val title = strings.t("site.title")
     val blocking = browser.blocking
-    val changed = setting.textSize != null || setting.reader || setting.desktopMode || setting.swipe != null
+    val changed = setting.textSize != null || setting.reader || setting.desktopMode || setting.swipe != null ||
+        setting.font != null || setting.fullscreen || setting.forceDark || !setting.miniPlayer
     val downloaded = app.store.downloadsFrom(url)
+    val swipe = setting.swipe ?: app.preferences.swipeToNavigate
     PanelSheet(
-        visible, title, "site-settings", strings.sheetWords(title), close, maxFraction = 0.85f,
+        visible, title, "site-settings", strings.sheetWords(title), close,
         header = {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (url.isNotEmpty()) SiteIcon(app, url, size = 30.dp)
@@ -116,12 +117,14 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
             RowGroup {
+                ActionRow(
+                    strings.t("site.font"), "site-font", icon = BayIcon.FONT,
+                    value = setting.font?.let { strings.t(siteFontLabel(it)) } ?: strings.t("site.font.same"),
+                    chevron = true,
+                ) { fontPage = true }
+                RowDivider()
                 SiteZoomRow(strings, setting.textSize?.toInt(), app.preferences.textSize.toInt()) { zoom ->
                     browser.changeSiteSetting { it.copy(textSize = zoom?.toDouble()) }
-                }
-                RowDivider()
-                ActionRow(strings.t("site.desktop"), "site-desktop", icon = BayIcon.DESKTOP, tint = RowTint.language, toggle = setting.desktopMode) {
-                    browser.setDesktop(!setting.desktopMode)
                 }
             }
             // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
@@ -144,20 +147,37 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
                 }
             }
             RowGroup(strings.t("site.bayHere")) {
-                ActionRow(strings.t("site.reader"), "site-reader", icon = BayIcon.READER, tint = RowTint.bookmarks, toggle = setting.reader) {
-                    browser.changeSiteSetting { it.copy(reader = !setting.reader) }
+                ActionRow(strings.t("site.fullscreen"), "site-fullscreen", icon = BayIcon.FULLSCREEN, toggle = setting.fullscreen) {
+                    browser.changeSiteSetting { it.copy(fullscreen = !setting.fullscreen) }
                 }
                 RowDivider()
-                val mode = (setting.swipe ?: app.preferences.swipeToNavigate).name.lowercase()
+                ActionRow(strings.t("site.desktop"), "site-desktop", icon = BayIcon.DESKTOP, toggle = setting.desktopMode) {
+                    browser.setDesktop(!setting.desktopMode)
+                }
+                RowDivider()
+                ActionRow(strings.t("site.forceDark"), "site-force-dark", icon = BayIcon.DARK, toggle = setting.forceDark) {
+                    browser.changeSiteSetting { it.copy(forceDark = !setting.forceDark) }
+                }
+                RowDivider()
+                // Settings keeps the whole choice, Off included; here it's anywhere or from the edges.
                 ActionRow(
-                    strings.t("settings.swipe"), "site-swipe", icon = BayIcon.BACK, tint = RowTint.browsing,
-                    value = strings.t("settings.swipe.$mode"), chevron = true,
-                ) { swipePage = true }
+                    strings.t("site.swipeAnywhere"), "site-swipe", icon = BayIcon.SWIPE, toggle = swipe == SwipeMode.ANYWHERE,
+                ) {
+                    browser.changeSiteSetting { it.copy(swipe = if (swipe == SwipeMode.ANYWHERE) SwipeMode.EDGES else SwipeMode.ANYWHERE) }
+                }
+                RowDivider()
+                ActionRow(strings.t("site.miniPlayer"), "site-mini-player", icon = BayIcon.PIP, toggle = setting.miniPlayer) {
+                    browser.changeSiteSetting { it.copy(miniPlayer = !setting.miniPlayer) }
+                }
+                RowDivider()
+                ActionRow(strings.t("site.reader"), "site-reader", icon = BayIcon.READER, toggle = setting.reader) {
+                    browser.changeSiteSetting { it.copy(reader = !setting.reader) }
+                }
             }
             if (downloaded > 0u) {
                 RowGroup {
                     ActionRow(
-                        strings.t("site.downloaded"), "site-downloaded", icon = BayIcon.DOWNLOAD, tint = RowTint.downloads,
+                        strings.t("site.downloaded"), "site-downloaded", icon = BayIcon.DOWNLOAD,
                         value = "$downloaded", chevron = true,
                     ) { browser.panel = Panel.DOWNLOADS }
                 }
@@ -165,13 +185,18 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
             if (url.isNotEmpty()) RowGroup { Connection(strings, url.startsWith("https://")) }
             if (changed) {
                 RowGroup {
-                    ActionRow(strings.t("site.reset"), "site-reset", icon = BayIcon.DELETE, tint = RowTint.delete, destructive = true) {
-                        browser.changeSiteSetting { it.copy(textSize = null, reader = false, desktopMode = false, swipe = null) }
+                    ActionRow(strings.t("site.reset"), "site-reset", icon = BayIcon.DELETE, destructive = true) {
+                        browser.changeSiteSetting {
+                            it.copy(
+                                textSize = null, reader = false, desktopMode = false, swipe = null,
+                                font = null, fullscreen = false, forceDark = false, miniPlayer = true,
+                            )
+                        }
                     }
                 }
             }
             RowGroup {
-                ActionRow(strings.t("site.settings"), "site-bay-settings", icon = BayIcon.SETTINGS, tint = RowTint.browsing, chevron = true) {
+                ActionRow(strings.t("site.settings"), "site-bay-settings", icon = BayIcon.SETTINGS, chevron = true) {
                     browser.panel = null
                     onSettings()
                 }
@@ -189,7 +214,7 @@ private fun SiteZoomRow(strings: Strings, zoom: Int?, global: Int, onChange: (In
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TintedIcon(BayIcon.TEXT_SIZE, RowTint.display)
+        BayIconView(BayIcon.TEXT_SIZE, size = IconSize.control)
         BayText(strings.t("site.zoom"), maxLines = 1)
         Spacer(Modifier.weight(1f))
         Row(Modifier.background(Theme.colors.fill, CircleShape), verticalAlignment = Alignment.CenterVertically) {
@@ -226,13 +251,6 @@ private fun ZoomStep(icon: BayIcon, testID: String, label: String, enabled: Bool
     ) { BayIconView(icon, size = IconSize.small) }
 }
 
-@Composable
-private fun TintedIcon(icon: BayIcon, tint: Color) {
-    Box(Modifier.size(29.dp).background(tint, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-        BayIconView(icon, size = IconSize.small, color = Color.White)
-    }
-}
-
 /** Whether pages from here travel encrypted: said, not tapped. */
 @Composable
 private fun Connection(strings: Strings, secure: Boolean) {
@@ -247,7 +265,7 @@ private fun Connection(strings: Strings, secure: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TintedIcon(BayIcon.LOCK, if (secure) RowTint.blocking else RowTint.delete)
+        BayIconView(BayIcon.LOCK, size = IconSize.control, color = if (secure) Theme.colors.foreground else Theme.colors.danger)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             BayText(label, tone = if (secure) TextTone.DEFAULT else TextTone.DANGER)
             BayText(detail, variant = TextVariant.SUBHEAD, tone = TextTone.MUTED)

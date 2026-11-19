@@ -1,5 +1,9 @@
 package bay.app.browser
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.animateFloatAsState
@@ -63,6 +67,9 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val app = browser.app
     LaunchedEffect(app.activeTabId, app.tabs.map { it.url }) { browser.refreshMounted() }
     LaunchedEffect(app.preferences) { browser.preferencesChanged() }
+    // A site with the mini player off pauses once its tab is left.
+    LaunchedEffect(app.activeTabId, browser.overlay, browser.hasPage) { browser.pauseLeftMedia() }
+    FullscreenWindow(browser.fullscreen)
     // While a sheet or Settings is open, the browser behind it steps out of TalkBack's way, as iOS does under its sheets.
     val behind = browser.panel != null || browser.covered
     // The picker's card stays above the sheet it opened (Inspect's details), so it's reachable there.
@@ -72,7 +79,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
         val bottom: @Composable BoxScope.() -> Unit = {
             // Scrolled away while the page scrolls down; the toast and the player go with it.
-            val away by animateFloatAsState(if (browser.barHidden && browser.overlay == Overlay.NONE) 1f else 0f, tween(200), label = "bar")
+            val away by animateFloatAsState(if (browser.barAway) 1f else 0f, tween(200), label = "bar")
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs)
                     .graphicsLayer { translationY = away * 140.dp.toPx() },
@@ -114,15 +121,24 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             // The engine has no inset for what covers a page, so the page ends above the floating bar (what a site pins
             // to its bottom stays clear of it), over the page's own colour. Nothing is covered while the bar is away.
             val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            val covered = if (browser.barHidden && browser.overlay == Overlay.NONE) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
+            val covered = if (browser.barAway) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
             if (shown) {
                 // The page's own bottom colour, so the band behind the bar reads as the page. Until a page reports one, the
                 // engine's blank page is white.
-                val rgb = browser.pageBottomColors[app.activeTabId]
+                val rgb = browser.shownColor(browser.pageBottomColors[app.activeTabId])
                 val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
                 Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
             }
-            PagesHost(browser, shown && !behind, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered), visible = shown)
+            // A fullscreen site takes the status bar's place too.
+            val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
+            PagesHost(browser, shown && !behind, Modifier.fillMaxSize().then(top).padding(bottom = covered), visible = shown)
+            // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
+            if (browser.fullscreen) {
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(28.dp).testTag("fullscreen-edge")
+                        .pointerInput(Unit) { detectTapGestures { browser.peekBar() } },
+                )
+            }
             // Under the search sheet the page stays put, frosted: the engine draws on a SurfaceView, which no blur in the
             // app reaches, so its picture is drawn over it, blurred (Android 12 and later; dimmed only before that).
             if (browser.overlay == Overlay.SEARCH && !browser.searchInNewTab) {
@@ -145,7 +161,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 PageError(failure.message, strings, browser::retry, Modifier.statusBarsPadding())
             }
             // The strip behind the status bar, in the colour at the top of the page.
-            val rgb = browser.pageColors[app.activeTabId]
+            val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
             val strip = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(strip).clearAndSetSemantics {})
         } else if (browser.overlay == Overlay.NONE) {
@@ -161,7 +177,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         } else {
             val active = browser.activeTab
             // Search opened over a dark page is dark too, so the sheet doesn't glare over it.
-            val pageRgb = if (browser.searchInNewTab) null else browser.pageColors[app.activeTabId]
+            val pageRgb = if (browser.searchInNewTab) null else browser.shownColor(browser.pageColors[app.activeTabId])
             val overDark = pageRgb != null && pageRgb.size >= 3 &&
                 androidx.compose.ui.graphics.Color(pageRgb[0].toFloat() / 255, pageRgb[1].toFloat() / 255, pageRgb[2].toFloat() / 255).luminance() <= 0.4f
             bay.design.BayTheme(dark = overDark || androidx.compose.foundation.isSystemInDarkTheme()) {
@@ -218,5 +234,22 @@ private fun StartScreen(browser: BrowserModel, strings: Strings) {
             BayText(strings.t("start.tapToSearch"), variant = TextVariant.SUBHEAD, weight = FontWeight.Medium, color = Theme.colors.overWallpaper)
             BayIconView(BayIcon.DOWN, size = IconSize.small, color = Theme.colors.muted)
         }
+    }
+}
+
+/** Hides the status and navigation bars while a site set to Always fullscreen shows; a swipe from the edge brings them. */
+@Composable
+private fun FullscreenWindow(on: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(on) {
+        val window = generateSequence(view.context) { (it as? android.content.ContextWrapper)?.baseContext }
+            .filterIsInstance<android.app.Activity>().firstOrNull()?.window
+        val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        if (on) {
+            controller?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(bars)
+        }
+        onDispose { if (on) controller?.show(bars) }
     }
 }

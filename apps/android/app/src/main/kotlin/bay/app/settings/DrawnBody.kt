@@ -66,7 +66,7 @@ import bay.design.style
 import kotlinx.coroutines.launch
 
 /** An update that changes only the page zoom. */
-private fun textSizeUpdate(value: Double) = PreferencesUpdate(null, value, null, null, null, null, null, null, null, null, null)
+private fun textSizeUpdate(value: Double) = PreferencesUpdate(null, value, null, null, null, null, null, null, null, null, null, null)
 
 private const val TEXT_MIN = 80
 private const val TEXT_MAX = 200

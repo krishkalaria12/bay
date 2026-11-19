@@ -123,7 +123,7 @@ class MainActivity : ComponentActivity(), EngineHost {
                                     onDispose { browser.covered = settings.visible }
                                 }
                                 FirstRunScreen(model, strings, isSystemInDarkTheme()) { openField ->
-                                    model.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, true, null, null, null)))
+                                    model.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, true, null, null, null, null)))
                                     // Skipped early: the plate hands over to the real field.
                                     if (openField) browser.search(inNewTab = false)
                                     openIncoming(welcomed = true)

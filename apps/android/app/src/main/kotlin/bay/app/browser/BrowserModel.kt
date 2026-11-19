@@ -9,6 +9,7 @@ import android.os.Build
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
+import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -41,6 +42,7 @@ import bay.core.ReaderSettings
 import bay.core.ReaderSettingsInput
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
+import bay.core.SiteFont
 import bay.core.SiteSetting
 import bay.core.SiteSettingInput
 import bay.core.SpaceColor
@@ -61,6 +63,7 @@ import bay.core.parsePickedMessage
 import bay.core.readerVariables
 import bay.core.scriptsFor
 import bay.core.searchEngine
+import bay.core.siteFontFace
 import bay.core.siteHost
 import bay.engine.BayEngineView
 import bay.engine.Engine
@@ -77,6 +80,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -197,6 +201,29 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var barHidden by mutableStateOf(false)
         private set
 
+    /** The bar brought back for a moment on a site set to Always fullscreen, by a tap on the bottom edge. */
+    var peeking by mutableStateOf(false)
+        private set
+    private var peekJob: Job? = null
+
+    /** The page showing is on a site set to Always fullscreen, with nothing over it: no bar, no status bar. */
+    val fullscreen: Boolean
+        get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !peeking &&
+            app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
+
+    /** The bar is out of the way: scrolled off, or the site is fullscreen. */
+    val barAway: Boolean get() = overlay == Overlay.NONE && (barHidden || fullscreen)
+
+    fun peekBar() {
+        peeking = true
+        barHidden = false
+        peekJob?.cancel()
+        peekJob = scope.launch {
+            delay(4_000)
+            peeking = false
+        }
+    }
+
     /** Media playing (or paused) in each tab, as its page reports it. */
     val media = mutableStateMapOf<String, TabMedia>()
 
@@ -232,6 +259,17 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** The colour along each tab's page's bottom edge, for what sits behind the bar. */
     val pageBottomColors = mutableStateMapOf<String, List<Double>>()
+
+    /**
+     * A page colour as the page shows it: on a site with Force dark, Blink draws a light page dark, which the page's own
+     * styles (what the colour is read from) don't say.
+     */
+    fun shownColor(rgb: List<Double>?): List<Double>? {
+        if (app.preferences.siteSettings[siteHost(activeUrl)]?.forceDark != true) return rgb
+        if (rgb == null || rgb.size < 3) return listOf(18.0, 18.0, 18.0)
+        val light = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255
+        return if (light > 0.5) rgb.map { 255 - it } else rgb
+    }
 
     /** Find on page, while it is open over the page showing. */
     var find by mutableStateOf<FindState?>(null)
@@ -517,8 +555,22 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     val player: Pair<BrowserTab, TabMedia>?
         get() {
             val onScreen = if (overlay == Overlay.NONE && hasPage) app.activeTabId else null
-            return latestMedia { it.id != onScreen && !(locked && it.private) }
+            return latestMedia { it.id != onScreen && !(locked && it.private) && keepsPlayer(it.url) }
         }
+
+    /** Media from this site goes on in the mini player once its tab is left (on unless the site turned it off). */
+    private fun keepsPlayer(url: String) = app.preferences.siteSettings[siteHost(url)]?.miniPlayer != false
+
+    /** Media left playing in a tab that's no longer showing, from a site with the mini player off, pauses. */
+    fun pauseLeftMedia() {
+        val onScreen = if (overlay == Overlay.NONE && hasPage) app.activeTabId else null
+        val tabs = app.allTabs
+        for ((id, state) in media) {
+            if (id == onScreen || !state.report.playing) continue
+            val tab = tabs.firstOrNull { it.id == id } ?: continue
+            if (!keepsPlayer(tab.url)) stopMedia(id)
+        }
+    }
 
     private fun latestMedia(include: (BrowserTab) -> Boolean): Pair<BrowserTab, TabMedia>? {
         val tabs = app.allTabs
@@ -1264,11 +1316,18 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun setDesktop(on: Boolean) = changeSiteSetting { it.copy(desktopMode = on) }
 
+    /** The font this site shows in, or none for the one set for all websites. */
+    fun setSiteFont(font: SiteFont?) = changeSiteSetting { it.copy(font = font) }
+
     fun changeSiteSetting(change: (SiteSettingInput) -> SiteSettingInput) {
         val host = siteHost(activeUrl)
         if (host.isEmpty()) return
         val setting = siteSetting
-        val input = SiteSettingInput(setting.textSize?.toDouble(), setting.reader, setting.desktopMode, setting.blockOff, setting.swipe)
+        val input = SiteSettingInput(
+            textSize = setting.textSize?.toDouble(), reader = setting.reader, desktopMode = setting.desktopMode,
+            blockOff = setting.blockOff, swipe = setting.swipe, font = setting.font, fullscreen = setting.fullscreen,
+            forceDark = setting.forceDark, miniPlayer = setting.miniPlayer,
+        )
         app.dispatch(Action.SiteSettings(host, change(input)))
         preferencesChanged()
     }
@@ -1288,6 +1347,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         val preferences = app.preferences
         val setting = if (url.isEmpty()) null else app.store.siteSetting(url)
         view.desktopMode = setting?.desktopMode == true
+        view.forceDark = setting?.forceDark == true
         view.swipeMode = (setting?.swipe ?: preferences.swipeToNavigate).name.lowercase()
         view.pullToRefreshEnabled = preferences.pullToRefresh
         view.appLinks = preferences.appLinks.name.lowercase()
@@ -1302,6 +1362,31 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         scope.launch {
             val result = runCatching { view.runScript(PageScript.PAGE_TWEAKS, mapOf("textSize" to zoom, "skipAmp" to skipAmp)) }.getOrNull()
             if (result == "\"amp\"") ampLeft.getOrPut(tabId) { HashSet() } += url
+        }
+        applyFont(tabId, view, url)
+    }
+
+    /** Each bundled font file as base64, read from the APK's assets the first time a page needs it. */
+    private val fontFiles = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Tabs given one of Bay's fonts on their current page, so a change back to the site's own takes it off again. */
+    private val fontedTabs = HashSet<String>()
+
+    /** The site's font (else the one for all websites) on the page a tab shows; nothing to do for the site's own. */
+    private fun applyFont(tabId: String, view: BayEngineView, url: String) {
+        val face = siteFontFace(app.store.siteFont(url))
+        if (face.family.isEmpty() && tabId !in fontedTabs) return
+        if (face.family.isEmpty()) fontedTabs -= tabId else fontedTabs += tabId
+        scope.launch {
+            val faces = withContext(Dispatchers.IO) {
+                face.files.mapNotNull { file ->
+                    val data = fontFiles[file.file] ?: runCatching {
+                        Base64.encodeToString(context.assets.open(file.file).use { it.readBytes() }, Base64.NO_WRAP)
+                    }.getOrNull()?.also { fontFiles[file.file] = it }
+                    data?.let { mapOf("data" to it, "italic" to file.italic, "weight" to file.weight) }
+                }
+            }
+            runCatching { view.runScript(PageScript.PAGE_FONT, mapOf("family" to face.family, "faces" to faces)) }
         }
     }
 

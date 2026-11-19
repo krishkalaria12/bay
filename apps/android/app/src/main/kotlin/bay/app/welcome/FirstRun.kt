@@ -651,7 +651,7 @@ private fun SettingRow(parts: Run, app: AppModel) {
                 .pressFeedback {
                     Haptics.tick(view)
                     if (keyboard) {
-                        app.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, null, !on, null, null)))
+                        app.dispatch(Action.Preferences(PreferencesUpdate(null, null, null, null, null, null, null, null, !on, null, null, null)))
                     } else if (on) {
                         app.dispatch(Action.LockPrivateTabs(false))
                     } else {
