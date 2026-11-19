@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import bay.app.R
+import bay.app.browser.Toast
 import bay.core.RowKind
 import bay.core.SettingsPageView
 import bay.core.SettingsRow
@@ -116,6 +117,16 @@ fun SettingsScreen(settings: SettingsModel) {
                 if (!back) BayText(strings.t("settings.title"), Modifier.semantics { heading() }, variant = TextVariant.HEADLINE)
             }
             Box(Modifier.size(36.dp))
+        }
+        // The browser's notices (an import finishing, a reading tool's notice) while Settings covers the bar they'd sit
+        // on. Their actions act on the browser, so one closes Settings first.
+        settings.browser.toast?.let { toast ->
+            Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.sm)) {
+                Toast(toast) {
+                    settings.browser.dismissToast()
+                    settings.close()
+                }
+            }
         }
     }
 }

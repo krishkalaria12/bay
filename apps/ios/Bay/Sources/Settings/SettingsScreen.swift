@@ -21,6 +21,7 @@ struct SettingsScreen: View {
         SettingsIndex(settings: settings, context: context).transition(.move(edge: .leading))
       }
       head
+      SettingsToast(browser: settings.browser, onAction: settings.close)
     }
     .animation(.easeOut(duration: 0.3), value: settings.stack.count)
     .accessibilityElement(children: .contain)
@@ -289,5 +290,28 @@ private struct SettingsRowView: View {
       selected: selected, destructive: row.danger, disabled: row.disabled, action: tap
     )
     .background(lit ? BayColor.accent.opacity(0.15) : .clear)
+  }
+}
+
+/// The browser's notices (an import finishing, a reading tool's notice) while Settings covers the bar they'd sit on. Their
+/// actions act on the browser, so one closes Settings first.
+private struct SettingsToast: View {
+  @ObservedObject var browser: BrowserModel
+  let onAction: () -> Void
+
+  var body: some View {
+    VStack {
+      Spacer(minLength: 0)
+      if let toast = browser.toast {
+        ToastView(toast: toast) {
+          browser.dismissToast()
+          onAction()
+        }
+        .id(toast.id)
+      }
+    }
+    .padding(.horizontal, Space.edge)
+    .padding(.bottom, Space.sm)
+    .animation(.easeOut(duration: 0.2), value: browser.toast?.id)
   }
 }

@@ -78,7 +78,8 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             ) {
                 browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
                 browser.downloadToast?.let { item -> DownloadToast(browser, strings, item) }
-                browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
+                // Under Settings the toast shows on Settings instead (SettingsScreen).
+                if (!browser.covered) browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
                 val tip = browser.tip
                 if (tip == TipId.BAR) {
                     TipCard(strings.t("tip.bar.title"), strings.t("tip.bar.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(TipId.BAR)) }
