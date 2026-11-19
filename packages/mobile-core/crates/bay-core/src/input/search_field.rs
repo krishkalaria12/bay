@@ -1,7 +1,7 @@
 //! The phone's search field over the browser store: the rows for typed text, as the Expo app's `useSuggestions` did,
 //! with the site the text names ("Search IMDb") and bangs first, and the rows inside a site's chip.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::address::engine_for;
 use super::bangs::{BUNDLED_BANGS, bang_named, find_bang};
@@ -11,14 +11,14 @@ use super::site_search::{
     scoped_search_url,
 };
 use super::suggest::{
-    SuggestArchived, SuggestBookmark, SuggestEngine, SuggestHistory, SuggestOptions, SuggestTab,
-    Suggestion, SuggestionResult, SuggestionSource, build_suggestions,
+    BookmarkPlace, SuggestArchived, SuggestBookmark, SuggestEngine, SuggestHistory, SuggestOptions,
+    SuggestTab, Suggestion, SuggestionResult, SuggestionSource, build_suggestions,
 };
 use super::url::host_of;
 use crate::js;
 use crate::store::bookmarks::{BOOKMARKS_ROOT, bookmark_links};
 use crate::store::handle::BrowserStore;
-use crate::store::types::{BrowserData, PinKind};
+use crate::store::types::{BookmarkNode, BrowserData, PinKind};
 
 /// How many rows the search card shows.
 const LIMIT: u32 = 7;
@@ -52,6 +52,58 @@ fn history_hosts(data: &BrowserData) -> Vec<String> {
         .collect()
 }
 
+/// The spaces, the one showing first: a bookmark saved in more than one shows where it is in the space showing.
+fn spaces_showing_first(data: &BrowserData) -> Vec<&str> {
+    let active = data.active_space_id.as_str();
+    std::iter::once(active)
+        .chain(
+            data.spaces
+                .iter()
+                .map(|space| space.id.as_str())
+                .filter(|id| *id != active),
+        )
+        .collect()
+}
+
+/// Where each bookmarked address is saved, in any space.
+fn bookmark_places(data: &BrowserData) -> HashMap<String, BookmarkPlace> {
+    let mut places = HashMap::new();
+    for space_id in spaces_showing_first(data) {
+        let Some(tree) = data.bookmarks.get(space_id) else {
+            continue;
+        };
+        for node in tree.values() {
+            let BookmarkNode::Url { url, parent_id, .. } = node else {
+                continue;
+            };
+            let folder = match tree.get(parent_id) {
+                Some(BookmarkNode::Folder { title, .. }) if parent_id != BOOKMARKS_ROOT => {
+                    title.clone()
+                }
+                _ => String::new(),
+            };
+            places.entry(url.clone()).or_insert_with(|| BookmarkPlace {
+                space_id: space_id.to_owned(),
+                folder,
+            });
+        }
+    }
+    places
+}
+
+/// Each page row that is a bookmark says where it's saved.
+fn with_places(
+    mut items: Vec<Suggestion>,
+    places: &HashMap<String, BookmarkPlace>,
+) -> Vec<Suggestion> {
+    for item in &mut items {
+        if let Suggestion::Page { url, location, .. } = item {
+            *location = places.get(url.as_str()).cloned();
+        }
+    }
+    items
+}
+
 fn on_host(url: &str, host: &str) -> bool {
     is_on_site(&host_of(url), host)
 }
@@ -72,13 +124,13 @@ fn source(data: &BrowserData, host: Option<&str>) -> SuggestionSource {
             last_visit: entry.last_visit as f64,
         })
         .collect();
-    let bookmarks = data
-        .bookmarks
-        .get(space)
-        .map(|tree| bookmark_links(tree, BOOKMARKS_ROOT))
-        .unwrap_or_default()
+    // Every space's bookmarks: a row from another space says which, and opens there.
+    let mut seen = HashSet::new();
+    let bookmarks = spaces_showing_first(data)
         .into_iter()
-        .filter(|(url, _)| keep(url))
+        .filter_map(|space_id| data.bookmarks.get(space_id))
+        .flat_map(|tree| bookmark_links(tree, BOOKMARKS_ROOT))
+        .filter(|(url, _)| keep(url) && seen.insert(url.clone()))
         .map(|(url, title)| SuggestBookmark {
             url,
             title,
@@ -126,6 +178,7 @@ fn recent_page(url: &str, title: &str) -> Suggestion {
         cleaned_id: None,
         bookmarked: false,
         visited: true,
+        location: None,
     }
 }
 
@@ -151,7 +204,7 @@ impl BrowserStore {
                 .map(|entry| recent_page(&entry.url, &entry.title))
                 .collect();
             return SuggestionResult {
-                items,
+                items: with_places(items, &bookmark_places(&data)),
                 completion: String::new(),
             };
         }
@@ -205,6 +258,7 @@ impl BrowserStore {
             result.items.insert(at, Suggestion::Scope { scope });
         }
         result.items.truncate(LIMIT as usize);
+        result.items = with_places(result.items, &bookmark_places(&data));
         result
     }
 
@@ -234,7 +288,7 @@ impl BrowserStore {
                 return Vec::new();
             }
             let mut seen = HashSet::new();
-            return data
+            let recent = data
                 .history
                 .iter()
                 .filter(|entry| {
@@ -244,6 +298,7 @@ impl BrowserStore {
                 .take(RECENT)
                 .map(|entry| recent_page(&entry.url, &entry.title))
                 .collect();
+            return with_places(recent, &bookmark_places(&data));
         }
         let engine = engine_for(
             &data.preferences.search_engine_id,
@@ -297,7 +352,7 @@ impl BrowserStore {
             }
         }
         items.truncate(LIMIT as usize);
-        items
+        with_places(items, &bookmark_places(&data))
     }
 
     /// The sites under the empty search field: the space's pinned sites that have a search, then the sites with one
@@ -461,6 +516,38 @@ mod tests {
             matches!(&rows[1], Suggestion::Page { url, .. } if url == "https://www.imdb.com/title/tt2/")
         );
         assert_eq!(rows.last(), Some(&result));
+
+        // A bookmark in a folder of another space shows where it is, and search finds it from here.
+        store.dispatch(Action::CreateSpace {
+            space: store.new_space("work".into(), "Work".into()),
+            blank_tab: create_tab("t9", 9, "", false, "work"),
+        });
+        store.dispatch(Action::AddBookmarks {
+            space_id: "work".into(),
+            nodes: vec![
+                BookmarkNode::Folder {
+                    id: "f1".into(),
+                    parent_id: Some(BOOKMARKS_ROOT.into()),
+                    title: "Watchlist".into(),
+                    children: vec!["b1".into()],
+                    added_at: 1,
+                },
+                BookmarkNode::Url {
+                    id: "b1".into(),
+                    parent_id: "f1".into(),
+                    title: "Aftersun (2022) - IMDb".into(),
+                    url: "https://www.imdb.com/title/tt4/".into(),
+                    added_at: 2,
+                },
+            ],
+        });
+        store.dispatch(Action::SelectSpace {
+            id: PERSONAL_SPACE_ID.into(),
+            blank_tab: None,
+        });
+        let found = store.suggestions("aftersun".into(), Vec::new(), None, 5_000.0);
+        assert!(found.items.iter().any(|item| matches!(item, Suggestion::Page { url, location: Some(place), .. }
+            if url == "https://www.imdb.com/title/tt4/" && place.space_id == "work" && place.folder == "Watchlist")));
 
         let shortcuts: Vec<String> = store
             .scope_shortcuts(5)

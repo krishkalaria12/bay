@@ -92,6 +92,14 @@ pub struct SuggestOptions {
     pub calculator_enabled: bool,
 }
 
+/// A bookmark's place: its space, and the folder it's in ("" at the top of the space's bookmarks).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
+pub struct BookmarkPlace {
+    pub space_id: String,
+    pub folder: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, uniffi::Enum)]
 #[serde(
     tag = "kind",
@@ -111,6 +119,9 @@ pub enum Suggestion {
         bookmarked: bool,
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         visited: bool,
+        /// Where the page is saved as a bookmark, filled in by the phone's search field.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        location: Option<BookmarkPlace>,
     },
     Search {
         query: String,
@@ -529,6 +540,7 @@ fn page_suggestion(
         tab_id,
         bookmarked: c.bookmarked,
         visited: c.visits > 0.0,
+        location: None,
     }
 }
 
@@ -668,6 +680,7 @@ fn site_row(site: &Site) -> Suggestion {
         cleaned_id: None,
         bookmarked: false,
         visited: true,
+        location: None,
     }
 }
 
@@ -834,6 +847,7 @@ pub fn build_suggestions(
                 cleaned_id: None,
                 bookmarked: false,
                 visited: false,
+                location: None,
             };
         }
         row.unwrap_or(Suggestion::Page {
@@ -844,6 +858,7 @@ pub fn build_suggestions(
             cleaned_id: None,
             bookmarked: false,
             visited: false,
+            location: None,
         })
     };
 
