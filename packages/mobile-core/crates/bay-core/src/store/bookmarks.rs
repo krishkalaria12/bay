@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde_json::Value;
 
-use super::types::{BookmarkNode, Bookmarks};
+use super::types::{BookmarkDrop, BookmarkNode, Bookmarks};
 use crate::js;
 
 /// The folder every bookmark hangs off. It has no title of its own and is never removed.
@@ -581,6 +581,30 @@ pub fn move_bookmark(
     (next != *bookmarks).then_some(next)
 }
 
+/// Where `id` goes when it's dropped beside `target` (just before it, or just after with `after`): `target`'s folder, at
+/// its place there once `id` has left. None when either isn't in the tree, or `id` would go inside itself.
+pub fn bookmark_drop(
+    bookmarks: &Bookmarks,
+    id: &str,
+    target: &str,
+    after: bool,
+) -> Option<BookmarkDrop> {
+    bookmarks.get(id)?;
+    let parent_id = bookmarks.get(target)?.parent_id()?.to_owned();
+    if id == target || parent_id == id || is_inside(bookmarks, &parent_id, id) {
+        return None;
+    }
+    let siblings: Vec<&String> = folder_children(bookmarks, &parent_id)?
+        .iter()
+        .filter(|child| *child != id)
+        .collect();
+    let at = siblings.iter().position(|child| *child == target)? + usize::from(after);
+    Some(BookmarkDrop {
+        parent_id,
+        index: (at < siblings.len()).then_some(at as i64),
+    })
+}
+
 /// A bookmark's new title (and address, for a link), or a folder's new name. An empty title keeps the old one.
 pub fn rename_bookmark(
     bookmarks: &Bookmarks,
@@ -832,6 +856,53 @@ pub fn bookmark_tree_rows(bookmarks: &Bookmarks, open: &[String]) -> Vec<Bookmar
 #[cfg(test)]
 mod tree_rows_tests {
     use super::*;
+
+    #[test]
+    fn a_dragged_bookmark_lands_beside_its_target() {
+        let link = |id: &str, parent: &str| BookmarkNode::Url {
+            id: id.into(),
+            parent_id: parent.into(),
+            title: id.into(),
+            url: format!("https://{id}.example/"),
+            added_at: 1,
+        };
+        let tree = add_bookmarks(
+            &empty_bookmarks(),
+            &[
+                link("a", BOOKMARKS_ROOT),
+                link("b", BOOKMARKS_ROOT),
+                link("c", BOOKMARKS_ROOT),
+                BookmarkNode::Folder {
+                    id: "f".into(),
+                    parent_id: Some(BOOKMARKS_ROOT.into()),
+                    title: "f".into(),
+                    children: vec!["d".into()],
+                    added_at: 1,
+                },
+                link("d", "f"),
+            ],
+        )
+        .unwrap();
+        let drop = |id: &str, target: &str, after: bool| bookmark_drop(&tree, id, target, after);
+        let at = |index: Option<i64>, parent: &str| {
+            Some(BookmarkDrop {
+                parent_id: parent.into(),
+                index,
+            })
+        };
+        // "c" before "a": first; "a" after "c": at the end.
+        assert_eq!(drop("c", "a", false), at(Some(0), BOOKMARKS_ROOT));
+        assert_eq!(drop("a", "f", true), at(None, BOOKMARKS_ROOT));
+        // Into another folder, beside its link.
+        assert_eq!(drop("a", "d", false), at(Some(0), "f"));
+        // A folder can't go inside itself.
+        assert_eq!(drop("f", "d", false), None);
+        let moved = move_bookmark(&tree, "c", BOOKMARKS_ROOT, Some(0)).unwrap();
+        assert_eq!(
+            folder_children(&moved, BOOKMARKS_ROOT).unwrap()[..3],
+            ["c", "a", "b"]
+        );
+    }
 
     #[test]
     fn the_drawer_lists_folders_first_and_opens_only_the_open_ones() {

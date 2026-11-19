@@ -431,6 +431,18 @@ impl BrowserStore {
         }
     }
 
+    /// Where a bookmark dragged in the drawer goes when dropped beside another row.
+    pub fn bookmark_drop(
+        &self,
+        space_id: String,
+        id: String,
+        target: String,
+        after: bool,
+    ) -> Option<BookmarkDrop> {
+        let state = lock(&self.state);
+        super::bookmarks::bookmark_drop(state.data.bookmarks.get(&space_id)?, &id, &target, after)
+    }
+
     /// A space's folders to save a bookmark into, the top first.
     pub fn bookmark_folders(&self, space_id: String) -> Vec<BookmarkFolderChoice> {
         let state = lock(&self.state);

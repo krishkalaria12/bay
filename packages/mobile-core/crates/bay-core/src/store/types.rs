@@ -162,6 +162,14 @@ pub struct BookmarkLocation {
     pub title: String,
 }
 
+/// Where a dragged bookmark goes, as `Action::MoveBookmark` takes it: the folder, and the place among its children once
+/// the bookmark has left them (none for the end).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkDrop {
+    pub parent_id: String,
+    pub index: Option<i64>,
+}
+
 /// Every bookmark and folder of a tree, by id.
 pub type Bookmarks = HashMap<String, BookmarkNode>;
 
