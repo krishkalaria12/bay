@@ -300,7 +300,7 @@ private fun <T> WelcomeSpring.spec(reduced: Boolean): FiniteAnimationSpec<T> =
         spring(dampingRatio = dampingRatio.toFloat(), stiffness = ((2 * PI / response) * (2 * PI / response)).toFloat())
     }
 
-/** The first run's colours: Bay's paper and ink, with the icon's evening in it, as the Expo app drew them. */
+/** The first run's colours: Bay's paper and ink, with the icon's evening in it. */
 private class WelcomeColors(
     val ground: Color,
     val groundTop: Color,

@@ -1,5 +1,0 @@
-{
-  "platforms": ["apple", "android"],
-  "apple": { "modules": ["BayWelcomeModule"] },
-  "android": { "modules": ["expo.modules.baywelcome.BayWelcomeModule"] }
-}

@@ -1,8 +1,8 @@
 //! Settings without the screen: its pages, the index's cards, each page's sections of rows and the search that finds a
 //! page or a row by what it says. Ported from the Expo app's `src/settings/model.ts` and `content.ts` (after Yab's
 //! Settings, Apache-2.0). Where the TypeScript rows held callbacks, these hold a [`SettingsAction`] the app performs, so
-//! the whole tree is plain data both apps draw. Checked against `fixtures/settings.jsonl`
-//! (`scripts/settings-vector.mjs`), recorded from the TypeScript pages with spies for every callback.
+//! the whole tree is plain data both apps draw. Checked against `fixtures/settings.jsonl`,
+//! recorded from the TypeScript pages, with spies for every callback, before the Expo app was removed.
 
 mod content;
 mod search;

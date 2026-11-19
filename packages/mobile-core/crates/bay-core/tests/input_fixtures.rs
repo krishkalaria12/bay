@@ -1,6 +1,6 @@
 //! Replays what `@bay/core`'s address, IDN, calculator, emoji and suggestion code (and the phone's address helpers)
-//! did in their tests (`fixtures/input.jsonl`, written by `scripts/record-fixtures.mjs input`) and checks the Rust port
-//! gives the same answers.
+//! did in their tests (`fixtures/input.jsonl`, recorded before the Expo app was removed) and checks the Rust port gives
+//! the same answers.
 
 use bay_core::input::address::{engine_for, is_web_url, resolve_address, site_name};
 use bay_core::input::app_urls::{app_url_origin, to_app_url};

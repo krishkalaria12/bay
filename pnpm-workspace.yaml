@@ -7,8 +7,6 @@ packages:
   - "!apps/cli"
   # The release videos are a standalone Remotion project (apps/videos).
   - "!apps/videos"
-  # The mobile app is a standalone Expo project on a newer React Native (apps/mobile).
-  - "!apps/mobile"
   # The sync relay is a standalone Cloudflare Worker with its own lockfile (apps/sync-relay).
   - "!apps/sync-relay"
 

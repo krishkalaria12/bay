@@ -79,8 +79,7 @@ final class EngineControl: ObservableObject {
 }
 
 /// A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script, blocks
-/// with a small test list, downloads, and shows the page's media on the lock screen, to prove the engine works without
-/// Expo before the browser screen lands (N4).
+/// with a small test list, downloads, and shows the page's media on the lock screen, to check the engine on its own.
 struct EngineCheckView: View {
   @StateObject private var control = EngineControl()
   @EnvironmentObject private var model: AppModel

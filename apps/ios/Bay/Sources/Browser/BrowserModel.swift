@@ -39,8 +39,8 @@ struct TabMedia {
   var at: Date
 }
 
-/// The browser screen's state over the store: which pages are loaded, what each reports, and what is over them. The
-/// Expo app's BrowserScreen, without its rendering. Every change to tabs goes through the core's store.
+/// The browser screen's state over the store: which pages are loaded, what each reports, and what is over them. Every
+/// change to tabs goes through the core's store.
 @MainActor
 final class BrowserModel: ObservableObject {
   enum Overlay: Equatable {

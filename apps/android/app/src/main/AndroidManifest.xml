@@ -50,9 +50,8 @@
             </intent-filter>
         </activity>
         <!--
-            The launcher entry: one alias per home screen icon (AppIcons.kt), only the chosen one enabled. They keep the Expo
-            app's component names, so the icon someone picked there stays after the update. Android reads the app
-            shortcuts (long press on the icon) from the launcher entry, so each alias names them.
+            The launcher entry: one alias per home screen icon (AppIcons.kt), only the chosen one enabled. Android reads the
+            app shortcuts (long press on the icon) from the launcher entry, so each alias names them.
         -->
         <activity-alias
             android:name="in.krishkalaria.bay.mobile.MainActivityDefault"
@@ -131,7 +130,7 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity-alias>
         <receiver
-            android:name="expo.modules.bayengine.BaySearchWidget"
+            android:name="bay.app.BaySearchWidget"
             android:exported="false"
             android:label="@string/search_widget_hint">
             <intent-filter>

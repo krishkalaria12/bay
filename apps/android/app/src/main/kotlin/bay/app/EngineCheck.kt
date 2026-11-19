@@ -52,8 +52,8 @@ import kotlinx.coroutines.launch
 
 /**
  * A debug screen for the engine host (plan N3): opens an address, moves through history, runs a page script, blocks
- * with a small test list, downloads, and shows the page's media in the media notification, to prove Bay's Chromium
- * works without Expo before the browser screen lands (N4).
+ * with a small test list, downloads, and shows the page's media in the media notification, to check Bay's Chromium on
+ * its own.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

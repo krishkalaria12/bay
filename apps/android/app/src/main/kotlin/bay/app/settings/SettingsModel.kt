@@ -35,7 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/** A page's name as the Expo app's ids have it: SYNC_JOIN is "syncJoin". */
+/** A page's name as the core's ids have it: SYNC_JOIN is "syncJoin". */
 val SettingsPage.id: String
     get() = name.lowercase().split('_').mapIndexed { index, part -> if (index == 0) part else part.replaceFirstChar(Char::uppercase) }.joinToString("")
 

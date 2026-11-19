@@ -6,7 +6,7 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** A call's one answer, as Expo's promise was: a value, or why not. The engine's code answers through it. */
+/** A call's one answer: a value, or why not. The engine's code answers through it. */
 interface Promise {
   fun resolve(value: Any?)
   fun reject(code: String?, message: String?, cause: Throwable?)

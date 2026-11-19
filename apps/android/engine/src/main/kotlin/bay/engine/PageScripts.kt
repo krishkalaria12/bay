@@ -4,8 +4,8 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * The page scripts Bay runs in pages: one copy of each, shared with the Expo app (packages/mobile-pagescripts, D13),
- * bundled as the asset `pagescripts.json`. A script that takes arguments reads them from `args`.
+ * The page scripts Bay runs in pages: one copy of each, shared with iOS (packages/mobile-pagescripts, D13), bundled
+ * as the asset `pagescripts.json`. A script that takes arguments reads them from `args`.
  */
 enum class PageScript(val key: String) {
   CLOSE_READER("close-reader"),

@@ -9,9 +9,8 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 
-// The page engine: Bay's own Chromium (org.bay.engine, from bay-engine.aar) behind BayEngineView and Engine, ported
-// from the Expo module (apps/mobile/modules/bay-engine/android). There is no other engine on Android, so a build
-// without it stops here and says how to fetch it.
+// The page engine: Bay's own Chromium (org.bay.engine, from bay-engine.aar) behind BayEngineView and Engine. There is
+// no other engine on Android, so a build without it stops here and says how to fetch it.
 
 plugins {
     alias(libs.plugins.bay.android.library)
@@ -22,7 +21,7 @@ val engineVersion: String = Properties().run {
     val file = engineDir.resolve("engine.properties")
     if (file.isFile) file.inputStream().use(::load)
     getProperty("version")
-        ?: throw GradleException("Bay's engine isn't installed. From apps/mobile, run: node scripts/fetch-android-engine.mjs")
+        ?: throw GradleException("Bay's engine isn't installed. From apps/android, run: node scripts/fetch-engine.mjs")
 }
 val engineAar = engineDir.resolve("repo/org/bay/engine/bay-engine/$engineVersion/bay-engine-$engineVersion.aar")
 val engineRClasses = layout.buildDirectory.dir("generated/source/bayEngineR")
@@ -34,7 +33,7 @@ android {
         getByName("main") {
             // Scriptlet and $redirect stand-ins for the blocker (uBlock Origin's and Brave's), as resources.json.
             assets.srcDir(rootDir.resolve("../../packages/adblock/resources"))
-            // Page scripts, one copy shared with the Expo app (D13), as pagescripts.json.
+            // Page scripts, one copy shared with iOS (D13), as pagescripts.json.
             assets.srcDir(rootDir.resolve("../../packages/mobile-pagescripts/resources"))
         }
     }

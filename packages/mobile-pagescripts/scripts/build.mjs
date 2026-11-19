@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Writes resources/pagescripts.json, the page scripts the native apps bundle (D13 in docs/mobile-native-plan.html):
-// every `*_SCRIPT` the Expo app's src/pagescripts exports, keyed by its name in kebab case (WATCH_MEDIA_SCRIPT is
-// "watch-media"). A script that takes arguments reads them from `args`, which the runner declares ahead of it as
-// `const args = <JSON>;` (withArgs). The scripts stay in the Expo app until the cut-over; this keeps one copy.
+// Writes resources/pagescripts.json, the page scripts both apps bundle (D13 in docs/mobile-native-plan.html): every
+// `*_SCRIPT` src exports, keyed by its name in kebab case (WATCH_MEDIA_SCRIPT is "watch-media"). A script that takes
+// arguments reads them from `args`, which the app declares ahead of it as `const args = <JSON>;` (withArgs).
 //
 // Run after changing a page script: node packages/mobile-pagescripts/scripts/build.mjs
-// --check fails instead of writing when the file is out of date (the Expo app's tests run it).
+// --check fails instead of writing when the file is out of date (tests/resources.test.ts runs it).
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sources = join(here, "../../../apps/mobile/src/pagescripts");
+const sources = join(here, "../src");
 const output = join(here, "../resources/pagescripts.json");
 
 const scripts = {};

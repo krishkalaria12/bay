@@ -7,9 +7,9 @@ pluginManagement {
     }
 }
 
-// Bay's Chromium (bay-engine.aar), which apps/mobile/scripts/fetch-android-engine.mjs installs as a local Maven
-// repository. Shared with the Expo app's install until it goes (plan N8); -PbayEngineDir points elsewhere.
-val bayEngineDir = file(providers.gradleProperty("bayEngineDir").getOrElse("../mobile/modules/bay-engine/android/engine"))
+// Bay's Chromium (bay-engine.aar), which scripts/fetch-engine.mjs installs as a local Maven repository in .engine;
+// -PbayEngineDir points elsewhere.
+val bayEngineDir = file(providers.gradleProperty("bayEngineDir").getOrElse(".engine"))
 gradle.extra["bayEngineDir"] = bayEngineDir
 
 dependencyResolutionManagement {

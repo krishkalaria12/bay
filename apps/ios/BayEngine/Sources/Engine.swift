@@ -4,8 +4,7 @@ import Foundation
 import WebKit
 
 /// What every page view shares: audio, content blocking, private browsing, spaces' website data, downloads, media
-/// controls, voice search and saved images. The Expo module's functions (`BayEngineModule`), called from Swift.
-/// Call from the main thread.
+/// controls, voice search and saved images. Call from the main thread.
 public enum Engine {
   /// Sets up what the app needs before the first page: pages' audio keeps playing with the silent switch on and while
   /// Bay is in the background, as in Safari. `downloads` hears each download's progress; `media` the system's media

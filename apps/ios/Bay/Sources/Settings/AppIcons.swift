@@ -1,7 +1,7 @@
 import UIKit
 
 /// An icon Bay can wear on the home screen, the same set as the desktop's: `name` is the alternate icon's name in the
-/// asset catalog (nil is the bundle's own icon, Paper), as the Expo app named them, so a chosen icon carries over.
+/// asset catalog (nil is the bundle's own icon, Paper).
 struct AppIcon: Equatable {
   let name: String?
   /// The icon's name in the strings (`settings.appIcons.*`).
@@ -18,7 +18,7 @@ struct AppIcon: Equatable {
     AppIcon(name: "Bridge", label: "settings.appIcons.bridge", preview: "AppIconPreviews/Bridge"),
   ]
 
-  /// The id its picker tile goes by, as the Expo app's did.
+  /// The id its picker tile goes by.
   var testID: String { "settings-app-icon-\((name ?? "default").lowercased())" }
 
   /// Whether this phone lets Bay change its icon.

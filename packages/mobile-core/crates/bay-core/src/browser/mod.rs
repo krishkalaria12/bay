@@ -2,7 +2,7 @@
 //! for a page that failed to load, the saved-logins document, history's day groups, which downloads open themselves,
 //! favicon checks, which navigation reports run page scripts, pages' media reports, and where a link's redirects end. The Expo app's
 //! `src/browser/{incomingLink,pageErrors,logins,downloads,favicons,navigationEvents,linkResolver}.ts` and
-//! `src/panels/historyGroups.ts`, checked against `fixtures/browser.jsonl` (`scripts/record-fixtures.mjs browser`) and
+//! `src/panels/historyGroups.ts`, checked against `fixtures/browser.jsonl` (recorded from the Expo app before it was removed) and
 //! their ported tests.
 
 mod days;
