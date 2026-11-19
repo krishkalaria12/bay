@@ -84,15 +84,25 @@ struct SiteIcon: View {
   var body: some View {
     let host = hostOf(url: url)
     Group {
-      if let file = app.favicons[host].flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: file.path) {
-        if bare {
-          Image(uiImage: image).resizable().scaledToFit().frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
-        } else {
-          Image(uiImage: image).resizable().scaledToFit().frame(width: size * 0.72, height: size * 0.72)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
-            .frame(width: size, height: size)
-            .background(scheme == .dark ? Color(RGBA(0x2C, 0x2C, 0x2E)) : .white, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+      if let file = app.favicons[host] {
+        // The tile shows empty for the frame the icon takes to decode, not the monogram, which would flash.
+        FileImage(uri: file, points: bare ? size : size * 0.72) { image in
+          if bare {
+            image.resizable().scaledToFit().frame(width: size, height: size)
+              .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
+          } else {
+            image.resizable().scaledToFit().frame(width: size * 0.72, height: size * 0.72)
+              .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
+              .frame(width: size, height: size)
+              .background(tile, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+          }
+        } placeholder: { failed in
+          if failed {
+            monogram(host)
+          } else {
+            Color.clear.frame(width: size, height: size)
+              .background(bare ? .clear : tile, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+          }
         }
       } else {
         monogram(host)
@@ -100,6 +110,8 @@ struct SiteIcon: View {
     }
     .accessibilityHidden(true)
   }
+
+  private var tile: Color { scheme == .dark ? Color(RGBA(0x2C, 0x2C, 0x2E)) : .white }
 
   @ViewBuilder private func monogram(_ host: String) -> some View {
     let letter = host.first(where: { $0.isLetter || $0.isNumber }).map { String($0).uppercased() } ?? "•"

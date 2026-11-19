@@ -48,7 +48,10 @@ struct BrowserScreen: View {
       } else if browser.overlay == .none {
         startScreen.offset(x: pageSlide)
       }
-      if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path, let image = UIImage(contentsOfFile: path) {
+      // The zoom starts in this frame, so its picture is decoded now if it isn't in memory, once: later updates read it there.
+      if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path,
+        let image = FileImages.now(path, pixels: Int(max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale))
+      {
         TabZoom(snapshot: image, from: zoom.frame, onDone: browser.zoomFinished)
       }
       if browser.locked, browser.activeTab?.private == true, browser.overlay == .none {

@@ -146,15 +146,23 @@ fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false
     val host = hostOf(url)
     val file = app.favicons[host]
     val pixels = with(LocalDensity.current) { size.roundToPx() }
-    val bitmap = remember(file, pixels) { fileImageNow(file, pixels) }
+    // Decoded off the main thread: reading the file in the frame that drew the switcher's cards held it up. The tile
+    // shows empty for the frame that takes, not the monogram, which would flash.
+    val icon = rememberFileImageResult(file, pixels)
+    val bitmap = icon.image
     val corner = RoundedCornerShape(size * 0.28f)
     val modifier = Modifier.clearAndSetSemantics {}
+    val tile = if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color.White
+    if (bitmap == null && !icon.failed) {
+        Box(if (bare) modifier.size(size) else modifier.size(size).background(tile, corner))
+        return
+    }
     if (bitmap != null) {
         if (bare) {
             Image(bitmap, null, modifier.size(size).clip(RoundedCornerShape(size * 0.14f)))
         } else {
             Box(
-                modifier.size(size).background(if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color.White, corner)
+                modifier.size(size).background(tile, corner)
                     .border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
                 contentAlignment = Alignment.Center,
             ) {
