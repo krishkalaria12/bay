@@ -85,20 +85,17 @@ class UrlConnectionHttp : HttpClient {
 }
 
 /**
- * The chain's key in the Android keystore, stored as expo-secure-store stores it: an AES-GCM item in the `SecureStore`
- * preferences under `key_v1-<key>`, sealed with the keystore key `AES/GCM/NoPadding:key_v1:keystoreUnauthenticated`.
- * So the key the Expo app kept is read after the native app installs over it.
+ * Secrets (the chain's key, saved sign-ins) sealed with an AES-GCM key that never leaves the Android keystore, kept in
+ * the `bay-secrets` preferences as the ciphertext and its IV.
  */
 class KeystoreSecrets(context: Context) : SecretStore {
-    private val prefs: SharedPreferences = context.getSharedPreferences("SecureStore", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences("bay-secrets", Context.MODE_PRIVATE)
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
-    private fun entry(key: String) = "key_v1-$key"
-
-    private fun secretKey(alias: String, create: Boolean): SecretKey? {
-        (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+    private fun secretKey(create: Boolean): SecretKey? {
+        (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
         if (!create) return null
-        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        val spec = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setKeySize(256)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
@@ -110,36 +107,30 @@ class KeystoreSecrets(context: Context) : SecretStore {
     }
 
     override fun read(key: String): String? = runCatching {
-        val item = JSONObject(prefs.getString(entry(key), null) ?: return null)
-        if (item.optString("scheme") != "aes") return null
-        val alias = if (item.optBoolean("usesKeystoreSuffix")) SUFFIXED_ALIAS else ALIAS
-        val secret = secretKey(alias, create = false) ?: return null
+        val item = JSONObject(prefs.getString(key, null) ?: return null)
+        val secret = secretKey(create = false) ?: return null
         val cipher = Cipher.getInstance(CIPHER)
-        cipher.init(Cipher.DECRYPT_MODE, secret, GCMParameterSpec(item.getInt("tlen"), Base64.decode(item.getString("iv"), Base64.DEFAULT)))
-        String(cipher.doFinal(Base64.decode(item.getString("ct"), Base64.DEFAULT)), Charsets.UTF_8)
+        cipher.init(Cipher.DECRYPT_MODE, secret, GCMParameterSpec(TAG_BITS, Base64.decode(item.getString("iv"), Base64.NO_WRAP)))
+        String(cipher.doFinal(Base64.decode(item.getString("ct"), Base64.NO_WRAP)), Charsets.UTF_8)
     }.getOrNull()
 
     override fun write(key: String, value: String) {
-        val secret = secretKey(SUFFIXED_ALIAS, create = true) ?: return
+        val secret = secretKey(create = true) ?: return
         val cipher = Cipher.getInstance(CIPHER)
         cipher.init(Cipher.ENCRYPT_MODE, secret)
-        val spec = cipher.parameters.getParameterSpec(GCMParameterSpec::class.java)
         val item = JSONObject()
             .put("ct", Base64.encodeToString(cipher.doFinal(value.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP))
-            .put("iv", Base64.encodeToString(spec.iv, Base64.NO_WRAP))
-            .put("tlen", spec.tLen)
-            .put("scheme", "aes")
-            .put("usesKeystoreSuffix", true)
-        prefs.edit().putString(entry(key), item.toString()).apply()
+            .put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+        prefs.edit().putString(key, item.toString()).apply()
     }
 
     override fun delete(key: String) {
-        prefs.edit().remove(entry(key)).apply()
+        prefs.edit().remove(key).apply()
     }
 
     private companion object {
         const val CIPHER = "AES/GCM/NoPadding"
-        const val ALIAS = "$CIPHER:key_v1"
-        const val SUFFIXED_ALIAS = "$ALIAS:keystoreUnauthenticated"
+        const val ALIAS = "bay-secrets"
+        const val TAG_BITS = 128
     }
 }

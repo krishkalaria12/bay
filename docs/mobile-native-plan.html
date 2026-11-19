@@ -1678,6 +1678,11 @@ impl BrowserStore {
       <!-- 9 -->
       <section id="migration">
         <h2>9. Users' data across the cutover</h2>
+        <p>
+          <strong>Update, 19 November 2026:</strong> the mobile app never shipped, so there are no users' data to carry over and the native apps keep no
+          fallbacks for the Expo app's layouts. Secrets (the sync key, saved sign-ins) live in Bay's own keychain service and keystore preferences. The plan
+          below is kept for the record.
+        </p>
         <p>The native apps keep the same bundle ID and application ID, so they install as an update. On first launch:</p>
         <ol>
           <li>

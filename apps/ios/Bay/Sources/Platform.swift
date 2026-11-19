@@ -53,47 +53,37 @@ private final class StopRedirects: NSObject, URLSessionTaskDelegate, Sendable {
   }
 }
 
-/// The chain's key in the keychain, stored as expo-secure-store stores it (service `app:no-auth`, the key as account),
-/// so the key the Expo app kept is read after the native app installs over it.
+/// Secrets (the chain's key, saved sign-ins) in the keychain: one generic password per key, readable after the first
+/// unlock so syncing in the background works.
 final class KeychainSecrets: SecretStore, @unchecked Sendable {
-  private let service = "app:no-auth"
-  /// Where expo-secure-store kept items before it split them by authentication.
-  private let olderService = "app"
+  private let service = "bay"
 
-  private func query(_ key: String, service: String) -> [String: Any] {
-    let account = Data(key.utf8)
-    return [
+  private func query(_ key: String) -> [String: Any] {
+    [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrGeneric as String: account,
-      kSecAttrAccount as String: account,
+      kSecAttrAccount as String: key,
     ]
   }
 
   func read(key: String) -> String? {
-    for service in [service, olderService] {
-      var search = query(key, service: service)
-      search[kSecReturnData as String] = true
-      search[kSecMatchLimit as String] = kSecMatchLimitOne
-      var result: AnyObject?
-      if SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data {
-        return String(data: data, encoding: .utf8)
-      }
-    }
-    return nil
+    var search = query(key)
+    search[kSecReturnData as String] = true
+    search[kSecMatchLimit as String] = kSecMatchLimitOne
+    var result: AnyObject?
+    guard SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+    return String(data: data, encoding: .utf8)
   }
 
   func write(key: String, value: String) {
     delete(key: key)
-    var item = query(key, service: service)
+    var item = query(key)
     item[kSecValueData as String] = Data(value.utf8)
     item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
     SecItemAdd(item as CFDictionary, nil)
   }
 
   func delete(key: String) {
-    for service in [service, olderService] {
-      SecItemDelete(query(key, service: service) as CFDictionary)
-    }
+    SecItemDelete(query(key) as CFDictionary)
   }
 }
