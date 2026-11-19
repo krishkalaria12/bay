@@ -91,10 +91,14 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
         if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) else close()
     }
 
+    /** The app's version, as About shows it and a problem report names it. */
+    private val version: String by lazy {
+        runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull().orEmpty()
+    }
+
     val context: SettingsContext
         get() {
             val prefs = app.preferences
-            val version = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull().orEmpty()
             return SettingsContext(
                 strings.locale,
                 SettingsPlatform.ANDROID,
@@ -128,7 +132,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
             val space = app.activeSpaceId
             val history = app.store.history(space, "", 0u, 10_000u).size
             val bookmarks = app.store.bookmarkListing(space, "bookmarks", "").links
-            return IndexCounts(bookmarks, history.toUInt(), app.downloads.size.toUInt(), 0u)
+            return IndexCounts(bookmarks, history.toUInt(), app.downloads.size.toUInt(), app.crashLog.reports().size.toUInt())
         }
 
     /** Opens an index entry: a page (or the page a search found a row on), or one of the browser's own sheets. */
@@ -144,8 +148,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
                 IndexAction.HISTORY -> browser.panel = Panel.HISTORY
                 IndexAction.DOWNLOADS -> browser.panel = Panel.DOWNLOADS
                 IndexAction.IMPORT -> browser.panel = Panel.IMPORT
-                // Problem reports come with their sheet.
-                IndexAction.REPORT -> {}
+                IndexAction.REPORT -> reportProblem()
             }
         }
     }
@@ -197,11 +200,20 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
         }
     }
 
+    /** Sends on the crashes Bay kept (B8), or says there were none, so whoever looks after the app can see them. */
+    private fun reportProblem() {
+        share(app.crashLog.text(version) ?: strings.t("crash.none"))
+    }
+
+    private fun share(text: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        appContext.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     /** The open tabs' addresses, one a line, without their tracking parameters; private tabs stay out. */
     private fun exportTabs() {
         val urls = app.store.tabs().filter { it.url.isNotEmpty() && !it.private }.map { cleanUrl(it.url) }
         if (urls.isEmpty()) return
-        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, urls.joinToString("\n"))
-        appContext.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        share(urls.joinToString("\n"))
     }
 }

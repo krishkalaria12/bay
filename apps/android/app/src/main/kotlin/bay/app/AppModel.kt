@@ -14,6 +14,7 @@ import bay.core.BrowserPreferences
 import bay.core.BrowserSpace
 import bay.core.BrowserStore
 import bay.core.BrowserTab
+import bay.core.CrashLog
 import bay.core.DownloadEvent
 import bay.core.DownloadItem
 import bay.core.HistoryEntry
@@ -46,6 +47,9 @@ class AppModel(context: Context, barTitle: String) {
     val store: BrowserStore = BrowserStore.open(documents, UUID.randomUUID().toString(), now())
     val http = UrlConnectionHttp()
     val sync = PhoneSync(store, http, KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
+
+    /** The crashes kept for Settings › Report a problem: the one the application records into. */
+    val crashLog: CrashLog = (context.applicationContext as BayApplication).crashLog
 
     var spaces by mutableStateOf(emptyList<BrowserSpace>())
         private set
