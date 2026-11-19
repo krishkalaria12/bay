@@ -140,6 +140,7 @@ class MainActivity : ComponentActivity(), EngineHost {
     override fun onStart() {
         super.onStart()
         model.startSyncing()
+        model.refreshBangs()
         if (launched) cameBack() else launch()
     }
 
