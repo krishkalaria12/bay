@@ -61,12 +61,13 @@ private struct ToolButton: View {
   var body: some View {
     Button(action: action) {
       HStack(spacing: 6) {
-        if let icon { BayIconView(icon, size: IconSize.small, color: primary ? .white : BayColor.foreground) }
-        BayText(label, variant: .callout, weight: primary ? .semibold : .regular, color: primary ? .white : BayColor.foreground).lineLimit(1)
+        if let icon { BayIconView(icon, size: IconSize.small, color: primary ? BayColor.accentForeground : BayColor.foreground) }
+        BayText(label, variant: .callout, weight: primary ? .semibold : .regular, color: primary ? BayColor.accentForeground : BayColor.foreground)
+          .lineLimit(1)
       }
       .frame(maxWidth: .infinity, minHeight: 44)
       .padding(.horizontal, Space.md)
-      .background(primary ? BayColor.accent : BayColor.fill, in: Capsule())
+      .background(primary ? BayColor.accentFill : BayColor.fill, in: Capsule())
     }
     .buttonStyle(PressFeedbackStyle())
     .disabled(disabled)

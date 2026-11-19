@@ -92,8 +92,7 @@ final class AccessibilityAuditTests: XCTestCase {
       if !element.isHittable { return true }
       // The audit misreads text on Liquid Glass (sheets, cards, the bar), so the text is measured from the screen.
       guard let measured = pixels?.contrast(in: element.frame) else { return false }
-      // White on the accent blue is 3.7:1, which waits on a darker accent in packages/mobile-core/design/tokens.json.
-      return measured.ratio >= 4.5 || measured.onAccent
+      return measured >= 4.5
     case .dynamicType:
       // BayText follows the phone's text size up to each step's cap (TextVariant.maxScale), so labels in fixed shapes
       // don't spill out; the audit calls that partial support.
@@ -146,9 +145,8 @@ private struct ScreenPixels {
   }
 
   /// WCAG's contrast between the text in `frame` and what is behind it: the background is the area's median
-  /// luminance, the text the extreme farthest from it (past the outermost 0.2%, for specks), and whether the
-  /// background is the accent blue.
-  func contrast(in frame: CGRect) -> (ratio: Double, onAccent: Bool)? {
+  /// luminance, the text the extreme farthest from it (past the outermost 0.2%, for specks).
+  func contrast(in frame: CGRect) -> Double? {
     let rows = max(0, Int(frame.minY * scale))..<min(height, Int(frame.maxY * scale))
     let columns = max(0, Int(frame.minX * scale))..<min(width, Int(frame.maxX * scale))
     var luminances: [Double] = []
@@ -165,12 +163,8 @@ private struct ScreenPixels {
     let dark = luminances[count / 500]
     let light = luminances[count - 1 - count / 500]
     let text = abs(dark - background) > abs(light - background) ? dark : light
-    let ratio = (max(text, background) + 0.05) / (min(text, background) + 0.05)
-    return (ratio, abs(Self.accent - background) < 0.015)
+    return (max(text, background) + 0.05) / (min(text, background) + 0.05)
   }
-
-  /// BayColor.accent's (4, 133, 247).
-  private static let accent = 0.235
 
   private static func linear(_ channel: UInt8) -> Double {
     let value = Double(channel) / 255

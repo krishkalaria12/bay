@@ -131,10 +131,10 @@ struct TipCard: View {
       HStack {
         Spacer()
         Button(action: onDone) {
-          BayText(strings.t("tip.gotIt"), variant: .subhead, weight: .semibold, color: .white)
+          BayText(strings.t("tip.gotIt"), variant: .subhead, weight: .semibold, color: BayColor.accentForeground)
             .padding(.horizontal, Space.lg)
             .padding(.vertical, Space.sm)
-            .background(BayColor.accent, in: Capsule())
+            .background(BayColor.accentFill, in: Capsule())
         }
         .buttonStyle(.pressFeedback)
         .accessibilityIdentifier("tip-done")

@@ -165,9 +165,9 @@ fun TipCard(title: String, body: String, gotIt: String, onDone: () -> Unit) {
             Modifier.align(Alignment.End).padding(top = Space.sm).testTag("tip-done")
                 .clearAndSetSemantics { contentDescription = gotIt; role = Role.Button }
                 .pressFeedback(onClick = onDone)
-                .background(Theme.colors.accent, CircleShape)
+                .background(Theme.colors.accentFill, CircleShape)
                 .padding(horizontal = Space.lg, vertical = Space.sm),
-        ) { BayText(gotIt, variant = TextVariant.SUBHEAD, weight = FontWeight.SemiBold, color = Color.White) }
+        ) { BayText(gotIt, variant = TextVariant.SUBHEAD, weight = FontWeight.SemiBold, color = Theme.colors.accentForeground) }
     }
 }
 

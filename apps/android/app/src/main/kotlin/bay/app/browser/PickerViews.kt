@@ -112,7 +112,7 @@ fun PickerCard(browser: BrowserModel, strings: Strings, mode: PickMode) {
 @Composable
 private fun RowScope.ToolButton(id: String, label: String, icon: BayIcon? = null, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = Theme.colors
-    val content = if (primary) Color.White else colors.foreground
+    val content = if (primary) colors.accentForeground else colors.foreground
     Row(
         Modifier.weight(1f).heightIn(min = 44.dp).alpha(if (enabled) 1f else 0.4f).testTag(id)
             .clearAndSetSemantics {
@@ -121,7 +121,7 @@ private fun RowScope.ToolButton(id: String, label: String, icon: BayIcon? = null
                 if (!enabled) disabled()
             }
             .pressFeedback(enabled = enabled, onClick = onClick)
-            .background(if (primary) colors.accent else colors.fill, CircleShape)
+            .background(if (primary) colors.accentFill else colors.fill, CircleShape)
             .padding(horizontal = Space.md),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
