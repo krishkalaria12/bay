@@ -42,7 +42,8 @@ struct SpaceGlyph: View {
 }
 
 /// The tab view as a space's page: its name over a wash of its colour, the pinned sites, its folders, and its tabs as
-/// a grid of cards. A sideways swipe moves to the next space; the bar below switches spaces too.
+/// a grid of cards. A sideways swipe moves to the next space, the page following the finger with the next space drawn
+/// beside it and the colours blending; past the first or last space it stretches. The bar below switches spaces too.
 struct TabSwitcher: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -57,19 +58,20 @@ struct TabSwitcher: View {
   private static let cardRatio: CGFloat = 1.32
 
   var body: some View {
-    let space = app.spaces.first { $0.id == app.activeSpaceId } ?? app.spaces.first
+    let spaces = app.spaces
+    let index = spaces.firstIndex { $0.id == app.activeSpaceId }
+    let space = index.map { spaces[$0] } ?? spaces.first
     let color = spaceColor(space?.color ?? .gray)
     let tabs = browser.switcherTabs
     let essentials = app.pins.filter { $0.kind == .essential }
     let rows = app.pins.filter { $0.kind == .row }
     let hasPinned = !rows.isEmpty || !app.folders.isEmpty
+    // The space the swipe is pulling in, and how far it has come.
+    let coming = neighbour(index, toward: shift)
+    let progress = coming == nil ? 0 : min(1, abs(shift) / Self.pageWidth)
     ZStack(alignment: .top) {
-      LinearGradient(
-        stops: [.init(color: color.opacity(0.34), location: 0), .init(color: color.opacity(0.08), location: 0.55), .init(color: color.opacity(0), location: 1)],
-        startPoint: .top, endPoint: .bottom
-      )
-      .ignoresSafeArea()
-      .allowsHitTesting(false)
+      wash(color).opacity(1 - progress)
+      if let coming { wash(spaceColor(coming.color)).opacity(progress) }
       GeometryReader { geometry in
         let inner = geometry.size.width - 2 * Space.gutter
         let cardWidth = floor((inner - Self.gap * CGFloat(Self.columns - 1)) / CGFloat(Self.columns))
@@ -96,30 +98,83 @@ struct TabSwitcher: View {
           .padding(.bottom, 52 + Space.xxl)
         }
         .offset(x: shift)
+        if shift != 0, let index {
+          let cardHeight = (cardWidth * Self.cardRatio).rounded()
+          if index > 0 {
+            SpacePreview(space: spaces[index - 1], cardWidth: cardWidth, cardHeight: cardHeight, gap: Self.gap, columns: Self.columns)
+              .offset(x: shift - geometry.size.width)
+          }
+          if index < spaces.count - 1 {
+            SpacePreview(space: spaces[index + 1], cardWidth: cardWidth, cardHeight: cardHeight, gap: Self.gap, columns: Self.columns)
+              .offset(x: shift + geometry.size.width)
+          }
+        }
       }
     }
-    .gesture(spaceSwipe)
+    // Beside the list's scrolling: as a plain gesture it only heard the drag once the list let go, at its end.
+    .simultaneousGesture(spaceSwipe)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("tab-switcher")
   }
 
-  /// A sideways swipe moves to the next space or the one before.
+  /// The tab view's width, which a swipe across it moves a whole space by.
+  private static var pageWidth: CGFloat { UIScreen.main.bounds.width }
+
+  /// A space's wash of colour at the top of its page.
+  private func wash(_ color: Color) -> some View {
+    LinearGradient(
+      stops: [.init(color: color.opacity(0.34), location: 0), .init(color: color.opacity(0.08), location: 0.55), .init(color: color.opacity(0), location: 1)],
+      startPoint: .top, endPoint: .bottom
+    )
+    .ignoresSafeArea()
+    .allowsHitTesting(false)
+  }
+
+  /// The space beside the one at `index` on the side a swipe of `shift` pulls in: the next one for a swipe left.
+  private func neighbour(_ index: Int?, toward shift: CGFloat) -> BrowserSpace? {
+    guard let index, shift != 0 else { return nil }
+    let next = index + (shift < 0 ? 1 : -1)
+    return app.spaces.indices.contains(next) ? app.spaces[next] : nil
+  }
+
+  /// A sideways swipe follows the finger to the next space or the one before, and goes there once it's far or quick
+  /// enough; with no space that way the page stretches and springs back.
   private var spaceSwipe: some Gesture {
     DragGesture(minimumDistance: 24)
       .onChanged { value in
-        guard abs(value.translation.width) > abs(value.translation.height), app.spaces.count > 1 else { return }
-        shift = value.translation.width * 0.35
+        let dx = value.translation.width
+        guard abs(dx) > abs(value.translation.height) else { return }
+        let index = app.spaces.firstIndex { $0.id == app.activeSpaceId }
+        shift = neighbour(index, toward: dx) == nil ? stretch(dx) : dx
       }
       .onEnded { value in
-        defer { withAnimation(.easeOut(duration: 0.18)) { shift = 0 } }
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-        let far = abs(value.translation.width) > 80 || abs(value.predictedEndTranslation.width) > 240
-        guard far, let index = app.spaces.firstIndex(where: { $0.id == app.activeSpaceId }) else { return }
-        let next = index + (value.translation.width < 0 ? 1 : -1)
-        guard app.spaces.indices.contains(next) else { return }
+        let dx = value.translation.width
+        let width = Self.pageWidth
+        let index = app.spaces.firstIndex { $0.id == app.activeSpaceId }
+        let far = abs(dx) > width * 0.3 || abs(value.predictedEndTranslation.width) > width * 0.6
+        guard abs(dx) > abs(value.translation.height), far, let next = neighbour(index, toward: dx) else {
+          withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { shift = 0 }
+          return
+        }
         Haptics.tick()
-        browser.selectSpace(app.spaces[next].id)
+        withAnimation(.easeOut(duration: 0.2)) { shift = dx < 0 ? -width : width }
+        // Once the next space covers the screen it becomes the one showing, in place.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+          var still = Transaction()
+          still.disablesAnimations = true
+          withTransaction(still) {
+            browser.selectSpace(next.id)
+            shift = 0
+          }
+        }
       }
+  }
+
+  /// How far a page moves when pulled past the last space: less the further it goes, as a scroll view's edge does.
+  private func stretch(_ dx: CGFloat) -> CGFloat {
+    let width = Self.pageWidth
+    let pulled = (1 - 1 / (abs(dx) * 0.55 / width + 1)) * width
+    return dx < 0 ? -pulled : pulled
   }
 
   private func header(_ space: BrowserSpace) -> some View {
@@ -403,5 +458,56 @@ private struct TabCard: View {
   private func close() {
     Haptics.tick()
     browser.archive(tab.id)
+  }
+}
+
+/// A space beside the one showing while a swipe pulls it in: its name and its tabs' pictures, drawn only.
+private struct SpacePreview: View {
+  @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
+  @Environment(\.colorScheme) private var scheme
+  let space: BrowserSpace
+  let cardWidth: CGFloat
+  let cardHeight: CGFloat
+  let gap: CGFloat
+  let columns: Int
+
+  var body: some View {
+    let name = spaceName(space, strings)
+    // Private tabs stay out of sight, as they do in their own space's page until it shows.
+    let tabs = app.allTabs.filter { $0.spaceId == space.id && !$0.private }.prefix(8)
+    VStack(alignment: .leading, spacing: Space.lg) {
+      HStack(spacing: Space.sm) {
+        SpaceGlyph(space: space, name: name, size: 30)
+        BayText(name, variant: .title).lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .frame(minHeight: 44)
+      LazyVGrid(columns: Array(repeating: GridItem(.fixed(cardWidth), spacing: gap), count: columns), alignment: .leading, spacing: Space.lg) {
+        ForEach(Array(tabs), id: \.id) { tab in
+          picture(tab)
+            .frame(width: cardWidth, height: cardHeight)
+            .background(scheme == .dark ? Color(RGBA(0x17, 0x17, 0x17)) : .white)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous).stroke(BayColor.hairline, lineWidth: 1 / UIScreen.main.scale))
+            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        }
+      }
+    }
+    .padding(.horizontal, Space.gutter)
+    .padding(.top, Space.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+
+  @ViewBuilder private func picture(_ tab: BrowserTab) -> some View {
+    if let snapshot = tab.snapshot.flatMap(URL.init(string:)), let image = UIImage(contentsOfFile: snapshot.path) {
+      Image(uiImage: image).resizable().scaledToFill().frame(width: cardWidth, height: cardHeight, alignment: .top).clipped()
+    } else if !tab.url.isEmpty {
+      SiteIcon(url: tab.url, size: 32)
+    } else {
+      WallpaperView(id: app.preferences.wallpaper)
+    }
   }
 }
