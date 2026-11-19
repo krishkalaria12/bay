@@ -8,6 +8,8 @@ import UIKit
 @MainActor
 final class AppModel: ObservableObject {
   let store: BrowserStore
+  /// Fetches sites' icons from the sites themselves into the documents folder; `favicons` lists what it has kept.
+  let iconFetcher: Favicons
   let sync: PhoneSync
   let http = URLSessionHttp()
   /// The crashes kept for Settings › Report a problem.
@@ -67,6 +69,7 @@ final class AppModel: ObservableObject {
     )
     preferences = store.preferences()
     syncView = sync.view()
+    iconFetcher = Favicons(store: store, http: http, documentsDir: documents)
     // Downloads keep reporting after their tab closes, so the store hears them here.
     Engine.start(
       downloads: { [weak self, store] update in
@@ -79,6 +82,8 @@ final class AppModel: ObservableObject {
     sync.observe(observer: SyncChanges(model: self))
     blocker = ContentBlocker(documentsDir: documents, http: http) { [weak self] status in self?.blockerStatus = status }
     refresh()
+    // The icons of sites Bay shows without one, once a launch.
+    Task { [iconFetcher] in await iconFetcher.fillKnown() }
   }
 
   /// Milliseconds since 1970, as the store's timestamps are.
@@ -187,7 +192,10 @@ final class AppModel: ObservableObject {
     pins = store.pinnedSites(spaceId: activeSpaceId)
     folders = store.folders(spaceId: activeSpaceId)
     recentHistory = store.history(spaceId: activeSpaceId, query: "", offset: 0, limit: 24)
-    favicons = store.favicons()
+    let icons = store.favicons()
+    // Clearing history or browsing data drops icons: their files go too.
+    if icons.count < favicons.count { iconFetcher.forgetDropped() }
+    favicons = icons
     revision = store.revision()
     let hasPrivate = store.tabs().contains { $0.private }
     if hasPrivate != privateSession {

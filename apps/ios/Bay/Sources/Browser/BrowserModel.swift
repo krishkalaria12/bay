@@ -701,6 +701,19 @@ final class BrowserModel: ObservableObject {
     originOf(value: url) ?? url
   }
 
+  /// The icon the page names, for its site; the core keeps it when the site has none yet, or only a small one.
+  private func fetchIcon(_ view: EngineView, pageUrl: String) {
+    struct Named: Decodable {
+      let href: String
+      let userAgent: String
+    }
+    Task { [app] in
+      let named = (try? await view.runScript(.favicon)).flatMap { try? JSONDecoder().decode(Named?.self, from: Data($0.utf8)) } ?? nil
+      guard let named else { return }
+      await app.iconFetcher.pageLoaded(pageUrl: pageUrl, href: named.href, userAgent: named.userAgent)
+    }
+  }
+
   private func isPrivate(_ tabId: String) -> Bool {
     app.tabs.first { $0.id == tabId }?.private ?? false
   }
@@ -877,6 +890,8 @@ final class BrowserModel: ObservableObject {
         let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
         self?.pageColors[tabId] = color
       }
+      // The site's icon, unless the tab is private: its icon would say what was opened privately.
+      if !isPrivate(tabId) { fetchIcon(view, pageUrl: state.url) }
     }
     let rules = app.store.tabs().first { $0.id == tabId }.map { pageHidden($0, url: state.url) } ?? []
     let plan = scriptsFor(

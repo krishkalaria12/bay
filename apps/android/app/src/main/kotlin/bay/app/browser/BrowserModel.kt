@@ -744,6 +744,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         return true
     }
 
+    /** The icon the page names, for its site; the core keeps it when the site has none yet, or only a small one. */
+    private fun fetchIcon(view: BayEngineView, pageUrl: String) {
+        scope.launch {
+            val named = runCatching { org.json.JSONObject(view.runScript(PageScript.FAVICON)) }.getOrNull() ?: return@launch
+            app.iconFetcher.pageLoaded(pageUrl, named.optString("href").ifEmpty { null }, named.optString("userAgent").ifEmpty { null })
+        }
+    }
+
     private fun isPrivate(tabId: String): Boolean = app.tabs.firstOrNull { it.id == tabId }?.private == true
 
     /** A pin's page: its tab in the space when one is open there, else a new one. */
@@ -907,6 +915,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 val bottom = color(mapOf("edge" to "bottom"))
                 if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
             }
+            // The site's icon, unless the tab is private: its icon would say what was opened privately.
+            if (!isPrivate(tabId)) fetchIcon(view, state.url)
         }
         val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { pageHidden(it, state.url) }.orEmpty()
         val plan = scriptsFor(timing[tabId] ?: initialTiming(), NavigationReport(state.url, state.progress, state.isLoading), rules.isNotEmpty())

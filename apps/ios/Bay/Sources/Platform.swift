@@ -10,6 +10,9 @@ final class URLSessionHttp: HttpClient, @unchecked Sendable {
     let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = 20
     configuration.waitsForConnectivity = false
+    // Nothing the core asks for needs cookies (the relay, filter lists, sites' icons), and none are kept between asks.
+    configuration.httpShouldSetCookies = false
+    configuration.httpCookieAcceptPolicy = .never
     session = URLSession(configuration: configuration)
   }
 

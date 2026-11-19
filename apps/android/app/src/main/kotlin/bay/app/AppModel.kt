@@ -48,6 +48,9 @@ class AppModel(context: Context, barTitle: String) {
     val http = UrlConnectionHttp()
     val sync = PhoneSync(store, http, KeystoreSecrets(context), documents, deviceName(context), barTitle, null)
 
+    /** Fetches sites' icons from the sites themselves into the app's files; [favicons] lists what it has kept. */
+    val iconFetcher = bay.core.Favicons(store, http, documents)
+
     /** Sign-ins saved from the HTTP sign-in sheet, in the keystore. */
     val logins = bay.core.SavedLogins(KeystoreSecrets(context))
 
@@ -142,6 +145,8 @@ class AppModel(context: Context, barTitle: String) {
             }
         })
         refresh()
+        // The icons of sites Bay shows without one, once a launch.
+        scope.launch { iconFetcher.fillKnown() }
     }
 
     /**
@@ -225,7 +230,10 @@ class AppModel(context: Context, barTitle: String) {
         pins = store.pinnedSites(activeSpaceId)
         folders = store.folders(activeSpaceId)
         recentHistory = store.history(activeSpaceId, "", 0u, 24u)
-        favicons = store.favicons()
+        val icons = store.favicons()
+        // Clearing history or browsing data drops icons: their files go too.
+        if (icons.size < favicons.size) iconFetcher.forgetDropped()
+        favicons = icons
         revision = store.revision()
         val hasPrivate = store.tabs().any { it.private }
         if (hasPrivate != privateSession) {
