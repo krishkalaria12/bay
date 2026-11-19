@@ -217,6 +217,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
 
+    /** The colour along each tab's page's bottom edge, for what sits behind the bar. */
+    val pageBottomColors = mutableStateMapOf<String, List<Double>>()
+
     /** Find on page, while it is open over the page showing. */
     var find by mutableStateOf<FindState?>(null)
         private set
@@ -312,6 +315,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         visited.clear()
         media.clear()
         pageColors.clear()
+        pageBottomColors.clear()
         failure = null
         mounted = emptyList()
         Engine.setMediaSession(context, null, "", false)
@@ -890,9 +894,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
         if (finished && view != null) {
             scope.launch {
-                val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
-                val rgb = json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
-                if (rgb != null) pageColors[tabId] = rgb else pageColors.remove(tabId)
+                suspend fun color(args: Map<String, Any?>?): List<Double>? {
+                    val json = runCatching { view.runScript(PageScript.PAGE_COLOR, args) }.getOrNull()
+                    return json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
+                }
+                val top = color(null)
+                if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
+                val bottom = color(mapOf("edge" to "bottom"))
+                if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
             }
         }
         val rules = app.store.tabs().firstOrNull { it.id == tabId }?.let { pageHidden(it, state.url) }.orEmpty()

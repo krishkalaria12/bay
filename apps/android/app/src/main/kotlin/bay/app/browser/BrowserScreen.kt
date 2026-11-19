@@ -114,8 +114,10 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             val covered = if (browser.barHidden && browser.overlay == Overlay.NONE) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
             if (shown) {
-                val rgb = browser.pageColors[app.activeTabId]
-                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
+                // The page's own bottom colour, so the band behind the bar reads as the page. Until a page reports one, the
+                // engine's blank page is white.
+                val rgb = browser.pageBottomColors[app.activeTabId]
+                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
                 Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
             }
             PagesHost(browser, shown && !behind, Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered), visible = shown)
