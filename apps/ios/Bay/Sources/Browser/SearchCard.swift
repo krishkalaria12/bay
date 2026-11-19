@@ -338,6 +338,23 @@ struct SearchCard: View {
     }
   }
 
+  /// The mark before the words while the chip shows.
+  private static let chipMark = "\u{200B}"
+
+  /// The field's text: the words, after the chip's mark while there is a chip. A field emptied of the mark too (a
+  /// backspace with nothing typed) leaves the site.
+  private var fieldText: Binding<String> {
+    Binding(
+      get: { scope == nil ? query : Self.chipMark + query },
+      set: { text in
+        if scope != nil, text.isEmpty {
+          leave()
+          return
+        }
+        query = text.replacingOccurrences(of: Self.chipMark, with: "")
+      })
+  }
+
   private func field(completion: String, rows: [Suggestion]) -> some View {
     let placeholder = scope.map { strings.t("search.withEngine", ["engine": $0.name]) } ?? strings.t("search.placeholder")
     return HStack(spacing: 0) {
@@ -353,7 +370,17 @@ struct SearchCard: View {
             .accessibilityHidden(true)
             .accessibilityIdentifier("address-completion")
         }
-        TextField(placeholder, text: $query)
+        // The field holds an invisible mark before the words while the chip shows, the placeholder drawn over it: a
+        // backspace with no words deletes the mark, which SwiftUI's field reports, and gives the chip back.
+        if scope != nil, query.isEmpty {
+          Text(verbatim: placeholder)
+            .font(TextVariant.headline.font(weight: .regular, sizeCategory: sizeCategory))
+            .foregroundColor(Color(UIColor.placeholderText))
+            .lineLimit(1)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        TextField(scope == nil ? placeholder : "", text: fieldText)
           .font(TextVariant.headline.font(weight: .regular, sizeCategory: sizeCategory))
           .foregroundColor(text)
           .keyboardType(.webSearch)
