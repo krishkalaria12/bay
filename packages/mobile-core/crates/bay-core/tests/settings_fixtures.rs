@@ -96,13 +96,29 @@ fn plain(sections: &[SettingsSection]) -> Value {
         .collect()
 }
 
-/// Drops the rows only the native apps have (the font for all websites), which the Expo app's settings never had.
+/// Rows only the native apps have or show differently: the font for all websites, and the fonts pages can show in
+/// (which the Expo app never bundled; Inter was its Android UI font).
+const NATIVE_ROWS: [&str; 6] = [
+    "siteFont",
+    "credit.Inter",
+    "credit.Literata",
+    "credit.Nunito",
+    "credit.Charis SIL",
+    "credit.Lora",
+];
+
+/// Drops the rows in `NATIVE_ROWS`, from both what the Expo app said and what the core says.
 fn without_native_rows(value: Value) -> Value {
     match value {
         Value::Array(items) => Value::Array(
             items
                 .into_iter()
-                .filter(|item| item.get("id") != Some(&json!("siteFont")))
+                .filter(|item| {
+                    !item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| NATIVE_ROWS.contains(&id))
+                })
                 .map(without_native_rows)
                 .collect(),
         ),
@@ -165,7 +181,7 @@ fn settings_says_and_does_what_the_typescript_settings_does() {
         };
         let got = without_native_rows(got);
         checked += 1;
-        if got != line["result"] {
+        if got != without_native_rows(line["result"].clone()) {
             failures.push(format!(
                 "line {} {fun} {} {}:\n  want {}\n  got  {}",
                 number + 1,
@@ -173,7 +189,7 @@ fn settings_says_and_does_what_the_typescript_settings_does() {
                 line.get("page")
                     .or(line.get("query"))
                     .unwrap_or(&Value::Null),
-                line["result"],
+                without_native_rows(line["result"].clone()),
                 got
             ));
         }

@@ -287,7 +287,7 @@ const fn android_credit(name: &'static str, licence: &'static str, url: &'static
 }
 
 /// The software Bay is built from, and the licence each ships under. Names and licences stay as their projects write them.
-const CREDITS: [Credit; 14] = [
+const CREDITS: [Credit; 18] = [
     credit("Bay", "Apache-2.0", SOURCE_URL),
     credit(
         "Cra",
@@ -336,8 +336,20 @@ const CREDITS: [Credit; 14] = [
         "Apache-2.0",
         "https://github.com/google/material-design-icons",
     ),
-    android_credit("Inter", "OFL-1.1", "https://github.com/rsms/inter"),
+    credit("Inter", "OFL-1.1", "https://github.com/rsms/inter"),
     credit("Caveat", "OFL-1.1", "https://github.com/googlefonts/caveat"),
+    credit(
+        "Literata",
+        "OFL-1.1",
+        "https://github.com/googlefonts/literata",
+    ),
+    credit("Nunito", "OFL-1.1", "https://github.com/googlefonts/nunito"),
+    credit("Charis SIL", "OFL-1.1", "https://software.sil.org/charis/"),
+    credit(
+        "Lora",
+        "OFL-1.1",
+        "https://github.com/cyrealtype/Lora-Cyrillic",
+    ),
 ];
 
 /// An enum's name as it is saved: "dark", "edges", "browser".
