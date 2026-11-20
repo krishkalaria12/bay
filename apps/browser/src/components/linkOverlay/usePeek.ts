@@ -1,9 +1,17 @@
+import { View } from "@bay/platform";
 import { useEffect, useRef, useState } from "react";
-import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "@bay/platform/motion";
+import Animated, { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "@bay/platform/motion";
 import { PEEK_HIDE_DELAY_MS, PEEK_SLIDE_MS } from "../window/constants";
 
 // The sidebar's and tab strip's slides: the peek's and the docked sidebar's. Instant under Reduce Motion.
 export const SLIDE: WithTimingConfig = { duration: PEEK_SLIDE_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System };
+
+/**
+ * A peek's panel, on the platform's view as the edge strip that opens it is, so the two hear the pointer the same way.
+ * On the web a Reanimated view's enter is React's, which comes before the strip's leave: the strip's hide then won,
+ * shutting the peek with the pointer in it, and where the strip and the panel overlap, opening it again at once.
+ */
+export const PeekPanel = Animated.createAnimatedComponent(View);
 
 /**
  * A hidden sidebar or tab strip peeking out while the pointer is at the window's edge. The peek stays mounted, so a

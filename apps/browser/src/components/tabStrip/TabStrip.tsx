@@ -25,7 +25,7 @@ import { usePageStyle, usePagerPages } from "../spaces/pager";
 import { SpaceSwipeArea } from "../spaces/SpaceSwipe";
 import { openNewTabInSplit } from "../split/splitActions";
 import { setMeasuredWidth, useMeasuredWidths } from "../window/measuredWidths";
-import { usePeek } from "../linkOverlay/usePeek";
+import { PeekPanel, usePeek } from "../linkOverlay/usePeek";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -1564,7 +1564,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
       {live ? (
         <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
       ) : null}
-      <Animated.View
+      <PeekPanel
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}
         onMouseLeave={live ? hide : undefined}
@@ -1596,7 +1596,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
             <TopTabStrip floating swipe={live} width={Math.max(0, peekWidth - STRIP_PEEK_BORDER * 2)} />
           </View>
         </Surface>
-      </Animated.View>
+      </PeekPanel>
     </>
   );
 }
