@@ -8,16 +8,31 @@ name: Linux build from source
 # runner's Ubuntu doesn't limit which distributions the packages run on.
 #
 # Start a run: git tag linux-build-N && git push origin linux-build-N
+#
+# A release is the same run with a version and publish: the packages job's AppImage check must pass, then publish
+# (scripts/linux/publish.sh) signs them, adds them to the release v<version> and refreshes the APT and RPM
+# repositories and the AUR. docs/releasing.md › Linux:
+#   gh workflow run linux-build.yml --ref feat/linux -f version=X.Y.Z -f publish=true
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, X.Y.Z (default 0.1.<run number>)"
+        required: false
+        default: ""
+      publish:
+        description: "Publish the packages to the release v<version>, the repositories and the AUR"
+        type: boolean
+        default: false
   push:
     tags: ["linux-build-*"]
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: linux-build
-  cancel-in-progress: true
+  # A test build replaces the one before it, but never cancels a release.
+  group: linux-build${{ inputs.publish && '-release' || '' }}
+  cancel-in-progress: ${{ !inputs.publish }}
 env:
   # Raise the number to start from a clean tree, as a changed patch needs.
   STATE_ARTIFACT: linux-engine-state-1
@@ -26,7 +41,36 @@ env:
   ENGINE_ROOT: /engine/be
   STATE_DIR: /engine/state
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - name: Plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          HAS_GPG_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY != '' }}
+          HAS_AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
+        run: |
+          # Checked here, before hours of engine build, rather than in publish.
+          version=${VERSION:-0.1.$GITHUB_RUN_NUMBER}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z: $version"; exit 1; }
+          if [[ "$PUBLISH" == true ]]; then
+            [[ -n "$VERSION" ]] || { echo "::error::publishing needs a version"; exit 1; }
+            gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null || {
+              echo "::error::there is no release v$VERSION: Linux adds its packages to the Mac release, so publish that first"; exit 1; }
+            [[ "$HAS_GPG_KEY" == true ]] || { echo "::error::the LINUX_GPG_PRIVATE_KEY secret isn't set (docs/releasing.md › Linux)"; exit 1; }
+            [[ "$HAS_AUR_KEY" == true ]] || { echo "::error::the AUR_SSH_PRIVATE_KEY secret isn't set (docs/releasing.md › Linux)"; exit 1; }
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=${PUBLISH:-false}" >> "$GITHUB_OUTPUT"
   engine:
+    needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 355
     strategy:
@@ -163,10 +207,11 @@ jobs:
           overwrite: true
           retention-days: 7
   packages:
-    needs: engine
+    needs: [plan, engine]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
+      VERSION: ${{ needs.plan.outputs.version }}
       # Runners have no FUSE: appimagetool and the AppImage under test unpack themselves instead of mounting.
       APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
@@ -212,10 +257,11 @@ jobs:
           nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/ac588ef1c914865dad517b337ea0eb9694a4021c.tar.gz
       - name: Package
         run: |
-          scripts/linux/release.sh --app dist/linux-app --version "0.1.$GITHUB_RUN_NUMBER" \
+          scripts/linux/release.sh --app dist/linux-app --version "$VERSION" \
             --output dist/linux-release --formats tar,deb,rpm,appimage,aur,nix
       - name: Check the AppImage opens a window
-        continue-on-error: true
+        # Required for a release.
+        continue-on-error: ${{ needs.plan.outputs.publish != 'true' }}
         run: |
           # The runner's Ubuntu restricts the user namespaces Chromium's sandbox needs to programs with an AppArmor
           # profile, which an AppImage can't install (packaging/linux/AppRun).
@@ -225,27 +271,27 @@ jobs:
       # with the checksums, zsync, PKGBUILD and NixOS README, stays in one zip for publishing.
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/Bay-0.1.${{ github.run_number }}-x86_64.AppImage
+          path: dist/linux-release/Bay-${{ needs.plan.outputs.version }}-x86_64.AppImage
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay_0.1.${{ github.run_number }}_amd64.deb
+          path: dist/linux-release/bay_${{ needs.plan.outputs.version }}_amd64.deb
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay-0.1.${{ github.run_number }}-1.x86_64.rpm
+          path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-1.x86_64.rpm
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay-0.1.${{ github.run_number }}-linux-x64.tar.xz
+          path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-linux-x64.tar.xz
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay-0.1.${{ github.run_number }}-nixos-x64.nar.zst
+          path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-nixos-x64.nar.zst
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -253,4 +299,43 @@ jobs:
           name: bay-linux-packages
           path: dist/linux-release/
           if-no-files-found: error
+          # aur/.SRCINFO
+          include-hidden-files: true
           compression-level: 0
+  publish:
+    needs: [plan, packages]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    concurrency:
+      group: linux-publish
+      cancel-in-progress: false
+    steps:
+      # Only the scripts: nothing the build installed runs next to the keys.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bay-linux-packages
+          path: dist/linux-release
+      - name: Install signing and repository tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q apt-utils createrepo-c rpm gnupg
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          keys=$(mktemp -d)
+          trap 'rm -rf "$keys"' EXIT
+          export GNUPGHOME="$keys/gnupg" AUR_SSH_KEY="$keys/aur"
+          mkdir -m 700 "$GNUPGHOME"
+          gpg --batch --quiet --import <<<"$LINUX_GPG_PRIVATE_KEY"
+          BAY_GPG_KEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')
+          export BAY_GPG_KEY
+          (umask 077 && printf '%s\n' "$AUR_SSH_PRIVATE_KEY" >"$AUR_SSH_KEY")
+          scripts/linux/publish.sh --packages dist/linux-release --version "$VERSION"

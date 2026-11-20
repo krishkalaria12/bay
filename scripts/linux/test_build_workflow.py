@@ -16,7 +16,7 @@ BASH = shutil.which("bash")
 
 def step(name):
     source = WORKFLOW.read_text()
-    match = re.search(r"^      - name: " + re.escape(name) + r"\n(.*?)(?=^      - |^  packages:|\Z)", source, re.M | re.S)
+    match = re.search(r"^      - name: " + re.escape(name) + r"\n(.*?)(?=^      - |^  \w|\Z)", source, re.M | re.S)
     if not match:
         raise AssertionError(f"Missing workflow step: {name}")
     return match.group(1)
@@ -78,7 +78,21 @@ class LinuxBuildWorkflowTests(unittest.TestCase):
         build = step("Build app")
         self.assertIn('archive="dist/engine/$id.tar.zst"', build)
         self.assertIn("scripts/linux/release.sh --app dist/linux-app", step("Package"))
-        self.assertIn("continue-on-error: true", step("Check the AppImage opens a window"))
+        self.assertIn("continue-on-error: ${{ needs.plan.outputs.publish != 'true' }}", step("Check the AppImage opens a window"))
+
+    def test_a_release_is_checked_before_the_engine_and_published_apart_from_the_build(self):
+        source = WORKFLOW.read_text()
+        plan = step("Plan")
+        self.assertIn('gh release view "v$VERSION"', plan)
+        for secret in ("LINUX_GPG_PRIVATE_KEY", "AUR_SSH_PRIVATE_KEY"):
+            self.assertIn(f"secrets.{secret} != ''", plan)
+        self.assertIn("  engine:\n    needs: plan\n", source)
+        publish = source[source.index("\n  publish:\n"):]
+        self.assertIn("if: needs.plan.outputs.publish == 'true'", publish)
+        self.assertIn("contents: write", publish)
+        self.assertNotIn("pnpm", publish, "no build dependency runs next to the signing key")
+        self.assertIn("scripts/linux/publish.sh --packages dist/linux-release", step("Publish"))
+        self.assertIn("include-hidden-files: true", source, "the AUR's .SRCINFO is a dot file")
 
 
 @unittest.skipUnless(BASH and shutil.which("zstd") and shutil.which("sha256sum"), "requires bash, zstd and sha256sum")
