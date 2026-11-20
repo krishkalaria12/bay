@@ -55,11 +55,16 @@ export function createBrowserAuthority({
   store = createBrowserStore(),
   effects,
   executeAsync,
+  schedulePublish,
 }: {
   epoch: string;
   store?: BrowserStore;
   effects?: LocationCommandEffects;
   executeAsync?: (command: BrowserCommand, isActive: () => boolean) => Promise<JsonValue>;
+  /** Changes made outside a command (page facts, services) wait for `flush`, which this calls when it suits the
+   *  caller, so a burst of them makes one commit. Without it each change commits at once. A command always
+   *  commits at once, with any changes still waiting. */
+  schedulePublish?: (flush: () => void) => void;
 }) {
   text(epoch);
   const project = createBrowserProjector();
@@ -110,8 +115,26 @@ export function createBrowserAuthority({
     }
   }
 
+  let scheduled = false;
+
+  function flush() {
+    scheduled = false;
+
+    if (!closed) publish();
+  }
+
   const unsubscribe = store.subscribe(() => {
-    if (!executing) publish();
+    if (executing) return;
+
+    if (!schedulePublish) {
+      publish();
+
+      return;
+    }
+
+    if (scheduled) return;
+    scheduled = true;
+    schedulePublish(flush);
   });
 
   function enqueue<T>(apply: () => T) {
@@ -207,7 +230,13 @@ export function createBrowserAuthority({
   }
 
   return {
-    getSnapshot: () => commit,
+    getSnapshot() {
+      if (scheduled) flush();
+
+      return commit;
+    },
+    /** Commits any changes still waiting for their scheduled publish. */
+    flush,
     subscribe(listener: (commit: BrowserCommit) => void) {
       if (closed) throw new AuthorityError("closed", "authority is closed");
       listeners.add(listener);
