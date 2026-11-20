@@ -97,7 +97,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -194,6 +194,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         private set
     var drawerFolder: String? = null
         private set
+    /** The drawer shows the space's archived tabs instead of its bookmarks. */
+    var drawerArchive by mutableStateOf(false)
 
     /**
      * How far the bar has slid away with the page showing: 0 in full, 1 gone. The engine moves it as Chrome moves its
@@ -511,14 +513,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (announce) showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
     }
 
-    /** Slides the bookmarks drawer out over the page, with `folder` open in it. */
     /** Closes Settings when something opens over the page instead (the drawer); Settings sets it. */
     var leaveSettings: () -> Unit = {}
 
-    fun openDrawer(folder: String? = null) {
+    /** Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive. */
+    fun openDrawer(folder: String? = null, archive: Boolean = false) {
         if (covered) leaveSettings()
         panel = null
         drawerFolder = folder
+        drawerArchive = archive
         drawerOpen = true
     }
 

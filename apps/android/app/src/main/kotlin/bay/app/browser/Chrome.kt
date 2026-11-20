@@ -369,7 +369,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
     val view = androidx.compose.ui.platform.LocalView.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
-            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            BarButton("bar-archive", strings.t("bar.archive"), { browser.openDrawer(archive = true) }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             SpacesCapsule(browser, strings)
             BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
         } else if (browser.hasPage) {
@@ -384,7 +384,8 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
                 if (browser.tip == bay.core.TipId.BLOCKING) Box(Modifier.size(60.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
             }
         } else {
-            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
+            TabsButton(browser, strings, slide)
             Capsule(browser, strings)
             BarButton("bar-settings", strings.t("bar.settings"), onSettings, onLongClick = onChecks) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
         }
