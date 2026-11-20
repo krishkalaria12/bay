@@ -26,7 +26,9 @@ import { createServer, request as httpRequest } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as v from "valibot";
+
+// No packages: the release's launch check (release.yml's sign job) runs this file without node_modules.
+const isString = (value) => Object.prototype.toString.call(value) === "[object String]";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const here = fileURLToPath(import.meta.url);
@@ -155,7 +157,7 @@ const profileColors = ["plum", "blue", "green", "orange", "red"];
  */
 export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
   const ps = spaces.map((p, i) => {
-    const o = v.is(v.string(), p) ? { name: p } : p;
+    const o = isString(p) ? { name: p } : p;
 
     return { id: o.id ?? (i ? o.name.toLowerCase() : "default"), name: o.name ?? o.id, color: o.color ?? profileColors[i % 5], icon: null, createdAt: i, ...o };
   });
@@ -425,7 +427,7 @@ class Instance {
   }
   /** The first page target whose URL contains `urlPart` (or matches the predicate), or null. */
   async pageTarget(urlPart) {
-    const test = v.is(v.function_(), urlPart) ? urlPart : (t) => t.url.includes(urlPart);
+    const test = urlPart instanceof Function ? urlPart : (t) => t.url.includes(urlPart);
 
     return (await this.targets()).find((t) => t.type === "page" && test(t)) ?? null;
   }
@@ -552,7 +554,7 @@ export async function launch(app, opts = {}) {
 
   if (opts.probe) writeFileSync(join(data, "perf-probe"), "");
 
-  for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), v.is(v.string(), text) ? text : JSON.stringify(text));
+  for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), isString(text) ? text : JSON.stringify(text));
   const binary = binaryOf(app);
   const port = opts.port ? parsePort(opts.port) : await freePort();
   const busy = listenerPids(port);
@@ -613,7 +615,7 @@ export async function launch(app, opts = {}) {
 
   if (opts.ready !== false)
     try {
-      await instance.ready(v.is(v.string(), opts.ready) ? { test: opts.ready } : v.is(v.object({}), opts.ready) ? opts.ready : {});
+      await instance.ready(isString(opts.ready) ? { test: opts.ready } : opts.ready instanceof Object ? opts.ready : {});
     } catch (e) {
       await instance.quit({ graceful: false });
       throw e;
@@ -656,7 +658,7 @@ export function reporter(logFile, { name = "run" } = {}) {
     if (process.env.VERBOSE) console.log(line);
   };
 
-  const text = (a) => (v.is(v.string(), a) ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
+  const text = (a) => (isString(a) ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
 
   const r = {
     results,
