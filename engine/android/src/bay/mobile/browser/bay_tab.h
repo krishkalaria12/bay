@@ -77,6 +77,10 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void SetForceDark(bool dark);
   bool force_dark() const { return force_dark_; }
 
+  // The app's bar is the page's bottom browser controls (BayTab.setBottomControlsHeight): scrolling moves it with the
+  // page in the compositor. This brings it back, as Chrome does for a new page.
+  void ShowBrowserControls(bool animate);
+
   // Location, asked by BayPermissionManager. An answer lasts for the current page.
   bool HasLocationGrant(const url::Origin& origin) const;
   void RequestLocationPermission(const url::Origin& origin, base::OnceCallback<void(bool)> callback);

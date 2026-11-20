@@ -24,6 +24,8 @@
 #include "bay/mobile/browser/bay_browser_context.h"
 #include "bay/mobile/browser/bay_content_blocker.h"
 #include "bay/mobile/common/bay_isolated_world.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
+#include "cc/input/browser_controls_state.h"
 #include "components/android_autofill/browser/android_autofill_client.h"
 #include "components/android_autofill/browser/autofill_provider.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
@@ -906,6 +908,16 @@ void BayTab::SetForceDark(bool dark) {
 
 static void JNI_BayTab_SetForceDark(JNIEnv* env, int64_t tab_ptr, bool dark) {
   reinterpret_cast<BayTab*>(tab_ptr)->SetForceDark(dark);
+}
+
+void BayTab::ShowBrowserControls(bool animate) {
+  // Scrolling still moves them (kBoth); they're shown now.
+  web_contents_->UpdateBrowserControlsState(cc::BrowserControlsState::kBoth, cc::BrowserControlsState::kShown, animate,
+                                            std::nullopt);
+}
+
+static void JNI_BayTab_ShowBrowserControls(JNIEnv* env, int64_t tab_ptr, bool animate) {
+  reinterpret_cast<BayTab*>(tab_ptr)->ShowBrowserControls(animate);
 }
 
 static void JNI_BayTab_InitializeAutofill(JNIEnv* env, int64_t tab_ptr) {

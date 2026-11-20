@@ -19,10 +19,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -120,14 +118,12 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
             val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
-            // The engine has no inset for what covers a page, so the page ends above the floating bar (what a site pins
-            // to its bottom stays clear of it), over the page's own colour. Nothing is covered while the bar is away.
-            val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            val covered = if (browser.barAway) 0.dp else maxOf(navBottom, Space.md) + Space.xs + BAR_HEIGHT + Space.sm
+            // The page runs under the floating bar to the screen's foot and is never resized as the bar comes and goes:
+            // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. What a
+            // site pins to its bottom sits under the bar while it shows; the engine has no inset to lift it (plan gaps).
             if (shown) {
-                // The page's own bottom colour, so the band behind the bar reads as the page. Until a page reports one, the
-                // engine's blank page is white.
-                val rgb = browser.shownColor(browser.pageBottomColors[app.activeTabId])
+                // Behind the page until it draws its first frame: the colour at its top, else the engine's blank white.
+                val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
                 val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
                 Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
             }
@@ -147,7 +143,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
             PagesHost(
                 browser, shown && !behind,
-                Modifier.fillMaxSize().then(top).padding(bottom = covered).graphicsLayer {
+                Modifier.fillMaxSize().then(top).graphicsLayer {
                     translationX = slide.value
                     alpha = 1f - (kotlin.math.abs(slide.value) / pageWidth).coerceIn(0f, 0.6f)
                 },
@@ -167,7 +163,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 rememberFileImage(browser.activeTab?.snapshot, pixels)?.let { picture ->
                     androidx.compose.foundation.Image(
                         picture, null,
-                        Modifier.fillMaxSize().statusBarsPadding().padding(bottom = covered).blur(24.dp),
+                        Modifier.fillMaxSize().statusBarsPadding().blur(24.dp),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     )
                 }
@@ -223,7 +219,6 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)
         SiteSettingsPanel(browser, strings, browser.panel == Panel.SITE_SETTINGS, onSettings)
         LinkMenu(browser, strings, browser.panel == Panel.LINK)
-        TabsMenu(browser, strings, browser.panel == Panel.TABS)
         PinPanel(browser, strings, browser.panel == Panel.PIN)
         PageRequestPanel(browser, strings, browser.panel == Panel.REQUEST)
         ReaderPanel(browser, strings, browser.panel == Panel.READER)

@@ -48,17 +48,17 @@ struct PageMenu: View {
       header: AnyView(AddressRow(browser: browser, act: act).environmentObject(strings).environmentObject(app))
     ) {
       HStack(spacing: Space.sm) {
-        Tile(id: "page-share", icon: .share, label: strings.t("pageMenu.share"), action: act(browser.share))
+        MenuTile(id: "page-share", icon: .share, label: strings.t("pageMenu.share"), action: act(browser.share))
         let pinned = browser.isPinned
-        Tile(
+        MenuTile(
           id: "page-pin", icon: pinned ? .unpin : .pin, label: strings.t("pageMenu.pin"),
           accessibilityLabel: strings.t(pinned ? "pageMenu.unpin" : "pageMenu.pinToStart"), active: pinned, action: act(browser.togglePin))
         let bookmarked = browser.isBookmarked
-        Tile(
+        MenuTile(
           id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.save"),
           accessibilityLabel: strings.t("pageMenu.bookmark"), active: bookmarked,
           action: { browser.panel = .save })
-        Tile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
+        MenuTile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
       }
 
       VStack(spacing: Space.md) {
@@ -199,8 +199,8 @@ private struct AddressRow: View {
   }
 }
 
-/// A rounded square with an icon over its label, four to a row.
-private struct Tile: View {
+/// A rounded square with an icon over its label, four to a row: the page menu's and the tab sheet's.
+struct MenuTile: View {
   let id: String
   let icon: BayIcon
   let label: String

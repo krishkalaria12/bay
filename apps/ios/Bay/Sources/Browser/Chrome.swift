@@ -11,7 +11,7 @@ struct PagesHost: UIViewRepresentable {
   /// False under the tab switcher: no page is active, and VoiceOver skips them all.
   var shown = true
   /// How much of a page's bottom the floating bar covers, in points: WebKit keeps what a page pins to its bottom above
-  /// it, while content still scrolls under the bar. 0 while the bar is away.
+  /// it, while content still scrolls under the bar. 0 on a fullscreen site.
   var coveredBottom: CGFloat = 0
 
   final class Container: UIView {
@@ -168,8 +168,9 @@ struct BrowserBar: View {
   let onSettings: () -> Void
   var onChecks: () -> Void = {}
   @State private var swipe: CGFloat = 0
-  @State private var tabsHeld = false
-  /// Holding Tabs with more than one space: the row of spaces above the bar, and the one under the finger.
+  /// When a hold on Tabs last let go, so the tap the lift also makes doesn't open the tab view.
+  @State private var holdEnded = Date.distantPast
+  /// Holding Tabs: the column of spaces above the bar, and the one under the finger.
   @State private var sliding = false
   @State private var slideTarget: SlideTarget?
   @State private var tabsFrame: CGRect = .zero
@@ -211,8 +212,8 @@ struct BrowserBar: View {
     .highPriorityGesture(browser.hasPage && browser.overlay == .none && !sliding ? tabSwipe : nil)
   }
 
-  /// Tabs, with the open tabs' count. Holding it with more than one space brings the column of spaces: slide to one and
-  /// lift to switch, or lift without sliding for the Tabs menu.
+  /// Tabs, with the open tabs' count. Holding it brings the column of spaces, the one showing on a soft grey circle: slide
+  /// to one and lift to switch, or to + for a new one. Lifting without sliding puts it away.
   private var tabsButton: some View {
     let app = browser.app
     let count = app.tabs.count
@@ -221,28 +222,19 @@ struct BrowserBar: View {
     let tabsLabel = count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")
     let label = spaced && space != nil ? strings.t("bar.inSpace", ["label": tabsLabel, "space": spaceName(space!, strings)]) : tabsLabel
     return GlassIconButton(.tabs, label: label) {
-      // Held, the button opened the menu or switched space instead.
-      if tabsHeld {
-        tabsHeld = false
-      } else {
-        browser.showTabs()
-      }
+      // A hold's lift comes as a tap too, before or just after the hold ends.
+      guard !sliding, Date().timeIntervalSince(holdEnded) > 0.4 else { return }
+      browser.showTabs()
     }
-    .simultaneousGesture(spaced ? nil : LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-      tabsHeld = true
-      Haptics.tick()
-      browser.panel = .tabs
-    })
-    .simultaneousGesture(spaced ? spaceSlide : nil)
-    // A hold whose lift never reached the button (the finger slid off) doesn't eat the next tap.
-    .onChange(of: browser.panel) { if $0 == nil { tabsHeld = false } }
+    .simultaneousGesture(spaceSlide)
     .overlay(alignment: .topTrailing) { TabCount(count: count) }
     // The spaces stand in a column above the button while it's held, the nearest first.
     .overlay(alignment: .bottom) {
       if sliding {
         SpaceSlideColumn(spaces: app.spaces, current: app.activeSpaceId, target: slideTarget)
           .fixedSize()
-          .alignmentGuide(.bottom) { $0[.bottom] + SpaceSlideColumn.gap + tabsFrame.height }
+          // Lifted clear of the button: an alignment guide here was dropped, which left the column over the button.
+          .offset(y: -(SpaceSlideColumn.gap + tabsFrame.height))
           .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
       }
     }
@@ -253,12 +245,12 @@ struct BrowserBar: View {
         .onAppear { tabsFrame = proxy.frame(in: .global) }
         .onChange(of: proxy.frame(in: .global)) { tabsFrame = $0 }
     })
-    .modifier(SpaceActions(browser: browser, enabled: spaced))
+    .modifier(SpaceActions(browser: browser))
     .accessibilityIdentifier("bar-tabs")
   }
 
   /// Hold Tabs, then slide: the space under the finger grows and ticks; lifting switches to it. Lifting where it
-  /// started opens the Tabs menu; lifting well above the row lets go of nothing.
+  /// started, or well away from the column, lets go of nothing.
   private var spaceSlide: some Gesture {
     LongPressGesture(minimumDuration: 0.35)
       .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
@@ -266,7 +258,6 @@ struct BrowserBar: View {
         guard case .second(true, let drag) = value else { return }
         if !sliding {
           sliding = true
-          tabsHeld = true
           Haptics.tick()
         }
         guard let drag else { return }
@@ -278,21 +269,18 @@ struct BrowserBar: View {
         }
       }
       .onEnded { value in
-        defer {
-          sliding = false
-          slideTarget = nil
-        }
-        guard case .second(true, let drag) = value else { return }
-        let moved = drag.map { hypot($0.translation.width, $0.translation.height) > 12 } ?? false
-        switch slideTarget {
+        let target = slideTarget
+        sliding = false
+        slideTarget = nil
+        guard case .second(true, _) = value else { return }
+        holdEnded = Date()
+        switch target {
         case .space(let index):
           browser.switchSpace(browser.app.spaces[index].id)
         case .add:
           browser.newSpace()
         case nil:
-          if !moved {
-            browser.panel = .tabs
-          }
+          break
         }
       }
   }
@@ -397,6 +385,7 @@ struct SpacesCapsule: View {
           HStack(spacing: 2) {
             ForEach(app.spaces, id: \.id) { space in
               let active = space.id == app.activeSpaceId
+              let dropping = browser.cardDropSpace == space.id
               Button {
                 Haptics.press()
                 browser.selectSpace(space.id)
@@ -410,7 +399,17 @@ struct SpacesCapsule: View {
                   }
                 }
                 .frame(width: 34, height: 34)
+                // A tab card dragged over it lights it in its colour: let go, and the tab moves here.
+                .background(Circle().fill(spaceColor(space.color).opacity(dropping ? 0.35 : 0)))
+                .scaleEffect(dropping ? 1.25 : 1)
+                .animation(.easeOut(duration: 0.12), value: dropping)
                 .contentShape(Rectangle())
+                .background(GeometryReader { proxy in
+                  Color.clear
+                    .onAppear { browser.spaceDropFrames[space.id] = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { browser.spaceDropFrames[space.id] = $0 }
+                    .onDisappear { browser.spaceDropFrames[space.id] = nil }
+                })
               }
               .buttonStyle(.plain)
               .id(space.id)
@@ -523,16 +522,13 @@ struct PageErrorView: View {
 }
 
 /// VoiceOver can't hold and slide, so Tabs offers each other space as an action, and a new one. iOS 15 has no list of
-/// actions; there it offers the Tabs menu, which lists the spaces.
+/// actions; there Tabs opens the tab view, whose spaces are buttons.
 private struct SpaceActions: ViewModifier {
   @EnvironmentObject private var strings: Strings
   @ObservedObject var browser: BrowserModel
-  let enabled: Bool
 
   func body(content: Content) -> some View {
-    if !enabled {
-      content
-    } else if #available(iOS 16, *) {
+    if #available(iOS 16, *) {
       content.accessibilityActions {
         ForEach(browser.app.spaces.filter { $0.id != browser.app.activeSpaceId }, id: \.id) { other in
           Button(strings.t("tabs.switchSpace", ["name": spaceName(other, strings)])) { browser.switchSpace(other.id) }
@@ -540,7 +536,7 @@ private struct SpaceActions: ViewModifier {
         Button(strings.t("tabsMenu.newSpace")) { browser.newSpace() }
       }
     } else {
-      content.accessibilityAction(named: Text(verbatim: strings.t("tabsMenu.title"))) { browser.panel = .tabs }
+      content
     }
   }
 }

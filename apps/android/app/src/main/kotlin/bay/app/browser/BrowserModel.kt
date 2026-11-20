@@ -96,7 +96,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -180,9 +180,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var pinTab by mutableStateOf<BrowserTab?>(null)
         private set
 
-    /** The folder picked in the tabs menu, which it renames or deletes. */
-    var activeFolderId by mutableStateOf<String?>(null)
-
     var zoom by mutableStateOf<Zoom?>(null)
         private set
 
@@ -256,9 +253,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
-
-    /** The colour along each tab's page's bottom edge, for what sits behind the bar. */
-    val pageBottomColors = mutableStateMapOf<String, List<Double>>()
 
     /**
      * A page colour as the page shows it: on a site with Force dark, Blink draws a light page dark, which the page's own
@@ -370,7 +364,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         visited.clear()
         media.clear()
         pageColors.clear()
-        pageBottomColors.clear()
         failure = null
         mounted = emptyList()
         Engine.setMediaSession(context, null, "", false)
@@ -548,9 +541,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         activate(next.id)
     }
 
+    /** How far the person has scrolled the page one way since it last turned: down positive, up negative. */
+    private var scrollRun = 0.0
+
+    /**
+     * The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
+     * of the finger, or the page shifting itself as it loads (no delta), leaves it be.
+     */
     private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
         if (tabId != app.activeTabId) return
-        if (offsetY < 24 || deltaY < -8) barHidden = false else if (deltaY > 8) barHidden = true
+        if (offsetY < 24) {
+            scrollRun = 0.0
+            barHidden = false
+            return
+        }
+        if (deltaY == 0.0) return
+        scrollRun = if ((deltaY > 0) == (scrollRun > 0)) scrollRun + deltaY else deltaY
+        if (scrollRun > 48) barHidden = true else if (scrollRun < -24) barHidden = false
     }
 
     // Media
@@ -767,34 +774,54 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         refreshMounted()
     }
 
-    /** A space with the next default name ("Space 3"). */
-    fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
-
-    fun newFolder(name: String) {
+    /** A pinned folder in the space showing, named [name]; answers its id. */
+    fun newFolder(name: String): String {
         val folder = BrowserFolder(UUID.randomUUID().toString(), app.activeSpaceId, name)
         app.dispatch(Action.NewFolder(folder))
-        activeFolderId = folder.id
+        return folder.id
     }
 
     fun renameFolder(id: String, name: String) = app.dispatch(Action.RenameFolder(id, name))
 
-    /** Deletes a folder; its pinned rows return to the top level. */
-    fun deleteFolder(id: String) {
-        if (activeFolderId == id) activeFolderId = null
-        app.dispatch(Action.DeleteFolder(id))
-    }
+    /** Deletes a pinned folder; its pinned rows stay pinned, loose in the space. */
+    fun deleteFolder(id: String) = app.dispatch(Action.DeleteFolder(id))
+
+    /** Puts a pinned folder before the folder [beside], or after it when [after]. */
+    fun moveFolder(id: String, beside: String, after: Boolean) = app.dispatch(Action.MoveFolder(id, beside, after))
 
     /**
-     * Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
-     * desktop's Pinned folders hold pinned rows).
+     * Makes a pin an Essential or a pinned row, in [folderId] or loose, and beside the pin [beside] when it was dropped
+     * on one (after it when [after]).
      */
-    fun moveActiveTab(spaceId: String, folderId: String?) {
-        val id = app.activeTabId
-        app.dispatch(Action.MoveTab(id, spaceId, null))
-        activeFolderId = folderId
-        if (folderId != null) app.dispatch(Action.PinSite(id, UUID.randomUUID().toString(), PinKind.ROW, folderId))
+    fun movePin(site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = null, after: Boolean = false) =
+        app.dispatch(Action.MovePin(site.id, kind, folderId, beside, after))
+
+    /** Moves a tab to another space, where it becomes that space's newest tab, and says where at the top. */
+    fun moveTab(tab: BrowserTab, spaceId: String) {
+        if (tab.spaceId == spaceId) return
+        val space = app.spaces.firstOrNull { it.id == spaceId } ?: return
+        app.dispatch(Action.MoveTab(tab.id, spaceId, null))
         refreshMounted()
+        showTopNote(TopNote(System.nanoTime(), strings.t("tabs.movedTo", mapOf("space" to spaceName(space, strings))), space))
     }
+
+    /** A tab card being dragged in the tab view: the space in the bar it's over, which lights up and takes it when let go. */
+    var cardDropSpace by mutableStateOf<String?>(null)
+        private set
+
+    /** Where each space sits in the tab view's bar, in the window, for a dragged card to find the one it's over. */
+    val spaceDropFrames = mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The space in the bar under [point], a dragged card's place in the window; answers whether that changed. */
+    fun cardDragged(point: androidx.compose.ui.geometry.Offset?): Boolean {
+        val over = point?.let { at -> spaceDropFrames.entries.firstOrNull { it.value.inflate(16f).contains(at) }?.key }
+        if (over == cardDropSpace) return false
+        cardDropSpace = over
+        return over != null
+    }
+
+    /** A space with the next default name ("Space 3"). */
+    fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
 
     /** The pin sheet for a held tab card. Private and blank tabs have nothing to pin. */
     fun showPinMenu(tab: BrowserTab) {
@@ -803,10 +830,22 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         panel = Panel.PIN
     }
 
-    /** Pins a tab's page that way, or unpins it when it is already pinned so. */
-    fun pin(tab: BrowserTab, kind: PinKind, folderId: String?) {
-        panel = null
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+    /**
+     * Sets how a tab's page is pinned from its sheet, which stays open: null unpins it (with Undo), and a pin already
+     * there moves rather than toggling off.
+     */
+    fun setPin(tab: BrowserTab, kind: PinKind?, folderId: String?) {
+        val current = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            kind == null -> current?.let(::unpin)
+            current == null -> app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+            current.kind != kind || current.folderId != folderId -> movePin(current, kind, folderId)
+        }
+    }
+
+    /** A copy of a tab beside it, in the background. */
+    fun duplicate(tab: BrowserTab) {
+        if (tab.url.isNotEmpty()) openTab(tab.url, tab.private, background = true)
     }
 
     /** Answers the page question on show, then shows the next one waiting, if any. */
@@ -1011,14 +1050,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
         if (finished && view != null) {
             scope.launch {
-                suspend fun color(args: Map<String, Any?>?): List<Double>? {
-                    val json = runCatching { view.runScript(PageScript.PAGE_COLOR, args) }.getOrNull()
-                    return json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
-                }
-                val top = color(null)
+                val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
+                val top = json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
                 if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
-                val bottom = color(mapOf("edge" to "bottom"))
-                if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
             }
             // The site's icon, unless the tab is private: its icon would say what was opened privately.
             if (!isPrivate(tabId)) fetchIcon(view, state.url)
@@ -1073,10 +1107,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun stop() = activeView?.stop()
 
+    /** The page showing is pinned in its space, either way. */
     val isPinned: Boolean
         get() {
             val url = activeTab?.url
-            return app.pins.any { it.kind == PinKind.ESSENTIAL && it.url == url }
+            return app.pins.any { it.url == url }
         }
 
     val isBookmarked: Boolean
@@ -1085,11 +1120,21 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return !url.isNullOrEmpty() && app.store.isBookmarked(app.activeSpaceId, url)
         }
 
+    /**
+     * The page menu's Pin: unpins a pinned page; otherwise pins it as an Essential, or, when the space has folders, offers
+     * the ways to pin it.
+     */
     fun togglePin() {
         val tab = activeTab ?: return
-        val pinned = isPinned
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
-        showToast(if (pinned) strings.t("toast.unpinned") else strings.t("toast.pinned"))
+        val pin = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            pin != null -> unpin(pin)
+            app.folders.isNotEmpty() -> showPinMenu(tab)
+            else -> {
+                app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
+                showToast(strings.t("toast.pinned"))
+            }
+        }
     }
 
     fun toggleBookmark() {
