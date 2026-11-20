@@ -9,9 +9,6 @@ import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.util.Log
 import android.view.MotionEvent
@@ -21,12 +18,9 @@ import android.widget.FrameLayout
 import org.bay.engine.BayEngine
 import org.bay.engine.BayTab
 import org.bay.engine.BayTabClient
-import org.chromium.content_public.browser.GestureListenerManager
-import org.chromium.content_public.browser.GestureStateListener
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.suspendCoroutine
-import kotlin.math.max
 
 /**
  * A page in Bay's own Chromium (org.bay.engine.BayTab), with the same props, events and functions as iOS's WebKit
@@ -62,32 +56,6 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   private val pendingExternal = mutableMapOf<String, String>()
   private val density = resources.displayMetrics.density
   private var scrollOffset = 0.0
-  /** How far the person has scrolled the page since the last report (EngineEvent.Scroll). */
-  private var userScroll = 0.0
-  /** The person is scrolling the page, with a finger or its fling, as Chromium's gestures say. */
-  private var userScrolling = false
-  private var userFlinging = false
-  private val scrollGestures = object : GestureStateListener() {
-    override fun onScrollStarted(scrollOffsetY: Int, scrollExtentY: Int, isDirectionUp: Boolean) {
-      userScrolling = true
-    }
-
-    override fun onScrollEnded(scrollOffsetY: Int, scrollExtentY: Int) {
-      userScrolling = false
-    }
-
-    override fun onFlingStartGesture(scrollOffsetY: Int, scrollExtentY: Int, isDirectionUp: Boolean) {
-      userFlinging = true
-    }
-
-    override fun onFlingEndGesture(scrollOffsetY: Int, scrollExtentY: Int) {
-      userFlinging = false
-    }
-  }
-  private var lastScrollEmission = 0L
-  private val scrollHandler = Handler(Looper.getMainLooper())
-  private var scrollPending = false
-  private val emitPendingScroll = Runnable { scrollPending = false; if (!disposed) emitScroll() }
   private val snapshots = BaySnapshotWriter(context)
   private val fullscreen = BayFullscreen(context)
   private val gestures = BayPageGestures(this, object : BayPageGestures.Page {
@@ -174,6 +142,23 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       tab?.setDesktopMode(value)
     }
 
+  /**
+   * How much of the page's bottom the app's bar covers, in pixels; 0 for none (a fullscreen site). The page keeps its
+   * size: Chromium treats the bar as its bottom toolbar, lifting what the page pins to its bottom above it while it
+   * shows, sliding it away with the page as it scrolls down and back as it scrolls up (EngineEvent.BarMoved).
+   */
+  var barHeight = 0
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.setBottomControlsHeight(value)
+    }
+
+  /** Brings the bar back with the page's room for it, as a new page does. */
+  fun showBar() {
+    tab?.showBrowserControls(true)
+  }
+
   /** Blink's own forced dark mode for this tab: pages without a dark look of their own are drawn dark. */
   var forceDark = false
     set(value) {
@@ -221,7 +206,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.setDesktopMode(desktopMode)
     created.setForceDark(forceDark)
     created.setVisible(!isSuspended)
-    GestureListenerManager.fromWebContents(created.webContents)?.addListener(scrollGestures)
+    created.setBottomControlsHeight(barHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     if (isActive) {
       lastActive = this
@@ -238,9 +223,6 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     val closing = tab ?: return
     tab = null
     gestures.cancel()
-    userScrolling = false
-    userFlinging = false
-    GestureListenerManager.fromWebContents(closing.webContents)?.removeListener(scrollGestures)
     removeView(closing.view)
     closing.destroy()
     if (tabIsPrivate) BayEngineBackend.releasePrivateProfile()
@@ -616,30 +598,12 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
     override fun onScroll(offsetY: Float, deltaY: Float) {
       scrollOffset = offsetY.toDouble()
-      // Under a finger, or its fling; anything else is the page moving itself (a load, a resize, a jump to an anchor).
-      if (userScrolling || userFlinging) userScroll += deltaY
-      scheduleScroll()
     }
-  }
 
-  private fun scheduleScroll() {
-    if (disposed) return
-    val elapsed = SystemClock.uptimeMillis() - lastScrollEmission
-    if (elapsed >= 50) {
-      scrollHandler.removeCallbacks(emitPendingScroll)
-      scrollPending = false
-      emitScroll()
-    } else if (!scrollPending) {
-      scrollPending = true
-      scrollHandler.postDelayed(emitPendingScroll, 50 - elapsed)
+    override fun onBottomControlsChanged(offset: Int) {
+      if (disposed || barHeight <= 0) return
+      emit(EngineEvent.BarMoved((offset.toFloat() / barHeight).coerceIn(0f, 1f)))
     }
-  }
-
-  private fun emitScroll() {
-    val delta = userScroll
-    userScroll = 0.0
-    lastScrollEmission = SystemClock.uptimeMillis()
-    emit(EngineEvent.Scroll(max(0.0, scrollOffset), delta))
   }
 
   /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */
@@ -670,7 +634,6 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     if (disposed) return
     cancelPageRequests()
     disposed = true
-    scrollHandler.removeCallbacksAndMessages(null)
     hideFullscreen()
     BayFileChooser.cancelPending()
     destroyTab()

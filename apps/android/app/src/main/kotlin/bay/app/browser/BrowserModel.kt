@@ -11,6 +11,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
 import android.util.Base64
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -194,9 +195,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var drawerFolder: String? = null
         private set
 
-    /** The bar is scrolled away while the page scrolls down. */
-    var barHidden by mutableStateOf(false)
+    /**
+     * How far the bar has slid away with the page showing: 0 in full, 1 gone. The engine moves it as Chrome moves its
+     * bottom toolbar, in step with the page as it scrolls (BayEngineView.barHeight).
+     */
+    var barGone by mutableFloatStateOf(0f)
         private set
+
+    /** How much of a page's bottom the bar covers, in pixels, as the screen lays it out. */
+    private var barCover = 0
 
     /** The bar brought back for a moment on a site set to Always fullscreen, by a tap on the bottom edge. */
     var peeking by mutableStateOf(false)
@@ -208,12 +215,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !drawerOpen && !peeking &&
             app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
 
-    /** The bar is out of the way: scrolled off, or the site is fullscreen. */
-    val barAway: Boolean get() = overlay == Overlay.NONE && (barHidden || fullscreen)
+    /** The screen's layout of the bar: each page leaves that much room for it at its bottom while it shows. */
+    fun barCoverChanged(pixels: Int) {
+        if (barCover == pixels) return
+        barCover = pixels
+        for ((id, view) in views) configure(view, pageUrl(id))
+    }
 
     fun peekBar() {
         peeking = true
-        barHidden = false
+        barGone = 0f
         peekJob?.cancel()
         peekJob = scope.launch {
             delay(4_000)
@@ -442,7 +453,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
-        barHidden = false
+        barGone = 0f
+        views[id]?.showBar()
         refreshMounted()
     }
 
@@ -539,25 +551,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         app.dispatch(Action.TipSeen(TipId.BAR))
         capture(app.activeTabId)
         activate(next.id)
-    }
-
-    /** How far the person has scrolled the page one way since it last turned: down positive, up negative. */
-    private var scrollRun = 0.0
-
-    /**
-     * The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
-     * of the finger, or the page shifting itself as it loads (no delta), leaves it be.
-     */
-    private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
-        if (tabId != app.activeTabId) return
-        if (offsetY < 24) {
-            scrollRun = 0.0
-            barHidden = false
-            return
-        }
-        if (deltaY == 0.0) return
-        scrollRun = if ((deltaY > 0) == (scrollRun > 0)) scrollRun + deltaY else deltaY
-        if (scrollRun > 48) barHidden = true else if (scrollRun < -24) barHidden = false
     }
 
     // Media
@@ -1009,7 +1002,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                     }
                 }
             }
-            is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
+            is EngineEvent.BarMoved -> if (tabId == app.activeTabId) barGone = event.hidden
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
                 link = event
@@ -1384,12 +1377,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** A changed preference or site setting reaches the open pages at once. */
     fun preferencesChanged() {
         for ((id, view) in views) {
-            val url = navigation[id]?.url ?: app.tabs.firstOrNull { it.id == id }?.url.orEmpty()
+            val url = pageUrl(id)
             configure(view, url)
             applyTweaks(id, url)
         }
         applyBlockingPauses()
     }
+
+    /** The address a tab's page shows: where it navigated, else the tab's saved one. */
+    private fun pageUrl(tabId: String): String = navigation[tabId]?.url ?: app.tabs.firstOrNull { it.id == tabId }?.url.orEmpty()
 
     /** The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices. */
     private fun configure(view: BayEngineView, url: String) {
@@ -1400,6 +1396,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         view.swipeMode = (setting?.swipe ?: preferences.swipeToNavigate).name.lowercase()
         view.pullToRefreshEnabled = preferences.pullToRefresh
         view.appLinks = preferences.appLinks.name.lowercase()
+        // A fullscreen site has no bar over it.
+        view.barHeight = if (setting?.fullscreen == true) 0 else barCover
     }
 
     /** Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows. */

@@ -46,12 +46,8 @@ sealed interface EngineEvent {
   /** A main-frame load failed. */
   data class Failure(val url: String, val code: String, val message: String) : EngineEvent
 
-  /**
-   * The page scrolled, in density-independent pixels, at most every 50 ms with a trailing update. `deltaY` is only how
-   * far the person moved it since the last report, with a finger or its fling: a page shifting itself as it loads, or
-   * after a resize, counts for nothing.
-   */
-  data class Scroll(val offsetY: Double, val deltaY: Double) : EngineEvent
+  /** How far the bar (BayEngineView.barHeight) has slid away with the page: 0 showing in full, 1 gone. Each frame it moves. */
+  data class BarMoved(val hidden: Float) : EngineEvent
 
   /** A long press on a link or a bare image, which the app's own menu answers. */
   data class LinkPress(val url: String, val title: String, val x: Double?, val y: Double?, val image: Boolean) : EngineEvent

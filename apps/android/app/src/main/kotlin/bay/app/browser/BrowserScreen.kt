@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -78,11 +79,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
         val bottom: @Composable BoxScope.() -> Unit = {
-            // Scrolled away while the page scrolls down; the toast and the player go with it.
-            val away by animateFloatAsState(if (browser.barAway) 1f else 0f, tween(200), label = "bar")
+            // Off a fullscreen site; and, over a page, slid away in step with it as it scrolls down (BrowserModel.barGone).
+            // The toast and the player go with it.
+            val onPage = browser.overlay == Overlay.NONE
+            val away by animateFloatAsState(if (onPage && browser.fullscreen) 1f else 0f, tween(200), label = "bar")
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs)
-                    .graphicsLayer { translationY = away * 140.dp.toPx() },
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .graphicsLayer { translationY = maxOf(away, if (onPage) browser.barGone else 0f) * size.height }
+                    .navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
                 verticalArrangement = Arrangement.spacedBy(Space.md),
             ) {
                 browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
@@ -119,8 +123,11 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
             val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
             // The page runs under the floating bar to the screen's foot and is never resized as the bar comes and goes:
-            // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. What a
-            // site pins to its bottom sits under the bar while it shows; the engine has no inset to lift it (plan gaps).
+            // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. The
+            // engine takes the bar as the page's bottom toolbar instead, lifting what a site pins to its bottom above it.
+            val density = LocalDensity.current
+            val barCover = WindowInsets.navigationBars.getBottom(density) + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
+            LaunchedEffect(barCover) { browser.barCoverChanged(barCover) }
             if (shown) {
                 // Behind the page until it draws its first frame: the colour at its top, else the engine's blank white.
                 val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
