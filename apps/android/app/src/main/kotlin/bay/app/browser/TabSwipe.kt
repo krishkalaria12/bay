@@ -53,7 +53,7 @@ class TabSwipe(private val browser: BrowserModel) {
     var incoming by mutableStateOf<BrowserTab?>(null)
         private set
 
-    /** The tab just swiped to, its picture over its page until the page draws. */
+    /** The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`). */
     var cover by mutableStateOf<BrowserTab?>(null)
         private set
     val coverAlpha = Animatable(0f)
@@ -74,6 +74,10 @@ class TabSwipe(private val browser: BrowserModel) {
 
     fun drag(amount: Float) {
         settling?.cancel()
+        if (cover != null) {
+            covering?.cancel()
+            cover = null
+        }
         dragged += amount
         val next = neighbour(dragged)
         incoming = next
@@ -97,16 +101,39 @@ class TabSwipe(private val browser: BrowserModel) {
                 return@launch
             }
             offset.animateTo(if (distance < 0) -width else width, spring(dampingRatio = 1f, stiffness = 700f), velocity)
-            cover = target
-            coverAlpha.snapTo(1f)
+            cover(target)
             incoming = null
             offset.snapTo(0f)
             browser.swipedTo(target.id)
-            // The page has its surface back by now and draws within a few frames; the picture fades off it.
+        }
+    }
+
+    private var covering: Job? = null
+
+    /**
+     * Holds `tab`'s picture over its page until the page has drawn: a moment for a loaded page (it takes the surface back
+     * and draws within a few frames), else until it's most of the way loaded, so a tab coming back from its saved state
+     * never shows white.
+     */
+    fun cover(tab: BrowserTab) {
+        covering?.cancel()
+        cover = tab
+        covering = scope.launch {
+            coverAlpha.snapTo(1f)
+            val start = android.os.SystemClock.uptimeMillis()
             kotlinx.coroutines.delay(COVER_MS)
+            while (browser.app.activeTabId == tab.id && !drawn() && android.os.SystemClock.uptimeMillis() - start < COVER_LIMIT_MS) {
+                kotlinx.coroutines.delay(50)
+            }
             coverAlpha.animateTo(0f, tween(180))
             cover = null
         }
+    }
+
+    /** The page showing has something on screen: it finished loading, or is most of the way there. */
+    private fun drawn(): Boolean {
+        val state = browser.activeNavigation
+        return state.url.isNotEmpty() && (!state.isLoading || state.progress >= 0.5)
     }
 
     /** A drag cut short (the bar went away under it): the page goes back. */
@@ -115,6 +142,7 @@ class TabSwipe(private val browser: BrowserModel) {
     /** A tab shown some other way takes the swipe's pictures away at once. */
     fun reset() {
         settling?.cancel()
+        covering?.cancel()
         dragged = 0f
         incoming = null
         cover = null
@@ -127,6 +155,9 @@ class TabSwipe(private val browser: BrowserModel) {
     private companion object {
         /** How long the picture of the tab swiped to stays over it while its page takes the surface and draws. */
         const val COVER_MS = 140L
+
+        /** The longest the picture waits for a page that's slow to draw. */
+        const val COVER_LIMIT_MS = 4_000L
     }
 }
 
@@ -153,7 +184,7 @@ fun TabPicture(browser: BrowserModel, tab: BrowserTab, modifier: Modifier = Modi
     }
 }
 
-/** The pictures for a swipe: the tab coming in beside the moving page, then over the page it became. */
+/** The tab coming in beside the page moving with a swipe. */
 @Composable
 fun TabSwipeLayer(browser: BrowserModel) {
     val swipe = browser.tabSwipe
@@ -168,6 +199,12 @@ fun TabSwipeLayer(browser: BrowserModel) {
             translationX = if (moved < 0) moved + swipe.width + GAP.toPx() else moved - swipe.width - GAP.toPx()
         })
     }
+}
+
+/** The tab just swiped or zoomed to, as its picture, over its page until the page draws. */
+@Composable
+fun TabCoverLayer(browser: BrowserModel) {
+    val swipe = browser.tabSwipe
     swipe.cover?.let { tab -> TabPicture(browser, tab, Modifier.graphicsLayer { alpha = swipe.coverAlpha.value }) }
 }
 

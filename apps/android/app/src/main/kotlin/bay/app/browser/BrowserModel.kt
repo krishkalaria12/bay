@@ -641,13 +641,19 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from. */
     fun pick(tab: BrowserTab, frame: androidx.compose.ui.geometry.Rect) {
-        if (tab.snapshot == null) activate(tab.id) else zoom = Zoom(tab, frame)
+        if (tab.snapshot != null) {
+            zoom = Zoom(tab, frame)
+            return
+        }
+        activate(tab.id)
+        if (tab.url.isNotEmpty()) tabSwipe.cover(tab)
     }
 
     fun zoomFinished() {
         val current = zoom ?: return
         zoom = null
         activate(current.tab.id)
+        tabSwipe.cover(current.tab)
     }
 
     // Tips

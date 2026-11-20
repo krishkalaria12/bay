@@ -157,7 +157,10 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 },
                 visible = shown,
             )
-            if (shown) TabSwipeLayer(browser)
+            if (shown) {
+                TabSwipeLayer(browser)
+                TabCoverLayer(browser)
+            }
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
             if (browser.fullscreen) {
                 Box(
