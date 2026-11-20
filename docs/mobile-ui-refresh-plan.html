@@ -1540,10 +1540,11 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
         <li>
           <b>Pinned folders done:</b> tab things live in the tab view, bookmark things in the drawer. "Pinned" has a + for a new folder, named where it will
           sit; holding a folder offers Rename and Delete (its pins stay pinned); holding a pinned row lifts it into a folder, out of one (onto "Pinned") or
-          beside another row, or, let go where it was, offers the other folders and Unpin. Holding a tab card and letting go opens its sheet: the space chips
-          (another one moves the tab there), Essential, Pinned, each folder and a new folder; carried instead, the card follows the finger and lands on a space
-          in the bar below, which lights in its colour. The page menu's Pin offers the same choices once the space has folders. The core's
-          <code>MovePin</code> takes a pin beside another (before or after it).
+          beside another row, or, let go where it was, offers the other folders and Unpin. Holding a tab card and letting go opens its sheet, in the page menu's
+          look: the tab's site and address on top, Share, Copy link, Duplicate and Close as tiles, the space chips (another one moves the tab there), and Off ·
+          Essential · Pinned with the space's folders as chips under Pinned (and + for a new one); pin choices keep the sheet open. Carried instead, the card
+          follows the finger and lands on a space in the bar below, which lights in its colour. The page menu's Pin offers the same choices once the space has
+          folders. The core's <code>MovePin</code> takes a pin beside another (before or after it).
         </li>
         <li>
           <b>Folder order done:</b> holding a folder and moving it lifts it (closed, on a solid card) and lands it before or after the folder it's let go on,
