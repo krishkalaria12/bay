@@ -292,9 +292,10 @@ function barrier() {
   return { promise, resolve, reject };
 }
 
-// About ten seconds for a runtime that isn't ready yet.
-const SNAPSHOT_RETRIES = 40;
-const SNAPSHOT_RETRY_MS = 250;
+// A window that asks before the runtime is ready asks again soon, then less often: 25 ms doubling to 250 ms, for
+// about ten seconds in all.
+const SNAPSHOT_RETRIES = 44;
+const snapshotRetryMs = (retry: number) => Math.min(250, 25 * 2 ** retry);
 
 /** The code a transport failure carries, when it has one. */
 const errorCode = (cause: unknown): string | undefined => {
@@ -546,8 +547,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
 
         // The runtime is between coordinators (a window opening as another replaces it): ask again once it's back.
         if (errorCode(cause) === "not_ready" && snapshotRetries < SNAPSHOT_RETRIES) {
-          snapshotRetries++;
-          setTimeout(requestSnapshot, SNAPSHOT_RETRY_MS);
+          setTimeout(requestSnapshot, snapshotRetryMs(snapshotRetries++));
 
           return;
         }
