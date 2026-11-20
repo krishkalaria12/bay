@@ -21,6 +21,8 @@ import android.widget.FrameLayout
 import org.bay.engine.BayEngine
 import org.bay.engine.BayTab
 import org.bay.engine.BayTabClient
+import org.chromium.content_public.browser.GestureListenerManager
+import org.chromium.content_public.browser.GestureStateListener
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.suspendCoroutine
@@ -60,7 +62,28 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   private val pendingExternal = mutableMapOf<String, String>()
   private val density = resources.displayMetrics.density
   private var scrollOffset = 0.0
-  private var lastScrollOffset = 0.0
+  /** How far the person has scrolled the page since the last report (EngineEvent.Scroll). */
+  private var userScroll = 0.0
+  /** The person is scrolling the page, with a finger or its fling, as Chromium's gestures say. */
+  private var userScrolling = false
+  private var userFlinging = false
+  private val scrollGestures = object : GestureStateListener() {
+    override fun onScrollStarted(scrollOffsetY: Int, scrollExtentY: Int, isDirectionUp: Boolean) {
+      userScrolling = true
+    }
+
+    override fun onScrollEnded(scrollOffsetY: Int, scrollExtentY: Int) {
+      userScrolling = false
+    }
+
+    override fun onFlingStartGesture(scrollOffsetY: Int, scrollExtentY: Int, isDirectionUp: Boolean) {
+      userFlinging = true
+    }
+
+    override fun onFlingEndGesture(scrollOffsetY: Int, scrollExtentY: Int) {
+      userFlinging = false
+    }
+  }
   private var lastScrollEmission = 0L
   private val scrollHandler = Handler(Looper.getMainLooper())
   private var scrollPending = false
@@ -198,6 +221,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.setDesktopMode(desktopMode)
     created.setForceDark(forceDark)
     created.setVisible(!isSuspended)
+    GestureListenerManager.fromWebContents(created.webContents)?.addListener(scrollGestures)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     if (isActive) {
       lastActive = this
@@ -214,6 +238,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     val closing = tab ?: return
     tab = null
     gestures.cancel()
+    userScrolling = false
+    userFlinging = false
+    GestureListenerManager.fromWebContents(closing.webContents)?.removeListener(scrollGestures)
     removeView(closing.view)
     closing.destroy()
     if (tabIsPrivate) BayEngineBackend.releasePrivateProfile()
@@ -589,6 +616,8 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
     override fun onScroll(offsetY: Float, deltaY: Float) {
       scrollOffset = offsetY.toDouble()
+      // Under a finger, or its fling; anything else is the page moving itself (a load, a resize, a jump to an anchor).
+      if (userScrolling || userFlinging) userScroll += deltaY
       scheduleScroll()
     }
   }
@@ -607,11 +636,10 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   }
 
   private fun emitScroll() {
-    val offset = max(0.0, scrollOffset)
-    val delta = offset - lastScrollOffset
-    lastScrollOffset = offset
+    val delta = userScroll
+    userScroll = 0.0
     lastScrollEmission = SystemClock.uptimeMillis()
-    emit(EngineEvent.Scroll(offset, delta))
+    emit(EngineEvent.Scroll(max(0.0, scrollOffset), delta))
   }
 
   /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */

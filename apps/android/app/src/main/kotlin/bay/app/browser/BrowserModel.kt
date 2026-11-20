@@ -254,9 +254,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
 
-    /** The colour along each tab's page's bottom edge, for what sits behind the bar. */
-    val pageBottomColors = mutableStateMapOf<String, List<Double>>()
-
     /**
      * A page colour as the page shows it: on a site with Force dark, Blink draws a light page dark, which the page's own
      * styles (what the colour is read from) don't say.
@@ -367,7 +364,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         visited.clear()
         media.clear()
         pageColors.clear()
-        pageBottomColors.clear()
         failure = null
         mounted = emptyList()
         Engine.setMediaSession(context, null, "", false)
@@ -545,9 +541,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         activate(next.id)
     }
 
+    /** How far the person has scrolled the page one way since it last turned: down positive, up negative. */
+    private var scrollRun = 0.0
+
+    /**
+     * The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
+     * of the finger, or the page shifting itself as it loads (no delta), leaves it be.
+     */
     private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
         if (tabId != app.activeTabId) return
-        if (offsetY < 24 || deltaY < -8) barHidden = false else if (deltaY > 8) barHidden = true
+        if (offsetY < 24) {
+            scrollRun = 0.0
+            barHidden = false
+            return
+        }
+        if (deltaY == 0.0) return
+        scrollRun = if ((deltaY > 0) == (scrollRun > 0)) scrollRun + deltaY else deltaY
+        if (scrollRun > 48) barHidden = true else if (scrollRun < -24) barHidden = false
     }
 
     // Media
@@ -1040,14 +1050,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
         if (finished && view != null) {
             scope.launch {
-                suspend fun color(args: Map<String, Any?>?): List<Double>? {
-                    val json = runCatching { view.runScript(PageScript.PAGE_COLOR, args) }.getOrNull()
-                    return json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
-                }
-                val top = color(null)
+                val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
+                val top = json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
                 if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
-                val bottom = color(mapOf("edge" to "bottom"))
-                if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
             }
             // The site's icon, unless the tab is private: its icon would say what was opened privately.
             if (!isPrivate(tabId)) fetchIcon(view, state.url)
