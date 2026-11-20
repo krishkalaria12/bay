@@ -50,6 +50,18 @@ struct TabSwitcher: View {
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
   @State private var shift: CGFloat = 0
+  /// Folders opened or closed by a tap; one not tapped yet is open when it holds the page showing.
+  @State private var folderToggles: [String: Bool] = [:]
+  /// A folder name being typed: a new folder, or one being renamed where it sits.
+  @State private var naming: FolderNaming?
+  /// A pin or a folder held without moving, whose actions are offered.
+  @State private var pinActions: PinnedSite?
+  @State private var folderActions: BrowserFolder?
+  /// The pinned row being dragged, how far it has come, and what it would land on ("top", "folder:<id>", "pin:<id>").
+  @State private var draggingPin: String?
+  @State private var pinLift: CGFloat = 0
+  @State private var pinTarget: String?
+  @State private var pinFrames: [String: CGRect] = [:]
 
   private static let columns = 2
   private static let essentialColumns = 3
@@ -65,7 +77,7 @@ struct TabSwitcher: View {
     let tabs = browser.switcherTabs
     let essentials = app.pins.filter { $0.kind == .essential }
     let rows = app.pins.filter { $0.kind == .row }
-    let hasPinned = !rows.isEmpty || !app.folders.isEmpty
+    let hasPinned = !rows.isEmpty || !app.folders.isEmpty || naming != nil
     // The space the swipe is pulling in, and how far it has come.
     let coming = neighbour(index, toward: shift)
     let progress = coming == nil ? 0 : min(1, abs(shift) / Self.pageWidth)
@@ -218,52 +230,234 @@ struct TabSwitcher: View {
             RoundedRectangle(cornerRadius: Radius.tile, style: .continuous).stroke(active ? BayColor.accent : .clear, lineWidth: 2))
           .contentShape(Rectangle())
           .onTapGesture { browser.openPin(pin) }
-          .onLongPressGesture { unpin(pin) }
+          .onLongPressGesture {
+            Haptics.tick()
+            pinActions = pin
+          }
           .accessibilityElement()
           .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
           .accessibilityLabel(Text(verbatim: pin.title.isEmpty ? displayUrl(url: pin.url) : pin.title))
-          .accessibilityHint(Text(verbatim: strings.t("pin.unpinHint")))
+          .accessibilityHint(Text(verbatim: strings.t("pin.holdHint")))
+          .accessibilityAction(named: Text(verbatim: strings.t("pin.unpin"))) { unpin(pin) }
           .accessibilityIdentifier("tab-essential-\(index)")
       }
     }
   }
 
+  /// The pinned rows, loose ones first and then the folders, under "Pinned" with a + for a new folder. Holding a row
+  /// lifts it to drag into a folder, out of one (onto "Pinned"), or beside another; let go where it was, its actions
+  /// are offered. Holding a folder offers Rename and Delete.
   private func pinnedRows(_ rows: [PinnedSite]) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      BayText(strings.t("tabs.pinned"), variant: .footnote, weight: .medium, tone: .overWallpaper).padding(.bottom, Space.xs)
-      ForEach(rows.filter { $0.folderId == nil }, id: \.id) { row in pinRow(row, indent: false) }
-      ForEach(app.folders, id: \.id) { folder in
-        PinFolder(folder: folder, rows: rows.filter { $0.folderId == folder.id }, activeUrl: browser.activeTab?.url) { row in
-          pinRow(row, indent: true)
+    let activeUrl = browser.activeTab?.url
+    let loose = rows.filter { $0.folderId == nil }
+    let folders = app.folders.map { folder in (folder, rows.filter { $0.folderId == folder.id }) }
+    let visible = loose.map(\.id) + folders.flatMap { folder, inside in isOpen(folder.id, inside, activeUrl) ? inside.map(\.id) : [] }
+    return VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: Space.sm) {
+        BayText(strings.t("tabs.pinned"), variant: .footnote, weight: .medium, tone: .overWallpaper)
+        Spacer(minLength: 0)
+        Button {
+          Haptics.press()
+          naming = .new
+        } label: {
+          BayIconView(.add, size: IconSize.inline, color: BayColor.muted).frame(width: 44, height: 32).contentShape(Rectangle())
+        }
+        .buttonStyle(.pressFeedback)
+        .accessibilityLabel(Text(verbatim: strings.t("tabs.newFolder")))
+        .accessibilityIdentifier("tab-pinned-new-folder")
+      }
+      .padding(.leading, Space.sm)
+      .background(dropWash(pinTarget == "top"))
+      .background(frame("top"))
+      ForEach(loose, id: \.id) { row in pinRow(row, indent: false, visible: visible) }
+      ForEach(folders, id: \.0.id) { folder, inside in
+        if naming == .rename(folder.id) {
+          FolderNameField(name: folder.name, placeholder: strings.t("tabs.folderName")) { name in
+            naming = nil
+            if let name, name != folder.name { browser.renameFolder(folder.id, name) }
+          }
+        } else {
+          folderRow(folder, count: inside.count, open: isOpen(folder.id, inside, activeUrl))
+        }
+        if isOpen(folder.id, inside, activeUrl) {
+          ForEach(inside, id: \.id) { row in pinRow(row, indent: true, visible: visible) }
+        }
+      }
+      if naming == .new {
+        FolderNameField(name: "", placeholder: strings.t("tabs.folderName")) { name in
+          naming = nil
+          if let name { browser.newFolder(name) }
         }
       }
     }
+    .coordinateSpace(name: "pinned")
+    .onPreferenceChange(PinFrames.self) { pinFrames = $0 }
+    .confirmationDialog(
+      pinActions.map { $0.title.isEmpty ? displayUrl(url: $0.url) : $0.title } ?? "",
+      isPresented: Binding(get: { pinActions != nil }, set: { if !$0 { pinActions = nil } }), titleVisibility: .visible,
+      presenting: pinActions
+    ) { pin in
+      if pin.kind == .essential {
+        Button(strings.t("pin.makeRow")) { browser.movePin(pin, kind: .row, folderId: nil) }
+      } else {
+        if let folder = app.folders.first(where: { $0.id == pin.folderId }) {
+          Button(strings.t("pin.takeOut", ["folder": folder.name])) { browser.movePin(pin, kind: .row, folderId: nil) }
+        }
+        ForEach(app.folders.filter { $0.id != pin.folderId }, id: \.id) { folder in
+          Button(strings.t("pin.moveTo", ["folder": folder.name])) {
+            browser.movePin(pin, kind: .row, folderId: folder.id)
+            folderToggles[folder.id] = true
+          }
+        }
+      }
+      Button(strings.t("pin.unpin"), role: .destructive) { unpin(pin) }
+      Button(strings.t("tabs.cancel"), role: .cancel) {}
+    }
+    .confirmationDialog(
+      folderActions?.name ?? "", isPresented: Binding(get: { folderActions != nil }, set: { if !$0 { folderActions = nil } }),
+      titleVisibility: .visible, presenting: folderActions
+    ) { folder in
+      // After the dialog has gone, so the field can take the keyboard.
+      Button(strings.t("tabs.renameFolder")) { DispatchQueue.main.async { naming = .rename(folder.id) } }
+      Button(strings.t("tabs.deleteFolder"), role: .destructive) { browser.deleteFolder(folder.id) }
+      Button(strings.t("tabs.cancel"), role: .cancel) {}
+    } message: { _ in
+      Text(verbatim: strings.t("tabs.deleteFolder.detail"))
+    }
   }
 
-  private func pinRow(_ row: PinnedSite, indent: Bool) -> some View {
-    let activeUrl = browser.activeTab?.url
-    return Group {
-        let active = row.url == activeUrl
-        Button {
-          browser.openPin(row)
-        } label: {
-          HStack(spacing: Space.md) {
-            SiteIcon(url: row.url, size: 20)
-            BayText(row.title.isEmpty ? displayUrl(url: row.url) : row.title, variant: .callout, weight: active ? .semibold : .regular)
-              .lineLimit(1)
-            Spacer(minLength: 0)
-          }
-          .padding(.leading, indent ? Space.xl + Space.sm : Space.sm)
-          .padding(.trailing, Space.sm)
-          .frame(minHeight: 40)
-          .background(active ? BayColor.fill : .clear, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        }
-        .buttonStyle(.pressFeedback)
-        .simultaneousGesture(LongPressGesture().onEnded { _ in unpin(row) })
-        .accessibilityHint(Text(verbatim: strings.t("pin.unpinHint")))
-        .accessibilityAddTraits(active ? .isSelected : [])
-        .accessibilityIdentifier("tab-pinned-\(row.id)")
+  private func isOpen(_ id: String, _ inside: [PinnedSite], _ activeUrl: String?) -> Bool {
+    folderToggles[id] ?? inside.contains { $0.url == activeUrl }
+  }
+
+  /// A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do.
+  private func folderRow(_ folder: BrowserFolder, count: Int, open: Bool) -> some View {
+    HStack(spacing: Space.md) {
+      BayIconView(.folder, size: IconSize.small)
+      BayText(folder.name, variant: .callout).lineLimit(1)
+      Spacer(minLength: 0)
+      BayText(count == 0 ? "" : "\(count)", variant: .footnote, tone: .overWallpaper)
+      BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
     }
+    .padding(.horizontal, Space.sm)
+    .frame(minHeight: 40)
+    .background(dropWash(pinTarget == "folder:\(folder.id)"))
+    .contentShape(Rectangle())
+    .onTapGesture {
+      withAnimation(.easeOut(duration: Motion.tap)) { folderToggles[folder.id] = !open }
+    }
+    .onLongPressGesture(minimumDuration: 0.4) {
+      Haptics.tick()
+      folderActions = folder
+    }
+    .background(frame("folder:\(folder.id)"))
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityLabel(Text(verbatim: folder.name))
+    .accessibilityValue(Text(verbatim: open ? "expanded" : "collapsed"))
+    .accessibilityAction(.default) { folderToggles[folder.id] = !open }
+    .accessibilityAction(named: Text(verbatim: strings.t("tabs.renameFolder"))) { naming = .rename(folder.id) }
+    .accessibilityAction(named: Text(verbatim: strings.t("tabs.deleteFolder"))) { browser.deleteFolder(folder.id) }
+    .accessibilityIdentifier("tab-folder-\(folder.id)")
+  }
+
+  private func pinRow(_ row: PinnedSite, indent: Bool, visible: [String]) -> some View {
+    let active = row.url == browser.activeTab?.url
+    let lifted = draggingPin == row.id
+    return HStack(spacing: Space.md) {
+      SiteIcon(url: row.url, size: 20)
+      BayText(row.title.isEmpty ? displayUrl(url: row.url) : row.title, variant: .callout, weight: active ? .semibold : .regular)
+        .lineLimit(1)
+      Spacer(minLength: 0)
+    }
+    .padding(.leading, indent ? Space.xl + Space.sm : Space.sm)
+    .padding(.trailing, Space.sm)
+    .frame(minHeight: 40)
+    .background(
+      pinTarget == "pin:\(row.id)" ? BayColor.accent.opacity(0.25) : lifted || active ? BayColor.fill : .clear,
+      in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+    )
+    .scaleEffect(lifted ? 1.03 : 1)
+    .shadow(color: .black.opacity(lifted ? 0.2 : 0), radius: 10, y: 5)
+    .contentShape(Rectangle())
+    .onTapGesture {
+      guard draggingPin == nil else { return }
+      browser.openPin(row)
+    }
+    .background(frame("pin:\(row.id)"))
+    .offset(y: lifted ? pinLift : 0)
+    .zIndex(lifted ? 1 : 0)
+    .gesture(pinHold(row, visible: visible))
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+    .accessibilityLabel(Text(verbatim: row.title.isEmpty ? displayUrl(url: row.url) : row.title))
+    .accessibilityHint(Text(verbatim: strings.t("pin.holdHint")))
+    .accessibilityAction(.default) { browser.openPin(row) }
+    .accessibilityAction(named: Text(verbatim: strings.t("pin.unpin"))) { unpin(row) }
+    .accessibilityIdentifier("tab-pinned-\(row.id)")
+  }
+
+  private func pinHold(_ row: PinnedSite, visible: [String]) -> some Gesture {
+    LongPressGesture(minimumDuration: 0.4)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("pinned")))
+      .onChanged { value in
+        guard case .second(true, let drag) = value else { return }
+        guard let drag else {
+          Haptics.press()
+          return
+        }
+        if draggingPin == nil, abs(drag.translation.height) > 8 {
+          draggingPin = row.id
+          Haptics.tick()
+        }
+        guard draggingPin == row.id else { return }
+        pinLift = drag.translation.height
+        let over = pinFrames.first { $0.key != "pin:\(row.id)" && $0.value.minY <= drag.location.y && drag.location.y < $0.value.maxY }?.key
+        if over != pinTarget {
+          pinTarget = over
+          if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
+        }
+      }
+      .onEnded { value in
+        guard case .second(true, _) = value else { return }
+        guard draggingPin == row.id else {
+          pinActions = row
+          return
+        }
+        if let pinTarget { drop(row, on: pinTarget, visible: visible) }
+        withAnimation(Motion.settle.animation) {
+          pinLift = 0
+          draggingPin = nil
+          pinTarget = nil
+        }
+      }
+  }
+
+  /// A dragged pinned row let go over `target`: onto "Pinned" it comes out of its folder, onto a folder it goes in,
+  /// onto another row it goes beside it, in that row's folder (after it when dragged down to it).
+  private func drop(_ row: PinnedSite, on target: String, visible: [String]) {
+    if target == "top" {
+      browser.movePin(row, kind: .row, folderId: nil)
+    } else if target.hasPrefix("folder:") {
+      let id = String(target.dropFirst("folder:".count))
+      browser.movePin(row, kind: .row, folderId: id)
+      folderToggles[id] = true
+    } else if target.hasPrefix("pin:") {
+      let id = String(target.dropFirst("pin:".count))
+      guard let beside = app.pins.first(where: { $0.id == id }) else { return }
+      let after = (visible.firstIndex(of: row.id) ?? 0) < (visible.firstIndex(of: id) ?? 0)
+      browser.movePin(row, kind: .row, folderId: beside.folderId, beside: id, after: after)
+    }
+  }
+
+  /// The wash on what a dragged row would land on.
+  private func dropWash(_ on: Bool) -> some View {
+    RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(BayColor.accent.opacity(on ? 0.25 : 0))
+  }
+
+  /// Reports where a pinned row, folder or the heading sits, for a dragged row to find what it's over.
+  private func frame(_ key: String) -> some View {
+    GeometryReader { proxy in Color.clear.preference(key: PinFrames.self, value: [key: proxy.frame(in: .named("pinned"))]) }
   }
 
   private func countRow(_ count: Int) -> some View {
@@ -293,45 +487,54 @@ struct TabSwitcher: View {
   }
 }
 
-/// A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do. A folder holding
-/// the page on screen starts open.
-private struct PinFolder<Row: View>: View {
-  let folder: BrowserFolder
-  let rows: [PinnedSite]
-  let activeUrl: String?
-  let row: (PinnedSite) -> Row
-  @State private var open: Bool
+/// What the Pinned section's name field is for.
+private enum FolderNaming: Equatable {
+  case new
+  case rename(String)
+}
 
-  init(folder: BrowserFolder, rows: [PinnedSite], activeUrl: String?, @ViewBuilder row: @escaping (PinnedSite) -> Row) {
-    self.folder = folder
-    self.rows = rows
-    self.activeUrl = activeUrl
-    self.row = row
-    _open = State(initialValue: rows.contains { $0.url == activeUrl })
+/// Where each pinned row, folder and the heading sit in the Pinned section.
+private struct PinFrames: PreferenceKey {
+  static let defaultValue: [String: CGRect] = [:]
+  static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+    value.merge(nextValue()) { $1 }
   }
+}
+
+/// A folder's name typed where the folder sits: Done or tapping away keeps it; left empty, nothing changes. Answers
+/// nil for nothing typed.
+struct FolderNameField: View {
+  let name: String
+  let placeholder: String
+  let onDone: (String?) -> Void
+  @State private var text = ""
+  @State private var done = false
+  @FocusState private var focused: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Button {
-        withAnimation(.easeOut(duration: Motion.tap)) { open.toggle() }
-      } label: {
-        HStack(spacing: Space.md) {
-          BayIconView(.folder, size: IconSize.small)
-          BayText(folder.name, variant: .callout).lineLimit(1)
-          Spacer(minLength: 0)
-          BayText(rows.isEmpty ? "" : "\(rows.count)", variant: .footnote, tone: .overWallpaper)
-          BayIconView(.chevron, size: IconSize.inline, color: BayColor.muted).rotationEffect(.degrees(open ? 90 : 0))
-        }
-        .padding(.horizontal, Space.sm)
-        .frame(minHeight: 40)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.pressFeedback)
-      .accessibilityLabel(Text(verbatim: folder.name))
-      .accessibilityValue(Text(verbatim: open ? "expanded" : "collapsed"))
-      .accessibilityIdentifier("tab-folder-\(folder.id)")
-      if open { ForEach(rows, id: \.id) { row($0) } }
+    HStack(spacing: Space.md) {
+      BayIconView(.folder, size: IconSize.small, color: BayColor.muted)
+      TextField(placeholder, text: $text)
+        .focused($focused)
+        .submitLabel(.done)
+        .onSubmit(finish)
+        .accessibilityIdentifier("tab-folder-name")
     }
+    .padding(.horizontal, Space.sm)
+    .frame(minHeight: 40)
+    .background(BayColor.fill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+    .onAppear {
+      text = name
+      DispatchQueue.main.async { focused = true }
+    }
+    .onChange(of: focused) { if !$0 { finish() } }
+  }
+
+  private func finish() {
+    guard !done else { return }
+    done = true
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    onDone(trimmed.isEmpty ? nil : trimmed)
   }
 }
 
@@ -350,6 +553,8 @@ private struct TabCard: View {
   @ObservedObject var browser: BrowserModel
   @State private var lift: CGFloat = 0
   @State private var held = false
+  /// Held and moved: the card follows the finger, to a space in the bar below.
+  @State private var carried: CGSize?
   /// Where the card sits on screen, so the page can grow out of it.
   @State private var frame: CGRect = .zero
 
@@ -380,18 +585,16 @@ private struct TabCard: View {
             })
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(
-          LongPressGesture().onEnded { _ in
-            held = true
-            browser.showPinMenu(tab)
-          })
+        .simultaneousGesture(hold)
         // A hold whose lift never reached the card (the finger slid off) doesn't eat the next tap.
         .onChange(of: browser.panel) { if $0 == nil { held = false } }
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        .scaleEffect(held && carried == nil ? 1.03 : 1)
+        .shadow(color: .black.opacity(carried == nil ? 0.12 : 0.3), radius: carried == nil ? 10 : 18, y: carried == nil ? 4 : 10)
         .accessibilityLabel(Text(verbatim: strings.t("tabs.openLabel", ["title": title])))
         .accessibilityValue(
           Text(verbatim: strings.t(tab.private ? "tabs.privatePosition" : "tabs.position", ["index": "\(index + 1)", "count": "\(count)"])))
         .accessibilityAddTraits(active ? .isSelected : [])
+        .modifier(MoveToSpaceActions(tab: tab, browser: browser))
         .accessibilityIdentifier("tab-card-\(index)")
         Button(action: close) {
           BayIconView(.close, size: 12, color: .white)
@@ -421,15 +624,19 @@ private struct TabCard: View {
       }
       .accessibilityHidden(true)
     }
-    .offset(y: lift)
+    // Shrunk where it sits, then moved, so the card stays under the finger.
+    .scaleEffect(carried == nil ? 1 : (browser.cardDropSpace == nil ? 0.9 : 0.6), anchor: .center)
+    .offset(carried ?? CGSize(width: 0, height: lift))
+    .zIndex(carried == nil ? 0 : 1)
     .opacity(1 - Double(min(1, -lift / 240)))
     .simultaneousGesture(
       DragGesture(minimumDistance: 16)
         .onChanged { value in
-          guard abs(value.translation.height) > abs(value.translation.width) else { return }
+          guard !held, abs(value.translation.height) > abs(value.translation.width) else { return }
           lift = min(0, value.translation.height)
         }
         .onEnded { value in
+          guard !held else { return }
           let velocity = value.predictedEndTranslation.height - value.translation.height
           // Thrown away when dragged far enough up, or flicked up.
           if value.translation.height < -120 || (value.translation.height < -30 && velocity < -200) {
@@ -458,6 +665,55 @@ private struct TabCard: View {
   private func close() {
     Haptics.tick()
     browser.archive(tab.id)
+  }
+
+  /// Holding the card: let go where it was for its sheet (pinning it, its space); moved, it follows the finger, and
+  /// let go over a space in the bar below, the tab moves there.
+  private var hold: some Gesture {
+    LongPressGesture(minimumDuration: 0.45)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+      .onChanged { value in
+        guard case .second(true, let drag) = value else { return }
+        if !held {
+          held = true
+          Haptics.tick()
+        }
+        guard let drag else { return }
+        if carried == nil, hypot(drag.translation.width, drag.translation.height) < 10 { return }
+        carried = drag.translation
+        browser.cardDragged(to: drag.location)
+      }
+      .onEnded { value in
+        guard case .second(true, _) = value else { return }
+        let target = browser.cardDropSpace
+        browser.cardDragged(to: nil)
+        if carried == nil {
+          browser.showPinMenu(tab)
+          return
+        }
+        if let target {
+          browser.moveTab(tab, to: target)
+        }
+        withAnimation(Motion.settle.animation) { carried = nil }
+        // The lift's tap, if it reached the card, is the hold's.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { held = false }
+      }
+  }
+}
+
+/// VoiceOver can't carry a card to a space, so each card offers the other spaces to move its tab to.
+private struct MoveToSpaceActions: ViewModifier {
+  @EnvironmentObject private var strings: Strings
+  @EnvironmentObject private var app: AppModel
+  let tab: BrowserTab
+  @ObservedObject var browser: BrowserModel
+
+  func body(content: Content) -> some View {
+    app.spaces.filter { $0.id != tab.spaceId }.reduce(AnyView(content)) { view, space in
+      AnyView(view.accessibilityAction(named: Text(verbatim: strings.t("tabs.moveToSpace", ["name": spaceName(space, strings)]))) {
+        browser.moveTab(tab, to: space.id)
+      })
+    }
   }
 }
 

@@ -373,6 +373,7 @@ struct SpacesCapsule: View {
           HStack(spacing: 2) {
             ForEach(app.spaces, id: \.id) { space in
               let active = space.id == app.activeSpaceId
+              let dropping = browser.cardDropSpace == space.id
               Button {
                 Haptics.press()
                 browser.selectSpace(space.id)
@@ -386,7 +387,17 @@ struct SpacesCapsule: View {
                   }
                 }
                 .frame(width: 34, height: 34)
+                // A tab card dragged over it lights it in its colour: let go, and the tab moves here.
+                .background(Circle().fill(spaceColor(space.color).opacity(dropping ? 0.35 : 0)))
+                .scaleEffect(dropping ? 1.25 : 1)
+                .animation(.easeOut(duration: 0.12), value: dropping)
                 .contentShape(Rectangle())
+                .background(GeometryReader { proxy in
+                  Color.clear
+                    .onAppear { browser.spaceDropFrames[space.id] = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { browser.spaceDropFrames[space.id] = $0 }
+                    .onDisappear { browser.spaceDropFrames[space.id] = nil }
+                })
               }
               .buttonStyle(.plain)
               .id(space.id)

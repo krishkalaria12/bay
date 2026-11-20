@@ -670,6 +670,53 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
+  /// A pinned folder in the space showing, named `name`; answers its id.
+  @discardableResult
+  func newFolder(_ name: String) -> String {
+    let folder = BrowserFolder(id: UUID().uuidString, spaceId: app.activeSpaceId, name: name)
+    app.dispatch(.newFolder(folder: folder))
+    return folder.id
+  }
+
+  func renameFolder(_ id: String, _ name: String) {
+    app.dispatch(.renameFolder(id: id, name: name))
+  }
+
+  /// Deletes a pinned folder; its pinned rows stay pinned, loose in the space.
+  func deleteFolder(_ id: String) {
+    app.dispatch(.deleteFolder(id: id))
+  }
+
+  /// Makes a pin an Essential or a pinned row, in `folderId` or loose, and beside the pin `beside` when it was dropped
+  /// on one (after it when `after`).
+  func movePin(_ site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = nil, after: Bool = false) {
+    Haptics.tick()
+    app.dispatch(.movePin(id: site.id, kind: kind, folderId: folderId, beside: beside, after: after))
+  }
+
+  /// Moves a tab to another space, where it becomes that space's newest tab, and says where at the top.
+  func moveTab(_ tab: BrowserTab, to spaceId: String) {
+    guard tab.spaceId != spaceId, let space = app.spaces.first(where: { $0.id == spaceId }) else { return }
+    Haptics.press()
+    app.dispatch(.moveTab(id: tab.id, spaceId: spaceId, folderId: nil))
+    refreshMounted()
+    showTopNote(TopNote(text: strings.t("tabs.movedTo", ["space": spaceName(space, strings)]), space: space))
+  }
+
+  /// A tab card being dragged in the tab view: the space in the bar it's over, which lights up and takes it when let go.
+  @Published var cardDropSpace: String?
+  /// Where each space sits in the tab view's bar, on screen, for a dragged card to find the one it's over.
+  var spaceDropFrames: [String: CGRect] = [:]
+
+  /// The space in the bar under `point`, a dragged card's place on screen.
+  func cardDragged(to point: CGPoint?) {
+    let over = point.flatMap { point in spaceDropFrames.first { $0.value.insetBy(dx: -6, dy: -14).contains(point) }?.key }
+    if over != cardDropSpace {
+      if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
+      cardDropSpace = over
+    }
+  }
+
   /// A space with the next default name ("Space 3").
   func newSpace() {
     createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
@@ -1020,9 +1067,10 @@ extension BrowserModel {
   func reload() { activeView?.reload() }
   func stop() { activeView?.stop() }
 
+  /// The page showing is pinned in its space, either way.
   var isPinned: Bool {
     let url = activeTab?.url
-    return app.pins.contains { $0.kind == .essential && $0.url == url }
+    return app.pins.contains { $0.url == url }
   }
 
   var isBookmarked: Bool {
@@ -1030,12 +1078,20 @@ extension BrowserModel {
     return app.store.isBookmarked(spaceId: app.activeSpaceId, url: url)
   }
 
+  /// The page menu's Pin: unpins a pinned page; otherwise pins it as an Essential, or, when the space has folders,
+  /// offers the ways to pin it.
   func togglePin() {
     guard let tab = activeTab else { return }
-    Haptics.tick()
-    let pinned = isPinned
-    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: .essential, folderId: nil))
-    showToast(pinned ? strings.t("toast.unpinned") : strings.t("toast.pinned"))
+    if let pin = app.pins.first(where: { $0.url == tab.url }) {
+      Haptics.tick()
+      unpin(pin)
+    } else if !app.folders.isEmpty {
+      showPinMenu(tab)
+    } else {
+      Haptics.tick()
+      app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: .essential, folderId: nil))
+      showToast(strings.t("toast.pinned"))
+    }
   }
 
   func toggleBookmark() {
