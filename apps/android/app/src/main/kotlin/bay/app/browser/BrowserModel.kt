@@ -81,6 +81,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -639,21 +640,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         updateMediaSession()
     }
 
-    /** A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from. */
+    /** A card picked in the switcher grows into its page (`TabZoom`). */
     fun pick(tab: BrowserTab, frame: androidx.compose.ui.geometry.Rect) {
-        if (tab.snapshot != null) {
+        if (zoom != null || zoomLoading != null) return
+        zoomLoading = scope.launch {
+            // At the page's size, read before it grows, so it never starts as a plain tile.
+            preloadFileImage(tab.snapshot, TAB_PICTURE_WIDTH)
             zoom = Zoom(tab, frame)
-            return
+            zoomLoading = null
         }
-        activate(tab.id)
-        if (tab.url.isNotEmpty()) tabSwipe.cover(tab)
     }
+    private var zoomLoading: Job? = null
 
     fun zoomFinished() {
         val current = zoom ?: return
         zoom = null
         activate(current.tab.id)
-        tabSwipe.cover(current.tab)
+        if (current.tab.url.isNotEmpty()) tabSwipe.cover(current.tab)
     }
 
     // Tips
@@ -733,18 +736,52 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return app.tabs.filter { it.url.isEmpty() || it.url !in pinned }
         }
 
+    /** Where each tab's card sits in the switcher, in the window: the page shrinks into it and grows out of it. */
+    val cardFrames = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The page shrinking into its card as the switcher opens, until it lands (`openingDone`). */
+    var opening by mutableStateOf<BrowserTab?>(null)
+        private set
+    private var openingJob: Job? = null
+
+    /**
+     * Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+     * its card is the page as it is now.
+     */
     fun showTabs() {
-        if (hasPage) capture(app.activeTabId)
-        overlay = Overlay.TABS
+        val tab = activeTab
+        if (!hasPage || tab == null) {
+            overlay = Overlay.TABS
+            return
+        }
+        if (openingJob?.isActive == true) return
+        openingJob = scope.launch {
+            val fresh = captureAsync(tab.id)
+            kotlinx.coroutines.withTimeoutOrNull(OPEN_PICTURE_MS) { fresh?.await() }
+            val shown = app.tabs.firstOrNull { it.id == tab.id } ?: tab
+            preloadFileImage(shown.snapshot, TAB_PICTURE_WIDTH)
+            opening = shown
+            overlay = Overlay.TABS
+        }
+    }
+
+    fun openingDone() {
+        opening = null
     }
 
     /** Takes the tab's picture for the switcher now. Private tabs and failed pages keep none. */
     fun capture(tabId: String) {
-        val view = views[tabId] ?: return
-        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return
-        scope.launch {
-            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@launch
+        captureAsync(tabId)
+    }
+
+    /** The tab's picture as it comes in (its file's address), or null when it keeps none. */
+    private fun captureAsync(tabId: String): kotlinx.coroutines.Deferred<String?>? {
+        val view = views[tabId] ?: return null
+        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return null
+        return scope.async {
+            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@async null
             app.dispatch(Action.UpdateTab(tabId, TabUpdate(null, null, null, null, uri)))
+            uri
         }
     }
 
@@ -1563,6 +1600,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     companion object {
         /** At most this many pages stay loaded; the rest reload from their saved state when shown again. */
         const val MAX_LIVE = 4
+
+        /** How long opening the switcher waits for a fresh picture of the page before shrinking the last one. */
+        const val OPEN_PICTURE_MS = 400L
+
+        /** Tab pictures are this wide (BaySnapshotWriter.MAX_WIDTH): decoded as they are, wherever they're drawn. */
+        const val TAB_PICTURE_WIDTH = 640
 
         /** A settled download's toast stays this long. */
         private const val DOWNLOAD_TOAST_MS = 6_000L

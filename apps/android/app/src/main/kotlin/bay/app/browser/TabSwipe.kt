@@ -164,7 +164,7 @@ class TabSwipe(private val browser: BrowserModel) {
 /** A tab's picture where its page would be, or its title on a plain page when it has none yet. */
 @Composable
 fun TabPicture(browser: BrowserModel, tab: BrowserTab, modifier: Modifier = Modifier) {
-    val picture = rememberFileImage(tab.snapshot, PICTURE_WIDTH)
+    val picture = rememberFileImage(tab.snapshot, BrowserModel.TAB_PICTURE_WIDTH)
     val rgb = browser.pageColors[tab.id]
     val back = rgb?.takeIf { it.size >= 3 }?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
     Box(modifier.fillMaxSize().statusBarsPadding().background(back).clearAndSetSemantics {}) {
@@ -191,8 +191,8 @@ fun TabSwipeLayer(browser: BrowserModel) {
     // Decoded ahead, so the picture is there the moment a drag starts.
     val tabs = browser.app.tabs
     val index = tabs.indexOfFirst { it.id == browser.app.activeTabId }
-    tabs.getOrNull(index - 1)?.let { rememberFileImage(it.snapshot, PICTURE_WIDTH) }
-    tabs.getOrNull(index + 1)?.let { rememberFileImage(it.snapshot, PICTURE_WIDTH) }
+    tabs.getOrNull(index - 1)?.let { rememberFileImage(it.snapshot, BrowserModel.TAB_PICTURE_WIDTH) }
+    tabs.getOrNull(index + 1)?.let { rememberFileImage(it.snapshot, BrowserModel.TAB_PICTURE_WIDTH) }
     swipe.incoming?.let { tab ->
         TabPicture(browser, tab, Modifier.graphicsLayer {
             val moved = swipe.offset.value
@@ -210,6 +210,3 @@ fun TabCoverLayer(browser: BrowserModel) {
 
 /** The gap between the page and the tab coming in. */
 private val GAP = 12.dp
-
-/** Tab pictures are this wide (BaySnapshotWriter.MAX_WIDTH): decoded as they are. */
-private const val PICTURE_WIDTH = 640

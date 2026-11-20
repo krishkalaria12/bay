@@ -62,6 +62,9 @@ import bay.design.overWallpaper
 
 private val BAR_HEIGHT = 52.dp
 
+/** How small the switcher starts as it comes up behind the shrinking page, and goes as the page grows back. */
+private const val SWITCHER_FROM = 0.94f
+
 /** Bay's one screen: the page showing (or the start page), the floating bar, and what opens over them. */
 @Composable
 fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit = {}) {
@@ -182,8 +185,27 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
         }
         if (browser.overlay == Overlay.TABS) {
+            // In from a page, the page shrinks into its card as the switcher comes up behind it; back to a page, the
+            // card grows into it as the switcher falls away (TabZoom).
+            val opening = browser.opening
+            val reveal = remember { androidx.compose.animation.core.Animatable(if (opening != null) 0f else 1f) }
+            LaunchedEffect(opening) {
+                if (opening == null) return@LaunchedEffect
+                reveal.snapTo(0f)
+                reveal.animateTo(1f, bay.design.Motion.settle.spec())
+                browser.openingDone()
+            }
+            val leave by animateFloatAsState(if (browser.zoom != null) 1f else 0f, bay.design.Motion.open.spec(), label = "switcher-leave")
             Wallpaper(app.preferences.wallpaper)
-            TabSwitcher(browser, strings, onSettings)
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    val shown = reveal.value * (1 - leave)
+                    alpha = shown
+                    scaleX = SWITCHER_FROM + (1 - SWITCHER_FROM) * shown
+                    scaleY = scaleX
+                },
+            ) { TabSwitcher(browser, strings, onSettings) }
+            opening?.let { TabMorph(browser, it, browser.cardFrames[it.id], 1f - reveal.value) }
         } else if (browser.hasPage) {
             val failure = browser.failure
             if (failure != null && failure.tabId == app.activeTabId) {
@@ -200,7 +222,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
             PrivateLock(strings) { activity?.let(browser::unlock) }
         }
-        browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
+        browser.zoom?.let { zoom -> TabZoom(browser, zoom, browser::zoomFinished) }
         if (browser.overlay != Overlay.SEARCH) {
             if (!pickerOnTop) bottom()
         } else {
