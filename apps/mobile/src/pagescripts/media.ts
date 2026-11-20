@@ -26,12 +26,17 @@ const fileName = (media) => {
     return "";
   }
 };
+// Silent media is part of the page, not something being listened to: a muted preview (search results, a feed), a
+// looping background, a GIF served as video. It never brings the player; unmuting it does.
+const audible = (media) => !media.muted && media.volume > 0;
 const report = (event) => {
   const media = event.target;
   if (!(media instanceof HTMLMediaElement)) return;
-  if (event.type === "play" || event.type === "playing") state.current = media;
+  const sounding = !media.paused && !media.ended && audible(media);
+  if (sounding && ["play", "playing", "volumechange"].includes(event.type)) state.current = media;
   else if (media !== state.current) return;
-  const playing = !media.paused && !media.ended;
+  // Media muted while it plays counts as paused.
+  const playing = sounding;
   post({
     type: "media",
     playing,
@@ -39,9 +44,9 @@ const report = (event) => {
     video: media instanceof HTMLVideoElement && media.videoWidth > 0,
   });
 };
-for (const type of ["play", "playing", "pause", "ended", "emptied"]) document.addEventListener(type, report, true);
+for (const type of ["play", "playing", "pause", "ended", "emptied", "volumechange"]) document.addEventListener(type, report, true);
 // Media that started before the watch did (a file that plays by itself as it opens) never sends its play event again.
-const playing = [...document.querySelectorAll("video, audio")].find((media) => !media.paused && !media.ended);
+const playing = [...document.querySelectorAll("video, audio")].find((media) => !media.paused && !media.ended && audible(media));
 if (playing) report({ type: "playing", target: playing });
 return true;
 `;
