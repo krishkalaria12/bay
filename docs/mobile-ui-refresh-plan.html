@@ -1589,6 +1589,12 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           white.
         </li>
         <li>
+          <b>Tab view in and out done (both apps):</b> Tabs shrinks the page into its card (a fresh picture if it comes within 400 ms, else the last one) while
+          the tab view fades up behind it, opened on that card; picking a card grows it into its page while the tab view falls away. A tab without a picture
+          morphs as its page's colour and icon (a new tab: the wallpaper). Pictures lie across the width, top at the top, so they line up with the page; on
+          iPhone a page that's already drawn takes over with no picture over it.
+        </li>
+        <li>
           <b>Bar during loads done (Android):</b> a new page's first frames report the browser controls hidden until the engine brings them back, which slid the
           bar away and in again mid-load. The bar now hides only with the person's own scrolling (a finger on the page, or its fling for 2.5 seconds after).
         </li>
