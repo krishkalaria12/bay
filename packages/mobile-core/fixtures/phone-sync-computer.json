@@ -1,0 +1,24 @@
+{
+  "now": 1794830400000,
+  "scopes": {
+    "app": {
+      "dev:mac": { "n": "Krish's MacBook" },
+      "prof:personal": { "n": "Personal", "c": "blue", "i": null, "d": true },
+      "prof:work": { "n": "Work", "c": "purple", "i": "💼" }
+    },
+    "p:work": {
+      "pin:t:gmail": { "g": null, "u": "https://mail.example/", "t": null, "i": null, "ti": "Mail", "pos": "V" }
+    },
+    "p:personal": {
+      "tabs:mac": { "n": "Krish's MacBook", "tabs": [{ "u": "https://bay.example/", "t": "Bay" }] },
+      "bm:folder-1": { "k": "f", "p": "bar", "t": "Work", "a": 1, "pos": "V" },
+      "bm:link-1": { "k": "u", "p": "folder-1", "t": "Docs", "u": "https://docs.example/", "a": 2, "pos": "V" },
+      "bm:link-2": { "k": "u", "p": "other", "t": "News", "u": "https://news.example/", "a": 3, "pos": "V" },
+      "h:https://visited.example/": { "t": "Visited", "n": 3, "vt": [1794830340000] },
+      "pin:t:essential-1": { "g": null, "u": "https://tube.example/", "t": null, "i": null, "ti": "Tube", "pos": "V" },
+      "pin:g:music": { "n": "Music", "i": null, "c": null, "pos": "V", "f": true },
+      "pin:t:row-1": { "g": "music", "u": "https://songs.example/", "t": "Songs", "i": null, "ti": "Songs page", "pos": "V", "r": true, "o": "V" },
+      "pin:t:row-2": { "g": null, "u": "https://notes.example/", "t": null, "i": null, "ti": "Notes", "pos": "X", "r": true, "o": "X" }
+    }
+  }
+}

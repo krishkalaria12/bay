@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { addBookmarks, bookmarkFolder, BOOKMARKS_ROOT, emptyBookmarks, isBookmarked, parseBookmarks, removeBookmark, removeBookmarksOf } from "./bookmarks.ts";
+import { sliceText } from "./text.ts";
 import { SIMPLE_PREFERENCE_KEYS, TAB_UPDATE_FIELDS } from "./types.ts";
 import type {
   ArchivedTab,
@@ -528,12 +529,12 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     case "rename-space": {
       if (!data.spaces.some((space) => space.id === action.id) || !action.name.trim()) return data;
 
-      return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, name: action.name.trim().slice(0, 40) } : space)) };
+      return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, name: sliceText(action.name.trim(), 40) } : space)) };
     }
 
     case "set-space-icon": {
       // Every space wears an emoji: none isn't a choice.
-      const icon = action.icon?.trim().slice(0, SPACE_ICON_LENGTH);
+      const icon = action.icon ? sliceText(action.icon.trim(), SPACE_ICON_LENGTH) : undefined;
 
       if (!icon || !data.spaces.some((space) => space.id === action.id)) return data;
 
@@ -631,7 +632,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     case "rename-folder": {
       if (!data.folders.some((folder) => folder.id === action.id) || !action.name.trim()) return data;
 
-      return { ...data, folders: data.folders.map((folder) => (folder.id === action.id ? { ...folder, name: action.name.trim().slice(0, 40) } : folder)) };
+      return { ...data, folders: data.folders.map((folder) => (folder.id === action.id ? { ...folder, name: sliceText(action.name.trim(), 40) } : folder)) };
     }
 
     case "delete-folder": {
@@ -730,7 +731,12 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         const change = changed.get(space.id);
 
         return change
-          ? { ...space, name: change.name.trim().slice(0, 40) || space.name, color: change.color, icon: change.icon?.slice(0, SPACE_ICON_LENGTH) || null }
+          ? {
+              ...space,
+              name: sliceText(change.name.trim(), 40) || space.name,
+              color: change.color,
+              icon: (change.icon ? sliceText(change.icon, SPACE_ICON_LENGTH) : "") || null,
+            }
           : space;
       });
 
@@ -1100,8 +1106,8 @@ function parseTab(value: JsonValue): BrowserTab | null {
     id: value.id,
     url: value.url,
     title: value.title,
-    createdAt: value.createdAt,
-    lastVisit: value.lastVisit,
+    createdAt: Math.trunc(value.createdAt),
+    lastVisit: Math.trunc(value.lastVisit),
     favicon: v.is(v.string(), value.favicon) ? value.favicon : null,
     snapshot: v.is(v.string(), value.snapshot) && value.snapshot.startsWith("file://") ? value.snapshot : null,
     spaceId: PERSONAL_SPACE_ID,
@@ -1173,9 +1179,9 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
       ? [
           {
             id: entry.id,
-            name: v.is(v.string(), entry.name) && entry.name ? entry.name.slice(0, 40) : "Space",
+            name: v.is(v.string(), entry.name) && entry.name ? sliceText(entry.name, 40) : "Space",
             color: v.is(v.picklist(SPACE_COLOR_PICKLIST), entry.color) ? entry.color : "gray",
-            icon: v.is(v.string(), entry.icon) && entry.icon ? entry.icon.slice(0, SPACE_ICON_LENGTH) : null,
+            icon: v.is(v.string(), entry.icon) && entry.icon ? sliceText(entry.icon, SPACE_ICON_LENGTH) : null,
           },
         ]
       : [],
@@ -1196,7 +1202,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     spaceIds.has(entry.spaceId) &&
     v.is(v.string(), entry.name) &&
     entry.name
-      ? [{ id: entry.id, spaceId: entry.spaceId, name: entry.name.slice(0, 40) }]
+      ? [{ id: entry.id, spaceId: entry.spaceId, name: sliceText(entry.name, 40) }]
       : [],
   );
 
@@ -1235,7 +1241,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
             url: entry.url,
             title: entry.title,
             favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null,
-            lastVisit: entry.lastVisit,
+            lastVisit: Math.trunc(entry.lastVisit),
             visits: Math.floor(entry.visits),
           },
         ]
@@ -1265,14 +1271,14 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
     if (!tab?.url || !isRecord(entry) || !isTimestamp(entry.closedAt)) return [];
     const spaceId = v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : PERSONAL_SPACE_ID;
 
-    return [{ ...tab, spaceId, closedAt: entry.closedAt }];
+    return [{ ...tab, spaceId, closedAt: Math.trunc(entry.closedAt) }];
   });
 
   const downloads: DownloadItem[] = (Array.isArray(value.downloads) ? value.downloads : []).filter(isRecord).flatMap((entry) => {
     if (!v.is(v.string(), entry.id) || !entry.id || !v.is(v.string(), entry.filename) || !isTimestamp(entry.startedAt)) return [];
 
     if (!v.is(v.picklist(DOWNLOAD_STATES), entry.state)) return [];
-    const bytes = (value: JsonValue) => (v.is(v.number(), value) && Number.isFinite(value) && value > 0 ? value : 0);
+    const bytes = (value: JsonValue) => (v.is(v.number(), value) && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
     // A download Bay was running when it quit can't be resumed.
     const interrupted = entry.state === "downloading";
 
@@ -1286,7 +1292,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
         total: bytes(entry.total),
         ...(v.is(v.string(), entry.path) && entry.path ? { path: entry.path } : undefined),
         ...(interrupted ? { error: INTERRUPTED_DOWNLOAD } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
-        startedAt: entry.startedAt,
+        startedAt: Math.trunc(entry.startedAt),
       },
     ];
   });
@@ -1337,7 +1343,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
         .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && v.is(v.string(), entry[1]) && entry[1].startsWith("file://"))
         .slice(-FAVICON_LIMIT),
     ),
-    leftAt: v.is(v.number(), value.leftAt) && Number.isFinite(value.leftAt) ? value.leftAt : null,
+    leftAt: v.is(v.number(), value.leftAt) && Number.isFinite(value.leftAt) ? Math.trunc(value.leftAt) : null,
   };
 }
 

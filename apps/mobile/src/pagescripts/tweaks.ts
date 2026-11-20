@@ -1,8 +1,9 @@
-/** Bay's page zoom, and AMP pages swapped for the publisher's own. Safe to run more than once per page. */
-export function pageTweaksScript({ textSize, skipAmp }: { textSize: number; skipAmp: boolean }): string {
-  return `
+import { withArgs } from "./args.ts";
+
+/** Bay's page zoom (`args.textSize`), and AMP pages swapped for the publisher's own (`args.skipAmp`). Safe to run more than once per page. */
+export const PAGE_TWEAKS_SCRIPT = `
 const root = document.documentElement;
-if (${skipAmp} && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
+if (args.skipAmp && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
   const canonical = document.querySelector('link[rel="canonical"]');
   const href = canonical && canonical.href;
   // Never from https down to http.
@@ -12,7 +13,7 @@ if (${skipAmp} && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
     return "amp";
   }
 }
-const size = ${textSize};
+const size = args.textSize;
 const state = (window[Symbol.for("bay.tweaks")] ??= {});
 // CSS zoom scales text and images and reflows the page, the same on both engines.
 // It goes on <body>: Reader and the element picker attach to <html> and keep their own sizes.
@@ -24,11 +25,16 @@ if (document.body && (size !== 100 || state.size)) {
 }
 return "ok";
 `;
+
+export function pageTweaksScript({ textSize, skipAmp }: { textSize: number; skipAmp: boolean }): string {
+  return withArgs(PAGE_TWEAKS_SCRIPT, { textSize, skipAmp });
 }
 
 /**
  * The colour at the top of the page, for the strip behind the status bar: the background under the top edge, else
- * the page's theme-color, else its body. Resolves to [r, g, b], or null when the page has no opaque colour there.
+ * the page's theme-color, else its body, else the browser's canvas the page shows through (light or dark, as the page's
+ * colour scheme says). With `args.edge` "bottom" (the native apps), the colour along the bottom edge instead, for what
+ * sits behind Bay's bar; theme-color describes a page's top, so it's skipped there. Resolves to [r, g, b].
  */
 // ponytail: read once per load, so a header that changes colour on scroll keeps the first one; re-read on scroll if
 // that shows up.
@@ -37,13 +43,14 @@ const parse = (value) => {
   const m = /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(value || "");
   return m && (m[4] === undefined || Number(m[4]) > 0.9) ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 };
-let element = document.elementFromPoint(innerWidth / 2, 1);
+const bottom = typeof args !== "undefined" && args.edge === "bottom";
+let element = document.elementFromPoint(innerWidth / 2, bottom ? innerHeight - 1 : 1);
 while (element) {
   const color = parse(getComputedStyle(element).backgroundColor);
   if (color) return color;
   element = element.parentElement;
 }
-for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+for (const meta of bottom ? [] : document.querySelectorAll('meta[name="theme-color"]')) {
   const media = meta.getAttribute("media");
   if (media && !matchMedia(media).matches) continue;
   const probe = document.createElement("i");
@@ -54,5 +61,12 @@ for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
   probe.remove();
   if (color) return color;
 }
-return parse(getComputedStyle(document.body || document.documentElement).backgroundColor);
+const page = parse(getComputedStyle(document.body || document.documentElement).backgroundColor);
+if (page) return page;
+const canvas = document.createElement("i");
+canvas.style.backgroundColor = "Canvas";
+document.documentElement.append(canvas);
+const color = parse(getComputedStyle(canvas).backgroundColor);
+canvas.remove();
+return color;
 `;

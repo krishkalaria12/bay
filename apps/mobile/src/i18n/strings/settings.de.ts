@@ -55,6 +55,7 @@ export const settingsDe: SettingsStrings = {
   "site.bayHere": "Hier",
   "site.settings": "Bay-Einstellungen",
   "site.zoom.reset": "Zurück zu Bays {size} %",
+  "format.percent": "{value} %",
 
   // Sync with your other devices.
   "settings.page.sync": "Sync",

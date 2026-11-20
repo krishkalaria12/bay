@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's colours at night: the "Bay" wallpaper's night sky, with translucent controls. -->
+<resources>
+    <color name="widget_sky_top">#0F1C2A</color>
+    <color name="widget_sky_middle">#14202C</color>
+    <color name="widget_sky_bottom">#231D24</color>
+    <color name="widget_field">#26FFFFFF</color>
+    <color name="widget_text">#FFFFFFFF</color>
+    <color name="widget_text_muted">#CCFFFFFF</color>
+    <color name="widget_icon">#FFFFFFFF</color>
+</resources>

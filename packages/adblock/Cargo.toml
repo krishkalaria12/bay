@@ -6,7 +6,8 @@ publish = false
 description = "Bay's content blocker: Brave's adblock-rust behind a C ABI and JNI, shared by the desktop and mobile engines."
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+# "lib" lets the mobile core link it into its own library (one Rust artifact per app, plan D16).
+crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
 adblock = { version = "0.13.5", features = ["content-blocking", "debug-info", "css-validation"] }

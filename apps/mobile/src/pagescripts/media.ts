@@ -3,6 +3,8 @@
 // don't bubble, so they're caught on the way down at the document. State lives under Symbol.for("bay.media").
 import * as v from "valibot";
 
+import { withArgs } from "./args.ts";
+
 export interface MediaMessage {
   type: "media";
   playing: boolean;
@@ -61,15 +63,17 @@ if (state && state.current) state.current.pause();
 return true;
 `;
 
-/** Seeks the page's media by `seconds` (negative rewinds), clamped to the media's own bounds. */
-export function seekMediaScript(seconds: number): string {
-  return `
+/** Seeks the page's media by `args.seconds` (negative rewinds), clamped to the media's own bounds. */
+export const SEEK_MEDIA_SCRIPT = `
 const state = window[Symbol.for("bay.media")];
 const media = state && state.current;
 if (!media || !media.isConnected) return null;
-media.currentTime = Math.max(0, media.currentTime + ${seconds});
+media.currentTime = Math.max(0, media.currentTime + args.seconds);
 return true;
 `;
+
+export function seekMediaScript(seconds: number): string {
+  return withArgs(SEEK_MEDIA_SCRIPT, { seconds });
 }
 
 /** Asks the page's own video element for picture in picture; false where it can't (audio, or the engine won't). */

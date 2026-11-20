@@ -33,6 +33,8 @@ build/
 # …but not the engine source build's step scripts
 !engine/patches/build/
 build-*/
+# …but not the Android app's Gradle convention plugins
+!apps/android/build-logic/
 DerivedData/
 *.xcuserstate
 *.moved-aside

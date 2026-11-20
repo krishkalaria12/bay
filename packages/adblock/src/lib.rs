@@ -9,7 +9,8 @@
 mod adapt;
 mod blocker;
 mod body;
-mod ffi;
+/// The C ABI the engines call; public so a crate that links this one (the mobile core, plan D16) exports it too.
+pub mod ffi;
 mod html;
 mod modifiers;
 mod preprocess;

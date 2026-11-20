@@ -55,6 +55,7 @@ export const settingsJa: SettingsStrings = {
   "site.bayHere": "このサイト",
   "site.settings": "Bay の設定",
   "site.zoom.reset": "Bay の {size}% に戻す",
+  "format.percent": "{value}%",
 
   // Sync with your other devices.
   "settings.page.sync": "同期",

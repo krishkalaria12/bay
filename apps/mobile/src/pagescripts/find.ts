@@ -2,6 +2,7 @@
 // ranges without changing the page's DOM, through a constructed style sheet (a page's Content Security Policy can't
 // block one). Engines without highlights select the current match instead. Matching ignores case and stays within one
 // text node. State lives under Symbol.for("bay.find").
+import { withArgs } from "./args.ts";
 
 /** At most this many matches are marked, so a huge page stays responsive. */
 export const MAX_MATCHES = 1000;
@@ -51,10 +52,9 @@ const clear = () => {
 };
 `;
 
-/** Marks every match of `query` and scrolls to the first one at or below the top of the screen. */
-export function findScript(query: string): string {
-  return `
-const QUERY = ${JSON.stringify(query)};
+/** Marks every match of `args.query` and scrolls to the first one at or below the top of the screen. */
+export const FIND_SCRIPT = `
+const QUERY = args.query;
 ${HELPERS}
 clear();
 const needle = QUERY.toLocaleLowerCase();
@@ -88,16 +88,21 @@ const first = ranges.findIndex((range) => range.getBoundingClientRect().bottom >
 state.index = first < 0 ? 0 : first;
 return show();
 `;
+
+export function findScript(query: string): string {
+  return withArgs(FIND_SCRIPT, { query });
 }
 
-/** Moves to the next (1) or previous (-1) match, wrapping around. */
-export function findStepScript(step: 1 | -1): string {
-  return `
+/** Moves to the next (`args.step` 1) or previous (-1) match, wrapping around. */
+export const FIND_STEP_SCRIPT = `
 ${HELPERS}
 if (!state.ranges || !state.ranges.length) return { count: 0, index: -1 };
-state.index = (state.index + ${step} + state.ranges.length) % state.ranges.length;
+state.index = (state.index + args.step + state.ranges.length) % state.ranges.length;
 return show();
 `;
+
+export function findStepScript(step: 1 | -1): string {
+  return withArgs(FIND_STEP_SCRIPT, { step });
 }
 
 /** Removes the marks. */

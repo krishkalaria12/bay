@@ -1,4 +1,5 @@
 import { ARTICLE_HELPERS } from "./article.ts";
+import { withArgs } from "./args.ts";
 import { READABILITY } from "./vendor.generated.ts";
 
 // Reader: the page's article (Mozilla's Readability) typeset in a full-page layer of the page itself, in a closed
@@ -43,7 +44,8 @@ interface ReaderVariables {
   [variable: string]: string;
 }
 
-function variables(settings: ReaderSettings): ReaderVariables {
+/** Reader's CSS variables for `settings`: the arguments of its open and update scripts. */
+export function readerVariables(settings: ReaderSettings): ReaderVariables {
   const theme = READER_THEMES.find((entry) => entry.id === settings.theme) ?? READER_THEMES[0]!;
   const font = READER_FONTS.find((entry) => entry.id === settings.font) ?? READER_FONTS[0]!;
   const size = Number.isFinite(settings.size) ? Math.min(READER_SIZES.max, Math.max(READER_SIZES.min, Math.round(settings.size))) : DEFAULT_READER.size;
@@ -73,13 +75,15 @@ const STYLE = [
   "h2,h3,h4{line-height:1.3;}",
 ].join("");
 
-/** Opens Reader; resolves `{ ok: true, title }`, or `{ ok: false }` when the page has no article. */
-export function openReaderScript(settings: ReaderSettings): string {
-  return `
+/**
+ * Opens Reader with `args.variables` (its CSS variables, from `readerVariables`); resolves `{ ok: true, title }`, or
+ * `{ ok: false }` when the page has no article.
+ */
+export const OPEN_READER_SCRIPT = `
 const state = (window[Symbol.for("bay.reader")] ??= {});
 state.Readability ??= ${READABILITY};
 if (state.host && state.host.isConnected) {
-  for (const [name, value] of Object.entries(${JSON.stringify(variables(settings))})) state.host.style.setProperty(name, value);
+  for (const [name, value] of Object.entries(args.variables)) state.host.style.setProperty(name, value);
   return { ok: true, title: state.title };
 }
 ${ARTICLE_HELPERS}
@@ -103,7 +107,7 @@ byline.textContent = article.byline || "";
 const body = safeArticle(article.content);
 main.append(site, title, byline, body);
 root.append(style, main);
-for (const [name, value] of Object.entries(${JSON.stringify(variables(settings))})) host.style.setProperty(name, value);
+for (const [name, value] of Object.entries(args.variables)) host.style.setProperty(name, value);
 const overflow = document.documentElement.style.getPropertyValue("overflow");
 const priority = document.documentElement.style.getPropertyPriority("overflow");
 document.documentElement.style.overflow = "hidden";
@@ -119,15 +123,21 @@ state.close = () => {
 };
 return { ok: true, title: title.textContent };
 `;
+
+export function openReaderScript(settings: ReaderSettings): string {
+  return withArgs(OPEN_READER_SCRIPT, { variables: readerVariables(settings) });
 }
 
-export function updateReaderScript(settings: ReaderSettings): string {
-  return `
+/** Restyles open Reader with `args.variables`. */
+export const UPDATE_READER_SCRIPT = `
 const state = window[Symbol.for("bay.reader")];
 if (!state || !state.host || !state.host.isConnected) return false;
-for (const [name, value] of Object.entries(${JSON.stringify(variables(settings))})) state.host.style.setProperty(name, value);
+for (const [name, value] of Object.entries(args.variables)) state.host.style.setProperty(name, value);
 return true;
 `;
+
+export function updateReaderScript(settings: ReaderSettings): string {
+  return withArgs(UPDATE_READER_SCRIPT, { variables: readerVariables(settings) });
 }
 
 export const CLOSE_READER_SCRIPT = `

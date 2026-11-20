@@ -1,0 +1,9 @@
+/* Info.plist strings: the permission prompts and the Home Screen quick actions (keyed by their English titles). */
+NSLocationWhenInUseUsageDescription = "Bay teilt deinen Standort mit Seiten, denen du es erlaubst.";
+NSCameraUsageDescription = "Bay lässt Seiten, denen du es erlaubst, die Kamera verwenden.";
+NSMicrophoneUsageDescription = "Bay verwendet das Mikrofon für die Sprachsuche und für Seiten, denen du es erlaubst.";
+NSSpeechRecognitionUsageDescription = "Bay macht aus deinen Worten eine Suche, direkt auf dem Gerät.";
+NSPhotoLibraryAddUsageDescription = "Bay sichert Bilder, die du speichern möchtest, in deiner Fotomediathek.";
+NSFaceIDUsageDescription = "Bay verwendet Face ID, um deine privaten Tabs zu entsperren.";
+"New tab" = "Neuer Tab";
+"Private tab" = "Privater Tab";

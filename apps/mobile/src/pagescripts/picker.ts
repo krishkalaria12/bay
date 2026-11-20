@@ -1,4 +1,5 @@
 import { SELECTOR_FOR } from "@bay/core/src/selectorFor.ts";
+import { withArgs } from "./args.ts";
 
 // Hide elements: while editing, a tap on the page picks the element under it instead of acting; it's outlined, and the
 // app gets `{ type: "picked", selector, label }` through post(). "Parent" widens the pick. Hidden elements are one
@@ -137,10 +138,9 @@ state.host = state.box = state.current = state.touch = state.pick = null;
 return true;
 `;
 
-/** Replaces the page's hidden elements with `selectors`; resolves how many elements they hide now. */
-export function hideElementsScript(selectors: readonly string[]): string {
-  return `
-const SELECTORS = ${JSON.stringify(selectors)};
+/** Replaces the page's hidden elements with `args.selectors`; resolves how many elements they hide now. */
+export const HIDE_ELEMENTS_SCRIPT = `
+const SELECTORS = args.selectors;
 const state = (window[Symbol.for("bay.hidden")] ??= {});
 if (!state.style || !state.style.isConnected) {
   state.style = document.createElement("style");
@@ -153,4 +153,7 @@ const picker = window[Symbol.for("bay.picker")];
 if (picker && picker.box) picker.box.style.display = "none";
 return valid.reduce((count, s) => count + document.querySelectorAll(s).length, 0);
 `;
+
+export function hideElementsScript(selectors: readonly string[]): string {
+  return withArgs(HIDE_ELEMENTS_SCRIPT, { selectors });
 }

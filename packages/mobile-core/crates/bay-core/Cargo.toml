@@ -1,0 +1,46 @@
+[package]
+name = "bay-core"
+version = "0.1.0"
+description = "Bay mobile's shared core: the browser store, persistence, sync and input, behind UniFFI for the Swift and Kotlin apps."
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+name = "bay_core"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+uniffi.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+indexmap.workspace = true
+url.workspace = true
+aes-gcm.workspace = true
+regex.workspace = true
+fancy-regex.workspace = true
+unicode-normalization.workspace = true
+ryu-js.workspace = true
+libm.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+pbkdf2.workspace = true
+sha2.workspace = true
+x25519-dalek.workspace = true
+bip39.workspace = true
+getrandom.workspace = true
+zeroize.workspace = true
+subtle.workspace = true
+async-trait.workspace = true
+hex.workspace = true
+icu_collator.workspace = true
+zip.workspace = true
+bay-adblock = { workspace = true, optional = true }
+
+[features]
+# The content blocker's C functions, linked into this library for iOS (plan D16). Android's engine carries its own.
+adblock = ["dep:bay-adblock"]
+
+[dev-dependencies]
+pollster.workspace = true

@@ -12,7 +12,7 @@ export const chromeFr: ChromeStrings = {
   "bar.searchOrEnterInsecure": "Recherchez ou saisissez une adresse, non sécurisé, {site}",
   "bar.more": "Plus",
 
-  // The sheet's chrome.
+  // The sheet’s chrome.
   "sheet.back": "Retour",
   "sheet.close": "Fermer {title}",
   "sheet.selected": "Sélectionné",

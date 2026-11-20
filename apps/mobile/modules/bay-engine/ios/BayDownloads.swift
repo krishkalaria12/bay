@@ -342,10 +342,20 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
 
   private var preview: BayFilePreview?
 
+  /// A saved download's file now. The store keeps its absolute address, but iOS can move the app's container (an
+  /// update, a reinstall), so an address under another container's Documents/Downloads is read in today's folder.
+  /// Downloads are saved flat in that folder, so the file's name is enough.
+  static func current(_ path: String) -> URL? {
+    guard let url = URL(string: path), url.isFileURL else { return nil }
+    let parent = url.deletingLastPathComponent()
+    guard parent.lastPathComponent == "Downloads", parent.deletingLastPathComponent().lastPathComponent == "Documents" else { return nil }
+    let file = directory.appendingPathComponent(url.lastPathComponent)
+    return FileManager.default.fileExists(atPath: file.path) ? file : nil
+  }
+
   /// Shows a downloaded file in Quick Look, which can also share it or save it elsewhere.
   func open(_ path: String, promise: Promise) {
-    guard let url = URL(string: path), url.isFileURL, url.path.hasPrefix(Self.directory.path),
-          FileManager.default.fileExists(atPath: url.path) else {
+    guard let url = Self.current(path) else {
       promise.reject("E_DOWNLOAD_MISSING", "The file isn't there anymore.")
       return
     }
