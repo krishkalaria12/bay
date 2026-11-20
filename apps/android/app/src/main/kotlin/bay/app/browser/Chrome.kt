@@ -13,6 +13,13 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -499,7 +506,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
             }
         }
         // Drawn over the pill and sized by it, so loading never widens the pill.
-        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.matchParentSize())
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, browser.app.activeTabId, Modifier.matchParentSize())
     }
 }
 
@@ -599,18 +606,59 @@ fun TabCount(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** The thin line along the capsule's edge: it fills as the page loads and fades once the page is there. */
+/**
+ * The thin line along the capsule's edge: it fills as the page loads, runs to the end and fades once the page is there.
+ * Chromium's progress starts over on each redirect and frame, and a load can stop and start again within a moment, so
+ * within one load the line only moves forward, and a stop only finishes it once it has lasted. A tab switch starts a
+ * line of its own.
+ */
 @Composable
-fun LoadProgress(state: NavigationState, modifier: Modifier = Modifier) {
-    val filled by animateFloatAsState(maxOf(state.progress.toFloat(), 0.04f), tween(240), label = "progress")
-    val shown by animateFloatAsState(if (state.isLoading) 1f else 0f, tween(if (state.isLoading) 120 else 220), label = "shown")
-    if (shown == 0f) return
-    Box(modifier.alpha(shown).testTag("page-progress").clearAndSetSemantics {}) {
+fun LoadProgress(state: NavigationState, tabId: String, modifier: Modifier = Modifier) {
+    val fill = remember(tabId) { Animatable(if (state.isLoading) maxOf(state.progress.toFloat(), LOAD_START) else 0f) }
+    val shown = remember(tabId) { Animatable(if (state.isLoading) 1f else 0f) }
+    val loading = state.isLoading
+    LaunchedEffect(tabId, loading) {
+        if (loading) {
+            // A new load after the last one finished starts the line again; one that resumes keeps its place.
+            if (shown.value == 0f || fill.value >= 1f) fill.snapTo(0f)
+            shown.animateTo(1f, tween(120))
+        } else if (shown.value > 0f) {
+            delay(LOAD_SETTLE_MS)
+            fill.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+            shown.animateTo(0f, tween(220))
+            fill.snapTo(0f)
+        }
+    }
+    val progress = state.progress.toFloat()
+    LaunchedEffect(tabId, loading, progress) {
+        if (!loading) return@LaunchedEffect
+        val target = maxOf(progress, LOAD_START, fill.value)
+        // Eases towards what's loaded, then creeps on while the page is still busy, never quite reaching the end.
+        fill.animateTo(target, tween(320, easing = LinearOutSlowInEasing))
+        while (true) {
+            delay(400)
+            fill.animateTo(fill.value + (LOAD_CREEP_LIMIT - fill.value).coerceAtLeast(0f) * 0.08f, tween(380, easing = LinearEasing))
+        }
+    }
+    if (shown.value == 0f) return
+    Box(modifier.graphicsLayer { alpha = shown.value }.testTag("page-progress").clearAndSetSemantics {}) {
         Box(Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 2.dp).fillMaxWidth().height(2.dp)) {
-            Box(Modifier.fillMaxWidth(filled).height(2.dp).background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+            Box(Modifier.fillMaxHeight().fillMaxWidth().graphicsLayer {
+                scaleX = fill.value.coerceIn(0f, 1f)
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+            }.background(Theme.colors.accent, RoundedCornerShape(1.dp)))
         }
     }
 }
+
+/** Where the line starts, so a load shows at once. */
+private const val LOAD_START = 0.08f
+
+/** How far the line creeps on its own while the page says nothing new. */
+private const val LOAD_CREEP_LIMIT = 0.92f
+
+/** How long a stopped load waits before finishing the line, for the load that often follows at once (a redirect). */
+private const val LOAD_SETTLE_MS = 160L
 
 /** A page that failed to load, in plain words, and a way to try again. */
 @Composable
