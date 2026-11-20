@@ -18,6 +18,9 @@ enum SearchSheet {
   static func height(rows: Int = visibleRows) -> CGFloat {
     topInset + fieldHeight + rowsTopGap + CGFloat(rows) * rowHeight + bottomInset
   }
+
+  /// With nothing to list: the field alone.
+  static let bareHeight = topInset + fieldHeight + bottomInset + 4
 }
 
 /// Answers that follow typing, asked a moment after it stops with the latest kept: the engine's suggestions, or the
@@ -120,8 +123,10 @@ struct SearchCard: View {
   }
 
   private var result: SuggestionResult {
+    // Until the prefilled address is changed, the rows are the space's recent pages, as on an empty field: the address
+    // alone matches little more than its own page.
     app.store.suggestions(
-      query: query, remote: remote.items, currentUrl: initialText.isEmpty ? nil : initialText,
+      query: untouched ? "" : query, remote: remote.items, currentUrl: initialText.isEmpty ? nil : initialText,
       now: Double(AppModel.now()))
   }
 
@@ -138,6 +143,16 @@ struct SearchCard: View {
   }
 
   private var colors: ScopeColors? { ScopeColors(hex: scope?.color) }
+
+  /// The field still holds the page's address it opened with.
+  private var untouched: Bool { !initialText.isEmpty && query == initialText }
+
+  private var showsShortcuts: Bool { scope == nil && query.isEmpty && !shortcuts.isEmpty }
+
+  /// Nothing to list under the field (a new person, before typing): the sheet is just the field, on the keyboard.
+  private func bare(_ rows: [Suggestion]) -> Bool {
+    rows.isEmpty && !showsShortcuts && !privately && (query.isEmpty || untouched)
+  }
 
   /// Search was opened over a page, not for a new tab.
   private var overPage: Bool { !browser.searchInNewTab && browser.hasPage }
@@ -181,7 +196,7 @@ struct SearchCard: View {
                 .padding(.leading, Space.lg).padding(.top, 2)
                 .accessibilityIdentifier("private-notice")
             }
-            if scope == nil, query.isEmpty, !shortcuts.isEmpty {
+            if showsShortcuts {
               shortcutRow
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
@@ -195,7 +210,8 @@ struct SearchCard: View {
         }
         .padding(.top, SearchSheet.rowsTopGap)
       }
-      .frame(height: SearchSheet.height())
+      .frame(height: bare(rows) ? SearchSheet.bareHeight : SearchSheet.height())
+      .animation(Motion.settle.animation, value: bare(rows))
       .background(
         (privately ? Color(RGBA(0x17, 0x17, 0x17)) : BayColor.background)
           .clipShape(RoundedCornerShape(radius: SearchSheet.cornerRadius))
