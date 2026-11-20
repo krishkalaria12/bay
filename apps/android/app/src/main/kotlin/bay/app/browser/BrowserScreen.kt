@@ -132,7 +132,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 // Behind the page until it draws its first frame: the colour at its top, else the engine's blank white.
                 val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
                 val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
-                Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(behind).clearAndSetSemantics {})
             }
             // A fullscreen site takes the status bar's place too.
             val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
@@ -141,6 +141,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             val spaceIndex = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
             var lastSpace by remember { androidx.compose.runtime.mutableIntStateOf(spaceIndex) }
             val pageWidth = with(LocalDensity.current) { androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx() }
+            browser.tabSwipe.width = pageWidth
             LaunchedEffect(spaceIndex) {
                 val from = lastSpace
                 lastSpace = spaceIndex
@@ -151,11 +152,12 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             PagesHost(
                 browser, shown && !behind,
                 Modifier.fillMaxSize().then(top).graphicsLayer {
-                    translationX = slide.value
+                    translationX = slide.value + browser.tabSwipe.offset.value
                     alpha = 1f - (kotlin.math.abs(slide.value) / pageWidth).coerceIn(0f, 0.6f)
                 },
                 visible = shown,
             )
+            if (shown) TabSwipeLayer(browser)
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
             if (browser.fullscreen) {
                 Box(

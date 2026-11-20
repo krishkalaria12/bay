@@ -544,13 +544,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     // The bar
 
-    /** Moves to the tab before (-1) or after (1) the one showing, in the switcher's order. */
-    fun swipeTabs(step: Int) {
-        val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-        val next = app.tabs.getOrNull(index + step) ?: return
+    /** Sliding the bar sideways between tabs. */
+    val tabSwipe = TabSwipe(this)
+
+    /** A swipe along the bar carried the page off to the tab beside it. */
+    fun swipedTo(id: String) {
         app.dispatch(Action.TipSeen(TipId.BAR))
         capture(app.activeTabId)
-        activate(next.id)
+        activate(id)
     }
 
     // Media

@@ -48,9 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -242,42 +240,45 @@ private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: 
 fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier, onChecks: () -> Unit = {}) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
-    var swipe by remember { mutableFloatStateOf(0f) }
-    // Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
+    // Dragging the bar sideways slides the page to the tab before (right) or after (left) under the finger, as Arc
+    // Search's bar does (TabSwipe); dragging it up opens the tab switcher.
     val swipeable = browser.hasPage && browser.overlay == Overlay.NONE
-    var up by remember { mutableFloatStateOf(0f) }
+    val swipe = browser.tabSwipe
     val dragged = if (!swipeable) modifier else modifier.pointerInput(app.activeTabId, app.tabs.size) {
+        val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+        var up = 0f
+        var sideways = 0f
+        // Which way the drag went once it moved far enough to tell: sideways slides tabs, up opens the switcher.
+        var axis = 0
+        val slop = viewConfiguration.touchSlop
         detectDragGestures(
-            onDragStart = { up = 0f },
+            onDragStart = {
+                up = 0f
+                sideways = 0f
+                axis = 0
+                tracker.resetTracking()
+            },
             onDragEnd = {
-                val distance = swipe
-                swipe = 0f
-                // Up opens the tab switcher; sideways goes to the next tab.
-                if (up > 110.dp.toPx() && up > kotlin.math.abs(distance)) {
+                if (axis == 2 && up > 110.dp.toPx()) {
                     Haptics.press(view)
                     app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BAR))
                     browser.showTabs()
-                } else if (kotlin.math.abs(distance) > 24.dp.toPx()) {
-                    Haptics.press(view)
-                    browser.swipeTabs(if (distance < 0) 1 else -1)
+                } else if (axis == 1) {
+                    swipe.release(tracker.calculateVelocity().x)
                 }
-                up = 0f
             },
-            onDragCancel = {
-                swipe = 0f
-                up = 0f
-            },
-            onDrag = { _, amount ->
+            onDragCancel = { if (axis == 1) swipe.cancel() },
+            onDrag = { change, amount ->
+                tracker.addPosition(change.uptimeMillis, change.position)
                 up -= amount.y
-                if (up > kotlin.math.abs(swipe) * 2) return@detectDragGestures
-                val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-                val open = app.tabs.getOrNull(index + if (swipe + amount.x < 0) 1 else -1) != null
-                swipe += amount.x * if (open) 0.4f else 0.12f
+                sideways += amount.x
+                if (axis == 0 && (kotlin.math.abs(sideways) > slop || up > slop)) axis = if (up > kotlin.math.abs(sideways)) 2 else 1
+                if (axis == 1) swipe.drag(amount.x)
             },
         )
     }
     val slide = remember { SpaceSlide() }
-    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks, slide) }
+    BarRow(browser, strings, onSettings, dragged, onChecks, slide)
 }
 
 /** Holding Tabs: whether the row of spaces is up, what's under the finger, and where things are. */
@@ -361,9 +362,6 @@ private fun SpaceSlide.targetAt(point: Offset, count: Int, cell: Float, inset: F
         else -> null
     }
 }
-
-/** How far the capsule follows a sideways drag on the bar. */
-private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f }
 
 @Composable
 private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit, slide: SpaceSlide) {
@@ -495,8 +493,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
     val insecure = url.startsWith("http:")
     val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
-    val shift = LocalCapsuleShift.current
-    Box(Modifier.graphicsLayer { translationX = shift; alpha = 1f - minOf(kotlin.math.abs(shift) / 110.dp.toPx(), 0.6f) }) {
+    Box {
         // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
         // says so with a mark beside it.
         BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = 128.dp) {
