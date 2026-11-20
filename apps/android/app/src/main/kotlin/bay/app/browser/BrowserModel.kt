@@ -820,10 +820,22 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         panel = Panel.PIN
     }
 
-    /** Pins a tab's page that way, or unpins it when it is already pinned so. */
-    fun pin(tab: BrowserTab, kind: PinKind, folderId: String?) {
-        panel = null
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+    /**
+     * Sets how a tab's page is pinned from its sheet, which stays open: null unpins it (with Undo), and a pin already
+     * there moves rather than toggling off.
+     */
+    fun setPin(tab: BrowserTab, kind: PinKind?, folderId: String?) {
+        val current = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            kind == null -> current?.let(::unpin)
+            current == null -> app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+            current.kind != kind || current.folderId != folderId -> movePin(current, kind, folderId)
+        }
+    }
+
+    /** A copy of a tab beside it, in the background. */
+    fun duplicate(tab: BrowserTab) {
+        if (tab.url.isNotEmpty()) openTab(tab.url, tab.private, background = true)
     }
 
     /** Answers the page question on show, then shows the next one waiting, if any. */

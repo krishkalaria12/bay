@@ -106,18 +106,18 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         header = { AddressRow(browser, strings, ::act) },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
-            Tile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
+            MenuTile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
             val pinned = browser.isPinned
-            Tile(
+            MenuTile(
                 "page-pin", if (pinned) BayIcon.UNPIN else BayIcon.PIN, strings.t("pageMenu.pin"),
                 strings.t(if (pinned) "pageMenu.unpin" else "pageMenu.pinToStart"), pinned, act(browser::togglePin),
             )
             val bookmarked = browser.isBookmarked
-            Tile(
+            MenuTile(
                 "page-bookmark", if (bookmarked) BayIcon.BOOKMARKED else BayIcon.BOOKMARK, strings.t("pageMenu.save"),
                 strings.t("pageMenu.bookmark"), bookmarked,
             ) { browser.panel = Panel.SAVE }
-            Tile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
+            MenuTile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
         }
         Column(Modifier.padding(top = Space.md)) {
             RowGroup {
@@ -238,9 +238,9 @@ private fun AddressIcon(id: String, icon: BayIcon, label: String, enabled: Boole
     ) { BayIconView(icon, size = IconSize.row, color = if (enabled) colors.foreground else colors.muted.copy(alpha = 0.5f)) }
 }
 
-/** A rounded square with an icon over its label, four to a row. */
+/** A rounded square with an icon over its label, four to a row: the page menu's and the tab sheet's. */
 @Composable
-private fun RowScope.Tile(id: String, icon: BayIcon, label: String, description: String = label, active: Boolean = false, onClick: () -> Unit) {
+fun RowScope.MenuTile(id: String, icon: BayIcon, label: String, description: String = label, active: Boolean = false, onClick: () -> Unit) {
     val colors = Theme.colors
     Column(
         Modifier.weight(1f).height(TILE_HEIGHT).testTag(id)
