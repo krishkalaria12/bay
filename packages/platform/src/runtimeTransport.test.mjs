@@ -383,3 +383,91 @@ test("the native Connect version-one payload is accepted without changing Native
   assert.equal(connection.bootstrap.version, 1);
   connection.dispose();
 });
+
+const deepFreeze = (value) => {
+  if (value && Object(value) === value) Object.values(value).forEach(deepFreeze);
+
+  return Object.freeze(value);
+};
+
+const nested = (levels) => {
+  let node = { leaf: true };
+
+  for (let i = 0; i < levels; i++) node = { node };
+
+  return deepFreeze(node);
+};
+
+test("a published commit is checked again wherever it isn't deeply frozen", async () => {
+  const native = endpoints("coordinator"),
+    connection = await createAppRuntimeTransport(native);
+
+  // A frozen subtree is checked once, then shared by later commits.
+  const shared = deepFreeze({ a: { b: [1, "two", null, false] } });
+  const mutable = { title: "ok" };
+  await connection.publish({ ...snapshot(0), state: { tabs: { shared, mutable } } });
+  await connection.publish({ ...snapshot(1), state: { tabs: { shared, mutable } } });
+  assert.deepEqual(native.calls.at(-1)[1].state.tabs.shared, shared);
+
+  mutable.title = undefined;
+  await assert.rejects(connection.publish({ ...snapshot(2), state: { tabs: { shared, mutable } } }), { code: "invalid_runtime_message" });
+
+  for (const bad of [Number.NaN, Infinity, () => {}, new Date(0), Symbol("s"), 1n]) {
+    const again = endpoints("coordinator"),
+      fresh = await createAppRuntimeTransport(again);
+
+    await fresh.publish({ ...snapshot(0), state: { tabs: { shared } } });
+    await assert.rejects(fresh.publish({ ...snapshot(1), state: { tabs: { shared, bad: deepFreeze({ value: bad }) } } }), { code: "invalid_runtime_message" });
+  }
+});
+
+test("a checked subtree still counts toward the depth limit wherever it is placed", async () => {
+  const deep = nested(100);
+
+  const first = endpoints("coordinator"),
+    shallow = await createAppRuntimeTransport(first);
+
+  await shallow.publish({ ...snapshot(0), state: { tabs: { deep } } });
+
+  const second = endpoints("coordinator"),
+    deeper = await createAppRuntimeTransport(second);
+
+  let wrapped = deep;
+
+  // The same checked subtree, thirty levels further down: past the 128 levels a message may have.
+  for (let i = 0; i < 30; i++) wrapped = { wrapped };
+  await assert.rejects(deeper.publish({ ...snapshot(0), state: { tabs: { deep, wrapped } } }), { code: "invalid_runtime_message" });
+
+  const third = endpoints("coordinator"),
+    cycle = await createAppRuntimeTransport(third);
+
+  const loop = { tabs: {} };
+  loop.tabs.self = loop;
+  await assert.rejects(cycle.publish({ ...snapshot(0), state: loop }), { code: "invalid_runtime_message" });
+});
+
+test("messages are limited by their UTF-8 size, not their length", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native);
+
+  const ascii = { ...request(1), command: { method: "activate", tabId: "a".repeat(600_000) } };
+  assert.equal((await connection.dispatch(ascii)).commit.revision, 1);
+
+  // Under a million characters, but two bytes each: over the one-megabyte request limit.
+  const wide = { ...request(2), command: { method: "activate", tabId: "é".repeat(600_000) } };
+  await assert.rejects(connection.dispatch(wide), { code: "invalid_runtime_message" });
+});
+
+test("an incoming commit is frozen all the way down", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native),
+    received = [];
+
+  connection.subscribeCommits((commit) => received.push(commit));
+  native.emit("commit", JSON.stringify({ ...snapshot(3), state: { tabs: { a: { list: [{ x: 1 }] } } } }));
+  const commit = received.at(-1);
+  assert.equal(commit.revision, 3);
+
+  for (const node of [commit, commit.state, commit.state.tabs, commit.state.tabs.a, commit.state.tabs.a.list, commit.state.tabs.a.list[0]])
+    assert.ok(Object.isFrozen(node));
+});

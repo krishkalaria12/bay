@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { decodeNativeResult, NativeBridgeError } from "./nativeBridge.ts";
-import { checked, isJsonObject, isNumber, isString, type JsonInput, type JsonObject, type JsonValue } from "./json.ts";
+import { checked, isJsonObject, isNumber, isString, jsonKind, type JsonInput, type JsonObject, type JsonValue } from "./json.ts";
 import { sizeOf, span, spanStart } from "./profiling.ts";
 
 export type RuntimeCommit<State> = Readonly<{ epoch: string; revision: number; state: State }>;
@@ -98,28 +98,26 @@ function revision<T>(value: T): number {
   return count;
 }
 
+const TEXT = v.string();
+const MAXIMUM_DEPTH = 128;
+
+const notJSON = () => invalid("Runtime value is not JSON data");
+
+/** A detached, frozen copy of JSON data, for values a caller still holds and could change. */
 function freezeJSON<T>(value: T, ancestors = new Set<object>(), depth = 0): JsonValue {
   const json = checked<JsonInput>(value);
+  const kind = jsonKind(json);
 
-  if (json === null || v.is(v.string(), json) || v.is(v.boolean(), json)) return json;
-
-  if (v.is(v.number(), json)) {
-    if (!Number.isFinite(json)) return invalid("Runtime value is not JSON data");
-
-    return json;
-  }
-
-  if (!v.is(v.object({}), json) || depth > 128 || ancestors.has(json)) return invalid("Runtime value is not JSON data");
-
+  if (kind === "leaf") return json!;
   const node = checked<object>(json);
 
-  if (!Array.isArray(json)) object(json);
+  if (kind === null || depth > MAXIMUM_DEPTH || ancestors.has(node)) return notJSON();
   ancestors.add(node);
 
   try {
     const copied = Array.isArray(json)
       ? Array.from(json, (item) => freezeJSON(item, ancestors, depth + 1))
-      : Object.fromEntries(Object.entries(json).map(([key, item]) => [key, freezeJSON(item, ancestors, depth + 1)]));
+      : Object.fromEntries(Object.entries(checked<JsonObject>(json)).map(([key, item]) => [key, freezeJSON(item, ancestors, depth + 1)]));
 
     // SAFETY: a frozen copy still holds the JSON values it was copied from.
     return Object.freeze(copied) as JsonValue;
@@ -128,26 +126,103 @@ function freezeJSON<T>(value: T, ancestors = new Set<object>(), depth = 0): Json
   }
 }
 
+// Deeply frozen nodes already checked, with how many object levels lie below each. The coordinator's projection
+// shares unchanged nodes between commits, so a commit checks only the paths that changed.
+const verified = new WeakMap<object, number>();
+
+/** Checks that `value` is JSON data a runtime message may carry, as freezeJSON does, without copying it. Returns
+ *  how many object levels lie below it (-1 for a leaf). */
+function checkJSON<T>(value: T, ancestors = new Set<object>(), depth = 0): number {
+  const json = checked<JsonInput>(value);
+  const kind = jsonKind(json);
+
+  if (kind === "leaf") return -1;
+
+  const node = checked<object>(json);
+
+  if (kind === null || ancestors.has(node)) return notJSON();
+  const known = verified.get(node);
+
+  if (known !== undefined) {
+    if (depth + known > MAXIMUM_DEPTH) notJSON();
+
+    return known;
+  }
+
+  if (depth > MAXIMUM_DEPTH) return notJSON();
+  ancestors.add(node);
+  let height = 0;
+  let deep = Object.isFrozen(node);
+
+  try {
+    const items = Array.isArray(json) ? json : Object.values(checked<JsonObject>(json));
+
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      const below = checkJSON(item, ancestors, depth + 1);
+
+      if (below < 0) continue;
+      height = Math.max(height, below + 1);
+      deep &&= verified.has(checked<object>(item));
+    }
+  } finally {
+    ancestors.delete(node);
+  }
+
+  if (deep) verified.set(node, height);
+
+  return height;
+}
+
+/** Freezes freshly parsed JSON where it lies: nothing else holds it, so it needs no copy. */
+function freezeParsed(json: JsonValue, depth = 0): JsonValue {
+  if (Object(json) !== json) return json;
+
+  if (depth > MAXIMUM_DEPTH) return notJSON();
+  const items = Array.isArray(json) ? json : Object.values(checked<JsonObject>(json));
+
+  for (let index = 0; index < items.length; index++) freezeParsed(items[index]!, depth + 1);
+  Object.freeze(json);
+
+  return json;
+}
+
+/** Whether `text` takes at most `limit` bytes as UTF-8. A UTF-16 unit takes one to three bytes, so most messages
+ *  answer without being encoded. */
+function fitsUtf8(text: string, limit: number): boolean {
+  if (text.length > limit) return false;
+
+  if (text.length * 3 <= limit) return true;
+
+  return new TextEncoder().encode(text).byteLength <= limit;
+}
+
 function bounded<T>(json: T, limit: number): string {
   const text = checked<JsonInput>(json);
 
-  if (!v.is(v.string(), text) || new TextEncoder().encode(text).byteLength > limit) return invalid("Runtime message is too large or is not JSON text");
+  if (!v.is(TEXT, text) || !fitsUtf8(text, limit)) return invalid("Runtime message is too large or is not JSON text");
 
   return text;
 }
 
 function fromJSON<T>(json: T, limit: number): JsonValue {
+  let parsed: JsonValue;
+
   try {
-    return freezeJSON(JSON.parse(bounded(json, limit)));
+    parsed = JSON.parse(bounded(json, limit));
   } catch (error) {
     if (error instanceof NativeBridgeError) throw error;
 
     return invalid("Runtime message is not valid JSON");
   }
+
+  return freezeParsed(parsed);
 }
 
 function toJSON<T>(value: T, limit: number): string {
-  return bounded(JSON.stringify(freezeJSON(value)), limit);
+  checkJSON(value);
+
+  return bounded(JSON.stringify(value), limit);
 }
 
 function commitFrom<State>(value: JsonInput, epoch: string): RuntimeCommit<State> {
@@ -288,7 +363,7 @@ export async function createAppRuntimeTransport<State, Command, Value>({
 
             try {
               active();
-              resolve(freezeJSON(decodeNativeResult(bounded(response.resultJson, limit))));
+              resolve(freezeParsed(decodeNativeResult(bounded(response.resultJson, limit))));
             } catch (error) {
               if (error instanceof NativeBridgeError && !["invalid_result", "invalid_runtime_message", "stale_epoch", "runtime_closed"].includes(error.code))
                 reject(error);
