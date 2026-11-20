@@ -3,13 +3,8 @@ import { View } from "react-native";
 import { useHideSplash } from "react-native-splash-motion";
 
 import { BrowserScreen } from "@/browser/BrowserScreen";
-import { installCrashReports } from "@/crashReports";
 import { Welcome } from "@/onboarding/Welcome";
 import { useBrowserStore } from "@/store/browser";
-
-// A crash in a release build says nothing, so Bay keeps what happened (B8). The watch goes on before the first
-// screen, so nothing that goes wrong on the way there is lost.
-installCrashReports();
 
 /** The browser, with the welcome over it on a fresh install until it's finished or skipped. */
 export default function Home(): JSX.Element {

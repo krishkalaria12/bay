@@ -11,8 +11,3 @@ const href = usable[0] ? usable[0].href : /^https?:/.test(location.href) ? new U
 // The browser's own user agent goes with the download: some sites refuse requests from unknown clients.
 return href && { href, userAgent: navigator.userAgent };
 `;
-
-export interface FaviconSource {
-  href: string;
-  userAgent: string;
-}

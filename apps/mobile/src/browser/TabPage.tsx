@@ -1,5 +1,4 @@
 import {
-  runPageScript,
   EngineView,
   type LinkPress,
   type NavigationError,
@@ -17,6 +16,7 @@ import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
 import { PAGE_COLOR_SCRIPT, pageTweaksScript } from "@/pagescripts/tweaks";
 import { initialTiming, scriptsFor, shouldHide } from "./navigationEvents";
+import { sendPageScript } from "./pageScripts";
 
 import type { BrowserTab } from "@/store/types";
 
@@ -88,7 +88,7 @@ export function TabPage({
 
   // The page may be mid-navigation; the next finished load applies the rules again.
   function applyHiddenElements(selectors: string[]): void {
-    if (view.current) void runPageScript(view.current, hideElementsScript(selectors)).catch(() => {});
+    if (view.current) sendPageScript(view.current, hideElementsScript(selectors));
   }
 
   const selectorsKey = JSON.stringify(hiddenSelectors);
@@ -113,9 +113,9 @@ export function TabPage({
     // SAFETY: tweaksKey is the JSON string of tweaks at this point, so its parse round-trips to the settings object.
     const settings = JSON.parse(tweaksKey) as TabPageProps["tweaks"];
     const skipAmp = settings.skipAmp && !ampLeft.current.has(url);
-    void runPageScript<string>(current, pageTweaksScript({ ...settings, skipAmp }))
-      .then((result) => result === "amp" && ampLeft.current.add(url))
-      .catch(() => {});
+    sendPageScript<string>(current, pageTweaksScript({ ...settings, skipAmp }), (result) => {
+      if (result === "amp") ampLeft.current.add(url);
+    });
   }
 
   // A changed setting applies to the open page at once; the default text size on a fresh tab has nothing to undo.
@@ -163,11 +163,11 @@ export function TabPage({
 
           if (run.watchMedia) {
             applyTweaks(nativeEvent.url);
-            void runPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT).then(onPageColor, () => {});
-            void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
+            sendPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT, onPageColor);
+            sendPageScript(view.current, WATCH_MEDIA_SCRIPT);
 
             // Image long-presses (B13): on iOS the page reports them, since WebKit exposes nothing for images.
-            if (Platform.OS === "ios") void runPageScript(view.current, WATCH_IMAGES_SCRIPT).catch(() => {});
+            if (Platform.OS === "ios") sendPageScript(view.current, WATCH_IMAGES_SCRIPT);
           }
         }}
         onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}

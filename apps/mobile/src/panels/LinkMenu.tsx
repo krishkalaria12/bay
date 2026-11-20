@@ -1,11 +1,14 @@
 import { EngineView, type PageRequest, type Tab } from "@bay/engine";
 import { useThemeColor } from "heroui-native";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
+import { LinkResolver } from "@/browser/linkResolver";
 import { Text } from "@/chrome/Text";
 import { radius, space } from "@/chrome/tokens";
-import { useT } from "@/i18n";
+import type { CommandResult } from "@/effect/commands";
+import { useScopedWork } from "@/effect/react";
+import { useT, type Translate } from "@/i18n";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface LinkMenuProps {
@@ -25,7 +28,6 @@ export interface LinkMenuProps {
   onShare: () => void;
   /** Only for images (B13): asks the engine to save the image (Photos on iOS, Downloads on Android). */
   onSave: () => void;
-  onResolveDestination: () => Promise<string>;
 }
 
 export function LinkMenu(props: LinkMenuProps): JSX.Element {
@@ -38,38 +40,33 @@ export function LinkMenu(props: LinkMenuProps): JSX.Element {
   );
 }
 
+/** What the menu says when it couldn't find where a link goes: unreachable, or something going wrong on the way. */
+function answerError(answer: CommandResult<string | null> | null, t: Translate): string | null {
+  if (answer?._tag === "Failed") return t("linkMenu.failed");
+
+  return answer?._tag === "Done" && answer.value === null ? t("linkMenu.unreachable") : null;
+}
+
 function LinkActions(props: LinkMenuProps): JSX.Element {
-  const [resolving, setResolving] = useState(false);
-  const [destination, setDestination] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const t = useT();
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
+  // Resolving belongs to the menu: closing it (or opening it on another link) aborts the request.
+  const { run, result } = useScopedWork<string | null>(props.url);
+  // The answer that was showing when the user last asked: until a newer one arrives, the menu is still checking.
+  const [askedOver, setAskedOver] = useState<CommandResult<string | null> | null | undefined>(undefined);
+  const resolving = askedOver !== undefined && result === askedOver;
+  const answer = resolving ? null : result;
+  const destination = answer?._tag === "Done" ? answer.value : null;
+  const error = answerError(answer, t);
 
   function act(action: () => void): void {
     props.onClose();
     action();
   }
 
-  async function resolveDestination(): Promise<void> {
+  function resolveDestination(): void {
     if (resolving) return;
-    setResolving(true);
-    setError(null);
-
-    try {
-      const url = await props.onResolveDestination();
-
-      if (mounted.current) setDestination(url);
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : t("linkMenu.failed"));
-    } finally {
-      if (mounted.current) setResolving(false);
-    }
+    setAskedOver(result);
+    run(LinkResolver.use((resolver) => resolver.resolve(props.url)));
   }
 
   return (
@@ -101,9 +98,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
             icon="forward"
             label={resolving ? t("linkMenu.checking") : t("linkMenu.where")}
             disabled={resolving}
-            onPress={() => {
-              void resolveDestination();
-            }}
+            onPress={resolveDestination}
           />
         </Group>
       )}

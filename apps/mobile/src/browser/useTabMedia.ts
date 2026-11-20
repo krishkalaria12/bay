@@ -1,9 +1,10 @@
 import { hostOf } from "@bay/core/src/input.ts";
-import { addMediaControlListener, runPageScript, setMediaSession, type MediaControl, type Tab } from "@bay/engine";
+import { addMediaControlListener, setMediaSession, type MediaControl, type Tab } from "@bay/engine";
 import { useEffect, useRef, useState } from "react";
 
 import { parseMediaMessage, PAUSE_MEDIA_SCRIPT, PIP_MEDIA_SCRIPT, seekMediaScript, TOGGLE_MEDIA_SCRIPT, type MediaMessage } from "@/pagescripts/media";
 import type { BrowserTab } from "@/store/types";
+import { sendPageScript } from "./pageScripts";
 
 type Reports = Record<string, MediaMessage & { at: number }>;
 
@@ -39,11 +40,10 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
     const view = views.get(tabId);
 
     if (!view) return;
-    // Resolves null when the page's media is gone.
-    runPageScript<boolean | null>(view, source).then(
-      (playing) => playing === null && forget(tabId),
-      () => {},
-    );
+    // Answers null when the page's media is gone.
+    sendPageScript<boolean | null>(view, source, (playing) => {
+      if (playing === null) forget(tabId);
+    });
   }
 
   function stop(tabId: string): void {
