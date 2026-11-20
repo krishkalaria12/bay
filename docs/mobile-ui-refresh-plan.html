@@ -1583,7 +1583,14 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           with nothing to list (a new person, before typing) the sheet is only the field, on the keyboard.
         </li>
         <li>
-          <b>Gap:</b> iPhone still has Archive on a new tab's bar and in its own sheet, and its search sheet keeps its full height with the address alone.
+          <b>Both apps:</b> the bar swipe, the forward-only loading line, Tabs on a new tab's bar with the archive in the drawer, and the search sheet's
+          recent pages and field-only state are on iPhone too. A tab reached by a swipe or from the tab view keeps its picture (or its title on a plain page,
+          when it has no picture yet) over its page until the page is most of the way loaded, at most 4 seconds, so a tab coming back from its saved state
+          never shows white.
+        </li>
+        <li>
+          <b>Bar during loads done (Android):</b> a new page's first frames report the browser controls hidden until the engine brings them back, which slid
+          the bar away and in again mid-load. The bar now hides only with the person's own scrolling (a finger on the page, or its fling for 2.5 seconds after).
         </li>
         <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
