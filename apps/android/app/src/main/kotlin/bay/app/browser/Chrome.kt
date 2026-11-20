@@ -548,8 +548,14 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
         ) {
             app.spaces.forEach { space ->
                 val active = space.id == app.activeSpaceId
+                // A tab card dragged over it lights it in its colour: let go, and the tab moves here.
+                val dropping = browser.cardDropSpace == space.id
+                val grow by androidx.compose.animation.core.animateFloatAsState(if (dropping) 1.25f else 1f, label = "drop")
                 Box(
                     Modifier.size(SPACE_TARGET).testTag("bar-space-${space.id}")
+                        .onGloballyPositioned { browser.spaceDropFrames[space.id] = it.boundsInWindow() }
+                        .graphicsLayer { scaleX = grow; scaleY = grow }
+                        .background(if (dropping) spaceColor(space.color).copy(alpha = 0.35f) else Color.Transparent, CircleShape)
                         .pressFeedback {
                             Haptics.press(view)
                             browser.selectSpace(space.id)

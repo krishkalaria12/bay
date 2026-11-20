@@ -764,6 +764,49 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         refreshMounted()
     }
 
+    /** A pinned folder in the space showing, named [name]; answers its id. */
+    fun newFolder(name: String): String {
+        val folder = BrowserFolder(UUID.randomUUID().toString(), app.activeSpaceId, name)
+        app.dispatch(Action.NewFolder(folder))
+        return folder.id
+    }
+
+    fun renameFolder(id: String, name: String) = app.dispatch(Action.RenameFolder(id, name))
+
+    /** Deletes a pinned folder; its pinned rows stay pinned, loose in the space. */
+    fun deleteFolder(id: String) = app.dispatch(Action.DeleteFolder(id))
+
+    /**
+     * Makes a pin an Essential or a pinned row, in [folderId] or loose, and beside the pin [beside] when it was dropped
+     * on one (after it when [after]).
+     */
+    fun movePin(site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = null, after: Boolean = false) =
+        app.dispatch(Action.MovePin(site.id, kind, folderId, beside, after))
+
+    /** Moves a tab to another space, where it becomes that space's newest tab, and says where at the top. */
+    fun moveTab(tab: BrowserTab, spaceId: String) {
+        if (tab.spaceId == spaceId) return
+        val space = app.spaces.firstOrNull { it.id == spaceId } ?: return
+        app.dispatch(Action.MoveTab(tab.id, spaceId, null))
+        refreshMounted()
+        showTopNote(TopNote(System.nanoTime(), strings.t("tabs.movedTo", mapOf("space" to spaceName(space, strings))), space))
+    }
+
+    /** A tab card being dragged in the tab view: the space in the bar it's over, which lights up and takes it when let go. */
+    var cardDropSpace by mutableStateOf<String?>(null)
+        private set
+
+    /** Where each space sits in the tab view's bar, in the window, for a dragged card to find the one it's over. */
+    val spaceDropFrames = mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The space in the bar under [point], a dragged card's place in the window; answers whether that changed. */
+    fun cardDragged(point: androidx.compose.ui.geometry.Offset?): Boolean {
+        val over = point?.let { at -> spaceDropFrames.entries.firstOrNull { it.value.inflate(16f).contains(at) }?.key }
+        if (over == cardDropSpace) return false
+        cardDropSpace = over
+        return over != null
+    }
+
     /** A space with the next default name ("Space 3"). */
     fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
 
@@ -1044,10 +1087,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun stop() = activeView?.stop()
 
+    /** The page showing is pinned in its space, either way. */
     val isPinned: Boolean
         get() {
             val url = activeTab?.url
-            return app.pins.any { it.kind == PinKind.ESSENTIAL && it.url == url }
+            return app.pins.any { it.url == url }
         }
 
     val isBookmarked: Boolean
@@ -1056,11 +1100,21 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return !url.isNullOrEmpty() && app.store.isBookmarked(app.activeSpaceId, url)
         }
 
+    /**
+     * The page menu's Pin: unpins a pinned page; otherwise pins it as an Essential, or, when the space has folders, offers
+     * the ways to pin it.
+     */
     fun togglePin() {
         val tab = activeTab ?: return
-        val pinned = isPinned
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
-        showToast(if (pinned) strings.t("toast.unpinned") else strings.t("toast.pinned"))
+        val pin = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            pin != null -> unpin(pin)
+            app.folders.isNotEmpty() -> showPinMenu(tab)
+            else -> {
+                app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
+                showToast(strings.t("toast.pinned"))
+            }
+        }
     }
 
     fun toggleBookmark() {

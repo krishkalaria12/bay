@@ -714,7 +714,7 @@ private fun DrawerRow(
 }
 
 @Composable
-private fun MenuChoice(label: String, destructive: Boolean = false, onClick: () -> Unit) {
+internal fun MenuChoice(label: String, destructive: Boolean = false, onClick: () -> Unit) {
     BayText(
         label,
         Modifier.fillMaxWidth().heightIn(min = 44.dp).pressFeedback(onClick = onClick).padding(horizontal = Space.lg, vertical = Space.md),
