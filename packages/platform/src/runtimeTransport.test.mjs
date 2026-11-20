@@ -495,3 +495,54 @@ test("a reply's commit may name only its revision, but nothing else", async () =
     await assert.rejects(connection.dispatch(request()));
   }
 });
+
+test("an engine that takes deltas gets only the fields that changed since its last accepted commit", async () => {
+  const native = endpoints("coordinator");
+  native.bootstrap.partialCommits = true;
+  const connection = await createAppRuntimeTransport(native);
+  const published = () => native.calls.filter(([name]) => name === "publish").map(([, commit]) => commit);
+  const tabs = deepFreeze({ a: { title: "one" } });
+  const history = deepFreeze({ default: [{ url: "https://one.example/" }] });
+
+  await connection.publish({ ...snapshot(0), state: { tabs, history } });
+  const next = deepFreeze({ a: { title: "two" } });
+  await connection.publish({ ...snapshot(1), state: { tabs: next, history } });
+  // Not the next revision, or a field gone: the whole state again.
+  await connection.publish({ ...snapshot(3), state: { tabs: next, history } });
+  await connection.publish({ ...snapshot(4), state: { tabs: next } });
+
+  assert.deepEqual(published(), [
+    { ...snapshot(0), state: { tabs, history } },
+    { ...snapshot(1), state: { tabs: next }, partial: true },
+    { ...snapshot(3), state: { tabs: next, history } },
+    { ...snapshot(4), state: { tabs: next } },
+  ]);
+});
+
+test("without the engine's say-so a coordinator publishes whole commits, and the capability is checked", async () => {
+  const native = endpoints("coordinator"),
+    connection = await createAppRuntimeTransport(native);
+
+  const tabs = deepFreeze({});
+  await connection.publish({ ...snapshot(0), state: { tabs } });
+  await connection.publish({ ...snapshot(1), state: { tabs, other: deepFreeze({}) } });
+  assert.ok(native.calls.filter(([name]) => name === "publish").every(([, commit]) => !("partial" in commit)));
+
+  const odd = endpoints("coordinator");
+  odd.bootstrap.partialCommits = "yes";
+  await assert.rejects(createAppRuntimeTransport(odd), { code: "invalid_runtime_message" });
+});
+
+test("a window takes a delta commit, but only one marked as such", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native),
+    received = [],
+    reasons = [];
+
+  connection.subscribeCommits((commit) => received.push(commit));
+  connection.subscribeClose((error) => reasons.push(error.code));
+  native.emit("commit", JSON.stringify({ ...snapshot(2), state: { tabs: {} }, partial: true }));
+  assert.equal(received.at(-1).partial, true);
+  native.emit("commit", JSON.stringify({ ...snapshot(3), state: { tabs: {} }, partial: false }));
+  assert.deepEqual(reasons, ["invalid_runtime_message"]);
+});

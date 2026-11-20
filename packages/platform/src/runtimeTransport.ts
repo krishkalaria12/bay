@@ -5,6 +5,10 @@ import { sizeOf, span, spanStart } from "./profiling.ts";
 
 export type RuntimeCommit<State> = Readonly<{ epoch: string; revision: number; state: State }>;
 
+/** A commit carrying only the state's top-level fields that changed since the revision before it. It applies only
+ *  on top of that revision; the fields it leaves out are that revision's. */
+export type RuntimeDelta<State> = Readonly<{ epoch: string; revision: number; state: Partial<State>; partial: true }>;
+
 export type RuntimeRequest<Command> = Readonly<{ epoch: string; clientId: string; requestId: number; originWindowId?: string; command: Command }>;
 
 /** A command's reply names the commit that carries its result. The browser may leave that commit's state out: the
@@ -22,7 +26,7 @@ export type RuntimeResolution<Value> =
 
 export type RuntimeBootstrap<State> =
   | Readonly<{ version: 1; role: "window"; epoch: string; clientId: string; windowId: string }>
-  | Readonly<{ version: 1; role: "coordinator"; epoch: string; clientId: string; recoveryState?: State }>;
+  | Readonly<{ version: 1; role: "coordinator"; epoch: string; clientId: string; recoveryState?: State; partialCommits?: true }>;
 
 type Event<Args extends unknown[]> = { addListener(listener: (...args: Args) => void): number };
 
@@ -54,7 +58,7 @@ export type WindowRuntimeTransport<State, Command, Value> = Common<State> & {
   bootstrap: Extract<RuntimeBootstrap<State>, { role: "window" }>;
   getSnapshot(): Promise<RuntimeCommit<State>>;
   dispatch(request: RuntimeRequest<Command>): Promise<RuntimeReply<State, Value>>;
-  subscribeCommits(listener: (commit: RuntimeCommit<State>) => void): () => void;
+  subscribeCommits(listener: (commit: RuntimeCommit<State> | RuntimeDelta<State>) => void): () => void;
 };
 
 export type CoordinatorRuntimeTransport<State, Command, Value> = Common<State> & {
@@ -235,13 +239,43 @@ function toJSON<T>(value: T, limit: number): string {
 function commitFrom<State>(value: JsonInput, epoch: string): RuntimeCommit<State> {
   const commit = object(value);
   exact(commit, ["epoch", "revision", "state"]);
-
-  if (id(commit.epoch) !== epoch) throw new NativeBridgeError("stale_epoch", "Browser runtime epoch changed");
-  revision(commit.revision);
-  object(commit.state);
+  stamped(commit, epoch);
 
   // SAFETY: the checks above established this shape.
   return checked<RuntimeCommit<State>>(commit);
+}
+
+/** A commit to a window: the whole state, or a delta of it. */
+function windowCommitFrom<State>(value: JsonInput, epoch: string): RuntimeCommit<State> | RuntimeDelta<State> {
+  const commit = object(value);
+  exact(commit, ["epoch", "revision", "state"], ["partial"]);
+
+  if (Object.hasOwn(commit, "partial") && commit.partial !== true) invalid("Invalid runtime delta");
+  stamped(commit, epoch);
+
+  // SAFETY: the checks above established this shape.
+  return checked<RuntimeCommit<State> | RuntimeDelta<State>>(commit);
+}
+
+/** The delta from `previous` to `next`: the top-level fields whose values aren't the same objects. Null when `next`
+ *  doesn't follow `previous`, or drops one of its fields. */
+function deltaOf<State>(previous: RuntimeCommit<State> | null, next: RuntimeCommit<State>): RuntimeDelta<State> | null {
+  if (!previous || previous.epoch !== next.epoch || next.revision !== previous.revision + 1) return null;
+  const before = checked<JsonObject>(previous.state);
+  const after = checked<JsonObject>(next.state);
+  const changed: JsonObject = {};
+
+  for (const key of Object.keys(before)) if (!Object.hasOwn(after, key)) return null;
+
+  for (const key of Object.keys(after)) if (!Object.hasOwn(before, key) || before[key] !== after[key]) changed[key] = after[key]!;
+
+  return { epoch: next.epoch, revision: next.revision, state: checked<Partial<State>>(changed), partial: true };
+}
+
+function stamped(commit: JsonObject, epoch: string) {
+  if (id(commit.epoch) !== epoch) throw new NativeBridgeError("stale_epoch", "Browser runtime epoch changed");
+  revision(commit.revision);
+  object(commit.state);
 }
 
 function requestFrom<Command>(value: JsonInput, epoch: string, fromNative = false): RuntimeRequest<Command> {
@@ -282,12 +316,12 @@ export async function createAppRuntimeTransport<State, Command, Value>({
   let failure: NativeBridgeError | null = null;
   const removers: (() => void)[] = [];
   const closeListeners = new Set<{ listener: (error: NativeBridgeError) => void }>();
-  const commitListeners = new Set<{ listener: (commit: RuntimeCommit<State>) => void }>();
+  const commitListeners = new Set<{ listener: (commit: RuntimeCommit<State> | RuntimeDelta<State>) => void }>();
   let commandListener: ((token: string, request: RuntimeRequest<Command>) => void) | null = null;
   const queuedCommands: [string, RuntimeRequest<Command>][] = [];
   const tokens = new Set<string>();
   const earlyEvents: (() => void)[] = [];
-  let latestCommit: RuntimeCommit<State> | null = null;
+  let latestCommit: RuntimeCommit<State> | RuntimeDelta<State> | null = null;
   const pending = new Set<{ reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
 
   const active = () => {
@@ -433,7 +467,7 @@ export async function createAppRuntimeTransport<State, Command, Value>({
       event(() => {
         if (bootstrap!.role !== "window") invalid("Coordinator received a window commit");
         const decoding = spanStart();
-        const commit = commitFrom<State>(fromJSON(json, COMMIT_LIMIT), bootstrap!.epoch);
+        const commit = windowCommitFrom<State>(fromJSON(json, COMMIT_LIMIT), bootstrap!.epoch);
         span("Bay.runtime decodeCommit", decoding, { bytes: sizeOf(json), revision: commit.revision });
 
         if (!latestCommit || commit.revision > latestCommit.revision) latestCommit = commit;
@@ -493,9 +527,11 @@ export async function createAppRuntimeTransport<State, Command, Value>({
 
       if (expectedWindowId !== undefined && value.windowId !== expectedWindowId) invalid("Browser runtime window identity mismatch");
     } else {
-      exact(value, ["version", "role", "epoch", "clientId"], ["recoveryState"]);
+      exact(value, ["version", "role", "epoch", "clientId"], ["recoveryState", "partialCommits"]);
 
       if (expectedWindowId !== undefined) invalid("Coordinator cannot claim a window identity");
+
+      if (Object.hasOwn(value, "partialCommits") && value.partialCommits !== true) invalid("Invalid runtime capability");
 
       if (value.recoveryState !== undefined) object(value.recoveryState);
     }
@@ -582,6 +618,8 @@ export async function createAppRuntimeTransport<State, Command, Value>({
     }
 
     const assigned = bootstrap;
+    // The commit the browser last accepted: an engine that takes deltas gets only what changed since it.
+    let accepted: RuntimeCommit<State> | null = null;
 
     return {
       ...common,
@@ -590,10 +628,12 @@ export async function createAppRuntimeTransport<State, Command, Value>({
         active();
         const encoding = spanStart();
         commitFrom<State>(checked<JsonInput>(commit), assigned.epoch);
-        const json = toJSON(commit, COMMIT_LIMIT);
-        span("Bay.runtime encodeCommit", encoding, { bytes: sizeOf(json), revision: commit.revision });
+        const delta = assigned.partialCommits ? deltaOf(accepted, commit) : null;
+        const json = toJSON(delta ?? commit, COMMIT_LIMIT);
+        span("Bay.runtime encodeCommit", encoding, { bytes: sizeOf(json), revision: commit.revision, partial: delta !== null });
         const publishing = spanStart();
         await ack(() => remote.publish(json));
+        accepted = commit;
         span("Bay.runtime awaitPublish", publishing, { revision: commit.revision });
       },
       async resolve(token, reply) {

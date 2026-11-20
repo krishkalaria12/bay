@@ -7,13 +7,16 @@ import { jsonKind } from "@bay/platform/json";
 import type { BrowserCommand, BrowserCommit, CommandReply, CommandRequest } from "./authority";
 import type { BrowserProjection } from "./projection";
 
+/** A commit with only the top-level fields that changed since the revision before it (RuntimeDelta). */
+export type BrowserDelta = Readonly<{ epoch: string; revision: number; state: Partial<BrowserProjection>; partial: true }>;
+
 /** A command's reply as the browser sends it: its commit may name only the revision, without the state. */
 type ClientReply = Omit<CommandReply, "commit"> & { commit: BrowserCommit | Pick<BrowserCommit, "epoch" | "revision"> };
 
 export type BrowserClientTransport = {
   getSnapshot(): Promise<BrowserCommit>;
   dispatch(request: CommandRequest): Promise<ClientReply>;
-  subscribeCommits(listener: (commit: BrowserCommit) => void): () => void;
+  subscribeCommits(listener: (commit: BrowserCommit | BrowserDelta) => void): () => void;
   subscribeClose(listener: () => void): () => void;
 };
 
@@ -55,6 +58,9 @@ function copyJson(value: JsonInput, previous?: JsonInput, ancestors = new Set<ob
   const kind = jsonKind(value);
 
   if (kind === "leaf") return value!;
+
+  // A previous node passed back in (a delta's unchanged fields): it was checked and frozen when it arrived.
+  if (adopt && value === previous) return value!;
 
   // SAFETY: jsonKind found an array or a plain object.
   const node = checked<JsonValue[] | JsonObject>(value);
@@ -187,8 +193,30 @@ const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
   downloads: "array",
 };
 
+/** Whether a commit is a delta rather than the whole state. */
+const isDelta = (value: JsonInput): boolean => isJsonObject(value) && Object.hasOwn(value, "partial");
+
+/** A delta on top of `previous`, as the whole commit it stands for. */
+function withPrevious(value: JsonInput, previous: BrowserCommit | null): JsonInput {
+  const delta = record(value);
+
+  if (
+    !previous ||
+    delta.partial !== true ||
+    Object.keys(delta).length !== 4 ||
+    delta.epoch !== previous.epoch ||
+    delta.revision !== previous.revision + 1 ||
+    Object.keys(record(delta.state)).some((key) => !Object.hasOwn(projectionFields, key))
+  )
+    return invalid();
+
+  // The fields a delta leaves out are the previous revision's, already checked and frozen.
+  return { epoch: delta.epoch, revision: delta.revision, state: { ...checked<JsonObject>(previous.state), ...record(delta.state) } };
+}
+
 export function decodeBrowserCommit(value: JsonInput, previous: BrowserCommit | null = null): BrowserCommit {
-  const input = record(copyJson(value, checked<JsonInput>(previous), new Set(), 0, false, true));
+  const whole = isDelta(value) ? withPrevious(value, previous) : value;
+  const input = record(copyJson(whole, checked<JsonInput>(previous), new Set(), 0, false, true));
 
   if (Object.keys(input).length !== 3 || Object.keys(input).some((key) => !["epoch", "revision", "state"].includes(key))) invalid();
 
@@ -382,8 +410,54 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     return v.is(NUMBER, revision) && Number.isSafeInteger(revision) && revision >= 0 && revision <= current.revision ? revision : null;
   }
 
-  function acceptCommit(input: BrowserCommit) {
+  // Deltas that arrived before the revision they apply on, by revision.
+  const deltas = new Map<number, BrowserDelta>();
+
+  /** Applies the waiting deltas that follow the installed revision, in order. Returns whether any are left over. */
+  function drainDeltas(): boolean {
+    for (const revision of deltas.keys()) if (!current || revision <= current.revision) deltas.delete(revision);
+
+    while (status === "ready" && current && deltas.has(current.revision + 1)) {
+      const delta = deltas.get(current.revision + 1)!;
+      deltas.delete(delta.revision);
+      let commit: BrowserCommit;
+
+      try {
+        commit = timed("Bay.client decodeCommit", () => decodeBrowserCommit(checked<JsonInput>(delta), current));
+      } catch {
+        fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit"));
+
+        return false;
+      }
+
+      acceptValidatedCommit(commit);
+    }
+
+    return deltas.size > 0;
+  }
+
+  /** A delta applies only on the revision before it. One that comes early waits for it; any other gap resyncs. */
+  function acceptDelta(delta: BrowserDelta) {
+    if (!sameEpoch(delta)) return;
+
+    if (deltas.size >= 64) deltas.clear();
+    deltas.set(delta.revision, delta);
+
+    if (status !== "ready") return;
+
+    if (drainDeltas()) beginResync();
+  }
+
+  function acceptCommit(input: BrowserCommit | BrowserDelta) {
     if (terminalError || heldRevision(checked<JsonInput>(input)) !== null) return;
+
+    if (isDelta(checked<JsonInput>(input))) {
+      // SAFETY: the transport checked the delta's stamp and that `partial` is true.
+      acceptDelta(input as BrowserDelta);
+
+      return;
+    }
+
     let commit: BrowserCommit;
 
     try {
@@ -395,6 +469,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     }
 
     acceptValidatedCommit(commit);
+    drainDeltas();
   }
 
   function acceptValidatedCommit(commit: BrowserCommit) {
@@ -460,6 +535,9 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         availability.resolve(current!);
         notify();
         settle();
+
+        // Deltas that came while it waited follow the snapshot; one that doesn't means another went missing.
+        if (drainDeltas()) beginResync();
       })
       .catch((cause: unknown) => {
         snapshotInFlight = false;

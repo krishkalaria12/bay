@@ -698,3 +698,70 @@ test("a reply naming only its revision resolves once that commit arrives", async
   await assert.rejects(broken, { code: "invalid_protocol" });
   authority.close();
 });
+
+/** The fields of `next` that aren't the same as `previous`'s, as an engine's delta carries them. */
+function deltaOf(previous, next) {
+  const state = {};
+
+  for (const key of Object.keys(next.state)) if (JSON.stringify(next.state[key]) !== JSON.stringify(previous.state[key])) state[key] = next.state[key];
+
+  return { epoch: next.epoch, revision: next.revision, state: copy(state), partial: true };
+}
+
+test("a delta applies on the revision before it and keeps every field it leaves out", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const { fake, client } = await connect(copy(first.commit));
+  const before = client.getSnapshot().state;
+  const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value, options: { url: "https://two.example/" } }));
+  const delta = deltaOf(first.commit, second.commit);
+  assert.ok(Object.keys(delta.state).length < Object.keys(second.commit.state).length);
+  fake.emit(deepFreeze(delta));
+  const after = client.getSnapshot();
+  assert.equal(after.revision, second.commit.revision);
+  assert.deepEqual(copy(after.state), copy(second.commit.state));
+  assert.equal(after.state.history, before.history);
+  assert.equal(after.state.settings, before.settings);
+  assert.ok(after.state.tabs[second.value]);
+  client.close();
+  authority.close();
+});
+
+test("deltas that come before the snapshot wait for it, and a gap asks for another", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value, options: { url: "https://two.example/" } }));
+  const third = await authority.dispatch(request(3, { method: "newTab", windowId: first.value, options: { url: "https://three.example/" } }));
+  const fake = fakeTransport();
+  const client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+  await tick();
+  // Revision 2 and 3 arrive while the snapshot of revision 1 is still on its way.
+  fake.emit(deepFreeze(deltaOf(first.commit, second.commit)));
+  fake.emit(deepFreeze(deltaOf(second.commit, third.commit)));
+  fake.snapshots[0].resolve(copy(first.commit));
+  await client.ready;
+  assert.equal(client.getSnapshot().revision, third.commit.revision);
+  assert.deepEqual(copy(client.getSnapshot().state), copy(third.commit.state));
+
+  // A delta that skips a revision can't apply: the window asks for a snapshot, then takes it.
+  const fourth = await authority.dispatch(request(4, { method: "newTab", windowId: first.value, options: { url: "https://four.example/" } }));
+  const fifth = await authority.dispatch(request(5, { method: "newTab", windowId: first.value, options: { url: "https://five.example/" } }));
+  fake.emit(deepFreeze(deltaOf(fourth.commit, fifth.commit)));
+  assert.equal(client.getStatus(), "resyncing");
+  await tick();
+  fake.snapshots[1].resolve(copy(fifth.commit));
+  await tick();
+  assert.equal(client.getStatus(), "ready");
+  assert.equal(client.getSnapshot().revision, fifth.commit.revision);
+  client.close();
+  authority.close();
+});
+
+test("a delta naming a field the state doesn't have breaks the protocol", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const { fake, client } = await connect(copy(first.commit));
+  fake.emit(deepFreeze({ epoch: first.commit.epoch, revision: first.commit.revision + 1, state: { surprise: {} }, partial: true }));
+  assert.equal(client.getStatus(), "closed");
+  authority.close();
+});
