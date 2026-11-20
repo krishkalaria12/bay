@@ -324,7 +324,9 @@ struct BrowserBar: View {
       .padding(.vertical, 14)
       .padding(.horizontal, Space.lg)
       .bayCapsule()
-      .overlay(alignment: .bottom) { LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty) }
+      .overlay(alignment: .bottom) {
+        LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty).id(browser.app.activeTabId)
+      }
     }
     .buttonStyle(.pressFeedback)
     .offset(x: swipe)
@@ -464,27 +466,81 @@ struct TabCount: View {
   }
 }
 
-/// The thin line along the capsule's edge: it fills as the page loads and fades once the page is there.
+/// The thin line along the capsule's edge: it fills as the page loads, runs to the end and fades once the page is there.
+/// WebKit's progress starts over on redirects, and a load can stop and start again within a moment, so within one load
+/// the line only moves forward, and a stop only finishes it once it has lasted. Each tab gets a line of its own (`.id`).
 struct LoadProgress: View {
   let state: NavigationState
   @Environment(\.accessibilityReduceMotion) private var reduced
+  @State private var fill: Double = 0
+  @State private var shown = false
+
+  /// Where the line starts, so a load shows at once; how far it creeps on its own while the page says nothing new; how
+  /// long a stopped load waits before finishing the line, for the load that often follows at once.
+  private static let start = 0.08
+  private static let creepLimit = 0.92
+  private static let settle: UInt64 = 160_000_000
 
   var body: some View {
     GeometryReader { geometry in
       Capsule()
         .fill(BayColor.accent)
-        .frame(width: max(0, geometry.size.width - 48) * max(state.progress, 0.04), height: 2)
+        .frame(width: max(0, geometry.size.width - 48) * min(fill, 1), height: 2)
         .padding(.leading, 24)
         .frame(maxHeight: .infinity, alignment: .bottom)
         .padding(.bottom, 2)
     }
-    .opacity(state.isLoading ? 1 : 0)
-    .animation(reduced ? nil : .easeOut(duration: Motion.settleDuration), value: state.progress)
-    .animation(.easeOut(duration: 0.22), value: state.isLoading)
+    .opacity(shown ? 1 : 0)
+    .onAppear {
+      if state.isLoading {
+        fill = max(state.progress, Self.start)
+        shown = true
+      }
+    }
+    // One task per load and per step of progress: it eases the line forward, then creeps it on while the page is busy.
+    .task(id: LoadStep(loading: state.isLoading, progress: state.progress)) { await follow() }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
     .accessibilityIdentifier(state.isLoading ? "page-progress" : "")
   }
+
+  private func follow() async {
+    if state.isLoading {
+      // A new load after the last one finished starts the line again; one that resumes keeps its place.
+      if !shown || fill >= 1 { fill = 0 }
+      withAnimation(.easeOut(duration: 0.12)) { shown = true }
+      move(to: max(state.progress, Self.start, fill), duration: 0.32)
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        guard !Task.isCancelled else { return }
+        move(to: fill + max(0, Self.creepLimit - fill) * 0.08, duration: 0.38)
+      }
+    } else if shown {
+      try? await Task.sleep(nanoseconds: Self.settle)
+      guard !Task.isCancelled else { return }
+      move(to: 1, duration: 0.2)
+      try? await Task.sleep(nanoseconds: 200_000_000)
+      guard !Task.isCancelled else { return }
+      withAnimation(.easeOut(duration: 0.22)) { shown = false }
+      try? await Task.sleep(nanoseconds: 220_000_000)
+      if !Task.isCancelled { fill = 0 }
+    }
+  }
+
+  private func move(to value: Double, duration: Double) {
+    guard value > fill || value == 0 else { return }
+    if reduced {
+      fill = value
+    } else {
+      withAnimation(.easeOut(duration: duration)) { fill = value }
+    }
+  }
+}
+
+/// What restarts the line's task: a load starting or stopping, or new progress.
+private struct LoadStep: Equatable {
+  let loading: Bool
+  let progress: Double
 }
 
 /// A page that failed to load, in plain words, and a way to try again.
