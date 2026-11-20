@@ -33,11 +33,13 @@ export function shareLink(url: string): string | null {
 }
 
 /**
- * What a `bay://` command (B15) asks for. Quick actions and the search widget open these links; JavaScript answers
- * them with the matching action rather than a page, like `shareLink` answers its carry. Exactly these three hosts,
- * and nothing with a path or query: anything else (a stray `bay:` address) is left alone.
+ * What a `bay://` command (B15, C7) asks for. Quick actions and the widgets open these links; JavaScript answers them
+ * with the matching action rather than a page, like `shareLink` answers its carry. Exactly these hosts, and nothing
+ * with a path or query: anything else (a stray `bay:` address) is left alone.
  */
-export type BayCommand = "new-tab" | "private-tab" | "search";
+export type BayCommand = "new-tab" | "private-tab" | "search" | "voice";
+
+const COMMANDS: readonly BayCommand[] = ["new-tab", "private-tab", "search", "voice"];
 
 export function bayCommand(value: string | null): BayCommand | null {
   if (!value) return null;
@@ -55,6 +57,5 @@ export function bayCommand(value: string | null): BayCommand | null {
   // Hosts are case-insensitive, and non-special schemes don't get normalised by the URL parser.
   const host = parsed.host.toLowerCase();
 
-  // SAFETY: the host was checked to be one of the three commands above (bay scheme, no path, no query).
-  return host === "new-tab" || host === "private-tab" || host === "search" ? (host as BayCommand) : null;
+  return COMMANDS.find((command) => command === host) ?? null;
 }

@@ -2,10 +2,12 @@ package expo.modules.bayengine
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -41,6 +43,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onPageRequest by EventDispatcher()
   val onNewWindow by EventDispatcher()
   val onFullscreenChange by EventDispatcher()
+  /** A swipe past the first or last page of the tab's history (C6): JavaScript archives the tab, or brings it back. */
+  val onSwipeNavigation by EventDispatcher()
+  /** Declared for the shared API (C2); the engine doesn't count what it blocks on Android yet. */
+  val onBlockedCount by EventDispatcher()
 
   override val shouldUseAndroidLayout = true
 
@@ -82,9 +88,22 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     override fun goBack() = this@BayEngineView.goBack()
     override fun goForward() = this@BayEngineView.goForward()
     override fun reload() = this@BayEngineView.reload()
+    override val swipeMode: String get() = this@BayEngineView.swipeMode
+    override fun pastHistory(back: Boolean) {
+      onSwipeNavigation(mapOf("action" to if (back) "pastFirstPage" else "pastLastPage"))
+    }
   })
 
   var pullToRefreshEnabled = true
+
+  /** Swipe to navigate (C5): "anywhere" on the page, "edges", or "off". */
+  var swipeMode = "edges"
+
+  /**
+   * Open app links in (C12, C19): "app" hands a link tapped in the page to another site to the app that claims it
+   * (Android's verified app links, never another browser); "browser" keeps every web link in Bay.
+   */
+  var appLinks = "app"
 
   /** Private pages use the private session's profile (BayEngineBackend), which ends with the session. Set at creation. */
   var isPrivate = false
@@ -507,6 +526,25 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       val id = newRequestId("external")
       pendingExternal[id] = url
       emitPageRequest(id, "external", externalUrl = url)
+    }
+
+    override fun onAppLink(url: String): Boolean {
+      // A non-browser app only (Android 11 and later can say so); on Android 10 every web link stays in Bay.
+      if (appLinks != "app" || disposed || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+      val activity = activityFor(context) ?: appContext.currentActivity ?: return false
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        .addCategory(Intent.CATEGORY_BROWSABLE)
+        .addFlags(Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
+      return try {
+        activity.startActivity(intent)
+        true
+      } catch (_: ActivityNotFoundException) {
+        false
+      }
+    }
+
+    override fun onBlockedCount(count: Int) {
+      if (!disposed) onBlockedCount(mapOf("count" to count))
     }
 
     override fun onRequestsCancelled() = forgetPageRequests()

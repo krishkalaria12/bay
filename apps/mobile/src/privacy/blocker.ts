@@ -19,7 +19,7 @@ import { Engine, type EngineError } from "../effect/ports/engine.ts";
 import { Files, type FileError } from "../effect/ports/files.ts";
 import { Http } from "../effect/ports/http.ts";
 import type { BrowserData } from "../store/types.ts";
-import { useBlockerStatus, type BlockerStatus } from "./contentBlocking.ts";
+import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "./contentBlocking.ts";
 import { ENGINE_RULES, FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, type ListValidators } from "./filterLists.ts";
 
 /** Where the lists live, in the app's documents. */
@@ -227,7 +227,11 @@ export class Blocker extends Context.Service<
           // ahead of a list that was still being applied.
           yield* Effect.uninterruptible(
             Effect.andThen(
-              engine.setContentBlocking(uris, listVersion([ENGINE_RULES, ...digests].join(":"))),
+              engine.setContentBlocking(
+                uris,
+                listVersion([ENGINE_RULES, ...digests].join(":")),
+                present.map((list) => list.group),
+              ),
               setStatus({ state: "ready", lists: present.length }),
             ),
           );
@@ -270,16 +274,58 @@ export class Blocker extends Context.Service<
           // Each runs one fiber at a time: a new preference interrupts the work the previous one started.
           const follow = yield* FiberHandle.makeRuntime<never>();
           const pausing = yield* FiberHandle.makeRuntime<never>();
+          const siting = yield* FiberHandle.makeRuntime<never>();
 
           let enabled: boolean | undefined;
-          let paused: readonly string[] | undefined;
+          let saved: readonly string[] = [];
+          let paused: string | undefined;
+
+          // The sites saved as paused, and the ones shown without blocking for this visit, go to the engine as one list.
+          const syncPaused = (): void => {
+            const hosts = [...new Set([...saved, ...useRestoredSites.getState().hosts])];
+            const key = hosts.join(" ");
+
+            if (key === paused) return;
+            paused = key;
+            pausing(pause(hosts));
+          };
+
+          yield* Effect.acquireRelease(
+            Effect.sync(() => useRestoredSites.subscribe(syncPaused)),
+            (unsubscribe) => Effect.sync(unsubscribe),
+          );
+
+          // What each site turns off on its own (C3), sent when it changes.
+          let sitesKey: string | undefined;
+
+          const syncSites = (data: BrowserData): void => {
+            const groupsOff = Object.fromEntries(
+              Object.entries(data.preferences.siteSettings).flatMap(([host, setting]) => (setting.blockOff.length ? [[host, setting.blockOff]] : [])),
+            );
+
+            const key = JSON.stringify(groupsOff);
+
+            if (key === sitesKey) return;
+            sitesKey = key;
+            siting(
+              engine
+                .setSiteBlocking(groupsOff)
+                .pipe(
+                  Effect.catch((error) =>
+                    diagnostics.report({ operation: { name: "blocker.sites" }, message: "Couldn't set what each site blocks.", cause: error }),
+                  ),
+                ),
+            );
+          };
 
           const sync = (data: BrowserData): void => {
             const { blockContent, blockingPausedHosts } = data.preferences;
 
-            if (blockingPausedHosts !== paused) {
-              paused = blockingPausedHosts;
-              pausing(pause(blockingPausedHosts));
+            syncSites(data);
+
+            if (blockingPausedHosts !== saved) {
+              saved = blockingPausedHosts;
+              syncPaused();
             }
 
             if (blockContent !== enabled) {

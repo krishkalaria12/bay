@@ -66,6 +66,10 @@ module.exports = function withBayEngine(config) {
 
     if (!permitted.includes(downloadTasks)) mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...permitted, downloadTasks];
 
+    // The welcome asks to be the default browser only where it can be (modules/bay-welcome reads this).
+    if (defaultBrowser) mod.modResults.BayCanBeDefaultBrowser = true;
+    else delete mod.modResults.BayCanBeDefaultBrowser;
+
     return mod;
   });
   config = withEntitlementsPlist(config, (mod) => {
@@ -150,6 +154,9 @@ module.exports = function withBayEngine(config) {
       bundleIdSuffix: "widgets",
       plist: widgetExtensionInfoPlist,
       sources: widgetExtensionSources,
+      // The widgets' buttons open Bay through OpenURLIntent (C7), which arrived in iOS 18. Phones on older versions
+      // keep Bay itself and go without the widget.
+      minimumOS: "18.0",
     });
 
     return mod;
@@ -194,6 +201,17 @@ const compressedDex = `
 android.packaging.dex.useLegacyPackaging = true
 `;
 
+// Android's window extensions (foldable postures; Chromium's DevicePosturePlatformProviderAndroid) come with the system,
+// so androidx.window compiles against them without shipping them. Unseen, R8 couldn't tell that Chromium's listener
+// implements their Consumer, dropped its accept, and the first page load died with an AbstractMethodError. Compiled
+// against here, R8 sees them as the platform's and keeps what implements them.
+const windowExtensions = `
+// Bay's engine: the system's window extensions, for R8 (modules/bay-engine/app.plugin.js).
+dependencies {
+    compileOnly "androidx.window.extensions.core:core:1.0.0"
+}
+`;
+
 // Each edit leaves a file it has already made alone, so prebuilding twice changes nothing.
 const chromiumEngineEdits = {
   projectBuildGradle(gradle) {
@@ -221,6 +239,8 @@ const chromiumEngineEdits = {
     if (!gradle.includes("bayEngineR")) gradle += engineRClasses;
 
     if (!gradle.includes("dex.useLegacyPackaging")) gradle += compressedDex;
+
+    if (!gradle.includes("androidx.window.extensions.core")) gradle += windowExtensions;
 
     return gradle;
   },
@@ -263,7 +283,7 @@ module.exports.chromiumEngineEdits = chromiumEngineEdits;
 // rest is done by hand here, for two node-xcode quirks: `updateBuildProperty` matches targets by comment, where
 // the created name is already quoted, and `addTargetDependency` writes nothing at all when a fresh project lacks
 // its sections.
-function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuffix, plist, sources }) {
+function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuffix, plist, sources, minimumOS }) {
   if (findTargetKeyFor(project, targetName)) return;
 
   const extension = project.addTarget(targetName, "app_extension", subfolder, `${bundleId}.${bundleIdSuffix}`);
@@ -279,7 +299,8 @@ function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuf
 
   // The extension matches Bay's own deployment target and builds like it does; its plist, sources and bundle id
   // come from addTarget and the constants above.
-  const minimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
+  const appMinimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
+  const minimum = minimumOS && Number.parseFloat(minimumOS) > Number.parseFloat(appMinimum) ? minimumOS : appMinimum;
 
   const settings = {
     INFOPLIST_FILE: plist,

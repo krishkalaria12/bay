@@ -124,7 +124,24 @@ export interface BrowserPreferences {
   youtube: YouTubeCleanup;
   /** The welcome has been seen (or skipped); a fresh install shows it once. */
   welcomed: boolean;
+  /** Bay opens ready to type: the search card and keyboard come up when it starts (C1). */
+  searchOnLaunch: boolean;
+  /** The custom search engine's address, https with `%s` where the words go; used while `searchEngineId` is "custom". */
+  customSearchUrl: string | null;
+  /** The first-run tips already shown (U7), so each shows once. */
+  tipsSeen: TipId[];
+  /** Swipe to navigate (C5): back and forward from anywhere on a page, from its edges, or not at all. */
+  swipeToNavigate: SwipeMode;
+  /** Open app links in (C12): the app that claims a link, or always Bay. */
+  appLinks: AppLinks;
 }
+
+export type SwipeMode = "anywhere" | "edges" | "off";
+
+export type AppLinks = "app" | "browser";
+
+/** A first-run tip (U7): the bar's gestures, and what blocking did on the first page. */
+export type TipId = "bar" | "blocking";
 
 export type ThemeChoice = "system" | "light" | "dark";
 
@@ -136,7 +153,14 @@ export type SiteSetting = {
   reader: boolean;
   /** The site answers with its desktop page: the engine presents itself as a desktop browser. */
   desktopMode: boolean;
+  /** What isn't blocked on this site (C3): ads, trackers or cookie banners. Empty blocks all three. */
+  blockOff: SiteBlockGroup[];
+  /** Swipe to navigate on this site (C20), or null for Bay's own choice. */
+  swipe: SwipeMode | null;
 };
+
+/** A kind of blocking a site can turn off on its own (C3). Kept here so the store needs nothing from the blocker. */
+export type SiteBlockGroup = "ads" | "trackers" | "cookies";
 
 /** What to hide on YouTube, with Brave's lists. Kept a type alias so it stays assignable to `JsonValue`. */
 export type YouTubeCleanup = {
@@ -155,6 +179,9 @@ export const SIMPLE_PREFERENCE_KEYS = [
   "startPageAfterHours",
   "youtube",
   "welcomed",
+  "searchOnLaunch",
+  "swipeToNavigate",
+  "appLinks",
 ] as const;
 
 export type SimplePreferences = Pick<BrowserPreferences, (typeof SIMPLE_PREFERENCE_KEYS)[number]>;
@@ -177,7 +204,7 @@ export interface BrowserData {
   /** Newest first. */
   downloads: DownloadItem[];
   preferences: BrowserPreferences;
-  /** Each site's icon (host without www.), downloaded once into the app's cache: a file:// URI. */
+  /** Each site's icon (host without www.), downloaded once into the app's documents: a file:// URI. */
   favicons: Record<string, string>;
   /** When Bay last went to the background, for "start page after hours away"; null while it hasn't. */
   leftAt: number | null;

@@ -6,7 +6,11 @@ steps:
   # The blocker is running with every filter list (the first run downloads them).
   - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - tap: { id: settings-privacy }
   - await: { text: { in: { id: settings-block-content-detail }, contains: "8 lists active" }, timeout: 90000 }
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }

@@ -10,13 +10,17 @@ import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, useWindowDimensions, View } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import { scheduleOnRN } from "react-native-worklets";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { opensSwitcher, pageBehindSearch, switcherProgress } from "@/chrome/layout";
+import { SPRING } from "@/chrome/motion";
 import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
@@ -28,21 +32,24 @@ import { Engine } from "@/effect/ports/engine";
 import { Lifecycle } from "@/effect/ports/lifecycle";
 import { useCommand } from "@/effect/react";
 import { useT, type Translate } from "@/i18n";
-import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
+import { ArchivePanel, LinkMenu, PageMenu, SiteSettingsPanel, TabsMenu } from "@/panels";
+import { SettingsScreen } from "@/settings/SettingsScreen";
+import type { PageBlocking } from "@/panels/PageMenu";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
 import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
+import { takeFieldRequest } from "@/onboarding/handoff";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
-import { useBlockerStatus, type BlockerStatus } from "@/privacy/contentBlocking";
+import { useBlockerStatus, useRestoredSites, type BlockerStatus } from "@/privacy/contentBlocking";
 import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
-import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
+import { CUSTOM_ENGINE_ID, engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { ClearData, ViewRegistry } from "./clearData";
 import { Logins } from "./credentials";
 import { originOf } from "./logins";
@@ -53,6 +60,7 @@ import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
 import { TabZoom, type Frame } from "./TabZoom";
+import { Tip, TipRing } from "./Tip";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { Favicons } from "./favicons";
@@ -65,6 +73,7 @@ import { TabWork } from "./tabWork";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
 import { Toast, useToast } from "./Toast";
+import { downloadsFrom } from "./downloads";
 import { DownloadToast, useDownloads } from "./useDownloads";
 import { useFindInPage } from "./useFindInPage";
 import { useReadingTools } from "./useReadingTools";
@@ -98,7 +107,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
+type Panel = "archive" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -135,7 +144,14 @@ export function BrowserScreen(): JSX.Element {
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [searchInNewTab, setSearchInNewTab] = useState(false);
   const [searchPrivately, setSearchPrivately] = useState(false);
+  // The search Bay opened as it started (C1): over a page it opens a new tab, but the page stays on screen behind it
+  // and putting the search away goes back to that page, not to the switcher.
+  const [launchSearch, setLaunchSearch] = useState(false);
+  // The search card opened from the widget's microphone starts listening (C7).
+  const [searchListening, setSearchListening] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
+  // Settings is a screen of its own (src/settings): the browser's sheets open over it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [link, setLink] = useState<LinkPress | null>(null);
   // Dialogs pages are waiting on (`alert`/`confirm`/`prompt`, I3), in the order they asked; the engine holds each
   // page paused until its answer goes back, so they queue rather than replace each other.
@@ -153,6 +169,11 @@ export function BrowserScreen(): JSX.Element {
   const lastTab = useRef<string | null>(null);
   // A card in the switcher, growing into the page it stands for (A1).
   const [zoom, setZoom] = useState<{ tab: BrowserTab; frame: Frame } | null>(null);
+  // What the blocker stopped on each tab's page (C2), where the engine counts it.
+  const [blockedCounts, setBlockedCounts] = useState<Record<string, number>>({});
+  // The tab a swipe back past its first page archived (C6), and the tab that showed instead: forward from that one,
+  // straight away, brings it back.
+  const swipeArchived = useRef<{ id: string; shown: string } | null>(null);
   const barHidden = useSharedValue(0);
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
@@ -161,10 +182,10 @@ export function BrowserScreen(): JSX.Element {
   const switcherTabs = spaceTabs.filter((tab) => !activeFolderId || tab.folderId === activeFolderId);
   const page = navigation[active.id] ?? { ...blankNavigation, url: active.url, title: active.title };
   const hasPage = Boolean(active.url);
-  const engine = engineFor(data.preferences.searchEngineId);
+  const engine = engineFor(data.preferences.searchEngineId, data.preferences.customSearchUrl);
   const existing = new Set(data.tabs.map((tab) => tab.id));
   // A search for a new tab opens over the wallpaper, like the switcher it came from.
-  const showPages = overlay === "none" || (overlay === "search" && !searchInNewTab);
+  const showPages = overlay === "none" || (overlay === "search" && (!searchInNewTab || launchSearch));
   const media = useTabMedia({ tabs: data.tabs, views, onScreenTabId: showPages && hasPage ? active.id : null, locked });
   // A tab playing media stays mounted, so its sound doesn't stop when other tabs are opened.
   const playing = media.playingTabIds.filter((id) => existing.has(id));
@@ -179,41 +200,57 @@ export function BrowserScreen(): JSX.Element {
     Uniwind.setTheme(theme);
   }, [theme]);
 
-  // A fresh install, just through the welcome, is offered the import (desktop's first run has it as a step). Only a
-  // welcome seen in this session counts: Bay reopened later doesn't ask again.
-  const sawWelcome = useRef(ready && !welcomed);
+  // The welcome skipped early ends on the search field: its glass hands over to the real one (onboarding/handoff.ts).
   useEffect(() => {
-    if (ready && !welcomed) sawWelcome.current = true;
-    else if (ready && welcomed && sawWelcome.current) {
-      sawWelcome.current = false;
-      toast.show(t("toast.importOffer"), { label: t("toast.importAction"), onPress: () => setPanel("import") });
-    }
-    // The toast and the translation are the screen's own and stay the same; only the welcome's ending asks.
+    if (!ready || !welcomed || !takeFieldRequest()) return;
+    search(false);
+    setLaunchSearch(true);
+    // Only the welcome's ending asks; the handlers it calls stay the screen's own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, welcomed]);
 
   // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
   // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
-  const startFresh = useRef<() => void>(() => {});
+  // Says whether it put a fresh start page up.
+  const startFresh = useRef<() => boolean>(() => false);
   startFresh.current = () => {
     const { data: current } = useBrowserStore.getState();
 
-    if (startPageAfterHours === null || current.leftAt === null) return;
+    if (startPageAfterHours === null || current.leftAt === null) return false;
 
-    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return;
+    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return false;
 
-    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return;
+    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return false;
     const empty = current.tabs.find((tab) => !tab.url && !tab.private);
 
     if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
     else openTab("");
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
+
+    return true;
   };
 
+  // Bay opens ready to type (C1): when it starts, and when it comes back to a fresh start page, the search card and
+  // keyboard come up. Not on the run that showed the welcome, which ends on the field itself when it's skipped.
+  const launched = useRef(false);
+
   useEffect(() => {
-    if (ready) startFresh.current();
+    if (!ready || launched.current) return;
+    launched.current = true;
+    const opened = startFresh.current();
+    const { data: current } = useBrowserStore.getState();
+
+    if (!current.preferences.welcomed || !current.preferences.searchOnLaunch) return;
+    const tab = current.tabs.find((entry) => entry.id === current.activeTabId);
+
+    // Over a page, a new search starts a new tab and leaves the page as it was.
+    search(!opened && Boolean(tab?.url));
+    setLaunchSearch(true);
+    // Only the launch asks; the handlers it calls stay the screen's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
   // Leaving the foreground and coming back, heard through the app's one lifecycle registration. The screen joins it
   // once the saved tabs are in, after the store's own handler, so each change is handled in the order it always was.
@@ -231,7 +268,8 @@ export function BrowserScreen(): JSX.Element {
 
         yield* lifecycle.onChange((state) => {
           if (state === "active") {
-            startFresh.current();
+            // A fresh start page after a long time away opens ready to type too (C1).
+            if (startFresh.current() && useBrowserStore.getState().data.preferences.searchOnLaunch) search(false);
 
             return;
           }
@@ -422,9 +460,10 @@ export function BrowserScreen(): JSX.Element {
   // Quick actions and the search widget (B15) hand their `bay://` commands to the same desk as incoming links (B9):
   // a fresh tab, a private tab, or the search card over the current tab, exactly as the bar and the tabs menu open
   // them. A private tab here is a private tab or nothing: the menus don't offer one the engine can't keep private.
-  function openIncomingCommand(command: Exclude<BayCommand, "search">): void {
+  function openIncomingCommand(command: Exclude<BayCommand, "search" | "voice">): void {
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
 
     if (command === "new-tab") openTab("");
@@ -435,8 +474,19 @@ export function BrowserScreen(): JSX.Element {
     const command = bayCommand(incomingUrl);
 
     if (command) {
+      // A widget or quick action opens search over whatever is up: a sheet left open goes first.
+      if (command === "search" || command === "voice") {
+        setPanel(null);
+        setSettingsOpen(false);
+        setLink(null);
+      }
+
       if (command === "search") search(false);
-      else openIncomingCommand(command);
+      else if (command === "voice") {
+        // The widget's microphone (C7): the search card, already listening.
+        search(false);
+        setSearchListening(true);
+      } else openIncomingCommand(command);
 
       return;
     }
@@ -446,6 +496,7 @@ export function BrowserScreen(): JSX.Element {
     if (!url) return;
     setOverlay("none");
     setPanel(null);
+    setSettingsOpen(false);
     setLink(null);
 
     const current = useBrowserStore.getState().data;
@@ -456,6 +507,8 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function search(inNewTab: boolean, privately = false): void {
+    setLaunchSearch(false);
+    setSearchListening(false);
     setSearchInNewTab(inNewTab);
     setSearchPrivately(privately);
     setOverlay("search");
@@ -465,6 +518,7 @@ export function BrowserScreen(): JSX.Element {
   const activeIndex = data.tabs.findIndex((tab) => tab.id === active.id);
 
   function swipeTabs(step: 1 | -1): void {
+    dispatch({ type: "tip-seen", id: "bar" });
     const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
 
     if (!next) return;
@@ -473,7 +527,11 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function showTabs(): void {
-    if (hasPage) capture(active.id);
+    if (hasPage) {
+      dispatch({ type: "tip-seen", id: "bar" });
+      capture(active.id);
+    }
+
     setOverlay("tabs");
   }
 
@@ -510,9 +568,34 @@ export function BrowserScreen(): JSX.Element {
     void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show(t("toast.linkCopied")));
   }
 
+  // The open tabs' addresses, one a line (C16), without their tracking parameters. Private tabs stay out.
+  async function exportTabs(): Promise<void> {
+    const urls = data.tabs.flatMap((tab) => (tab.url && !tab.private ? [cleanUrl(tab.url)] : []));
+
+    if (urls.length) await Share.share({ message: urls.join("\n") });
+  }
+
   // What went wrong since Bay was opened (B8): sent on, so it can be looked at.
   async function reportProblem(): Promise<void> {
     await Share.share({ message: crashReports().length ? crashReportText() : t("crash.none") });
+  }
+
+  // A swipe back past a tab's first page archives the tab, and forward right after brings it back (C6), as in Arc Search.
+  function swipePastHistory(tabId: string, action: "pastFirstPage" | "pastLastPage"): void {
+    if (tabId !== active.id) return;
+
+    if (action === "pastFirstPage") {
+      if (data.tabs.length < 2) return;
+      archiveTab(tabId);
+      swipeArchived.current = { id: tabId, shown: useBrowserStore.getState().data.activeTabId };
+
+      return;
+    }
+
+    const archived = swipeArchived.current;
+    swipeArchived.current = null;
+
+    if (archived && archived.shown === tabId) restoreTab(archived.id);
   }
 
   // Closing a tab archives it, so it can come straight back.
@@ -630,13 +713,41 @@ export function BrowserScreen(): JSX.Element {
   // What this site (B12) keeps instead of the globals: a per-site zoom, auto Reader and desktop mode.
   const siteSetting = siteSettingFor(data.preferences.siteSettings, active.url);
   const pausedEntry = blockingPausedHosts.find((entry) => host === entry || host.endsWith(`.${entry}`));
-  const blocking = !blockContent ? "off" : pausedEntry ? "paused" : "on";
+  const restoredSites = useRestoredSites((state) => state.hosts);
+  const restored = Boolean(host) && restoredSites.includes(host);
+  const blocking: PageBlocking = !blockContent ? "off" : pausedEntry ? "paused" : restored ? "restored" : "on";
+
+  // A site shown without blocking for one visit (C2) gets its blocking back once the tab is somewhere else.
+  useEffect(() => {
+    const hosts = useRestoredSites.getState().hosts;
+
+    if (hosts.length && !hosts.includes(host)) useRestoredSites.setState({ hosts: [] });
+  }, [host]);
 
   function toggleBlocking(): void {
     if (!host) return;
-    dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
+
+    if (restored) useRestoredSites.setState({ hosts: [] });
+    else dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
     // The change applies to new loads; reload so this page shows it.
     run((tab) => tab.reload());
+  }
+
+  // "Page broken?" (C2): the page again without blocking, and the question whether that fixed it. Yes keeps blocking
+  // off for the site; otherwise it comes back when the tab leaves.
+  function restoreOriginal(): void {
+    if (!host) return;
+    const site = host;
+
+    useRestoredSites.setState({ hosts: [site] });
+    run((tab) => tab.reload());
+    toast.show(t("toast.restoredBlocking"), {
+      label: t("toast.keepBlockingOff"),
+      onPress: () => {
+        dispatch({ type: "pause-blocking", host: site, paused: true });
+        useRestoredSites.setState({ hosts: [] });
+      },
+    });
   }
 
   // Site settings (B12) are written whole: the store keeps an entry only while some value differs from the globals.
@@ -718,10 +829,87 @@ export function BrowserScreen(): JSX.Element {
     }, []),
   );
 
+  // The page steps back behind the search sheet (U4): a card 10 pt in from each side, its top under the status bar,
+  // with round corners, dimmed by the sheet's scrim.
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const pageBehind = overlay === "search" && showPages && hasPage;
+  const behind = useSharedValue(0);
+
+  useEffect(() => {
+    behind.value = withSpring(pageBehind ? 1 : 0, { ...SPRING, overshootClamping: true });
+  }, [pageBehind, behind]);
+
+  // Dragging the bar up shrinks the page under the finger towards its card (U5, C6); far enough, it lets go into the
+  // switcher.
+  const shrink = useSharedValue(0);
+
+  const behindStyle = useAnimatedStyle(() => {
+    const scale = interpolate(behind.value, [0, 1], [1, (screenWidth - 2 * pageBehindSearch.sideInset) / screenWidth]);
+    // Scaled about its middle, the page is moved back up so its top edge stays under the status bar.
+    const lift = ((screenHeight - insets.top) * (1 - scale)) / 2;
+    const shrunk = interpolate(shrink.value, [0, 1], [1, 0.68]);
+
+    return {
+      transform: [{ translateY: -lift - shrink.value * 40 }, { scale: scale * shrunk }],
+      borderRadius: Math.max(behind.value * pageBehindSearch.cornerRadius, shrink.value * 28),
+    };
+  });
+
+  function openSwitcherFromDrag(): void {
+    showTabs();
+    shrink.value = 0;
+  }
+
+  const dragUp = usePanGesture({
+    // Up only: sideways drags move between tabs (TabSwipe), taps press the bar's buttons.
+    activeOffsetY: [-14, 10_000],
+    failOffsetX: [-14, 14],
+    onUpdate: (event) => {
+      "worklet";
+      shrink.value = switcherProgress(-event.translationY);
+    },
+    onDeactivate: (event) => {
+      "worklet";
+
+      if (!event.canceled && opensSwitcher(-event.translationY, -event.velocityY)) {
+        scheduleOnRN(openSwitcherFromDrag);
+
+        return;
+      }
+
+      shrink.value = withSpring(0, { ...SPRING, overshootClamping: true });
+    },
+  });
+
   const barStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: barHidden.value * (BAR_HEIGHT + insets.bottom + 24) }],
     opacity: 1 - barHidden.value,
   }));
+
+  // First-run tips (U7): what blocking did on the first page, then the bar's gestures once there is a tab to swipe to.
+  // One at a time, only over a page that has finished loading, and never while anything else is up.
+  const { tipsSeen } = data.preferences;
+
+  const quiet = ready && welcomed && hasPage && showPages && overlay === "none" && panel === null && !link && !page.isLoading && !find.open;
+
+  const tip =
+    !quiet || locked
+      ? null
+      : !tipsSeen.includes("blocking") && blocking === "on" && blockerStatus.state === "ready"
+        ? "blocking"
+        : !tipsSeen.includes("bar") && data.tabs.filter((tab) => tab.url && !tab.private).length > 1
+          ? "bar"
+          : null;
+
+  const tipSeen = useCallback((id: "blocking" | "bar") => dispatch({ type: "tip-seen", id }), [dispatch]);
+
+  // A tip that isn't answered goes after a while; it has been seen.
+  useEffect(() => {
+    if (!tip) return;
+    const timer = setTimeout(() => tipSeen(tip), 12_000);
+
+    return () => clearTimeout(timer);
+  }, [tip, tipSeen]);
 
   const player = media.player;
   // A locked private tab or an error page shows Bay's own screen there, not the page.
@@ -735,7 +923,7 @@ export function BrowserScreen(): JSX.Element {
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false} {...behindSheet}>
         <Wallpaper id={data.preferences.wallpaper} photo={data.preferences.wallpaperPhoto} />
         {ready ? (
-          <View style={[StyleSheet.absoluteFill, { top: insets.top }]} pointerEvents="box-none">
+          <Animated.View style={[StyleSheet.absoluteFill, { top: insets.top, overflow: "hidden" }, behindStyle]} pointerEvents="box-none">
             {mounted.map((id) => {
               const tab = data.tabs.find((entry) => entry.id === id)!;
               const visible = showPages && id === active.id && hasPage;
@@ -754,6 +942,10 @@ export function BrowserScreen(): JSX.Element {
                     skipAmp: data.preferences.skipAmp,
                   }}
                   desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
+                  swipeToNavigate={siteSettingFor(data.preferences.siteSettings, tab.url).swipe ?? data.preferences.swipeToNavigate}
+                  appLinks={data.preferences.appLinks}
+                  onSwipeNavigation={(action) => swipePastHistory(id, action)}
+                  onBlockedCount={(count) => setBlockedCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count }))}
                   pullToRefresh={data.preferences.pullToRefresh}
                   pageColor={pageColors[id] ?? null}
                   onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
@@ -799,7 +991,7 @@ export function BrowserScreen(): JSX.Element {
                 />
               );
             })}
-          </View>
+          </Animated.View>
         ) : null}
 
         {tabError && hasPage && showPages ? (
@@ -815,7 +1007,7 @@ export function BrowserScreen(): JSX.Element {
           </View>
         ) : null}
 
-        {hasPage && showPages && !fullscreen ? (
+        {hasPage && showPages && !fullscreen && !pageBehind ? (
           <View
             className="absolute inset-x-0 top-0 bg-background"
             style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}
@@ -951,50 +1143,69 @@ export function BrowserScreen(): JSX.Element {
             />
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
+          {tip ? (
+            <Tip
+              key={tip}
+              target={tip === "blocking" ? "more" : "capsule"}
+              title={tip === "blocking" ? t("tip.blocking.title") : t("tip.bar.title")}
+              body={tip === "blocking" ? t("tip.blocking.body") : t("tip.bar.body")}
+              onDone={() => tipSeen(tip)}
+            />
+          ) : null}
           <View collapsable={false} {...behindSheet}>
+            {tip ? <TipRing target={tip === "blocking" ? "more" : "capsule"} /> : null}
             {hasPage && showPages ? (
-              <TabSwipe
-                onSwipe={swipeTabs}
-                hasPrevious={activeIndex > 0}
-                hasNext={activeIndex < data.tabs.length - 1}
-                contentKey={`${active.id} ${host ?? ""}`}
-              >
-                {(capsuleStyle) => (
-                  <BrowserBar
-                    capsuleStyle={capsuleStyle}
-                    mode="page"
-                    site={locked && active.private ? undefined : host}
-                    insecure={active.url.startsWith("http:")}
-                    privately={Boolean(active.private)}
-                    // The capsule's edge carries the load's progress (A6).
-                    progress={page.progress}
-                    loading={page.isLoading}
-                    onTabs={() => showTabs()}
-                    onTabsLongPress={() => {
-                      tick();
-                      setPanel("tabs");
-                    }}
-                    onTabsSwipeUp={lastOpenTab}
-                    tabCount={data.tabs.length}
-                    onSearch={() => search(false)}
-                    onMore={() => {
-                      if (!(locked && active.private)) setPanel("page");
-                    }}
-                    onMoreLongPress={() => {
-                      if (locked && active.private) return;
-                      tick();
-                      void share(active.url);
-                    }}
-                  />
-                )}
-              </TabSwipe>
+              <GestureDetector gesture={dragUp}>
+                <View collapsable={false}>
+                  <TabSwipe
+                    onSwipe={swipeTabs}
+                    hasPrevious={activeIndex > 0}
+                    hasNext={activeIndex < data.tabs.length - 1}
+                    contentKey={`${active.id} ${host ?? ""}`}
+                  >
+                    {(capsuleStyle) => (
+                      <BrowserBar
+                        capsuleStyle={capsuleStyle}
+                        mode="page"
+                        site={locked && active.private ? undefined : host}
+                        insecure={active.url.startsWith("http:")}
+                        privately={Boolean(active.private)}
+                        // The capsule's edge carries the load's progress (A6).
+                        progress={page.progress}
+                        loading={page.isLoading}
+                        onTabs={() => showTabs()}
+                        onTabsLongPress={() => {
+                          tick();
+                          setPanel("tabs");
+                        }}
+                        onTabsSwipeUp={lastOpenTab}
+                        tabCount={data.tabs.length}
+                        onSearch={() => search(false)}
+                        onMore={() => {
+                          if (locked && active.private) return;
+                          dispatch({ type: "tip-seen", id: "blocking" });
+                          setPanel("page");
+                        }}
+                        onMoreLongPress={() => {
+                          if (locked && active.private) return;
+                          tick();
+                          void share(active.url);
+                        }}
+                      />
+                    )}
+                  </TabSwipe>
+                </View>
+              </GestureDetector>
             ) : (
               <BrowserBar
                 mode="start"
                 newTab={overlay === "tabs"}
                 onArchive={() => setPanel("archive")}
                 onSearch={() => search(overlay === "tabs")}
-                onSettings={() => setPanel("settings")}
+                onSettings={() => {
+                  setPanel(null);
+                  setSettingsOpen(true);
+                }}
               />
             )}
           </View>
@@ -1007,10 +1218,11 @@ export function BrowserScreen(): JSX.Element {
           engine={engine}
           data={data}
           initialPrivate={searchPrivately || (!searchInNewTab && Boolean(active.private))}
+          listenOnOpen={searchListening}
           onOpen={open}
           onDismiss={() => {
             Keyboard.dismiss();
-            setOverlay(searchInNewTab ? "tabs" : "none");
+            setOverlay(searchInNewTab && !launchSearch ? "tabs" : "none");
           }}
         />
       ) : null}
@@ -1026,6 +1238,12 @@ export function BrowserScreen(): JSX.Element {
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
         isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
+        blockedCount={blockedCounts[active.id] ?? null}
+        onRestore={restoreOriginal}
+        zoom={siteSetting.textSize ?? data.preferences.textSize}
+        onZoom={(textSize) => changeSiteSetting({ textSize: textSize === data.preferences.textSize ? null : textSize })}
+        desktop={siteSetting.desktopMode}
+        onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
         readerActive={reading.reader}
         onReader={reading.openReader}
         onHideElements={reading.startPicking}
@@ -1065,7 +1283,10 @@ export function BrowserScreen(): JSX.Element {
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
         onCloseTab={() => archiveTab(active.id)}
-        onSettings={() => setPanel("settings")}
+        onSettings={() => {
+          setPanel(null);
+          setSettingsOpen(true);
+        }}
         onHistory={() => setPanel("history")}
       />
       <TabsMenu
@@ -1117,6 +1338,23 @@ export function BrowserScreen(): JSX.Element {
           else if (!reader && reading.reader) reading.closeReader();
         }}
         onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
+        blocking={blocking}
+        onToggleBlocking={toggleBlocking}
+        blockOff={siteSetting.blockOff}
+        onBlockOff={(blockOff) => {
+          changeSiteSetting({ blockOff });
+          // The change applies to new loads; reload so this page shows it.
+          run((tab) => tab.reload());
+        }}
+        swipe={siteSetting.swipe}
+        globalSwipe={data.preferences.swipeToNavigate}
+        onSwipe={(swipe) => changeSiteSetting({ swipe })}
+        downloadedHere={downloadsFrom(downloads.downloads, active.url)}
+        onDownloads={() => setPanel("downloads")}
+        onSettings={() => {
+          setPanel(null);
+          setSettingsOpen(true);
+        }}
       />
       <ArchivePanel
         visible={panel === "archive"}
@@ -1129,12 +1367,26 @@ export function BrowserScreen(): JSX.Element {
         onRemove={(id) => dispatch({ type: "remove-archived", id })}
         onClear={() => dispatch({ type: "clear-archive" })}
       />
-      <SettingsPanel
-        visible={panel === "settings"}
-        onClose={() => closePanel("settings")}
+      <SettingsScreen
+        visible={settingsOpen}
+        covered={panel !== null}
+        onClose={() => setSettingsOpen(false)}
         engines={SEARCH_ENGINES}
         searchEngineId={engine.id}
         onSearchEngineChange={(id) => dispatch({ type: "search-engine", id })}
+        customSearchUrl={data.preferences.customSearchUrl}
+        onCustomEngine={(customUrl) => dispatch({ type: "search-engine", id: CUSTOM_ENGINE_ID, customUrl })}
+        openTabCount={data.tabs.filter((tab) => tab.url && !tab.private).length}
+        onExportTabs={() => void exportTabs()}
+        onShowWelcome={() => {
+          setSettingsOpen(false);
+          dispatch({ type: "welcome-again" });
+        }}
+        onOpenLink={(url) => {
+          setSettingsOpen(false);
+          setOverlay("none");
+          openTab(url);
+        }}
         archiveAfterDays={data.preferences.archiveAfterDays}
         onArchiveAfterDaysChange={(days) => dispatch({ type: "archive-days", days })}
         blockContent={blockContent}

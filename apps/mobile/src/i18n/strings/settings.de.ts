@@ -1,0 +1,58 @@
+import type { SettingsStrings } from "./settings.ts";
+
+export const settingsDe: SettingsStrings = {
+  "settings.search.placeholder": "Suchen",
+  "settings.search.clear": "Suche löschen",
+  "settings.search.empty": "Keine Einstellungen gefunden",
+
+  "settings.page.general": "Allgemein",
+  "settings.page.search": "Suche",
+  "settings.page.tabs": "Tabs",
+  "settings.page.passwords": "Passwörter",
+  "settings.page.customEngine": "Eigene Suchmaschine",
+
+  "settings.blurb.general": "Wie Bay startet, welche Links es öffnet und wie du zwischen Seiten wechselst.",
+  "settings.blurb.search": "Womit das Suchfeld sucht und was es beim Tippen abfragt.",
+  "settings.blurb.appearance": "Bays helles oder dunkles Aussehen, die Startseite dahinter und wie groß Seiten sind.",
+  "settings.blurb.tabs": "Wann ruhige Tabs ins Archiv wandern und wann Bay neu beginnt.",
+  "settings.blurb.privacy": "Werbung und Tracker, private Tabs und was Bay auf diesem Telefon behält.",
+  "settings.blurb.passwords": "Anmeldungen, die Bay auf diesem Telefon gespeichert hat, und nirgendwo sonst.",
+  "settings.blurb.youtube": "Ein ruhigeres YouTube, mit den Listen von Brave.",
+  "settings.blurb.about": "Ein freier Open-Source-Browser für dein Telefon und deinen Mac.",
+  "settings.blurb.defaultBrowser": "Der Browser, in dem Links aus anderen Apps öffnen.",
+
+  "settings.keywords.general": "browser standard links apps sprache wischen gesten zurück vor ziehen aktualisieren tastatur start willkommen",
+  "settings.keywords.search": "suchmaschine google duckduckgo bing eigene vorschläge adresse feld",
+  "settings.keywords.appearance": "design hell dunkel modus hintergrund foto zoom textgröße aussehen",
+  "settings.keywords.tabs": "archiv inaktiv alt startseite exportieren teilen",
+  "settings.keywords.privacy": "werbung tracker blocker blockieren inhalte amp privat sperren gesicht fingerabdruck code daten löschen cookies",
+  "settings.keywords.passwords": "anmeldungen anmelden passwörter passkeys gespeichert konten",
+  "settings.keywords.youtube": "shorts kommentare vorschläge videos",
+  "settings.keywords.about": "version lizenzen quellcode credits datenschutz",
+  "settings.keywords.bookmarks": "lesezeichen favoriten gespeichert",
+  "settings.keywords.history": "verlauf besucht seiten zuletzt",
+  "settings.keywords.downloads": "dateien gespeichert",
+  "settings.keywords.import": "chrome safari firefox brave arc export datei umziehen",
+  "settings.keywords.report": "fehler absturz problem hilfe feedback",
+
+  "settings.search.engineNote": "Tippe eine Adresse, um eine Seite zu öffnen, oder Wörter, um mit {engine} zu suchen.",
+  "settings.showWelcome.note": "Bays erste Seiten noch einmal, vom Namen bis zum Suchfeld. Deine Tabs bleiben, wie sie sind.",
+  "settings.passwords.none": "Keine gespeicherten Passwörter",
+
+  "settings.default.yes": "Bay",
+  "settings.default.no": "Noch nicht",
+  "settings.default.isDefault": "Links aus anderen Apps öffnen in Bay, als neuer Tab.",
+  "settings.default.howIos": "Wähle Bay unter Einstellungen › Apps › Standard-Apps › Browser-App, dann öffnen Links aus anderen Apps hier als neuer Tab.",
+  "settings.default.howAndroid": "Wähle Bay als Browser-App deines Telefons, dann öffnen Links aus anderen Apps hier als neuer Tab.",
+  "settings.default.make": "Bay als Standard festlegen",
+
+  "site.secure": "Verbindung ist sicher",
+  "site.notSecure": "Nicht sicher",
+  "site.secure.detail": "Seiten von hier kommen verschlüsselt, und die Website hat bewiesen, wer sie ist.",
+  "site.notSecure.detail": "Seiten von hier kommen unverschlüsselt: Gib kein Passwort und keine Kartennummer ein.",
+  "site.downloaded": "Hier geladen",
+  "site.blockingHere": "Blockieren hier",
+  "site.bayHere": "Hier",
+  "site.settings": "Bay-Einstellungen",
+  "site.zoom.reset": "Zurück zu Bays {size} %",
+};

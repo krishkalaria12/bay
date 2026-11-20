@@ -9,12 +9,18 @@ import {
   type EntryOrExitLayoutType,
 } from "react-native-reanimated";
 
+import { openSpring, settleSpring, springConfig } from "./layout.ts";
+
 /**
- * The one spring Bay's motion uses. Sheets, the switcher and the shared transitions all settle the same way, so the app
- * feels like one thing rather than a pile of screens. Springs are for what a finger moves (a drag, a card); timings are
- * for a tap.
+ * The spring Bay's motion settles with. Sheets, the switcher and the shared transitions all settle the same way, so the
+ * app feels like one thing rather than a pile of screens. It is Arc Search's, as Cra fitted it to the footage: 0.34 s and
+ * critically damped, so nothing overshoots where it was put. Springs are for what a finger moves (a drag, a card);
+ * timings are for a tap.
  */
-export const SPRING = { damping: 22, stiffness: 240, mass: 0.9 } as const;
+export const SPRING = springConfig(settleSpring);
+
+/** A card growing into its page, or the search sheet into its place: quicker, still without overshoot. */
+export const OPEN_SPRING = springConfig(openSpring);
 
 /** A tap: quick, and eased out. */
 export const TAP = { duration: 160, easing: Easing.out(Easing.cubic) } as const;

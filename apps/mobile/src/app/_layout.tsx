@@ -1,4 +1,6 @@
+import { NavigationBar } from "expo-navigation-bar";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { HeroUINativeProvider } from "heroui-native";
 import { type JSX } from "react";
@@ -15,6 +17,11 @@ import "../global.css";
 // goes wrong on the way to the first screen is lost.
 installCrashReports();
 
+// The launch screen stays until the tabs are in (src/app/index.tsx), then goes in a blink.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+SplashScreen.setOptions({ duration: 150, fade: true });
+
 // The saved browsing state and language are read before the first screen draws, so the app opens on them. The splash
 // stays up until the store says it is ready. A development build then checks once that Effect behaves under Hermes as
 // it does in the tests; what it finds lands under Report a problem.
@@ -30,6 +37,7 @@ export default function RootLayout(): JSX.Element | null {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>
         <StatusBar style="auto" />
+        <NavigationBar style="auto" />
         <Stack screenOptions={{ headerShown: false }} />
       </HeroUINativeProvider>
     </GestureHandlerRootView>

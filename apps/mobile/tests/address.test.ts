@@ -30,3 +30,11 @@ test("ignores empty input", () => {
 test("falls back to the first engine for an unknown id", () => {
   assert.equal(engineFor("missing").id, "google");
 });
+
+test("the custom engine is named by its site and asks for no suggestions", () => {
+  const engine = engineFor("custom", "https://search.example/find?q=%s");
+  assert.equal(engine.name, "search.example");
+  assert.equal(engine.suggestUrl, undefined);
+  assert.equal(resolveAddress("bay browser", engine), "https://search.example/find?q=bay%20browser");
+  assert.equal(engineFor("custom", null).id, "google");
+});

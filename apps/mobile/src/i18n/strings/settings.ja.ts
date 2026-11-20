@@ -1,0 +1,58 @@
+import type { SettingsStrings } from "./settings.ts";
+
+export const settingsJa: SettingsStrings = {
+  "settings.search.placeholder": "検索",
+  "settings.search.clear": "検索をクリア",
+  "settings.search.empty": "設定が見つかりません",
+
+  "settings.page.general": "一般",
+  "settings.page.search": "検索",
+  "settings.page.tabs": "タブ",
+  "settings.page.passwords": "パスワード",
+  "settings.page.customEngine": "カスタム検索エンジン",
+
+  "settings.blurb.general": "Bay の起動のしかた、開くリンク、ページの行き来のしかたです。",
+  "settings.blurb.search": "検索フィールドが使う検索エンジンと、入力中に問い合わせる内容です。",
+  "settings.blurb.appearance": "Bay のライトまたはダークの見た目、背景のスタートページ、ページの大きさです。",
+  "settings.blurb.tabs": "使っていないタブをアーカイブに移すタイミングと、Bay が新しく始めるタイミングです。",
+  "settings.blurb.privacy": "広告とトラッカー、プライベートタブ、Bay がこの電話に保存するものです。",
+  "settings.blurb.passwords": "Bay がこの電話にだけ保存したサインイン情報です。",
+  "settings.blurb.youtube": "Brave のリストで、静かな YouTube にします。",
+  "settings.blurb.about": "電話と Mac のための、無料でオープンソースのブラウザです。",
+  "settings.blurb.defaultBrowser": "ほかのアプリのリンクが開くブラウザです。",
+
+  "settings.keywords.general": "ブラウザ デフォルト 既定 リンク アプリ 言語 スワイプ ジェスチャ 戻る 進む 引っ張る 更新 キーボード 起動 ようこそ",
+  "settings.keywords.search": "検索エンジン google duckduckgo bing カスタム 候補 アドレス フィールド",
+  "settings.keywords.appearance": "テーマ ライト ダーク モード 壁紙 背景 写真 ズーム 文字 サイズ 見た目",
+  "settings.keywords.tabs": "アーカイブ 非アクティブ 古い スタートページ 書き出す 共有",
+  "settings.keywords.privacy": "広告 トラッカー ブロッカー ブロック コンテンツ amp プライベート ロック 顔 指紋 パスコード 消去 データ cookie",
+  "settings.keywords.passwords": "ログイン サインイン パスワード パスキー 保存 アカウント",
+  "settings.keywords.youtube": "ショート コメント おすすめ 動画",
+  "settings.keywords.about": "バージョン ライセンス ソースコード クレジット プライバシー",
+  "settings.keywords.bookmarks": "ブックマーク お気に入り 保存",
+  "settings.keywords.history": "履歴 閲覧 ページ 最近",
+  "settings.keywords.downloads": "ダウンロード ファイル 保存",
+  "settings.keywords.import": "chrome safari firefox brave arc 書き出し ファイル 移行",
+  "settings.keywords.report": "バグ クラッシュ エラー 問題 ヘルプ フィードバック",
+
+  "settings.search.engineNote": "アドレスを入力するとページを開き、言葉を入力すると {engine} で検索します。",
+  "settings.showWelcome.note": "名前から検索フィールドまで、Bay の最初のページをもう一度表示します。タブはそのままです。",
+  "settings.passwords.none": "保存されたパスワードはありません",
+
+  "settings.default.yes": "Bay",
+  "settings.default.no": "まだです",
+  "settings.default.isDefault": "ほかのアプリのリンクは Bay の新しいタブで開きます。",
+  "settings.default.howIos": "設定 › アプリ › デフォルトのApp › ブラウザApp で Bay を選ぶと、ほかのアプリのリンクがここの新しいタブで開きます。",
+  "settings.default.howAndroid": "電話のブラウザアプリに Bay を選ぶと、ほかのアプリのリンクがここの新しいタブで開きます。",
+  "settings.default.make": "Bay をデフォルトにする",
+
+  "site.secure": "接続は安全です",
+  "site.notSecure": "安全ではありません",
+  "site.secure.detail": "このサイトのページは暗号化されて届き、サイトは身元を証明しました。",
+  "site.notSecure.detail": "このサイトのページは暗号化されずに届きます。パスワードやカード番号を入力しないでください。",
+  "site.downloaded": "ここからのダウンロード",
+  "site.blockingHere": "このサイトでのブロック",
+  "site.bayHere": "このサイト",
+  "site.settings": "Bay の設定",
+  "site.zoom.reset": "Bay の {size}% に戻す",
+};

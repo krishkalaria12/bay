@@ -15,9 +15,11 @@ import type {
   JsonValue,
   PinnedSite,
   SimplePreferences,
+  SiteBlockGroup,
   SiteSetting,
   SpaceColor,
   TabUpdate,
+  TipId,
   WallpaperId,
 } from "./types";
 
@@ -44,13 +46,24 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
   welcomed: false,
+  searchOnLaunch: true,
+  customSearchUrl: null,
+  tipsSeen: [],
+  swipeToNavigate: "anywhere",
+  appLinks: "app",
 };
+
+/** The first-run tips, in the order they may show. */
+export const TIP_IDS: readonly TipId[] = ["blocking", "bar"];
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
 export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
 
 /** What a site with no entry of its own keeps: every global choice. */
-export const EMPTY_SITE_SETTING: SiteSetting = { textSize: null, reader: false, desktopMode: false };
+export const EMPTY_SITE_SETTING: SiteSetting = { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null };
+
+/** The kinds of blocking a site turns off on its own (C3), in Site Settings' order. */
+export const SITE_BLOCK_GROUPS: readonly SiteBlockGroup[] = ["ads", "trackers", "cookies"];
 
 /** A site's stored setting, or the default when it has none. */
 export function siteSettingFor(siteSettings: Record<string, SiteSetting>, url: string): SiteSetting {
@@ -164,11 +177,16 @@ export type BrowserAction =
   | { type: "remove-archived"; id: string }
   | { type: "clear-archive" }
   | { type: "wallpaper"; id: WallpaperId; photo?: string }
-  | { type: "search-engine"; id: string }
+  /** Choosing the custom engine (C17) carries its address; one that isn't https with `%s` is refused. */
+  | { type: "search-engine"; id: string; customUrl?: string }
   | { type: "archive-days"; days: number | null }
   | { type: "archive-stale"; now: number }
   | { type: "block-content"; enabled: boolean }
   | { type: "pause-blocking"; host: string; paused: boolean }
+  /** A first-run tip was shown and put away (U7). */
+  | { type: "tip-seen"; id: TipId }
+  /** "Show the welcome again": the welcome and every tip come back. */
+  | { type: "welcome-again" }
   | { type: "lock-private-tabs"; enabled: boolean }
   | { type: "preferences"; update: Partial<SimplePreferences> }
   | { type: "left"; now: number }
@@ -531,14 +549,34 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return { ...data, favicons: Object.fromEntries([...Object.entries(rest), [action.host, action.uri]].slice(-FAVICON_LIMIT)) };
     }
 
-    case "search-engine":
-      return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
+    case "search-engine": {
+      if (!action.id) return data;
+
+      if (action.customUrl !== undefined) {
+        const customUrl = action.customUrl.trim();
+
+        if (!isCustomSearchUrl(customUrl)) return data;
+
+        return { ...data, preferences: { ...data.preferences, searchEngineId: action.id, customSearchUrl: customUrl } };
+      }
+
+      return action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
+    }
+
     case "archive-days":
       return [null, 0.5, 1, 7, 30].includes(action.days) && action.days !== data.preferences.archiveAfterDays
         ? { ...data, preferences: { ...data.preferences, archiveAfterDays: action.days } }
         : data;
     case "block-content":
       return action.enabled === data.preferences.blockContent ? data : { ...data, preferences: { ...data.preferences, blockContent: action.enabled } };
+    case "tip-seen":
+      return data.preferences.tipsSeen.includes(action.id)
+        ? data
+        : { ...data, preferences: { ...data.preferences, tipsSeen: [...data.preferences.tipsSeen, action.id] } };
+
+    case "welcome-again":
+      return { ...data, preferences: { ...data.preferences, welcomed: false, tipsSeen: [] } };
+
     case "pause-blocking": {
       const host = action.host.toLowerCase().replace(/^www\./, "");
 
@@ -753,15 +791,24 @@ export function parseSiteSetting(value: JsonValue): SiteSetting {
         : null,
     reader: setting.reader === true,
     desktopMode: setting.desktopMode === true,
+    blockOff: SITE_BLOCK_GROUPS.filter((group) => Array.isArray(setting.blockOff) && setting.blockOff.includes(group)),
+    swipe: v.is(v.picklist(SWIPE_MODES), setting.swipe) ? setting.swipe : null,
   };
 }
 
 function isDefaultSiteSetting(setting: SiteSetting): boolean {
-  return setting.textSize === null && !setting.reader && !setting.desktopMode;
+  return setting.textSize === null && !setting.reader && !setting.desktopMode && !setting.blockOff.length && setting.swipe === null;
 }
 
 function sameSiteSetting(previous: SiteSetting | null, setting: SiteSetting): boolean {
-  return previous !== null && previous.textSize === setting.textSize && previous.reader === setting.reader && previous.desktopMode === setting.desktopMode;
+  return (
+    previous !== null &&
+    previous.textSize === setting.textSize &&
+    previous.reader === setting.reader &&
+    previous.desktopMode === setting.desktopMode &&
+    previous.blockOff.join(" ") === setting.blockOff.join(" ") &&
+    previous.swipe === setting.swipe
+  );
 }
 
 function parseSiteSettings(value: JsonValue): Record<string, SiteSetting> {
@@ -1027,6 +1074,28 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
 
 const THEME_CHOICES = ["system", "light", "dark"] as const;
 
+/** Swipe to navigate's choices (C5), in the order Settings lists them. */
+export const SWIPE_MODES = ["anywhere", "edges", "off"] as const;
+
+function parseTipsSeen(value: JsonValue | undefined): TipId[] {
+  if (!Array.isArray(value)) return [...TIP_IDS];
+
+  return TIP_IDS.filter((id) => value.includes(id));
+}
+
+/** A custom search engine's address: https, a host, and `%s` where the words go (C17). */
+export function isCustomSearchUrl(value: string): boolean {
+  if (!value.includes("%s")) return false;
+
+  try {
+    const url = new URL(value.replaceAll("%s", "q"));
+
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 /** Saved preferences with anything unknown or out of range replaced by its default. */
 export function parsePreferences(savedPreferences: JsonObject): BrowserPreferences {
   return {
@@ -1069,6 +1138,13 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
     },
     // Saved before the welcome existed: whoever saved it has used Bay already.
     welcomed: savedPreferences.welcomed !== false,
+    searchOnLaunch: savedPreferences.searchOnLaunch !== false,
+    customSearchUrl:
+      v.is(v.string(), savedPreferences.customSearchUrl) && isCustomSearchUrl(savedPreferences.customSearchUrl) ? savedPreferences.customSearchUrl : null,
+    // Saved before the tips existed: whoever saved it knows Bay already, so they show to people new to it.
+    tipsSeen: parseTipsSeen(savedPreferences.tipsSeen),
+    swipeToNavigate: v.is(v.picklist(SWIPE_MODES), savedPreferences.swipeToNavigate) ? savedPreferences.swipeToNavigate : DEFAULT_PREFERENCES.swipeToNavigate,
+    appLinks: savedPreferences.appLinks === "browser" ? "browser" : "app",
   };
 }
 

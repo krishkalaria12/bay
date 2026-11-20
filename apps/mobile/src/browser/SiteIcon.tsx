@@ -32,7 +32,7 @@ export function SiteIcon({
   const tile = useColorScheme() === "dark" ? "#2C2C2E" : "#FFFFFF";
   const radius = size * 0.28;
 
-  // The cache was cleared or the file isn't an image: show the monogram, and fetch it again next visit.
+  // The file is gone or isn't an image: show the monogram until Bay fetches the icon again (`favicons.ts`).
   const forget = (broke: string) => {
     setBroken(broke);
     useBrowserStore.getState().dispatch({ type: "favicon", host, uri: null });

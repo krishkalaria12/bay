@@ -122,3 +122,26 @@ export function inputFont(variant: TextVariant = "body", weight?: TextWeight): T
 
   return font;
 }
+
+/**
+ * The colours settings rows put their icons on (U6), one per kind of setting.
+ * Mid-tone, so the white icon reads on them in light and dark mode.
+ */
+export const rowTint = {
+  blocking: "#2F9E6E",
+  search: "#3478F6",
+  privacy: "#5E5CE6",
+  appearance: "#D9488F",
+  language: "#1E9AAE",
+  browsing: "#8E8E93",
+  import: "#34A853",
+  bookmarks: "#F29A1F",
+  history: "#8B5CF6",
+  downloads: "#3478F6",
+  export: "#1E9AAE",
+  delete: "#E5484D",
+  help: "#F08C2E",
+  about: "#8E8E93",
+  site: "#5E5CE6",
+  display: "#D9488F",
+} as const;

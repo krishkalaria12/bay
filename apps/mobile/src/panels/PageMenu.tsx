@@ -4,12 +4,17 @@ import { View } from "react-native";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { pageMenu, zoomStep } from "@/chrome/layout";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { iconSize, radius, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
+import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet, SheetIconButton } from "./PanelSheet";
+
+/** Ad and tracker blocking on this page: on, paused for the site, off for this visit only (restored), or off in Settings. */
+export type PageBlocking = "on" | "paused" | "restored" | "off";
 
 export interface PageMenuProps {
   visible: boolean;
@@ -21,12 +26,21 @@ export interface PageMenuProps {
   isLoading: boolean;
   isPinned: boolean;
   isBookmarked: boolean;
-  /** Ad and tracker blocking on this site; "off" when it's turned off in Settings. */
-  blocking: "on" | "paused" | "off";
+  blocking: PageBlocking;
+  /** What the blocker stopped on this page, when the engine counts it (C2); null where it can't. */
+  blockedCount: number | null;
   onToggleBlocking: () => void;
+  /** Shows this page without blocking until the tab leaves the site (C2). */
+  onRestore: () => void;
   /** Elements the user hid on this site. */
   hiddenCount: number;
   onShowHidden: () => void;
+  /** The page's zoom in percent: this site's own, else Bay's. */
+  zoom: number;
+  onZoom: (zoom: number) => void;
+  /** The site answers with its desktop page (B12). */
+  desktop: boolean;
+  onDesktop: (desktop: boolean) => void;
   onNewTab: () => void;
   onNewPrivateTab: () => void;
   onBack: () => void;
@@ -76,15 +90,15 @@ function NavigationAction({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="h-12 flex-1 items-center justify-center rounded-full bg-default"
-      style={{ opacity: disabled ? 0.35 : 1 }}
+      className="flex-1 items-center justify-center rounded-full"
+      style={{ height: pageMenu.capsuleHeight, opacity: disabled ? 0.35 : 1 }}
     >
       <Icon name={icon} color={foreground} size={iconSize.control} />
     </PressFeedback>
   );
 }
 
-/** An icon over a short label, four to a row. */
+/** A square with an icon and its label under it, four to a row (U3). */
 function Tile({
   id,
   icon,
@@ -111,35 +125,33 @@ function Tile({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`items-center justify-center ${active ? "bg-accent/15" : "bg-default"}`}
-      style={{ width: TILE_WIDTH, height: 76, gap: 6, borderRadius: radius.tile }}
+      className="flex-1 items-center"
+      style={{ gap: space.sm }}
     >
-      <Icon name={icon} color={active ? accent : foreground} size={iconSize.control} />
-      <Text variant="caption" tone={active ? "accent" : "default"} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
+      <View
+        className={`w-full items-center justify-center ${active ? "bg-accent/15" : "bg-default"}`}
+        style={{ height: pageMenu.tileHeight - 24, borderRadius: pageMenu.tileCornerRadius }}
+      >
+        <Icon name={icon} color={active ? accent : foreground} size={iconSize.control + 2} />
+      </View>
+      <Text variant="caption" tone={active ? "accent" : "default"} numberOfLines={1}>
         {label}
       </Text>
     </PressFeedback>
   );
 }
 
-/** Four tiles to a row, with the same gap between them as between the rows. */
-const TILE_GAP = space.sm;
-const TILE_WIDTH = `${(100 - 3 * 2.2) / 4}%` as const;
-
-function TileGrid({ children }: { children: JSX.Element | (JSX.Element | null)[] }): JSX.Element {
-  return (
-    <View className="flex-row flex-wrap" style={{ marginTop: TILE_GAP, columnGap: "2.2%", rowGap: TILE_GAP }}>
-      {children}
-    </View>
-  );
-}
-
 export function PageMenu(props: PageMenuProps): JSX.Element {
   const t = useT();
-  // Rarely used page tools sit one step away, so the menu fits without scrolling.
+  const foreground = useThemeColor("foreground");
+  // Rarely used page tools sit one step away, and the display options open in place, so the menu fits.
   const [tools, setTools] = useState(false);
+  const [display, setDisplay] = useState(false);
+
   useEffect(() => {
-    if (props.visible) setTools(false);
+    if (!props.visible) return;
+    setTools(false);
+    setDisplay(false);
   }, [props.visible]);
 
   function act(action: () => void): () => void {
@@ -157,29 +169,51 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         onBack={() => setTools(false)}
         title={t("pageMenu.toolsTitle")}
         testID="page-menu"
-        height="70%"
+        height="80%"
       >
-        <Group>
-          <ActionRow
-            testID="page-hide-elements"
-            icon="hide"
-            label={t("pageMenu.hideElements")}
-            detail={t("pageMenu.hideElements.detail")}
-            onPress={act(props.onHideElements)}
-          />
-          <ActionRow testID="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
-          <ActionRow testID="page-inspect" icon="inspect" label={t("pageMenu.inspect")} detail={t("pageMenu.inspect.detail")} onPress={act(props.onInspect)} />
-          <ActionRow
-            testID="page-markdown"
-            icon="markdown"
-            label={t("pageMenu.markdown")}
-            detail={t("pageMenu.markdown.detail")}
-            onPress={act(props.onCopyMarkdown)}
-          />
-        </Group>
+        <View style={{ gap: space.lg }}>
+          <Group>
+            <ActionRow
+              testID="page-pin"
+              icon={props.isPinned ? "unpin" : "pin"}
+              label={props.isPinned ? t("pageMenu.unpin") : t("pageMenu.pinToStart")}
+              onPress={act(props.onPin)}
+            />
+            <ActionRow testID="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
+            <ActionRow testID="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} />
+            <ActionRow
+              testID="page-hide-elements"
+              icon="hide"
+              label={t("pageMenu.hideElements")}
+              detail={t("pageMenu.hideElements.detail")}
+              onPress={act(props.onHideElements)}
+            />
+            <ActionRow
+              testID="page-inspect"
+              icon="inspect"
+              label={t("pageMenu.inspect")}
+              detail={t("pageMenu.inspect.detail")}
+              onPress={act(props.onInspect)}
+            />
+            <ActionRow
+              testID="page-markdown"
+              icon="markdown"
+              label={t("pageMenu.markdown")}
+              detail={t("pageMenu.markdown.detail")}
+              onPress={act(props.onCopyMarkdown)}
+            />
+          </Group>
+          <Group>
+            <ActionRow testID="page-history" icon="history" label={t("pageMenu.history")} chevron onPress={act(props.onHistory)} />
+            <ActionRow testID="page-downloads" icon="download" label={t("pageMenu.downloads")} chevron onPress={act(props.onDownloads)} />
+            <ActionRow testID="page-close-tab" icon="archive" label={t("pageMenu.archiveTab")} onPress={act(props.onCloseTab)} />
+          </Group>
+        </View>
       </PanelSheet>
     );
   }
+
+  const zoomed = props.zoom !== 100;
 
   return (
     <PanelSheet
@@ -187,34 +221,12 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       onClose={props.onClose}
       title={t("pageMenu.title")}
       testID="page-menu"
-      height="66%"
+      height="88%"
       header={<SiteHeader title={props.title} url={props.url} blocking={props.blocking} />}
-      // Settings sits beside the close button, so the twelve page actions fill the grid's three rows.
       accessory={<SheetIconButton testID="page-settings" icon="settings" label={t("pageMenu.settings")} onPress={act(props.onSettings)} tone="default" />}
     >
-      {props.blocking !== "off" || props.hiddenCount ? (
-        <Group>
-          {props.blocking !== "off" ? (
-            <ActionRow
-              testID="page-blocking"
-              icon="shield"
-              label={t("pageMenu.blocking")}
-              detail={props.blocking === "paused" ? t("pageMenu.blocking.paused") : t("pageMenu.blocking.on")}
-              toggle={props.blocking === "on"}
-              onPress={props.onToggleBlocking}
-            />
-          ) : null}
-          {props.hiddenCount ? (
-            <ActionRow
-              testID="page-show-hidden"
-              icon="visibility"
-              label={props.hiddenCount === 1 ? t("pageMenu.hiddenOne") : t("pageMenu.hiddenMany", { count: props.hiddenCount })}
-              onPress={act(props.onShowHidden)}
-            />
-          ) : null}
-        </Group>
-      ) : null}
-      <View className="flex-row" style={{ marginTop: space.md, gap: TILE_GAP }}>
+      {/* The address capsule's controls: where to go, and a fresh tab. */}
+      <View className="flex-row bg-default" style={{ marginTop: space.xs, borderRadius: pageMenu.capsuleHeight / 2, paddingHorizontal: space.xs }}>
         <NavigationAction id="page-back" icon="back" label={t("pageMenu.back")} disabled={!props.canGoBack} onPress={act(props.onBack)} />
         <NavigationAction id="page-forward" icon="forward" label={t("pageMenu.forward")} disabled={!props.canGoForward} onPress={act(props.onForward)} />
         <NavigationAction
@@ -223,11 +235,10 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           label={props.isLoading ? t("pageMenu.stop") : t("pageMenu.reload")}
           onPress={act(props.isLoading ? props.onStop : props.onReload)}
         />
-        <NavigationAction id="page-share" icon="share" label={t("pageMenu.share")} onPress={act(props.onShare)} />
+        <NavigationAction id="page-new-tab" icon="add" label={t("pageMenu.newTab")} onPress={act(props.onNewTab)} />
       </View>
-      <TileGrid>
-        <Tile id="page-new-tab" icon="add" label={t("pageMenu.newTab")} onPress={act(props.onNewTab)} />
-        <Tile id="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} />
+
+      <View className="flex-row" style={{ marginTop: pageMenu.tilesGap, gap: pageMenu.tileSpacing - space.xs }}>
         <Tile id="page-find" icon="find" label={t("pageMenu.find")} onPress={act(props.onFind)} />
         <Tile
           id="page-reader"
@@ -238,14 +249,6 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           onPress={act(props.onReader)}
         />
         <Tile
-          id="page-pin"
-          icon={props.isPinned ? "unpin" : "pin"}
-          label={props.isPinned ? t("pageMenu.unpin") : t("pageMenu.pin")}
-          active={props.isPinned}
-          onPress={act(props.onPin)}
-        />
-        <Tile id="page-translate" icon="translate" label={t("pageMenu.translate")} onPress={act(props.onTranslate)} />
-        <Tile
           id="page-bookmark"
           icon={props.isBookmarked ? "bookmarked" : "bookmark"}
           // The filled icon and the highlight say it's bookmarked; "Bookmarked" doesn't fit a tile in every language.
@@ -254,18 +257,150 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           active={props.isBookmarked}
           onPress={act(props.onBookmark)}
         />
-        <Tile id="page-more-tools" icon="more" label={t("pageMenu.tools")} onPress={() => setTools(true)} />
-        <Tile id="page-site-settings" icon="tune" label={t("pageMenu.thisSite")} onPress={act(props.onSiteSettings)} />
-        <Tile id="page-history" icon="history" label={t("pageMenu.history")} onPress={act(props.onHistory)} />
-        <Tile id="page-downloads" icon="download" label={t("pageMenu.downloads")} onPress={act(props.onDownloads)} />
-        <Tile id="page-close-tab" icon="archive" label={t("pageMenu.archive")} onPress={act(props.onCloseTab)} />
-      </TileGrid>
+        <Tile id="page-share" icon="share" label={t("pageMenu.share")} onPress={act(props.onShare)} />
+      </View>
+
+      <View style={{ marginTop: space.lg }}>
+        <Group>
+          <ActionRow
+            testID="page-display-options"
+            icon="textSize"
+            label={t("pageMenu.displayOptions")}
+            value={zoomed ? `${props.zoom}%` : undefined}
+            chevron={!display}
+            onPress={() => setDisplay((open) => !open)}
+          />
+          {display ? (
+            <>
+              <ActionRow testID="page-translate" icon="translate" label={t("pageMenu.translate")} onPress={act(props.onTranslate)} />
+              <ZoomRow zoom={props.zoom} onZoom={props.onZoom} />
+              <ActionRow
+                testID="page-desktop"
+                icon="desktop"
+                label={t("site.desktop")}
+                toggle={props.desktop}
+                onPress={() => props.onDesktop(!props.desktop)}
+              />
+            </>
+          ) : null}
+          <ActionRow testID="page-site-settings" icon="tune" label={t("pageMenu.siteSettings")} chevron onPress={act(props.onSiteSettings)} />
+          <ActionRow testID="page-more-tools" icon="more" label={t("pageMenu.tools")} chevron onPress={() => setTools(true)} />
+          {props.hiddenCount ? (
+            <ActionRow
+              testID="page-show-hidden"
+              icon="visibility"
+              label={props.hiddenCount === 1 ? t("pageMenu.hiddenOne") : t("pageMenu.hiddenMany", { count: props.hiddenCount })}
+              onPress={act(props.onShowHidden)}
+            />
+          ) : null}
+        </Group>
+      </View>
+
+      {props.blocking === "off" ? null : (
+        <BlockingCard
+          blocking={props.blocking}
+          blockedCount={props.blockedCount}
+          onToggle={props.onToggleBlocking}
+          onRestore={act(props.onRestore)}
+          foreground={foreground}
+        />
+      )}
     </PanelSheet>
   );
 }
 
+/** Page zoom, a tenth at a time, kept for this site (the stepper in Display Options). */
+function ZoomRow({ zoom, onZoom }: { zoom: number; onZoom: (zoom: number) => void }): JSX.Element {
+  const t = useT();
+  const foreground = useThemeColor("foreground");
+  const step = (up: boolean) => onZoom(zoomStep(zoom, up, TEXT_SIZE.min, TEXT_SIZE.max));
+
+  return (
+    <View className="flex-row items-center" style={{ minHeight: pageMenu.rowHeight + 4, paddingLeft: space.lg, paddingRight: space.sm, gap: 14 }}>
+      <Icon name="textSize" color={foreground} size={iconSize.control} />
+      <Text className="flex-1">{t("site.zoom")}</Text>
+      <Text testID="page-zoom-value" variant="subhead" tone="muted">{`${zoom}%`}</Text>
+      <View className="flex-row bg-default" style={{ borderRadius: radius.control }}>
+        <PressFeedback
+          testID="page-zoom-out"
+          accessibilityRole="button"
+          accessibilityLabel={t("site.zoom.out")}
+          disabled={zoom <= TEXT_SIZE.min}
+          onPress={() => step(false)}
+          className="h-9 w-11 items-center justify-center"
+          style={{ opacity: zoom <= TEXT_SIZE.min ? 0.35 : 1 }}
+        >
+          <Text weight="semibold">−</Text>
+        </PressFeedback>
+        <PressFeedback
+          testID="page-zoom-in"
+          accessibilityRole="button"
+          accessibilityLabel={t("site.zoom.in")}
+          disabled={zoom >= TEXT_SIZE.max}
+          onPress={() => step(true)}
+          className="h-9 w-11 items-center justify-center"
+          style={{ opacity: zoom >= TEXT_SIZE.max ? 0.35 : 1 }}
+        >
+          <Text weight="semibold">+</Text>
+        </PressFeedback>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * What blocking did on this page (C2): the count where the engine has one, the switch for this site, and a way to see
+ * the page as the site made it when blocking broke something.
+ */
+function BlockingCard({
+  blocking,
+  blockedCount,
+  onToggle,
+  onRestore,
+  foreground,
+}: {
+  blocking: Exclude<PageBlocking, "off">;
+  blockedCount: number | null;
+  onToggle: () => void;
+  onRestore: () => void;
+  foreground: string;
+}): JSX.Element {
+  const t = useT();
+  const counted = blocking === "on" && blockedCount !== null && blockedCount > 0;
+
+  return (
+    <View style={{ marginTop: space.lg }}>
+      <Group>
+        <ActionRow
+          testID="page-blocking"
+          icon="shield"
+          label={counted ? (blockedCount === 1 ? t("pageMenu.blockedOne") : t("pageMenu.blockedCount", { count: blockedCount })) : t("pageMenu.blocking")}
+          detail={blocking === "paused" ? t("pageMenu.blocking.paused") : blocking === "restored" ? t("pageMenu.blocking.restored") : t("pageMenu.blocking.on")}
+          toggle={blocking === "on"}
+          onPress={onToggle}
+        />
+        {blocking === "on" ? (
+          <PressFeedback
+            testID="page-restore"
+            accessibilityRole="button"
+            accessibilityLabel={t("pageMenu.restore")}
+            onPress={onRestore}
+            className="flex-row items-center"
+            style={{ minHeight: pageMenu.rowHeight - 4, paddingHorizontal: space.lg, gap: 14 }}
+          >
+            <Icon name="reload" color={foreground} size={iconSize.control} />
+            <Text variant="subhead" tone="muted" className="flex-1">
+              {t("pageMenu.restore")}
+            </Text>
+          </PressFeedback>
+        ) : null}
+      </Group>
+    </View>
+  );
+}
+
 /** The page's title and address, its site behind a lock (or a warning when it isn't encrypted), and what's blocked. */
-function SiteHeader({ title, url, blocking }: { title: string; url: string; blocking: PageMenuProps["blocking"] }): JSX.Element {
+function SiteHeader({ title, url, blocking }: { title: string; url: string; blocking: PageBlocking }): JSX.Element {
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
   const t = useT();
@@ -274,7 +409,7 @@ function SiteHeader({ title, url, blocking }: { title: string; url: string; bloc
 
   const status = [
     web ? (insecure ? t("pageMenu.notSecure") : t("pageMenu.secure")) : "",
-    blocking === "on" ? t("pageMenu.blocked") : blocking === "paused" ? t("pageMenu.blockingPaused") : "",
+    blocking === "on" ? t("pageMenu.blocked") : blocking === "off" ? "" : t("pageMenu.blockingPaused"),
   ]
     .filter(Boolean)
     .join(" · ");

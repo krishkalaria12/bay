@@ -73,21 +73,30 @@ public class BayEngineModule: Module {
       BayEngineTabStates.prune(keeping: keep)
     }
 
-    AsyncFunction("setContentBlocking") { (files: [String]?, version: String, promise: Promise) in
+    AsyncFunction("setContentBlocking") { (files: [String]?, version: String, groups: [String]?, promise: Promise) in
       let finish: (Result<Int, Error>) -> Void = { result in
         switch result {
         case .success(let rules): promise.resolve(rules)
         case .failure(let error): promise.reject(error)
         }
       }
-      // Read only when this version still has to be compiled.
-      let read: (() -> String?)? = files.map { files in
+      // Each group's lists (C3), read only when that group's version still has to be compiled. "shared" lists (the
+      // unbreak fixes) go with every group; lists without groups are one group, "all".
+      let read: ([String]) -> () -> String? = { files in
         { files.compactMap { URL(string: $0).flatMap { try? String(contentsOf: $0, encoding: .utf8) } }.joined(separator: "\n") }
+      }
+      let byGroup: [String: () -> String?]? = files.map { files in
+        guard let groups, groups.count == files.count else { return ["all": read(files)] }
+        let pairs = Array(zip(files, groups))
+        let shared = pairs.filter { $0.1 == "shared" }.map(\.0)
+        let names = Set(groups).subtracting(["shared"])
+        guard !names.isEmpty else { return ["all": read(files)] }
+        return Dictionary(uniqueKeysWithValues: names.map { name in (name, read(pairs.filter { $0.1 == name }.map(\.0) + shared)) })
       }
       let paths = files?.compactMap { URL(string: $0)?.path }
       DispatchQueue.main.async {
-        BayContentBlocker.shared.apply(lists: read, version: version, completion: finish)
-        BayContentBlocker.shared.loadScriptletEngine(paths: paths, version: version)
+        BayContentBlocker.shared.apply(groups: byGroup, version: version, completion: finish)
+        BayContentBlocker.shared.loadScriptletEngine(paths: paths, groups: groups, version: version)
       }
     }
 
@@ -95,12 +104,25 @@ public class BayEngineModule: Module {
       DispatchQueue.main.async { BayContentBlocker.shared.setPausedHosts(hosts) }
     }
 
+    Function("setSiteBlocking") { (json: String) in
+      DispatchQueue.main.async { BayContentBlocker.shared.setSiteGroups(json) }
+    }
+
     Function("setTrackingParameters") { (json: String) -> Bool in
       BayTracking.setParameters(json)
     }
 
     View(BayEngineView.self) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest", "onNewWindow")
+      Events(
+        "onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest",
+        "onNewWindow", "onSwipeNavigation", "onBlockedCount"
+      )
+      Prop("swipeToNavigate", "edges") { (view: BayEngineView, mode: String) in
+        view.swipeMode = mode
+      }
+      Prop("appLinks", "app") { (view: BayEngineView, mode: String) in
+        view.appLinks = mode
+      }
       Prop("pullToRefreshEnabled", true) { (view: BayEngineView, enabled: Bool) in
         view.pullToRefreshEnabled = enabled
       }

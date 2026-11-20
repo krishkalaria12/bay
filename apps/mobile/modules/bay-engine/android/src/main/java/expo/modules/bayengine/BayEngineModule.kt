@@ -92,23 +92,30 @@ class BayEngineModule : Module() {
 
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
-    AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
+    AsyncFunction("setContentBlocking") { files: List<String>?, version: String, groups: List<String>?, promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
         promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
         return@AsyncFunction
       }
-      BayEngineBackend.setContentBlocking(files, version, context) { result ->
+      BayEngineBackend.setContentBlocking(files, groups, version, context) { result ->
         result.fold({ promise.resolve(null) }, { promise.reject("E_CONTENT_BLOCKING", "Couldn't prepare the content blocker.", it) })
       }
     }.runOnQueue(Queues.MAIN)
 
     Function("setBlockingPausedHosts") { hosts: List<String> -> BayEngineBackend.setBlockingPausedHosts(hosts) }
 
+    Function("setSiteBlocking") { json: String -> BayEngineBackend.setSiteBlocking(json) }
+
     Function("setTrackingParameters") { json: String -> BayEngineBackend.setTrackingParameters(json) }
 
     View(BayEngineView::class) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest", "onNewWindow")
+      Events(
+        "onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest",
+        "onNewWindow", "onSwipeNavigation", "onBlockedCount",
+      )
+      Prop("swipeToNavigate") { view: BayEngineView, mode: String -> view.swipeMode = mode }
+      Prop("appLinks") { view: BayEngineView, mode: String -> view.appLinks = mode }
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }

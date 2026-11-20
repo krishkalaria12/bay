@@ -122,8 +122,6 @@ export const browser = {
   "toast.bookmarked": "Bookmarked",
   "toast.unbookmarked": "Bookmark removed",
   "toast.showBookmarks": "Show",
-  "toast.importOffer": "Bring your bookmarks from another browser",
-  "toast.importAction": "Import",
   "toast.linksAlreadyHere": "Those links are already here",
   "toast.openedTab": "Opened {count} tab",
   "toast.openedTabs": "Opened {count} tabs",
@@ -145,6 +143,13 @@ export const browser = {
   // Where a card sits in the tab switcher, read out with it (TabSwitcher.tsx).
   "tabs.position": "Tab {index} of {count}",
   "tabs.privatePosition": "Private tab {index} of {count}",
+  "toast.restoredBlocking": "Showing the page as the site made it. Did that fix it?",
+  "toast.keepBlockingOff": "Keep it off here",
+  "tip.gotIt": "Got it",
+  "tip.blocking.title": "Bay blocked ads and trackers here",
+  "tip.blocking.body": "See what's blocked, or turn it off for a site that breaks, in the ••• menu.",
+  "tip.bar.title": "Swipe the bar to switch tabs",
+  "tip.bar.body": "Sideways goes to the tab next to this one. Drag it up to see all your tabs.",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */

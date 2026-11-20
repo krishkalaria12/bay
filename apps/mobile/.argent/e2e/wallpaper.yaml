@@ -47,6 +47,9 @@ steps:
   - await: { text: { in: { id: settings-wallpaper-value }, equals: "Plain" }, timeout: 10000 }
 
   # The choice is kept: close Settings over the start page and open it again.
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
   - await: { visible: { id: start-screen }, timeout: 10000 }
@@ -64,5 +67,8 @@ steps:
   - await: { idle: true, timeout: 10000 }
   - tap: { id: settings-screen-back }
   - await: { text: { in: { id: settings-wallpaper-value }, equals: "Sea mist" }, timeout: 10000 }
+  # Settings closes from its index: ‹ first.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-screen-close }, timeout: 10000 }
   - tap: { id: settings-screen-close }
   - await: { hidden: { id: settings-screen-close }, timeout: 10000 }

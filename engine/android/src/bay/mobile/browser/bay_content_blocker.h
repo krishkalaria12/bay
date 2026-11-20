@@ -19,10 +19,12 @@ class BayContentBlocker {
   // Installs the filter callbacks. Once, at browser startup; they filter nothing until lists are set.
   static void Install();
 
-  // Blocks with these filter list files (paths), or stops blocking with an empty list. The compiled engine is cached
-  // at `cache_path` for `version` and loaded from there next time. On a background thread; `done` gets whether the
-  // lists loaded, on the calling sequence.
+  // Blocks with these filter list files (paths), or stops blocking with an empty list. `groups` names each file's
+  // group (C18: "ads", "trackers", "cookies", or "shared" for lists every group needs), or is empty when the lists
+  // come without groups. The compiled engine is cached at `cache_path` for `version` and loaded from there next time.
+  // On a background thread; `done` gets whether the lists loaded, on the calling sequence (the UI thread).
   static void SetLists(std::vector<std::string> files,
+                       std::vector<std::string> groups,
                        std::string version,
                        std::string cache_path,
                        std::string resources_path,
@@ -30,6 +32,12 @@ class BayContentBlocker {
 
   // Sites (hosts, matching their subdomains) where blocking is paused.
   static void SetPausedHosts(std::vector<std::string> hosts);
+
+  // The groups each site turns off (C18), as `{ "host": ["ads", ...] }` JSON; a host covers its subdomains. Pages on
+  // every other site keep the one engine of all the lists, so a list's exceptions still reach the others. The first
+  // time a site turns a group off, an engine per group loads (from its own cache) and that site gets only the groups
+  // it keeps; until it has, the site is filtered with every list. UI thread.
+  static void SetSiteGroups(const std::string& json);
 
   // The tracking-parameter table (@bay/core TRACKING_PARAMS as JSON) and the URL without them; "" when unchanged.
   static bool SetTrackingParameters(const std::string& json);

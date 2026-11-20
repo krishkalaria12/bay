@@ -57,8 +57,10 @@ export class Engine extends Context.Service<
     readonly pruneSnapshots: (keep: readonly string[]) => Effect.Effect<void, EngineError>;
     /** Deletes the saved page states whose tabs aren't in `keep`. */
     readonly pruneTabStates: (keep: readonly string[]) => Effect.Effect<void, EngineError>;
-    /** Blocks with filter list files, or stops blocking with null. */
-    readonly setContentBlocking: (files: readonly string[] | null, version: string) => Effect.Effect<void, EngineError>;
+    /** Blocks with filter list files, or stops blocking with null; `groups` names each file's group (C3). */
+    readonly setContentBlocking: (files: readonly string[] | null, version: string, groups?: readonly string[]) => Effect.Effect<void, EngineError>;
+    /** Says which groups each site turns off (C3). */
+    readonly setSiteBlocking: (groupsOff: Readonly<Record<string, readonly string[]>>) => Effect.Effect<void, EngineError>;
     /** Says where blocking is paused. */
     readonly setBlockingPausedHosts: (hosts: readonly string[]) => Effect.Effect<void, EngineError>;
     /** Gives the engine the table of tracking parameters to strip. */
@@ -157,7 +159,17 @@ export class Engine extends Context.Service<
         setPrivateSessionActive: (active) => call({ name: "engine.setPrivateSessionActive" }, (engine) => engine.setPrivateSessionActive(active)),
         pruneSnapshots: (keep) => call({ name: "engine.pruneSnapshots" }, (engine) => engine.pruneSnapshots(keep)),
         pruneTabStates: (keep) => call({ name: "engine.pruneTabStates" }, (engine) => engine.pruneTabStates(keep)),
-        setContentBlocking: (files, version) => call({ name: "engine.setContentBlocking" }, (engine) => engine.setContentBlocking(files, version)),
+        setContentBlocking: (files, version, groups) =>
+          call({ name: "engine.setContentBlocking" }, (engine) => engine.setContentBlocking(files, version, groups)),
+        setSiteBlocking: (groupsOff) =>
+          Effect.gen(function* () {
+            const engine = yield* engineModule;
+
+            yield* Effect.try({
+              try: () => engine.setSiteBlocking(groupsOff),
+              catch: (cause) => new EngineError({ operation: { name: "engine.setSiteBlocking" }, cause }),
+            });
+          }),
         setBlockingPausedHosts: (hosts) =>
           Effect.gen(function* () {
             const engine = yield* engineModule;

@@ -69,11 +69,13 @@ class ClearDataObserver : public content::BrowsingDataRemover::Observer {
 
 static void JNI_BayEngine_SetContentBlocking(JNIEnv* env,
                                              const JavaRef<jstring>& files_json,
+                                             const JavaRef<jstring>& groups_json,
                                              const JavaRef<jstring>& version,
                                              const JavaRef<jstring>& cache_path,
                                              const JavaRef<jstring>& resources_path,
                                              int32_t request_id) {
   BayContentBlocker::SetLists(StringList(ConvertJavaStringToUTF8(env, files_json)),
+                              StringList(ConvertJavaStringToUTF8(env, groups_json)),
                               ConvertJavaStringToUTF8(env, version), ConvertJavaStringToUTF8(env, cache_path),
                               resources_path.is_null() ? std::string() : ConvertJavaStringToUTF8(env, resources_path),
                               base::BindOnce(
@@ -86,6 +88,10 @@ static void JNI_BayEngine_SetContentBlocking(JNIEnv* env,
 
 static void JNI_BayEngine_SetBlockingPausedHosts(JNIEnv* env, const JavaRef<jstring>& hosts_json) {
   BayContentBlocker::SetPausedHosts(StringList(ConvertJavaStringToUTF8(env, hosts_json)));
+}
+
+static void JNI_BayEngine_SetSiteBlocking(JNIEnv* env, const JavaRef<jstring>& json) {
+  BayContentBlocker::SetSiteGroups(ConvertJavaStringToUTF8(env, json));
 }
 
 static bool JNI_BayEngine_SetTrackingParameters(JNIEnv* env, const JavaRef<jstring>& json) {

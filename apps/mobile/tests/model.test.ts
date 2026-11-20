@@ -8,6 +8,7 @@ import {
   persistedBrowserData,
   reduceBrowserData,
   siteHost,
+  siteSettingFor,
   SPACE_COLORS,
   type DownloadEvent,
 } from "../src/store/model.ts";
@@ -151,6 +152,11 @@ test("saved state is validated and repaired", () => {
     youtube: { shorts: false, suggestions: false, distractions: false },
     // Saved before the welcome existed, so its owner has seen Bay already.
     welcomed: true,
+    searchOnLaunch: true,
+    customSearchUrl: null,
+    tipsSeen: ["blocking", "bar"],
+    swipeToNavigate: "anywhere",
+    appLinks: "app",
   });
   assert.equal(data.spaces[0]?.id, "personal");
   assert.equal(data.activeSpaceId, "personal");
@@ -496,22 +502,41 @@ test("site settings are kept per host, and an all-default entry means none at al
   const siteOf = () => data.preferences.siteSettings["a.com"];
   assert.equal(siteOf(), undefined);
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "www.a.com", update: { textSize: null, reader: true, desktopMode: false } });
-  assert.deepEqual(siteOf(), { textSize: null, reader: true, desktopMode: false });
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "www.a.com",
+    update: { textSize: null, reader: true, desktopMode: false, blockOff: [], swipe: null },
+  });
+  assert.deepEqual(siteOf(), { textSize: null, reader: true, desktopMode: false, blockOff: [], swipe: null });
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 123, reader: true, desktopMode: false } });
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "a.com",
+    update: { textSize: 123, reader: true, desktopMode: false, blockOff: [], swipe: null },
+  });
   // Zoom snaps to the steps and the range the global zoom uses.
-  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: false });
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: false, blockOff: [], swipe: null });
 
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
-  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: true });
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "a.com",
+    update: { textSize: 120, reader: true, desktopMode: true, blockOff: [], swipe: null },
+  });
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: true, blockOff: [], swipe: null });
 
   // Everything back to the globals drops the entry, regardless of where it was written from.
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: null, reader: false, desktopMode: false } });
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "a.com",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null },
+  });
   assert.equal(siteOf(), undefined);
 
   // Unknown hosts or values change nothing.
-  assert.equal(reduceBrowserData(data, { type: "site-settings", host: "", update: { textSize: null, reader: true, desktopMode: false } }), data);
+  assert.equal(
+    reduceBrowserData(data, { type: "site-settings", host: "", update: { textSize: null, reader: true, desktopMode: false, blockOff: [], swipe: null } }),
+    data,
+  );
 
   const saved = {
     version: 1,
@@ -520,11 +545,15 @@ test("site settings are kept per host, and an all-default entry means none at al
   };
 
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.siteSettings, {
-    "a.com": { textSize: 200, reader: false, desktopMode: false },
+    "a.com": { textSize: 200, reader: false, desktopMode: false, blockOff: [], swipe: null },
   });
-  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "a.com",
+    update: { textSize: 120, reader: true, desktopMode: true, blockOff: [], swipe: null },
+  });
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...data })), data).preferences.siteSettings, {
-    "a.com": { textSize: 120, reader: true, desktopMode: true },
+    "a.com": { textSize: 120, reader: true, desktopMode: true, blockOff: [], swipe: null },
   });
 });
 
@@ -663,4 +692,94 @@ test("persisting drops private tabs but keeps the spaces they sat in", () => {
 
 test("spaces colours cover the palette and don't drift", () => {
   assert.deepEqual(SPACE_COLORS, ["blue", "green", "orange", "red", "violet", "gray"]);
+});
+
+test("Bay opens ready to type unless that is turned off, and an older document opens that way too", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  assert.equal(data.preferences.searchOnLaunch, true);
+  data = reduceBrowserData(data, { type: "preferences", update: { searchOnLaunch: false } });
+  assert.equal(data.preferences.searchOnLaunch, false);
+  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.searchOnLaunch, true);
+  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: false } }, data).preferences.searchOnLaunch, false);
+});
+
+test("a custom search engine needs https and a place for the words", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  const refused = reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: "http://search.example/?q=%s" });
+  assert.equal(refused, data);
+  assert.equal(reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: "https://search.example/" }), data);
+  data = reduceBrowserData(data, { type: "search-engine", id: "custom", customUrl: " https://search.example/?q=%s " });
+  assert.equal(data.preferences.searchEngineId, "custom");
+  assert.equal(data.preferences.customSearchUrl, "https://search.example/?q=%s");
+  // Another engine keeps the address for next time.
+  data = reduceBrowserData(data, { type: "search-engine", id: "google" });
+  assert.equal(data.preferences.customSearchUrl, "https://search.example/?q=%s");
+  const saved = parseBrowserData({ version: 1, preferences: { customSearchUrl: "javascript:%s" } }, data);
+  assert.equal(saved.preferences.customSearchUrl, null);
+});
+
+test("each tip shows once, and showing the welcome again brings them back", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "tip-seen", id: "bar" });
+  assert.deepEqual(data.preferences.tipsSeen, ["bar"]);
+  assert.equal(reduceBrowserData(data, { type: "tip-seen", id: "bar" }), data);
+  assert.deepEqual(parseBrowserData({ version: 1, preferences: { tipsSeen: ["bar", "nope", 3] } }, data).preferences.tipsSeen, ["bar"]);
+  // A document from before the tips: its owner knows Bay, so none show.
+  assert.deepEqual(parseBrowserData({ version: 1, preferences: {} }, data).preferences.tipsSeen, ["blocking", "bar"]);
+  data = reduceBrowserData({ ...data, preferences: { ...data.preferences, welcomed: true } }, { type: "welcome-again" });
+  assert.equal(data.preferences.welcomed, false);
+  assert.deepEqual(data.preferences.tipsSeen, []);
+});
+
+test("swipe to navigate and app links keep a known choice", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "preferences", update: { swipeToNavigate: "edges", appLinks: "browser" } });
+  assert.equal(data.preferences.swipeToNavigate, "edges");
+  assert.equal(data.preferences.appLinks, "browser");
+  const saved = parseBrowserData({ version: 1, preferences: { swipeToNavigate: "sideways", appLinks: 3 } }, data);
+  assert.equal(saved.preferences.swipeToNavigate, "anywhere");
+  assert.equal(saved.preferences.appLinks, "app");
+});
+
+test("a site can turn ads, trackers or cookie banners off on its own", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "news.example",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: ["cookies"], swipe: null },
+  });
+  assert.deepEqual(data.preferences.siteSettings["news.example"]?.blockOff, ["cookies"]);
+  const saved = parseBrowserData({ version: 1, preferences: { siteSettings: { "news.example": { blockOff: ["trackers", "nope", "ads"] } } } }, data);
+  assert.deepEqual(saved.preferences.siteSettings["news.example"]?.blockOff, ["ads", "trackers"]);
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "news.example",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null },
+  });
+  assert.equal(data.preferences.siteSettings["news.example"], undefined);
+});
+
+test("a site can keep its own swipe to navigate", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "maps.example",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: "off" },
+  });
+  assert.equal(siteSettingFor(data.preferences.siteSettings, "https://maps.example/place").swipe, "off");
+
+  const saved = parseBrowserData(
+    { version: 1, preferences: { siteSettings: { "maps.example": { swipe: "sideways" }, "b.example": { swipe: "edges" } } } },
+    data,
+  );
+
+  assert.equal(saved.preferences.siteSettings["maps.example"], undefined);
+  assert.equal(saved.preferences.siteSettings["b.example"]?.swipe, "edges");
+
+  data = reduceBrowserData(data, {
+    type: "site-settings",
+    host: "maps.example",
+    update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null },
+  });
+  assert.equal(data.preferences.siteSettings["maps.example"], undefined);
 });

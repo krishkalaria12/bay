@@ -95,6 +95,13 @@ export interface EngineViewProps extends ViewProps {
    * rendered shrunk to fit. A private engine still keeps its private store. Changing it reloads the page.
    */
   desktopMode?: boolean;
+  /** Swipe to navigate (C5): back and forward from "anywhere" on the page, from the "edges" only, or "off". */
+  swipeToNavigate?: SwipeToNavigate;
+  /**
+   * Open app links in (C12): "app" first offers a link tapped in the page to another site to the app that claims it
+   * (iOS universal links, Android verified app links from Android 11); "browser" keeps every link here.
+   */
+  appLinks?: "app" | "browser";
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
   /** Main-frame failures only. Native certificate validation is never bypassed. */
   onNavigationError?: (event: NativeSyntheticEvent<NavigationError>) => void;
@@ -108,7 +115,13 @@ export interface EngineViewProps extends ViewProps {
   onFullscreenChange?: (event: NativeSyntheticEvent<FullscreenChange>) => void;
   /** A new window (`target=_blank`, `window.open`) that becomes a real tab (B19); the opener is the tab that sent it. */
   onNewWindow?: (event: NativeSyntheticEvent<NewWindow>) => void;
+  /** A swipe back past the tab's first page, or forward past its last (C6). */
+  onSwipeNavigation?: (event: NativeSyntheticEvent<{ action: "pastFirstPage" | "pastLastPage" }>) => void;
+  /** How many requests the blocker stopped on the page now showing (C2, C18). */
+  onBlockedCount?: (event: NativeSyntheticEvent<{ count: number }>) => void;
 }
+
+export type SwipeToNavigate = "anywhere" | "edges" | "off";
 
 export interface NewWindow {
   url: string;
@@ -146,7 +159,8 @@ const nativeEngine = requireNativeModule<{
   setPrivateSessionActive(active: boolean): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
   pruneTabStates(keep: string[]): Promise<void>;
-  setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
+  setContentBlocking(listFiles: string[] | null, version: string, groups: string[] | null): Promise<number | null>;
+  setSiteBlocking(json: string): void;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   openDownload(reference: string): Promise<void>;
@@ -165,8 +179,14 @@ const nativeEngine = requireNativeModule<{
  * files off the main thread, so list text never passes through JavaScript. `version` names their contents: iOS
  * compiles WebKit rules once per version and reuses them on later launches. Applies to every page view.
  */
-export async function setContentBlocking(listFiles: readonly string[] | null, version: string): Promise<void> {
-  await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version);
+export async function setContentBlocking(listFiles: readonly string[] | null, version: string, groups?: readonly string[]): Promise<void> {
+  // Each list's group goes with it, so a site can turn one group off (C3, C18).
+  await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version, listFiles && groups ? [...groups] : null);
+}
+
+/** The groups each site turns off (C3, C18), by host (matching its subdomains). */
+export function setSiteBlocking(groupsOff: Readonly<Record<string, readonly string[]>>): void {
+  nativeEngine.setSiteBlocking(JSON.stringify(groupsOff));
 }
 
 /** Sites (hosts, matching their subdomains) where blocking is paused. */

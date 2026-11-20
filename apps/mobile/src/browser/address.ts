@@ -4,7 +4,20 @@ import { fixupUrl, hostOf } from "@bay/core/src/input.ts";
 // Deep imports keep the bundle off @bay/core's desktop-only modules (shared collections, the bang list).
 export const SEARCH_ENGINES: readonly SearchEngine[] = BUILT_IN_ENGINES;
 
-export function engineFor(id: string): SearchEngine {
+/** The id the custom engine is chosen by (C17). */
+export const CUSTOM_ENGINE_ID = "custom";
+
+/**
+ * The chosen search engine. The custom one is the address the user gave, named by its site; it asks for no
+ * suggestions, since Bay can't know where that site keeps them. Without an address it falls back to the default.
+ */
+export function engineFor(id: string, customUrl: string | null = null): SearchEngine {
+  if (id === CUSTOM_ENGINE_ID && customUrl) {
+    const host = hostOf(customUrl.replaceAll("%s", "q")) || customUrl;
+
+    return { id: CUSTOM_ENGINE_ID, name: host, keyword: host, url: customUrl, custom: true };
+  }
+
   return engineById(SEARCH_ENGINES, id);
 }
 

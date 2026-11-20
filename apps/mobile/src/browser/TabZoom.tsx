@@ -1,10 +1,10 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { Image, StyleSheet, useWindowDimensions } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { SETTLE, useReducedMotion } from "@/chrome/motion";
+import { OPEN_SPRING, useReducedMotion } from "@/chrome/motion";
 
 /** Where a rectangle sits on the screen. */
 export interface Frame {
@@ -39,9 +39,14 @@ export function TabZoom({ snapshot, from, onDone }: TabZoomProps): JSX.Element {
   handler.current = onDone;
 
   useEffect(() => {
-    progress.value = withTiming(1, { ...SETTLE, duration: reduced ? 0 : SETTLE.duration }, (finished) => {
+    // The card is its page within five frames, on Arc Search's spring; with reduced motion it is there at once.
+    const done = (finished?: boolean) => {
+      "worklet";
+
       if (finished) scheduleOnRN(finish);
-    });
+    };
+
+    progress.value = reduced ? withTiming(1, { duration: 0 }, done) : withSpring(1, { ...OPEN_SPRING, overshootClamping: true }, done);
   }, [finish, progress, reduced]);
 
   const style = useAnimatedStyle(() => {

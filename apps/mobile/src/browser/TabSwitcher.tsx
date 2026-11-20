@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
+import { tabCardCloses, tabCarousel } from "@/chrome/layout";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { iconSize, radius, space } from "@/chrome/tokens";
@@ -67,10 +68,6 @@ const CARD_LIFT = Platform.select({
 
 /** The row above each card: its site, title and close button. */
 const CARD_HEADER = 40;
-
-/** A card dragged up this far (share of its height), or flicked up this fast, closes. */
-const CLOSE_DISTANCE = 0.28;
-const CLOSE_VELOCITY = -900;
 
 interface Layout {
   width: number;
@@ -311,7 +308,8 @@ function TabCard({
     onDeactivate: (event) => {
       "worklet";
 
-      if (!event.canceled && (event.translationY < -cardHeight * CLOSE_DISTANCE || event.velocityY < CLOSE_VELOCITY)) {
+      // Thrown up 120 pt, or 30 pt quickly, as Arc Search's cards are (U5).
+      if (!event.canceled && tabCardCloses(event.translationY, event.velocityY)) {
         lift.value = withTiming(-cardHeight * 1.6, { duration: 200 }, () => scheduleOnRN(close));
       } else {
         lift.value = withTiming(0, { duration: 180 });
@@ -323,7 +321,8 @@ function TabCard({
     // 0 is the card in front, negative ones are behind it (left), positive ones still to come (right).
     const position = index - scrollX.value / step;
     const x = position >= 0 ? position * cardWidth * 1.04 : position * cardWidth * 0.3;
-    const scale = interpolate(position, [-3, 0], [0.84, 1], Extrapolation.CLAMP);
+    // The measured row (U5): cards behind shrink towards 0.9, the next ones grow a hair past the one in front.
+    const scale = position >= 0 ? Math.min(tabCarousel.maximumScale, 1 + 0.0096 * position) : Math.max(tabCarousel.minimumScale, 1 + 0.023 * position);
 
     // The card sits clear of the notch side and stays put on screen while the scroll view moves its content: add the
     // scroll back, then place it. It is laid out where it sits when it is in front and moved from there, because Android
@@ -340,8 +339,9 @@ function TabCard({
     opacity: interpolate(index - scrollX.value / step, [-0.6, 0], [0, 1], Extrapolation.CLAMP),
   }));
 
+  // Cards behind dim, a card's width at a time, down to 0.16.
   const shade = useAnimatedStyle(() => ({
-    opacity: interpolate(index - scrollX.value / step, [-3, 0], [0.45, 0], Extrapolation.CLAMP),
+    opacity: interpolate(index - scrollX.value / step, [-1, 0], [tabCarousel.maximumDim, 0], Extrapolation.CLAMP),
   }));
 
   return (

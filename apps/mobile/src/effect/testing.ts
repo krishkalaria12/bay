@@ -267,6 +267,8 @@ export type FakeEngine = {
   readonly blocking: readonly { readonly files: readonly string[] | null; readonly version: string }[];
   /** The hosts where blocking was paused. */
   readonly pausedHosts: readonly (readonly string[])[];
+  /** Each call's groups turned off per site (C3). */
+  readonly siteBlocking: readonly Record<string, readonly string[]>[];
   /** The downloads that were opened, by id. */
   readonly openedDownloads: readonly string[];
   /** The downloads that were cancelled. */
@@ -289,6 +291,7 @@ export const fakeEngine = (ledger: ResourceLedger = new ResourceLedger()): FakeE
   const prunedTabStates: string[][] = [];
   const blocking: { files: readonly string[] | null; version: string }[] = [];
   const pausedHosts: string[][] = [];
+  const siteBlocking: Record<string, readonly string[]>[] = [];
   const openedDownloads: string[] = [];
   const cancelledDownloads: string[] = [];
   const savedImages: string[] = [];
@@ -362,6 +365,10 @@ export const fakeEngine = (ledger: ResourceLedger = new ResourceLedger()): FakeE
         Effect.sync(() => {
           pausedHosts.push([...hosts]);
         }),
+      setSiteBlocking: (groupsOff) =>
+        Effect.sync(() => {
+          siteBlocking.push({ ...groupsOff });
+        }),
       setTrackingParameters: (_table: TrackingParameters) => Effect.void,
       openDownload: (download) =>
         Effect.sync(() => {
@@ -403,6 +410,7 @@ export const fakeEngine = (ledger: ResourceLedger = new ResourceLedger()): FakeE
     prunedTabStates,
     blocking,
     pausedHosts,
+    siteBlocking,
     openedDownloads,
     cancelledDownloads,
     savedImages,

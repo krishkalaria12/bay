@@ -1,0 +1,11 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'in.krishkalaria.bay.welcome'
+version = '0.1.0'
+
+android {
+  namespace 'in.krishkalaria.bay.baywelcome'
+}
