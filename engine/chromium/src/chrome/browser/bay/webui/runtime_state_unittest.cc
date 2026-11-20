@@ -359,6 +359,28 @@ TEST(RuntimeStateTest, PrivateWindowOnlyReceivesOwnPrivateDataAndDownloads) {
   EXPECT_EQ(projected->FindDict("privateSiteMutes")->size(), 1u);
   EXPECT_TRUE(projected->FindDict("windows")->contains("normal"));
 }
+TEST(RuntimeStateTest, SkippedSelfProjectedFieldsLeaveTheRestAsTheyWere) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private-one", true);
+  state.FindDict("history")->Set(
+      "default", base::ListValue().Append(
+                     base::DictValue().Set("url", "https://one.example/")));
+  for (const char* window : {"normal", "private-one"}) {
+    auto whole = ProjectRuntimeState(state, window);
+    auto skipped = ProjectRuntimeState(state, window, false,
+                                       {"history", "bookmarks"});
+    ASSERT_TRUE(whole && skipped);
+    EXPECT_TRUE(skipped->FindDict("history")->empty());
+    EXPECT_TRUE(skipped->FindDict("bookmarks")->empty());
+    EXPECT_FALSE(whole->FindDict("history")->empty());
+    for (const char* key : kSelfProjectedFields) {
+      whole->Remove(key);
+      skipped->Remove(key);
+    }
+    EXPECT_EQ(*whole, *skipped);
+  }
+}
 TEST(RuntimeStateTest, KeepsUnprofiledPublicDownloadAndRejectsPrivateAlias) {
   auto state = State();
   AddWindow(state, "normal", false);

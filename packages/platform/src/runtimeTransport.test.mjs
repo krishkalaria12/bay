@@ -383,3 +383,166 @@ test("the native Connect version-one payload is accepted without changing Native
   assert.equal(connection.bootstrap.version, 1);
   connection.dispose();
 });
+
+const deepFreeze = (value) => {
+  if (value && Object(value) === value) Object.values(value).forEach(deepFreeze);
+
+  return Object.freeze(value);
+};
+
+const nested = (levels) => {
+  let node = { leaf: true };
+
+  for (let i = 0; i < levels; i++) node = { node };
+
+  return deepFreeze(node);
+};
+
+test("a published commit is checked again wherever it isn't deeply frozen", async () => {
+  const native = endpoints("coordinator"),
+    connection = await createAppRuntimeTransport(native);
+
+  // A frozen subtree is checked once, then shared by later commits.
+  const shared = deepFreeze({ a: { b: [1, "two", null, false] } });
+  const mutable = { title: "ok" };
+  await connection.publish({ ...snapshot(0), state: { tabs: { shared, mutable } } });
+  await connection.publish({ ...snapshot(1), state: { tabs: { shared, mutable } } });
+  assert.deepEqual(native.calls.at(-1)[1].state.tabs.shared, shared);
+
+  mutable.title = undefined;
+  await assert.rejects(connection.publish({ ...snapshot(2), state: { tabs: { shared, mutable } } }), { code: "invalid_runtime_message" });
+
+  for (const bad of [Number.NaN, Infinity, () => {}, new Date(0), Symbol("s"), 1n]) {
+    const again = endpoints("coordinator"),
+      fresh = await createAppRuntimeTransport(again);
+
+    await fresh.publish({ ...snapshot(0), state: { tabs: { shared } } });
+    await assert.rejects(fresh.publish({ ...snapshot(1), state: { tabs: { shared, bad: deepFreeze({ value: bad }) } } }), { code: "invalid_runtime_message" });
+  }
+});
+
+test("a checked subtree still counts toward the depth limit wherever it is placed", async () => {
+  const deep = nested(100);
+
+  const first = endpoints("coordinator"),
+    shallow = await createAppRuntimeTransport(first);
+
+  await shallow.publish({ ...snapshot(0), state: { tabs: { deep } } });
+
+  const second = endpoints("coordinator"),
+    deeper = await createAppRuntimeTransport(second);
+
+  let wrapped = deep;
+
+  // The same checked subtree, thirty levels further down: past the 128 levels a message may have.
+  for (let i = 0; i < 30; i++) wrapped = { wrapped };
+  await assert.rejects(deeper.publish({ ...snapshot(0), state: { tabs: { deep, wrapped } } }), { code: "invalid_runtime_message" });
+
+  const third = endpoints("coordinator"),
+    cycle = await createAppRuntimeTransport(third);
+
+  const loop = { tabs: {} };
+  loop.tabs.self = loop;
+  await assert.rejects(cycle.publish({ ...snapshot(0), state: loop }), { code: "invalid_runtime_message" });
+});
+
+test("messages are limited by their UTF-8 size, not their length", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native);
+
+  const ascii = { ...request(1), command: { method: "activate", tabId: "a".repeat(600_000) } };
+  assert.equal((await connection.dispatch(ascii)).commit.revision, 1);
+
+  // Under a million characters, but two bytes each: over the one-megabyte request limit.
+  const wide = { ...request(2), command: { method: "activate", tabId: "é".repeat(600_000) } };
+  await assert.rejects(connection.dispatch(wide), { code: "invalid_runtime_message" });
+});
+
+test("an incoming commit is frozen all the way down", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native),
+    received = [];
+
+  connection.subscribeCommits((commit) => received.push(commit));
+  native.emit("commit", JSON.stringify({ ...snapshot(3), state: { tabs: { a: { list: [{ x: 1 }] } } } }));
+  const commit = received.at(-1);
+  assert.equal(commit.revision, 3);
+
+  for (const node of [commit, commit.state, commit.state.tabs, commit.state.tabs.a, commit.state.tabs.a.list, commit.state.tabs.a.list[0]])
+    assert.ok(Object.isFrozen(node));
+});
+
+test("a reply's commit may name only its revision, but nothing else", async () => {
+  const reply = (commit) =>
+    endpoints("window", {
+      dispatch: async (json) => {
+        const input = JSON.parse(json);
+
+        return envelope({ clientId: input.clientId, requestId: input.requestId, commit, value: null });
+      },
+    });
+
+  const stamped = await createAppRuntimeTransport(reply({ epoch: "epoch-1", revision: 4 }));
+  assert.deepEqual((await stamped.dispatch(request())).commit, { epoch: "epoch-1", revision: 4 });
+
+  for (const commit of [
+    { epoch: "epoch-1" },
+    { epoch: "epoch-1", revision: 4, extra: 1 },
+    { epoch: "epoch-1", revision: -1 },
+    { epoch: "other", revision: 4 },
+  ]) {
+    const connection = await createAppRuntimeTransport(reply(commit));
+    await assert.rejects(connection.dispatch(request()));
+  }
+});
+
+test("an engine that takes deltas gets only the fields that changed since its last accepted commit", async () => {
+  const native = endpoints("coordinator");
+  native.bootstrap.partialCommits = true;
+  const connection = await createAppRuntimeTransport(native);
+  const published = () => native.calls.filter(([name]) => name === "publish").map(([, commit]) => commit);
+  const tabs = deepFreeze({ a: { title: "one" } });
+  const history = deepFreeze({ default: [{ url: "https://one.example/" }] });
+
+  await connection.publish({ ...snapshot(0), state: { tabs, history } });
+  const next = deepFreeze({ a: { title: "two" } });
+  await connection.publish({ ...snapshot(1), state: { tabs: next, history } });
+  // Not the next revision, or a field gone: the whole state again.
+  await connection.publish({ ...snapshot(3), state: { tabs: next, history } });
+  await connection.publish({ ...snapshot(4), state: { tabs: next } });
+
+  assert.deepEqual(published(), [
+    { ...snapshot(0), state: { tabs, history } },
+    { ...snapshot(1), state: { tabs: next }, partial: true },
+    { ...snapshot(3), state: { tabs: next, history } },
+    { ...snapshot(4), state: { tabs: next } },
+  ]);
+});
+
+test("without the engine's say-so a coordinator publishes whole commits, and the capability is checked", async () => {
+  const native = endpoints("coordinator"),
+    connection = await createAppRuntimeTransport(native);
+
+  const tabs = deepFreeze({});
+  await connection.publish({ ...snapshot(0), state: { tabs } });
+  await connection.publish({ ...snapshot(1), state: { tabs, other: deepFreeze({}) } });
+  assert.ok(native.calls.filter(([name]) => name === "publish").every(([, commit]) => !("partial" in commit)));
+
+  const odd = endpoints("coordinator");
+  odd.bootstrap.partialCommits = "yes";
+  await assert.rejects(createAppRuntimeTransport(odd), { code: "invalid_runtime_message" });
+});
+
+test("a window takes a delta commit, but only one marked as such", async () => {
+  const native = endpoints(),
+    connection = await createAppRuntimeTransport(native),
+    received = [],
+    reasons = [];
+
+  connection.subscribeCommits((commit) => received.push(commit));
+  connection.subscribeClose((error) => reasons.push(error.code));
+  native.emit("commit", JSON.stringify({ ...snapshot(2), state: { tabs: {} }, partial: true }));
+  assert.equal(received.at(-1).partial, true);
+  native.emit("commit", JSON.stringify({ ...snapshot(3), state: { tabs: {} }, partial: false }));
+  assert.deepEqual(reasons, ["invalid_runtime_message"]);
+});

@@ -67,6 +67,7 @@ export async function createBrowserCoordinator({
 }) {
   const identity = transport.bootstrap;
   let authority: ReturnType<typeof createBrowserAuthority>;
+  let publications = Promise.resolve();
 
   try {
     if (
@@ -81,7 +82,17 @@ export async function createBrowserCoordinator({
       throw new Error("A browser-assigned coordinator connection is required");
 
     if (identity.recoveryState !== undefined) recover(store, identity.epoch, identity.recoveryState);
-    authority = createBrowserAuthority({ epoch: identity.epoch, store, effects, executeAsync });
+    authority = createBrowserAuthority({
+      epoch: identity.epoch,
+      store,
+      effects,
+      executeAsync,
+      // Page facts and services change the state many times a second while pages load. Each change waits for the
+      // commit before it to be accepted, so the changes made meanwhile go out as one commit, not one each.
+      schedulePublish: (flush) => {
+        void publications.then(flush, () => {});
+      },
+    });
   } catch (error) {
     transport.dispose();
     throw error;
@@ -91,7 +102,6 @@ export async function createBrowserCoordinator({
   let failure: Error | null = null;
   let disposed = false;
   let publishedRevision = -1;
-  let publications = Promise.resolve();
   let ready: Promise<void> | null = null;
   let unsubscribeAuthority = () => {};
   let unsubscribeCommands = () => {};
@@ -303,6 +313,7 @@ export async function createBrowserCoordinator({
       },
       async flushPublications() {
         active();
+        authority.flush();
         await Promise.all([...pageOpens.values()].map((request) => request.promise));
         await publications;
         active();
@@ -310,6 +321,7 @@ export async function createBrowserCoordinator({
       async announceReady() {
         active();
         ready ??= (async () => {
+          authority.flush();
           await Promise.all([...pageOpens.values()].map((request) => request.promise));
           await publications;
           active();

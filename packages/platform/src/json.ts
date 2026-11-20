@@ -28,3 +28,15 @@ export const isBoolean = (value: JsonInput): value is boolean => v.is(v.boolean(
 
 /** Whether a value is a plain object: JSON's own object shape, not an array. */
 export const isJsonObject = (value: JsonInput): value is JsonObject => v.is(v.object({}), value) && !Array.isArray(value);
+
+/** What a JSON value is: a "leaf" (null, a boolean, a finite number, a string), a "node" (an array or a plain object),
+ *  or null when JSON can't hold it. It tells them apart without valibot, whose every failed check builds an issue: a
+ *  runtime commit visits hundreds of thousands of values. */
+export function jsonKind(value: JsonInput): "leaf" | "node" | null {
+  if (value === null || value === true || value === false || Number.isFinite(value)) return "leaf";
+
+  // A primitive: only a string is left that JSON can hold.
+  if (Object(value) !== value) return String(value) === value ? "leaf" : null;
+
+  return Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype ? "node" : null;
+}

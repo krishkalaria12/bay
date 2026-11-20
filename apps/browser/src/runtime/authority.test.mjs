@@ -417,3 +417,40 @@ test("service actions record undo for the authenticated origin, not the focused 
   assert.deepEqual(seen, [origin, undefined]);
   authority.close();
 });
+
+test("with a publish scheduler, changes outside commands wait for one commit and a command takes them along", async () => {
+  const store = createBrowserStore();
+  const flushes = [];
+  const authority = createBrowserAuthority({ epoch: "epoch-1", store, schedulePublish: (flush) => flushes.push(flush) });
+  const commits = [];
+  authority.subscribe((commit) => commits.push(commit));
+  const opened = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const [tab] = viewTabIds(opened.commit.state, opened.value);
+  assert.deepEqual(
+    commits.map((c) => c.revision),
+    [1],
+  );
+
+  for (const progress of [0.1, 0.5, 0.9]) store.getState().updateLive(tab, { progress });
+  assert.equal(flushes.length, 1);
+  assert.equal(commits.length, 1);
+  flushes[0]();
+  assert.deepEqual(
+    commits.map((c) => c.revision),
+    [1, 2],
+  );
+  assert.equal(commits[1].state.live[tab].progress, 0.9);
+
+  // Waiting changes go out with the next command's commit; their scheduled flush then has nothing left.
+  store.getState().updateLive(tab, { progress: 1 });
+  await authority.dispatch(request(2, { method: "newTab", windowId: opened.value, options: { url: "https://two.example/" } }));
+  assert.equal(commits.at(-1).state.live[tab].progress, 1);
+  const revisions = commits.length;
+  flushes.at(-1)();
+  assert.equal(commits.length, revisions);
+
+  // A snapshot never misses a waiting change.
+  store.getState().updateLive(tab, { progress: 0.2 });
+  assert.equal(authority.getSnapshot().state.live[tab].progress, 0.2);
+  authority.close();
+});

@@ -15,6 +15,7 @@
     "./nativeBridge": "./nativeBridge.ts",
     "./webViewHost": "./webViewHost.ts",
     "./runtimeTransport": "./src/runtimeTransport.ts",
+    "./json": "./src/json.ts",
     "./profiling": "./src/profiling.ts"
   },
   "scripts": {

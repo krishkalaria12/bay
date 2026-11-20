@@ -67,9 +67,9 @@ The engine's spans run in the browser process (`app_runtime.cc`, `native_host.cc
 | `Bay.runtime decodeCommand` | The coordinator parsing it |
 | `Bay.reduce <method>` | The reducer (`runtime/authority.ts`) |
 | `Bay.authority project` / `notify` | Projecting the new state, and handing the commit on |
-| `Bay.runtime encodeCommit` / `awaitPublish` | The coordinator serialising the full state, then the browser accepting it |
-| `Bay.Runtime.Publish` [engine] | Parsing (`ParseCommit`) and checking (`ValidateCommit`) the state, then projecting and writing it for each window (`SendCommit`, `Snapshot`, `WriteJson`). `CommitSent` gives each window's bytes |
-| `Bay.Runtime.Resolve` [engine] | The coordinator's reply, and the window's projection sent with it |
+| `Bay.runtime encodeCommit` / `awaitPublish` | The coordinator serialising the commit, then the browser accepting it. `partial` marks a delta: only the top-level fields that changed since the last accepted commit, which an engine that says `partialCommits` takes |
+| `Bay.Runtime.Publish` [engine] | Parsing (`ParseCommit`) and checking (`ValidateCommit`) the state (a delta's fields are swapped into the accepted state first), then projecting and writing it for each window (`SendCommit`, `Snapshot`, `WriteJson`). A window that was sent the revision before gets a delta too: history and bookmarks only when they changed, other fields only when their JSON did. `CommitSent` gives each window's bytes |
+| `Bay.Runtime.Resolve` [engine] | The coordinator's reply, passed to the window with its commit's revision (the window has the commit itself from `Publish`) |
 | `Bay.coordinator <method>` | A command's whole stay in the coordinator, waits included |
 | `Bay.runtime decodeCommit` / `deliverCommit` | A window parsing a commit, then handing it on |
 | `Bay.client decodeCommit` / `decodeReply` / `applyCommit` | Validating it, then the window's store taking it and its subscribers running |

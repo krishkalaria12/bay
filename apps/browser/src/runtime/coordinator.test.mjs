@@ -562,3 +562,42 @@ test("failed handoff publication leaves the native offer unacknowledged for reco
   assert.equal(pageOpenListeners.size, listeners);
   await assert.rejects(runtime.flushPublications(), /handoff publication refused/);
 });
+
+test("changes made while a commit is in flight go out together as the next commit", async () => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport({ manualPublish: true });
+
+  const starting = createBrowserCoordinator({ store, transport: native.transport });
+  await tick();
+  native.publicationAcks.shift().resolve();
+  const runtime = await starting;
+  native.command("token-1", { method: "createWindow", options: { url: "https://first.example/" } }, 1);
+  await tick();
+  assert.deepEqual(
+    native.published.map((commit) => commit.revision),
+    [0, 1],
+  );
+  const window = store.getState().windowOrder[0];
+  const [tab] = viewTabIds(store.getState(), window);
+
+  // Revision 1 isn't accepted yet: these wait for it, then leave as one commit.
+  for (const progress of [0.25, 0.5, 0.75]) store.getState().updateLive(tab, { progress });
+  await tick();
+  assert.equal(native.published.length, 2);
+  native.publicationAcks.shift().resolve();
+  await tick();
+  assert.deepEqual(
+    native.published.map((commit) => commit.revision),
+    [0, 1, 2],
+  );
+  assert.equal(native.published[2].state.live[tab].progress, 0.75);
+  native.publicationAcks.shift().resolve();
+
+  // Once idle, a change goes out at once.
+  store.getState().updateLive(tab, { progress: 1 });
+  await tick();
+  assert.equal(native.published.at(-1).revision, 3);
+  native.publicationAcks.shift().resolve();
+  await runtime.flushPublications();
+  runtime.dispose();
+});

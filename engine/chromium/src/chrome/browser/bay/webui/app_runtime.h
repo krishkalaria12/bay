@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -117,6 +118,13 @@ class AppRuntime final : public ProfileManagerObserver,
              mojom::AppRuntime::DispatchCallback callback);
   void Timeout(const std::string& token);
   std::optional<base::DictValue> Snapshot(RuntimeConnection& connection) const;
+  // Whether Snapshot would answer for this connection.
+  bool CanProject(RuntimeConnection& connection) const;
+  // The accepted commit as this window's JSON: a delta of the fields that
+  // changed when it was sent the revision before, else the whole projection.
+  // `changed` names the fields the coordinator's delta changed (null: all).
+  std::optional<std::string> CommitFor(RuntimeConnection& connection,
+                                       const std::set<std::string>* changed);
   void OnProfileManagerDestroying() override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;

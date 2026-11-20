@@ -83,18 +83,14 @@ async function start() {
     throw new Error("Bay's UI must run in chrome://bay. The local preview is available only on localhost.");
   }
 
-  // The desktop hosts draw the UI in the Inter Bay ships, as macOS draws it in SF Pro.
-  if (getNativeHostInfo().platform !== "macos") {
-    const fontStart = performance.now();
-    await loadBundledFont();
-    span("Bay.startup font", fontStart);
-  }
+  const shell = getNativeHostInfo().constants.BayShell;
 
-  const initializationError = getNativeHostInfo().constants.BayShell?.initializationError;
+  // The desktop hosts draw the UI in the Inter Bay ships, as macOS draws it in SF Pro. The coordinator draws nothing,
+  // and a window loads the font while its runtime connects.
+  const fontLoaded = getNativeHostInfo().platform !== "macos" && !(native && shell?.runtimeRole === "coordinator") ? loadBundledFont() : Promise.resolve();
+  const initializationError = shell?.initializationError;
 
   if (v.is(v.string(), initializationError) && initializationError) throw new Error(initializationError);
-
-  const shell = getNativeHostInfo().constants.BayShell;
 
   // chrome://bay always runs the shared runtime: one coordinator document owns the state and each window projects it.
   if (native) {
@@ -138,6 +134,7 @@ async function start() {
     >({ ...endpoints, expectedRole: role, ...(role === "window" ? { expectedWindowId: checked<string>(windowId) } : undefined) });
 
     span("Bay.startup runtimeTransport", runtimeStart, { role });
+    await fontLoaded;
     const entryStart = performance.now();
     const { startSharedRuntime } = await import("./src/runtime/startup");
 
@@ -159,6 +156,7 @@ async function start() {
   }
 
   // The localhost preview has no coordinator, so it runs the single-document entry macOS uses.
+  await fontLoaded;
   await import("./src/main");
   const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browserStore")]);
   const hostId = shell?.windowId;
@@ -185,6 +183,7 @@ function followProfiling() {
  *  SF Pro, as "Bay UI": first in react-native-web's system stack (patches/react-native-web) and the body's font. It is
  *  local, so waiting for it before the first render costs milliseconds and avoids a flash of the fallback face. */
 async function loadBundledFont() {
+  const fontStart = performance.now();
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = "/fonts/bay-ui.css";
@@ -196,6 +195,7 @@ async function loadBundledFont() {
   document.head.append(link);
   await loaded;
   await Promise.race([document.fonts.load('13px "Bay UI"'), new Promise((resolve) => setTimeout(resolve, 1000))]).catch(() => undefined);
+  span("Bay.startup font", fontStart);
 }
 
 function showStartupError(error: Error) {

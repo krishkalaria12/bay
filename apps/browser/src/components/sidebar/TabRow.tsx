@@ -12,13 +12,14 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
 import { useIsActiveTab, usePageSpaceId, useSettings, useTab, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { HoverSlot } from "../ui/HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../ui/primitives";
 import { clickTab, commitRename, endRename, startRename, tabTitle } from "./actions";
 import { useDragItem } from "./dnd";
-import { dismissHover, useRowHover } from "./hover";
+import { dismissHover, useHovered, useRowHover, useRowHoverFlag, type HoverFlag } from "./hover";
 import { openTabMenu } from "./contextMenus";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { useSidebarUi } from "./state";
@@ -69,11 +70,51 @@ function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
 }
 
 export function TabRow({ tabId }: { tabId: string }) {
+  const windowId = useWindowId();
+  const tab = useTab(tabId);
+  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
+  const { hover, hoverProps } = useRowHoverFlag(windowId, renaming ? null : { kind: "tab", id: tabId });
+
+  if (!tab) return null;
+  const title = tabTitle(tab);
+
+  // The row's wrappers (keyboard focus, menus, press handling) render with the tab alone: its looks, which hovering,
+  // pressing and becoming the active tab change, are TabRowBody's.
+  return (
+    <SidebarKeyboardRowView
+      rowId={`t:${tabId}`}
+      legacyId={tabId}
+      label={title}
+      {...hoverProps}
+      onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
+    >
+      <MouseArea onMiddleClick={() => void closeTab(tabId)}>
+        <ContextMenuArea
+          onContextMenu={() => {
+            dismissHover();
+            void openTabMenu(windowId, tab);
+          }}
+        >
+          <Pressable
+            onPress={(e) => {
+              dismissHover();
+              clickTab(windowId, tabId, clickMods(e));
+            }}
+          >
+            {({ pressed }) => <TabRowBody tab={tab} renaming={renaming} hover={hover} pressed={pressed} />}
+          </Pressable>
+        </ContextMenuArea>
+      </MouseArea>
+    </SidebarKeyboardRowView>
+  );
+}
+
+function TabRowBody({ tab, renaming, hover, pressed }: { tab: DeepReadonly<Tab>; renaming: boolean; hover: HoverFlag; pressed: boolean }) {
   const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
-  const tab = useTab(tabId);
+  const tabId = tab.id;
   const row = useMemo(() => tabRowStore(windowId, tabId), [windowId, tabId]);
   const flags = useStore(row);
   const active = !!(flags & ACTIVE);
@@ -81,17 +122,14 @@ export function TabRow({ tabId }: { tabId: string }) {
   const playingAudio = !!(flags & PLAYING);
   const loading = !!(flags & LOADING);
   // The shown tab of a site in Developer Mode: outlined, as its bar is hatched.
-  const developer = useSettings((settings) => active && isDeveloperUrl({ settings }, tab?.url ?? ""));
-  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
-  const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
-
-  if (!tab) return null;
+  const developer = useSettings((settings) => active && isDeveloperUrl({ settings }, tab.url));
+  const hovered = useHovered(hover);
   const title = tabTitle(tab);
   // The active row's fill is its ActiveHighlight's, under it.
   const fill = active ? "rgba(0,0,0,0)" : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
   const border = selected && !active ? 0.5 : 0;
-  // What hovering and pressing don't change is made here, outside the press render function (which makes everything
-  // in it anew): hovering a row renders its fill and its slot again, not its icon, badges, label and highlight.
+  // What hovering and pressing don't change is memoized apart from them: hovering a row renders its fill and its slot
+  // again, not its icon, badges, label and highlight.
   const highlight = <ActiveHighlight active={active} tabIds={[tabId]} borderWidth={0.5} />;
 
   const icon = (
@@ -140,50 +178,24 @@ export function TabRow({ tabId }: { tabId: string }) {
   ) : null;
 
   return (
-    <SidebarKeyboardRowView
-      rowId={`t:${tabId}`}
-      legacyId={tabId}
-      label={title}
-      {...hoverProps}
-      onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
-    >
-      <MouseArea onMiddleClick={() => void closeTab(tabId)}>
-        <ContextMenuArea
-          onContextMenu={() => {
-            dismissHover();
-            void openTabMenu(windowId, tab);
-          }}
-        >
-          <Pressable
-            onPress={(e) => {
-              dismissHover();
-              clickTab(windowId, tabId, clickMods(e));
-            }}
-          >
-            {({ pressed }) => (
-              <View>
-                {highlight}
-                <Surface
-                  fill={hex(!active && pressed ? theme.tabPressed : fill)}
-                  cornerRadius={10}
-                  borderWidth={border}
-                  borderColor={border ? hex(tokens.multiSelectedStroke) : undefined}
-                  style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
-                >
-                  {icon}
-                  {mute}
-                  {label}
-                  <HoverSlot hovered={hovered && !renaming} width={22} hover={closeControl}>
-                    {spinner}
-                  </HoverSlot>
-                </Surface>
-                {outline}
-              </View>
-            )}
-          </Pressable>
-        </ContextMenuArea>
-      </MouseArea>
-    </SidebarKeyboardRowView>
+    <View>
+      {highlight}
+      <Surface
+        fill={hex(!active && pressed ? theme.tabPressed : fill)}
+        cornerRadius={10}
+        borderWidth={border}
+        borderColor={border ? hex(tokens.multiSelectedStroke) : undefined}
+        style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
+      >
+        {icon}
+        {mute}
+        {label}
+        <HoverSlot hovered={hovered && !renaming} width={22} hover={closeControl}>
+          {spinner}
+        </HoverSlot>
+      </Surface>
+      {outline}
+    </View>
   );
 }
 
