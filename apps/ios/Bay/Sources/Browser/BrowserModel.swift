@@ -687,6 +687,12 @@ final class BrowserModel: ObservableObject {
     app.dispatch(.deleteFolder(id: id))
   }
 
+  /// Puts a pinned folder before the folder `beside`, or after it when `after`.
+  func moveFolder(_ id: String, beside: String, after: Bool) {
+    Haptics.tick()
+    app.dispatch(.moveFolder(id: id, beside: beside, after: after))
+  }
+
   /// Makes a pin an Essential or a pinned row, in `folderId` or loose, and beside the pin `beside` when it was dropped
   /// on one (after it when `after`).
   func movePin(_ site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = nil, after: Bool = false) {

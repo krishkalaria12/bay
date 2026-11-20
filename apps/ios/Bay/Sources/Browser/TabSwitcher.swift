@@ -62,6 +62,10 @@ struct TabSwitcher: View {
   @State private var pinLift: CGFloat = 0
   @State private var pinTarget: String?
   @State private var pinFrames: [String: CGRect] = [:]
+  /// The folder being dragged among the others, how far it has come, and the folder it would land beside.
+  @State private var draggingFolder: String?
+  @State private var folderLift: CGFloat = 0
+  @State private var folderTarget: String?
 
   private static let columns = 2
   private static let essentialColumns = 3
@@ -326,13 +330,16 @@ struct TabSwitcher: View {
     }
   }
 
+  /// A folder being dragged shows closed, so only its row moves.
   private func isOpen(_ id: String, _ inside: [PinnedSite], _ activeUrl: String?) -> Bool {
-    folderToggles[id] ?? inside.contains { $0.url == activeUrl }
+    draggingFolder != id && (folderToggles[id] ?? inside.contains { $0.url == activeUrl })
   }
 
   /// A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do.
   private func folderRow(_ folder: BrowserFolder, count: Int, open: Bool) -> some View {
-    HStack(spacing: Space.md) {
+    let lifted = draggingFolder == folder.id
+    let index = app.folders.firstIndex { $0.id == folder.id } ?? 0
+    return HStack(spacing: Space.md) {
       BayIconView(.folder, size: IconSize.small)
       BayText(folder.name, variant: .callout).lineLimit(1)
       Spacer(minLength: 0)
@@ -341,16 +348,20 @@ struct TabSwitcher: View {
     }
     .padding(.horizontal, Space.sm)
     .frame(minHeight: 40)
-    .background(dropWash(pinTarget == "folder:\(folder.id)"))
+    .background(dropWash(pinTarget == "folder:\(folder.id)" || folderTarget == folder.id))
+    // Solid while it's carried, so the row it passes over doesn't show through.
+    .background(lifted ? BayColor.surface : .clear, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+    .scaleEffect(lifted ? 1.03 : 1)
+    .shadow(color: .black.opacity(lifted ? 0.2 : 0), radius: 10, y: 5)
     .contentShape(Rectangle())
     .onTapGesture {
+      guard draggingFolder == nil else { return }
       withAnimation(.easeOut(duration: Motion.tap)) { folderToggles[folder.id] = !open }
     }
-    .onLongPressGesture(minimumDuration: 0.4) {
-      Haptics.tick()
-      folderActions = folder
-    }
     .background(frame("folder:\(folder.id)"))
+    .offset(y: lifted ? folderLift : 0)
+    .zIndex(lifted ? 1 : 0)
+    .gesture(folderHold(folder))
     .accessibilityElement(children: .ignore)
     .accessibilityAddTraits(.isButton)
     .accessibilityLabel(Text(verbatim: folder.name))
@@ -358,7 +369,52 @@ struct TabSwitcher: View {
     .accessibilityAction(.default) { folderToggles[folder.id] = !open }
     .accessibilityAction(named: Text(verbatim: strings.t("tabs.renameFolder"))) { naming = .rename(folder.id) }
     .accessibilityAction(named: Text(verbatim: strings.t("tabs.deleteFolder"))) { browser.deleteFolder(folder.id) }
+    .modifier(FolderOrderActions(folders: app.folders, index: index, browser: browser))
     .accessibilityIdentifier("tab-folder-\(folder.id)")
+  }
+
+  /// Holding a folder: moved, it lifts and follows the finger and lands before or after the folder it's let go on;
+  /// let go where it was, Rename and Delete are offered.
+  private func folderHold(_ folder: BrowserFolder) -> some Gesture {
+    LongPressGesture(minimumDuration: 0.4)
+      .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("pinned")))
+      .onChanged { value in
+        guard case .second(true, let drag) = value else { return }
+        guard let drag else {
+          Haptics.press()
+          return
+        }
+        if draggingFolder == nil, abs(drag.translation.height) > 8 {
+          draggingFolder = folder.id
+          Haptics.tick()
+        }
+        guard draggingFolder == folder.id else { return }
+        folderLift = drag.translation.height
+        let over = pinFrames.first { key, frame in
+          key.hasPrefix("folder:") && key != "folder:\(folder.id)" && frame.minY <= drag.location.y && drag.location.y < frame.maxY
+        }.map { String($0.key.dropFirst("folder:".count)) }
+        if over != folderTarget {
+          folderTarget = over
+          if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
+        }
+      }
+      .onEnded { value in
+        guard case .second(true, _) = value else { return }
+        guard draggingFolder == folder.id else {
+          folderActions = folder
+          return
+        }
+        if let target = folderTarget {
+          let from = app.folders.firstIndex { $0.id == folder.id } ?? 0
+          let to = app.folders.firstIndex { $0.id == target } ?? 0
+          browser.moveFolder(folder.id, beside: target, after: from < to)
+        }
+        withAnimation(Motion.settle.animation) {
+          folderLift = 0
+          draggingFolder = nil
+          folderTarget = nil
+        }
+      }
   }
 
   private func pinRow(_ row: PinnedSite, indent: Bool, visible: [String]) -> some View {
@@ -374,7 +430,7 @@ struct TabSwitcher: View {
     .padding(.trailing, Space.sm)
     .frame(minHeight: 40)
     .background(
-      pinTarget == "pin:\(row.id)" ? BayColor.accent.opacity(0.25) : lifted || active ? BayColor.fill : .clear,
+      pinTarget == "pin:\(row.id)" ? BayColor.accent.opacity(0.25) : lifted ? BayColor.surface : active ? BayColor.fill : .clear,
       in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
     )
     .scaleEffect(lifted ? 1.03 : 1)
@@ -484,6 +540,27 @@ struct TabSwitcher: View {
   private func unpin(_ site: PinnedSite) {
     Haptics.tick()
     browser.unpin(site)
+  }
+}
+
+/// VoiceOver can't drag a folder, so each one offers moving up or down past its neighbour.
+private struct FolderOrderActions: ViewModifier {
+  @EnvironmentObject private var strings: Strings
+  let folders: [BrowserFolder]
+  let index: Int
+  @ObservedObject var browser: BrowserModel
+
+  func body(content: Content) -> some View {
+    let id = folders[index].id
+    let up = index > 0 ? folders[index - 1].id : nil
+    let down = index < folders.count - 1 ? folders[index + 1].id : nil
+    return content
+      .accessibilityAction(named: Text(verbatim: strings.t("tabs.folderUp"))) {
+        if let up { browser.moveFolder(id, beside: up, after: false) }
+      }
+      .accessibilityAction(named: Text(verbatim: strings.t("tabs.folderDown"))) {
+        if let down { browser.moveFolder(id, beside: down, after: true) }
+      }
   }
 }
 
