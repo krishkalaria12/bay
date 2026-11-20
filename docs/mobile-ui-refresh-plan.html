@@ -1545,7 +1545,10 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           in the bar below, which lights in its colour. The page menu's Pin offers the same choices once the space has folders. The core's
           <code>MovePin</code> takes a pin beside another (before or after it).
         </li>
-        <li><b>Gap:</b> folders keep the order they were made in; there's no dragging one folder above another yet.</li>
+        <li>
+          <b>Folder order done:</b> holding a folder and moving it lifts it (closed, on a solid card) and lands it before or after the folder it's let go on,
+          through the core's <code>MoveFolder</code>; VoiceOver and TalkBack get Move up and Move down.
+        </li>
         <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.
