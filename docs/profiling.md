@@ -69,7 +69,7 @@ The engine's spans run in the browser process (`app_runtime.cc`, `native_host.cc
 | `Bay.authority project` / `notify` | Projecting the new state, and handing the commit on |
 | `Bay.runtime encodeCommit` / `awaitPublish` | The coordinator serialising the full state, then the browser accepting it |
 | `Bay.Runtime.Publish` [engine] | Parsing (`ParseCommit`) and checking (`ValidateCommit`) the state, then projecting and writing it for each window (`SendCommit`, `Snapshot`, `WriteJson`). `CommitSent` gives each window's bytes |
-| `Bay.Runtime.Resolve` [engine] | The coordinator's reply, and the window's projection sent with it |
+| `Bay.Runtime.Resolve` [engine] | The coordinator's reply, passed to the window with its commit's revision (the window has the commit itself from `Publish`) |
 | `Bay.coordinator <method>` | A command's whole stay in the coordinator, waits included |
 | `Bay.runtime decodeCommit` / `deliverCommit` | A window parsing a commit, then handing it on |
 | `Bay.client decodeCommit` / `decodeReply` / `applyCommit` | Validating it, then the window's store taking it and its subscribers running |

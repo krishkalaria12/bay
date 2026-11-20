@@ -360,20 +360,24 @@ void RuntimeConnection::Resolve(const std::string& token,
   const auto* value = reply->Find("value");
   auto pending = std::move(found->second);
   runtime_->pending_.erase(found);
-  auto projection = pending->connection
-                        ? runtime_->Snapshot(*pending->connection)
-                        : std::nullopt;
   if (error) {
     std::move(pending->callback)
         .Run(Json(base::DictValue().Set("error", error->Clone())));
-  } else if (!projection || !pending->connection) {
+  } else if (!pending->connection ||
+             !runtime_->CanProject(*pending->connection)) {
     std::move(pending->callback)
         .Run(Failure("closed", "Command owner is no longer available"));
   } else {
+    // The reply names its commit's revision only. Publish already sent the
+    // window that commit, and a window that missed it asks for a snapshot.
     base::DictValue result;
     result.Set("clientId", pending->connection->id_);
     result.Set("requestId", pending->request_id);
-    result.Set("commit", std::move(*projection));
+    result.Set("commit",
+               base::DictValue()
+                   .Set("epoch", *runtime_->accepted_->FindString("epoch"))
+                   .Set("revision",
+                        runtime_->accepted_->Find("revision")->Clone()));
     result.Set("value", value->Clone());
     std::move(pending->callback).Run(Success(base::Value(std::move(result))));
   }
@@ -836,9 +840,25 @@ std::optional<base::DictValue> AppRuntime::Snapshot(
       WindowRegistry::Get().IsUtility(connection.window_.get()));
   if (!projection)
     return std::nullopt;
-  auto snapshot = accepted_->Clone();
-  snapshot.Set("state", std::move(*projection));
-  return snapshot;
+  // Not a clone of the accepted commit: its state is the whole application's.
+  return base::DictValue()
+      .Set("epoch", *accepted_->FindString("epoch"))
+      .Set("revision", accepted_->Find("revision")->Clone())
+      .Set("state", std::move(*projection));
+}
+bool AppRuntime::CanProject(RuntimeConnection& connection) const {
+  // What Snapshot needs, without projecting: ProjectRuntimeState fails only
+  // for a window the accepted state no longer has.
+  if (!ready_ || !accepted_ || !connection.client_.is_bound())
+    return false;
+  if (connection.is_coordinator_ ||
+      WindowRegistry::Get().IsUtility(connection.window_.get()))
+    return true;
+  const auto id = connection.window_
+                      ? WindowRegistry::Get().IdFor(connection.window_.get())
+                      : "";
+  return accepted_->FindDict("state")->FindDict("windows")->FindDict(id) !=
+         nullptr;
 }
 void AppRuntime::FailPending(const char* code) {
   auto pending = std::exchange(pending_, {});

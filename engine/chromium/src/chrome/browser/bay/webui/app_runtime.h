@@ -117,6 +117,8 @@ class AppRuntime final : public ProfileManagerObserver,
              mojom::AppRuntime::DispatchCallback callback);
   void Timeout(const std::string& token);
   std::optional<base::DictValue> Snapshot(RuntimeConnection& connection) const;
+  // Whether Snapshot would answer for this connection.
+  bool CanProject(RuntimeConnection& connection) const;
   void OnProfileManagerDestroying() override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
