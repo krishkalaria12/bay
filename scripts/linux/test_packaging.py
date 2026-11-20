@@ -1,4 +1,5 @@
 """Linux packaging against fixture engine archives: no engine build or Linux desktop needed."""
+import gzip
 import importlib.util
 import json
 import os
@@ -270,6 +271,20 @@ class ReleaseTests(unittest.TestCase):
         sandbox = members["opt/bay/chrome-sandbox"]
         self.assertEqual((sandbox.mode & 0o7777, sandbox.uid, sandbox.gid), (0o4755, 0, 0))
 
+    def test_srcinfo_lists_the_pkgbuild_without_makepkg(self):
+        output = self.root / "srcinfo"
+        self.release("tar,aur", output)
+        checksum = engine.sha256(output / "bay-1.3.0-linux-x64.tar.xz")
+        lines = (output / "aur/.SRCINFO").read_text().splitlines()
+        self.assertEqual(lines[:5], ["pkgbase = bay-bin", "\tpkgdesc = A fast browser with your tabs in a sidebar, on Chromium",
+                                     "\tpkgver = 1.3.0", "\tpkgrel = 1", "\turl = https://bay.krishkalaria.in"])
+        for line in ("\tarch = x86_64", "\tdepends = gtk3", "\tdepends = xdg-utils",
+                     "\toptdepends = kwallet: keep saved passwords in KWallet", "\toptions = !strip", "\toptions = !debug",
+                     "\tsource = https://github.com/krishkalaria12/bay/releases/download/v1.3.0/bay-1.3.0-linux-x64.tar.xz",
+                     f"\tsha256sums = {checksum}"):
+            self.assertIn(line, lines)
+        self.assertEqual(lines[-2:], ["", "pkgname = bay-bin"])
+
     @unittest.skipUnless(shutil.which("dpkg-deb"), "needs dpkg-deb")
     def test_deb_installs_a_setuid_sandbox_and_its_scripts(self):
         output = self.root / "deb"
@@ -310,6 +325,99 @@ class ReleaseTests(unittest.TestCase):
         for name in ("bay-1.3.0-linux-x64.tar.xz", "SHA256SUMS"):
             subprocess.run(["gpg", "--verify", output / f"{name}.asc", output / name], check=True, capture_output=True,
                            env={**os.environ, **env})
+
+
+PUBLISH_TOOLS = ("gpg", "rpmsign", "rpmkeys", "rpmbuild", "dpkg-deb", "apt-ftparchive", "createrepo_c")
+
+
+@unittest.skipUnless(sys.platform.startswith("linux") and all(map(shutil.which, PUBLISH_TOOLS)),
+                     "needs " + ", ".join(PUBLISH_TOOLS))
+class PublishTests(unittest.TestCase):
+    """publish.sh --dry-run on real fixture packages: everything it would upload, signed by a throwaway key."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = pathlib.Path(tempfile.mkdtemp(prefix="bay-publish-test-"))
+        make_runtime(cls.root / "engine")
+        write_manifest(cls.root / "engine")
+        build_app.stage(cls.root / "engine", make_web(cls.root / "web"), cls.root / "app")
+        home = cls.root / "gnupg"
+        home.mkdir(mode=0o700)
+        cls.env = {**os.environ, "GNUPGHOME": str(home), "BAY_GPG_KEY": "test@invalid"}
+        subprocess.run(["gpg", "--batch", "--passphrase", "", "--quick-gen-key", "Bay Test <test@invalid>", "rsa3072", "sign", "never"],
+                       check=True, capture_output=True, env=cls.env)
+        cls.packages = cls.root / "packages"
+        subprocess.run([RELEASE, "--app", cls.root / "app", "--version", "1.3.0", "--output", cls.packages, "--formats", "tar,deb,rpm,aur"],
+                       check=True, capture_output=True, env={**os.environ, "BAY_GPG_KEY": ""})
+        # appimagetool's output, stood in for: an image and the zsync file it makes for the image beside it.
+        image = cls.packages / "Bay-1.3.0-x86_64.AppImage"
+        image.write_bytes(b"fixture image")
+        pathlib.Path(f"{image}.zsync").write_bytes(b"zsync: 0.6.2\nFilename: Bay-1.3.0-x86_64.AppImage\nURL: Bay-1.3.0-x86_64.AppImage\n\n\x00\x01")
+        with open(cls.packages / "SHA256SUMS", "a") as sums:
+            for path in (image, pathlib.Path(f"{image}.zsync")):
+                sums.write(f"{engine.sha256(path)}  {path.name}\n")
+        cls.result = subprocess.run([HERE / "publish.sh", "--packages", cls.packages, "--version", "1.3.0", "--dry-run"],
+                                    capture_output=True, text=True, env=cls.env)
+        cls.out = cls.packages / "publish"
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root)
+
+    def verify(self, signature, data):
+        subprocess.run(["gpg", "--verify", signature, data], check=True, capture_output=True, env=self.env)
+
+    def test_dry_run_succeeds_without_gh_or_the_aur(self):
+        self.assertEqual(self.result.returncode, 0, self.result.stderr)
+        self.assertIn("nothing uploaded", self.result.stdout)
+
+    def test_release_assets_are_signed_and_checksummed_after_the_rpm_is_signed(self):
+        release = self.out / "release"
+        sums = release / "bay-1.3.0-linux-SHA256SUMS"
+        self.verify(f"{sums}.asc", sums)
+        names = []
+        for line in sums.read_text().splitlines():
+            checksum, name = line.split()
+            names.append(name)
+            self.assertEqual(engine.sha256(release / name), checksum)
+            self.verify(release / f"{name}.asc", release / name)
+        self.assertEqual(set(names), {"bay-1.3.0-linux-x64.tar.xz", "bay_1.3.0_amd64.deb", "bay-1.3.0-1.x86_64.rpm",
+                                      "Bay-1.3.0-x86_64.AppImage", "Bay-1.3.0-x86_64.AppImage.zsync"})
+        database = self.root / "rpmdb"
+        database.mkdir(exist_ok=True)
+        subprocess.run(["rpmkeys", "--dbpath", database, "--import", self.out / "repo/bay.asc"], check=True)
+        checked = subprocess.run(["rpmkeys", "--dbpath", database, "--checksig", release / "bay-1.3.0-1.x86_64.rpm"],
+                                 check=True, capture_output=True, text=True).stdout
+        self.assertIn("signatures OK", checked)
+
+    def test_apt_repository_is_signed_and_names_the_release_asset(self):
+        repo = self.out / "repo"
+        subprocess.run(["gpg", "--verify", repo / "InRelease"], check=True, capture_output=True, env=self.env)
+        self.verify(repo / "Release.gpg", repo / "Release")
+        packages = (repo / "Packages").read_text()
+        self.assertIn("Filename: pool/v1.3.0/bay_1.3.0_amd64.deb\n", packages)
+        self.assertIn("SHA256: " + engine.sha256(self.out / "release/bay_1.3.0_amd64.deb"), packages)
+        release = (repo / "Release").read_text()
+        self.assertIn(engine.sha256(repo / "Packages"), release)
+        self.assertIn(engine.sha256(repo / "Packages.gz"), release)
+        self.assertIn("Architectures: amd64", release)
+
+    def test_rpm_repository_is_signed_and_names_the_signed_package(self):
+        repo = self.out / "repo"
+        self.verify(repo / "repomd.xml.asc", repo / "repomd.xml")
+        primary = next(repo.glob("*-primary.xml.gz"))
+        self.assertIn(primary.name, (repo / "repomd.xml").read_text())
+        listing = gzip.decompress(primary.read_bytes()).decode()
+        self.assertIn('<location href="pool/v1.3.0/bay-1.3.0-1.x86_64.rpm"/>', listing)
+        self.assertIn(engine.sha256(self.out / "release/bay-1.3.0-1.x86_64.rpm"), listing)
+        config = (repo / "bay.repo").read_text()
+        self.assertIn("baseurl=https://bay.krishkalaria.in/linux/rpm\n", config)
+        self.assertIn("repo_gpgcheck=1\n", config)
+
+    def test_appimage_update_file_points_at_the_release_image(self):
+        data = (self.out / "repo/Bay-x86_64.AppImage.zsync").read_bytes()
+        self.assertIn(b"\nURL: https://github.com/krishkalaria12/bay/releases/download/v1.3.0/Bay-1.3.0-x86_64.AppImage\n\n", data)
+        self.assertTrue(data.endswith(b"\n\n\x00\x01"), "the block checksums after the header are untouched")
 
 
 if __name__ == "__main__":

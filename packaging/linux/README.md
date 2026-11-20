@@ -24,16 +24,19 @@ can't find. `--verify DIR` rechecks a staged app.
 | `bay-<version>-linux-x64.tar.xz` | any distro, and the AUR package's source | unpacks to `bay-<version>/` with `opt/`, `usr/`, `etc/`; the sandbox isn't setuid |
 | `bay_<version>_amd64.deb` | Debian, Ubuntu | browser alternatives and the AppArmor profile in `postinst` |
 | `bay-<version>-1.x86_64.rpm` | Fedora, openSUSE | bundled libraries are neither provided nor required |
-| `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from the latest GitHub release |
-| `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum |
+| `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `bay.krishkalaria.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
+| `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
 | `SHA256SUMS` | | every artifact |
 
-Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures. Publishing the
-files, the AUR copy and any APT or RPM repository is a separate step.
+Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures.
+`scripts/linux/publish.sh` publishes them: it signs the `.rpm` and every file, adds them to the GitHub release, rebuilds
+the APT and RPM repositories and pushes `bay-bin` to the AUR (`docs/releasing.md` › Linux). Users install with
+`docs/linux-install.md`.
 
 Each format needs its tool: `dpkg-deb` (Arch: `dpkg`), `rpmbuild` (`rpm-tools`), `appimagetool` and `zsyncmake`
-(AUR `appimagetool-bin`, `zsync`), and `makepkg` for `.SRCINFO`.
+(AUR `appimagetool-bin`, `zsync`).
+`publish.sh` needs `gpg`, `rpmsign` (`rpm`), `apt-ftparchive` (`apt-utils`) and `createrepo_c`.
 The optional `nix` format also needs `tar`, `nix-build`, `nix-store` and `zstd`.
 CI includes it and pins nixpkgs to a nixos-26.05 revision. Local builds use
 `<nixpkgs>` from `NIX_PATH`. The package's install check verifies that every ELF
