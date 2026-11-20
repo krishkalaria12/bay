@@ -17,6 +17,7 @@
 #include "chrome/browser/bay/webui/page_lifecycle_events.h"
 #include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
+#include "chrome/browser/bay/webui/page_swipe_events.h"
 #include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
@@ -134,6 +135,10 @@ void TabObserver::EnsureObservers() {
     interaction_events_ = std::make_unique<PageInteractionEvents>(
         web_contents(), base::BindRepeating(&TabObserver::Emit,
                                             base::Unretained(this)));
+  if (!facts_ && !swipe_events_)
+    swipe_events_ = std::make_unique<PageSwipeEvents>(
+        web_contents(), base::BindRepeating(&TabObserver::Emit,
+                                            base::Unretained(this)));
   if (!favicon_observation_.IsObserving()) {
     if (auto* driver =
             favicon::ContentFaviconDriver::FromWebContents(web_contents()))
@@ -182,6 +187,7 @@ void TabObserver::ReplaceContents(content::WebContents* contents) {
     return;
   media_events_.reset();
   interaction_events_.reset();
+  swipe_events_.reset();
   favicon_observation_.Reset();
   find_observation_.Reset();
   zoom_observation_.Reset();

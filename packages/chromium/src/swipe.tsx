@@ -133,7 +133,7 @@ export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function Sw
 
   if (!Module)
     return (
-      <View style={props.style} pointerEvents={props.pointerEvents ?? "box-none"}>
+      <View style={props.style} onLayout={props.onLayout} pointerEvents={props.pointerEvents ?? "box-none"}>
         {props.children}
       </View>
     );
