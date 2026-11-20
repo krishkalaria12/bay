@@ -7,6 +7,7 @@ import * as v from "valibot";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 import type { JsonValue } from "./json";
+import type { SwipeEvent } from "./swipe";
 import type { EngineBoostStyle } from "./native";
 import { hasWebKit, type PageEngine } from "./webkit";
 
@@ -228,6 +229,8 @@ export type WebViewProps = ViewProps & {
   onCommand?: (command: PageCommand) => void;
   onPageFocus?: () => void;
   onPageMessage?: (kind: string, data: JsonValue) => void;
+  /** A two-finger swipe past the page's horizontal edge, from the desktop host (macOS reports it through SwipeArea). */
+  onSwipe?: (event: SwipeEvent) => void;
   onReady?: (browserId: number, chromeTabId: number) => void;
   onDiscarded?: (url: string) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;
@@ -337,6 +340,7 @@ type NativeEvents = {
   onCommand: PageCommand;
   onPageFocus: object;
   onPageMessage: { kind: string; data: JsonValue };
+  onSwipe: SwipeEvent;
   onReady: { browserId: number; tabId?: number };
   onDiscarded: { url: string };
   onPasswordPrompt: PasswordPrompt;
@@ -378,6 +382,7 @@ const unwrap = {
   onCommand: (e) => [e],
   onPageFocus: () => [],
   onPageMessage: (e) => [e.kind, e.data],
+  onSwipe: (e) => [e],
   onReady: (e) => [e.browserId, e.tabId ?? 0],
   onDiscarded: (e) => [toAppUrl(e.url)],
   onPasswordPrompt: (e) => [e],

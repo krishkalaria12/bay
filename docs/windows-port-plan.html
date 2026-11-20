@@ -897,7 +897,10 @@
                 </tr>
                 <tr>
                   <td>Trackpad swipe (<code>NNSwipe</code>)</td>
-                  <td>Chrome's overscroll history navigation on precision touchpads</td>
+                  <td>
+                    Bay's own: page_swipe_events.cc reads the page's touchpad scroll acks and SwipeOverlay draws the capsule. Chrome's overscroll can't see a
+                    SurfaceEmbed page. Gap: the page's <code>overscroll-behavior-x</code> isn't honoured yet
+                  </td>
                   <td><span class="chip warn">Replace</span></td>
                 </tr>
                 <tr>
@@ -1509,7 +1512,7 @@
                 <tr>
                   <td><code>BaySwipe</code></td>
                   <td class="num">7 (2)</td>
-                  <td>Chrome's touchpad overscroll navigation; pager calls optional</td>
+                  <td>Page swipes as <code>onSwipe</code> page events (page_swipe_events.cc); pager calls optional</td>
                 </tr>
                 <tr>
                   <td><code>BayInlineCompletion</code></td>

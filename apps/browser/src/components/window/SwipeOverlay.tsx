@@ -3,6 +3,7 @@ import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@
 import { useQuietBrowser } from "../../store/hooks";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { StyleSheet, Text } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -79,6 +80,13 @@ const makeCapsuleValues = (): CapsuleValues => ({
   fade: makeMutable(1),
   scale: makeMutable(1),
 });
+
+// The desktop host's pages report their swipes as page events (TabWebView's onSwipe); macOS's come through SwipeArea.
+const pageSwipes = new Map<string, (e: SwipeEvent) => void>();
+
+export function pageSwipe(tabId: string, e: SwipeEvent) {
+  pageSwipes.get(tabId)?.(e);
+}
 
 export function SwipeOverlay({ tabId }: { tabId: string }) {
   const history = useHistoryAvailability(tabId);
@@ -282,6 +290,14 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     [],
   );
   useSwipeDevHandle(tabId, area);
+  const onPageSwipe = useEffectEvent((e: SwipeEvent) => onSwipe(e));
+  useEffect(() => {
+    pageSwipes.set(tabId, onPageSwipe);
+
+    return () => {
+      if (pageSwipes.get(tabId) === onPageSwipe) pageSwipes.delete(tabId);
+    };
+  }, [tabId, onPageSwipe]);
 
   return (
     <>

@@ -1198,7 +1198,10 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Trackpad swipe (<code>NNSwipe</code>)</td>
-                  <td>Chrome's touchpad overscroll history navigation (Wayland gestures). Check that it's on in M154</td>
+                  <td>
+                    Bay's own: page_swipe_events.cc reads the page's touchpad scroll acks and SwipeOverlay draws the capsule. Chrome's overscroll can't see a
+                    SurfaceEmbed page. Gap: the page's <code>overscroll-behavior-x</code> isn't honoured yet
+                  </td>
                   <td><span class="chip warn">Replace</span></td>
                 </tr>
                 <tr>
@@ -2241,7 +2244,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                     and URL forwarding (Chrome's ProcessSingleton), file chooser (GTK or portal), trash (FreeDesktop Trash spec), reveal in folder
                     (<code>org.freedesktop.FileManager1.ShowItems</code>).
                   </li>
-                  <li><strong>Gestures:</strong> touchpad back/forward through Chrome's overscroll; pinch to zoom.</li>
+                  <li><strong>Gestures:</strong> touchpad back/forward through Bay's page swipe events (page_swipe_events.cc); pinch to zoom.</li>
                 </ul>
               </div>
             </div>
@@ -2548,7 +2551,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td><code>BaySwipe</code> (7)</td>
-                  <td>Chrome overscroll navigation; the module reports itself missing</td>
+                  <td>Page swipes as <code>onSwipe</code> page events; the module reports itself missing</td>
                   <td><code>haptic</code>, <code>pagerState</code></td>
                   <td class="num">5</td>
                 </tr>

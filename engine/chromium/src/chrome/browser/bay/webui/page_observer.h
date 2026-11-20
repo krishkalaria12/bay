@@ -22,6 +22,7 @@ namespace bay {
 class NativeHost;
 class PageMediaEvents;
 class PageInteractionEvents;
+class PageSwipeEvents;
 
 // View observers follow a mount lease. Broker-owned fact observers follow the
 // WebContents through parking and transfers without retaining a renderer host.
@@ -114,6 +115,7 @@ class TabObserver final : public content::WebContentsObserver,
   base::WeakPtr<NativeHost> host_;
   std::unique_ptr<PageMediaEvents> media_events_;
   std::unique_ptr<PageInteractionEvents> interaction_events_;
+  std::unique_ptr<PageSwipeEvents> swipe_events_;
   base::ScopedObservation<favicon::FaviconDriver,
                           favicon::FaviconDriverObserver>
       favicon_observation_{this};

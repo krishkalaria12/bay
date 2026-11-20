@@ -84,7 +84,7 @@ import { setNowPlaying, setPictureInPictureState } from "../media/state";
 import { Toolbar } from "../toolbar/Toolbar";
 import { AutoHideToolbar, useToolbarMode, useToolbarMotion } from "../toolbar/AutoHideToolbar";
 import { noteScroll, revealToolbar } from "../toolbar/autoHide";
-import { NavigationOverlays } from "./SwipeOverlay";
+import { NavigationOverlays, pageSwipe } from "./SwipeOverlay";
 import "./devExpose";
 import { closeWebNotification, showWebNotification } from "../../lib/webNotifications";
 import { isSmallWindow } from "../../store/littleBay";
@@ -593,6 +593,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       warm={warm}
       autoPictureInPicture={autoPictureInPicture}
       peekLinks={peekLinks}
+      onSwipe={(e) => pageSwipe(tabId, e)}
       // Keep the engine's default canvas: sites without an authored background expect white, or the canvas their
       // color-scheme selects. A transparent override puts their text over the window's colors instead.
       onReady={(browserId, chromeTabId) => {

@@ -115,7 +115,11 @@ export function Toolbar({
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
         <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={TOOLBAR_BUTTON_MID - 14} right={(inSplit ? 8 + 60 : 8) + end} />
-        {tab.url ? <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} /> : null}
+        {tab.url ? (
+          <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} />
+        ) : (
+          <EmptyUrlField palette={palette} windowId={windowId} onFocus={focus} style={urlStyle} />
+        )}
         {inSplit && (
           <View style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 + end, flexDirection: "row", gap: -2 }}>
             <ToolbarButton palette={palette} icon="rectangle.split.2x1" size={14} box={30} onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
@@ -249,6 +253,32 @@ export function HistoryButton({
         tooltip={direction < 0 ? `Go Back (${shortcutForCommand("back", "⌘[")})` : `Go Forward (${shortcutForCommand("forward", "⌘]")})`}
       />
     </MouseArea>
+  );
+}
+
+// A tab with nothing loaded (a new tab) still has somewhere to type, as the sidebar's field does.
+function EmptyUrlField({ palette, windowId, onFocus, style }: { palette: ToolbarPalette; windowId: string; onFocus: () => void; style: ViewStyle }) {
+  const metrics = useSidebarMetrics();
+  const glass = useLiquidGlass();
+  const { hovered, hoverProps } = useHover();
+
+  const open = () => {
+    onFocus();
+    reportBrowserCommand(openCommandPanel(windowId, ""));
+  };
+
+  return (
+    <View
+      {...hoverProps}
+      style={[style, { height: metrics.toolbarAddressHeight, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined }]}
+    >
+      {glass ? <GlassFill radius={8} fill={hovered ? palette.pressed : palette.pill} /> : null}
+      <Pressable onPress={open} style={{ flex: 1, justifyContent: "center", paddingLeft: 8 }}>
+        <Text numberOfLines={1} style={{ fontSize: 13, color: palette.secondary }}>
+          Search or enter address
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
