@@ -11,7 +11,7 @@ struct PagesHost: UIViewRepresentable {
   /// False under the tab switcher: no page is active, and VoiceOver skips them all.
   var shown = true
   /// How much of a page's bottom the floating bar covers, in points: WebKit keeps what a page pins to its bottom above
-  /// it, while content still scrolls under the bar. 0 while the bar is away.
+  /// it, while content still scrolls under the bar. 0 on a fullscreen site.
   var coveredBottom: CGFloat = 0
 
   final class Container: UIView {

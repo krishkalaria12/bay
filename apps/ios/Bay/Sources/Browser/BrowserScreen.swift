@@ -21,8 +21,10 @@ struct BrowserScreen: View {
   @State private var pageSlide: CGFloat = 0
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
+  /// It stays put while the bar scrolls away: a change lays the page out again, and mid-scroll that shook the page.
+  /// Only a fullscreen site, which has no bar, gets the whole screen.
   private var coveredBottom: CGFloat {
-    browser.barAway ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
+    browser.fullscreen ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
   }
 
   var body: some View {

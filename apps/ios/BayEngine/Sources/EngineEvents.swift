@@ -7,7 +7,9 @@ public enum EngineEvent {
   case navigation(NavigationState)
   /// A main-frame load failed. Native certificate validation is never bypassed.
   case failure(NavigationFailure)
-  /// The page scrolled, in points: at most every 50 ms, with a trailing update. Overscroll is clamped to zero.
+  /// The page scrolled, in points: at most every 50 ms, with a trailing update. Overscroll is clamped to zero. `deltaY`
+  /// is only how far the person moved it since the last report, with a finger or its fling: a page shifting itself as
+  /// it loads, or after a resize, counts for nothing.
   case scroll(offsetY: Double, deltaY: Double)
   /// A long press on a web link, which the app's own menu answers.
   case linkPress(LinkPress)

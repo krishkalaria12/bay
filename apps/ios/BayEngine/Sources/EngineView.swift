@@ -33,7 +33,9 @@ public final class EngineView: UIView, WKNavigationDelegate, WKUIDelegate, UIScr
   /// When the current pull to refresh started: the spinner stays at least briefly, so a cached reload doesn't flash it.
   private var refreshStartedAt: CFTimeInterval = 0
   private var observations: [NSKeyValueObservation] = []
-  private var lastScrollOffset: CGFloat = 0
+  /// The page's offset at the last scroll, and how far the person has scrolled it since the last report.
+  private var seenScrollOffset: CGFloat = 0
+  private var userScroll: CGFloat = 0
   private var lastScrollEmission: CFTimeInterval = 0
   private var pendingScroll: DispatchWorkItem?
   private var snapshotURL: URL?
@@ -472,6 +474,12 @@ public final class EngineView: UIView, WKNavigationDelegate, WKUIDelegate, UIScr
   }
 
   public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    // Under a finger, or its fling; anything else is the page moving itself (a load, a resize, a jump to an anchor).
+    let offset = max(0, scrollView.contentOffset.y)
+    if scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
+      userScroll += offset - seenScrollOffset
+    }
+    seenScrollOffset = offset
     let elapsed = CACurrentMediaTime() - lastScrollEmission
     if elapsed >= 0.05 {
       pendingScroll?.cancel()
@@ -488,11 +496,10 @@ public final class EngineView: UIView, WKNavigationDelegate, WKUIDelegate, UIScr
   }
 
   private func emitScroll() {
-    let offset = max(0, webView.scrollView.contentOffset.y)
-    let delta = offset - lastScrollOffset
-    lastScrollOffset = offset
+    let delta = userScroll
+    userScroll = 0
     lastScrollEmission = CACurrentMediaTime()
-    emit(.scroll(offsetY: Double(offset), deltaY: Double(delta)))
+    emit(.scroll(offsetY: Double(max(0, webView.scrollView.contentOffset.y)), deltaY: Double(delta)))
   }
 
   public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

@@ -424,12 +424,24 @@ final class BrowserModel: ObservableObject {
     }
   }
 
+  /// How far the person has scrolled the page one way since it last turned: down positive, up negative.
+  private var scrollRun = 0.0
+
+  /// The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
+  /// of the finger, or the page shifting itself as it loads (no delta), leaves it be.
   private func scrolled(_ tabId: String, offsetY: Double, deltaY: Double) {
     guard tabId == app.activeTabId else { return }
-    if offsetY < 24 || deltaY < -8 {
+    if offsetY < 24 {
+      scrollRun = 0
       if barHidden { barHidden = false }
-    } else if deltaY > 8, !barHidden {
+      return
+    }
+    guard deltaY != 0 else { return }
+    scrollRun = (deltaY > 0) == (scrollRun > 0) ? scrollRun + deltaY : deltaY
+    if scrollRun > 48, !barHidden {
       barHidden = true
+    } else if scrollRun < -24, barHidden {
+      barHidden = false
     }
   }
 
