@@ -27,7 +27,7 @@ import { useCaptionRevealed } from "./components/window/captionReveal";
 import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
 import { TOP_CARD_INSET } from "./components/window/constants";
 import { TOP_STRIP_HEIGHT } from "./components/window/constants";
-import { usePeek } from "./components/linkOverlay/usePeek";
+import { PeekPanel, usePeek } from "./components/linkOverlay/usePeek";
 import { useSidebarDock } from "./components/sidebar/useSidebarDock";
 import { useSidebarLights } from "./components/sidebar/useSidebarLights";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/window/layout";
@@ -369,7 +369,7 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
           style={{ position: "absolute", top: 0, bottom: 0, [side]: 6 + sidebarWidth, [right ? "left" : "right"]: 0 }}
         />
       ) : null}
-      <Animated.View
+      <PeekPanel
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? enter : undefined}
         onMouseLeave={live ? leave : undefined}
@@ -401,7 +401,7 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
             <Sidebar />
           </SpaceSwipe>
         </Surface>
-      </Animated.View>
+      </PeekPanel>
     </>
   );
 }
