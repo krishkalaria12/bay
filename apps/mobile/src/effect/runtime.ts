@@ -23,6 +23,7 @@ import { Diagnostics } from "./ports/diagnostics.ts";
 import { Engine } from "./ports/engine.ts";
 import { Files } from "./ports/files.ts";
 import { Http } from "./ports/http.ts";
+import { ImportFiles } from "./ports/importFiles.ts";
 import { Lifecycle } from "./ports/lifecycle.ts";
 import { Links } from "./ports/links.ts";
 import { SecureStore } from "./ports/secureStore.ts";
@@ -31,6 +32,7 @@ import { SecureStore } from "./ports/secureStore.ts";
 export type AppServices =
   | Files
   | Http
+  | ImportFiles
   | SecureStore
   | Engine
   | Lifecycle
@@ -82,6 +84,7 @@ export const appLayer = Layer.mergeAll(
   diagnostics,
   Files.layer,
   Http.layer,
+  ImportFiles.layer,
   SecureStore.layer,
   Engine.layer,
   Lifecycle.layer,

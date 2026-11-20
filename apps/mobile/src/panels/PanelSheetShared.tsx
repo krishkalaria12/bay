@@ -253,9 +253,12 @@ export function ActionRow({
   value,
   chevron = false,
   toggle,
+  leading,
 }: {
   testID: string;
   icon?: IconName;
+  /** Drawn where the icon goes, `iconSize.control` wide: an app's own icon, say. */
+  leading?: ReactNode;
   label: string;
   detail?: string;
   onPress: () => void;
@@ -299,7 +302,13 @@ export function ActionRow({
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      {icon ? <Icon name={icon} color={destructive ? danger : foreground} size={iconSize.control} /> : null}
+      {leading ? (
+        <View className="items-center justify-center" style={{ width: iconSize.control, height: iconSize.control }}>
+          {leading}
+        </View>
+      ) : icon ? (
+        <Icon name={icon} color={destructive ? danger : foreground} size={iconSize.control} />
+      ) : null}
       <View className="flex-1" style={{ gap: 1 }}>
         <Text variant="body" tone={destructive ? "danger" : "default"}>
           {label}
@@ -385,11 +394,15 @@ export function SectionLabel({ children, inset = false }: { children: ReactNode;
 
 const InGroup = createContext(false);
 
+/** Whether a row draws something before its text, which its divider then starts after. */
+const hasLeading = (props: { icon?: unknown; leading?: unknown }): boolean => Boolean(props.icon ?? props.leading);
+
 /** Rows on one rounded card, split by hairlines that start where the rows' text does. */
 export function Group({ label, children, testID }: { label?: string; children: ReactNode; testID?: string }): JSX.Element {
   const rows = Children.toArray(children).filter(isValidElement);
 
-  // SAFETY: rows are the card's ActionRow children, whose props carry the icon name exactly when an icon is drawn.
+  // SAFETY: rows are the card's ActionRow children, whose props carry the icon name (or the leading view) exactly when
+  // one is drawn.
   return (
     <View testID={testID}>
       {label ? <SectionLabel inset>{label}</SectionLabel> : null}
@@ -402,7 +415,7 @@ export function Group({ label, children, testID }: { label?: string; children: R
                   className="bg-foreground/10"
                   style={{
                     height: StyleSheet.hairlineWidth,
-                    marginLeft: (row.props as { icon?: unknown }).icon ? ROW_INSET + iconSize.control + ROW_GAP : ROW_INSET,
+                    marginLeft: hasLeading(row.props as { icon?: unknown; leading?: unknown }) ? ROW_INSET + iconSize.control + ROW_GAP : ROW_INSET,
                   }}
                 />
               ) : null}

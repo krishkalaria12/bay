@@ -1,7 +1,9 @@
 import * as v from "valibot";
+import { addBookmarks, emptyBookmarks, isBookmarked, parseBookmarks, removeBookmark, removeBookmarksOf } from "./bookmarks.ts";
 import { SIMPLE_PREFERENCE_KEYS, TAB_UPDATE_FIELDS } from "./types.ts";
 import type {
   ArchivedTab,
+  BookmarkNode,
   BrowserData,
   BrowserFolder,
   BrowserPreferences,
@@ -60,7 +62,9 @@ export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
 const builtIn = (id: JsonValue): id is WallpaperId => v.is(v.picklist(WALLPAPERS), id);
 const isFileUri = (uri: JsonValue): uri is string => v.is(v.string(), uri) && uri.startsWith("file://");
 const DAY = 24 * 60 * 60 * 1000;
-const HISTORY_LIMIT = 1000;
+
+/** How many pages the history keeps. */
+export const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
 const DOWNLOAD_LIMIT = 100;
 const FAVICON_LIMIT = 500;
@@ -112,6 +116,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     activeTabId: tab.id,
     history: [],
     pinnedSites: [],
+    bookmarks: emptyBookmarks(),
     archive: [],
     downloads: [],
     favicons: {},
@@ -130,6 +135,11 @@ export type BrowserAction =
   | { type: "new-tab"; tab: BrowserTab; background: boolean }
   | { type: "import-tabs"; tabs: BrowserTab[] }
   | { type: "import-archive"; tabs: BrowserTab[]; now: number }
+  | { type: "import-history"; entries: HistoryEntry[] }
+  | { type: "import-pins"; sites: PinnedSite[] }
+  | { type: "add-bookmarks"; nodes: BookmarkNode[] }
+  | { type: "remove-bookmark"; id: string }
+  | { type: "toggle-bookmark"; bookmark: Extract<BookmarkNode, { kind: "url" }> }
   | { type: "activate-tab"; id: string; now: number }
   | { type: "update-tab"; id: string; update: TabUpdate }
   | { type: "visit"; url: string; title: string; favicon: string | null; now: number }
@@ -192,6 +202,46 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       const tabs = action.tabs.filter((tab) => tab.url && !tab.private);
 
       return tabs.length ? { ...data, archive: archiveTabs(data.archive, tabs, action.now) } : data;
+    }
+
+    case "import-history": {
+      const history = mergeHistory(data.history, action.entries);
+
+      return history === data.history ? data : { ...data, history };
+    }
+
+    case "import-pins": {
+      // Pins come after the ones already there; a site pinned already keeps its place.
+      const pinned = new Set(data.pinnedSites.map((site) => site.url));
+
+      const sites = uniqueBy(
+        action.sites.filter((site) => isWebAddress(site.url) && !pinned.has(site.url)),
+        (site) => site.url,
+      );
+
+      return sites.length ? { ...data, pinnedSites: [...data.pinnedSites, ...sites] } : data;
+    }
+
+    case "add-bookmarks": {
+      const bookmarks = addBookmarks(data.bookmarks, action.nodes);
+
+      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
+    }
+
+    case "remove-bookmark": {
+      const bookmarks = removeBookmark(data.bookmarks, action.id);
+
+      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
+    }
+
+    case "toggle-bookmark": {
+      // A page bookmarked anywhere is unbookmarked everywhere; otherwise it joins the top of the tree, last.
+      const { url } = action.bookmark;
+
+      if (!isWebAddress(url)) return data;
+      const bookmarks = isBookmarked(data.bookmarks, url) ? removeBookmarksOf(data.bookmarks, url) : addBookmarks(data.bookmarks, [action.bookmark]);
+
+      return bookmarks === data.bookmarks ? data : { ...data, bookmarks };
     }
 
     case "activate-tab": {
@@ -763,6 +813,35 @@ function parseTab(value: JsonValue): BrowserTab | null {
   };
 }
 
+/**
+ * Imported visits merged into the history: a page already there adds the imported visits to its own and keeps the
+ * later of the two times and its own title (unless it has none). Newest first, up to the limit.
+ */
+export function mergeHistory(history: HistoryEntry[], entries: readonly HistoryEntry[]): HistoryEntry[] {
+  const pages = new Map(history.map((entry) => [entry.url, entry]));
+  let changed = false;
+
+  for (const entry of entries) {
+    if (!isWebAddress(entry.url) || !isTimestamp(entry.lastVisit) || !(entry.visits > 0)) continue;
+    const previous = pages.get(entry.url);
+    changed = true;
+    pages.set(
+      entry.url,
+      previous
+        ? {
+            ...previous,
+            title: previous.title || entry.title,
+            favicon: previous.favicon ?? entry.favicon,
+            visits: previous.visits + entry.visits,
+            lastVisit: Math.max(previous.lastVisit, entry.lastVisit),
+          }
+        : entry,
+    );
+  }
+
+  return changed ? [...pages.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, HISTORY_LIMIT) : history;
+}
+
 /** Newest first, one entry per address: archiving a page again replaces its older copy. */
 function archiveTabs(archive: ArchivedTab[], tabs: BrowserTab[], now: number): ArchivedTab[] {
   const urls = new Set(tabs.map((tab) => tab.url));
@@ -925,6 +1004,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
       .sort((a, b) => b.lastVisit - a.lastVisit)
       .slice(0, HISTORY_LIMIT),
     pinnedSites: uniqueBy(pinnedSites, (entry) => entry.url),
+    bookmarks: parseBookmarks(value.bookmarks),
     archive: uniqueBy(
       uniqueBy(
         archive.sort((a, b) => b.closedAt - a.closedAt),

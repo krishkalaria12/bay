@@ -20,6 +20,7 @@ export interface PageMenuProps {
   canGoForward: boolean;
   isLoading: boolean;
   isPinned: boolean;
+  isBookmarked: boolean;
   /** Ad and tracker blocking on this site; "off" when it's turned off in Settings. */
   blocking: "on" | "paused" | "off";
   onToggleBlocking: () => void;
@@ -33,6 +34,7 @@ export interface PageMenuProps {
   onReload: () => void;
   onStop: () => void;
   onPin: () => void;
+  onBookmark: () => void;
   onShare: () => void;
   onCopy: () => void;
   onTranslate: () => void;
@@ -165,6 +167,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
             detail={t("pageMenu.hideElements.detail")}
             onPress={act(props.onHideElements)}
           />
+          <ActionRow testID="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
           <ActionRow testID="page-inspect" icon="inspect" label={t("pageMenu.inspect")} detail={t("pageMenu.inspect.detail")} onPress={act(props.onInspect)} />
           <ActionRow
             testID="page-markdown"
@@ -242,7 +245,15 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           onPress={act(props.onPin)}
         />
         <Tile id="page-translate" icon="translate" label={t("pageMenu.translate")} onPress={act(props.onTranslate)} />
-        <Tile id="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
+        <Tile
+          id="page-bookmark"
+          icon={props.isBookmarked ? "bookmarked" : "bookmark"}
+          // The filled icon and the highlight say it's bookmarked; "Bookmarked" doesn't fit a tile in every language.
+          label={t("pageMenu.bookmark")}
+          accessibilityLabel={props.isBookmarked ? t("pageMenu.removeBookmark") : t("pageMenu.bookmark")}
+          active={props.isBookmarked}
+          onPress={act(props.onBookmark)}
+        />
         <Tile id="page-more-tools" icon="more" label={t("pageMenu.tools")} onPress={() => setTools(true)} />
         <Tile id="page-site-settings" icon="tune" label={t("pageMenu.thisSite")} onPress={act(props.onSiteSettings)} />
         <Tile id="page-history" icon="history" label={t("pageMenu.history")} onPress={act(props.onHistory)} />

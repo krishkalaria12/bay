@@ -31,12 +31,14 @@ import { useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
+import { BookmarksPanel } from "@/panels/BookmarksPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, type BlockerStatus } from "@/privacy/contentBlocking";
+import { BOOKMARKS_ROOT, bookmarkLinks, isBookmarked } from "@/store/bookmarks";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
@@ -96,7 +98,7 @@ function endTabWork(tabId: string): void {
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "import" | null;
+type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "bookmarks" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -117,6 +119,7 @@ export function BrowserScreen(): JSX.Element {
     restoreTab,
     reset,
     importTabs,
+    importExport,
     selectSpace,
     createSpace,
     renameSpace,
@@ -171,10 +174,23 @@ export function BrowserScreen(): JSX.Element {
   const hasPrivateTabs = data.tabs.some((tab) => tab.private);
   const lockEnabled = lockPrivateTabs && hasPrivateTabs;
 
-  const { theme, startPageAfterHours } = data.preferences;
+  const { theme, startPageAfterHours, welcomed } = data.preferences;
   useEffect(() => {
     Uniwind.setTheme(theme);
   }, [theme]);
+
+  // A fresh install, just through the welcome, is offered the import (desktop's first run has it as a step). Only a
+  // welcome seen in this session counts: Bay reopened later doesn't ask again.
+  const sawWelcome = useRef(ready && !welcomed);
+  useEffect(() => {
+    if (ready && !welcomed) sawWelcome.current = true;
+    else if (ready && welcomed && sawWelcome.current) {
+      sawWelcome.current = false;
+      toast.show(t("toast.importOffer"), { label: t("toast.importAction"), onPress: () => setPanel("import") });
+    }
+    // The toast and the translation are the screen's own and stay the same; only the welcome's ending asks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, welcomed]);
 
   // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
   // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
@@ -1008,6 +1024,7 @@ export function BrowserScreen(): JSX.Element {
         canGoForward={page.canGoForward}
         isLoading={page.isLoading}
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
+        isBookmarked={isBookmarked(data.bookmarks, active.url)}
         blocking={blocking}
         readerActive={reading.reader}
         onReader={reading.openReader}
@@ -1032,6 +1049,18 @@ export function BrowserScreen(): JSX.Element {
           const pinned = data.pinnedSites.some((site) => site.url === active.url);
           dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
           toast.show(pinned ? t("toast.unpinned") : t("toast.pinned"));
+        }}
+        onBookmark={() => {
+          tick();
+          const bookmarked = isBookmarked(data.bookmarks, active.url);
+          dispatch({
+            type: "toggle-bookmark",
+            bookmark: { kind: "url", id: newId(), parentId: BOOKMARKS_ROOT, title: active.title || active.url, url: active.url, addedAt: Date.now() },
+          });
+          toast.show(
+            bookmarked ? t("toast.unbookmarked") : t("toast.bookmarked"),
+            bookmarked ? undefined : { label: t("toast.showBookmarks"), onPress: () => setPanel("bookmarks") },
+          );
         }}
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
@@ -1126,6 +1155,8 @@ export function BrowserScreen(): JSX.Element {
         onDownloads={() => setPanel("downloads")}
         historyCount={data.history.length}
         onHistory={() => setPanel("history")}
+        bookmarkCount={bookmarkLinks(data.bookmarks).length}
+        onBookmarks={() => setPanel("bookmarks")}
         crashCount={crashReports().length}
         onReportProblem={() => void reportProblem()}
       />
@@ -1143,6 +1174,20 @@ export function BrowserScreen(): JSX.Element {
         onRemove={(url) => dispatch({ type: "remove-history", url })}
         onClear={() => dispatch({ type: "clear-history" })}
       />
+      <BookmarksPanel
+        visible={panel === "bookmarks"}
+        onClose={() => closePanel("bookmarks")}
+        bookmarks={data.bookmarks}
+        onOpen={(url) => {
+          setOverlay("none");
+
+          // As from history: a page on screen stays, and the bookmark opens beside it.
+          if (hasPage) openTab(url);
+          else navigate(active.id, url);
+        }}
+        onRemove={(id) => dispatch({ type: "remove-bookmark", id })}
+        onImport={() => setPanel("import")}
+      />
       <DownloadsPanel
         visible={panel === "downloads"}
         onClose={() => closePanel("downloads")}
@@ -1152,7 +1197,17 @@ export function BrowserScreen(): JSX.Element {
         onRemove={downloads.remove}
         onClear={downloads.clear}
       />
-      <ImportPanel visible={panel === "import"} onClose={() => closePanel("import")} onImport={importLinks} />
+      <ImportPanel
+        visible={panel === "import"}
+        onClose={() => closePanel("import")}
+        onImportTabs={importLinks}
+        onImportExport={(chosen, choice, folderName) => importExport(chosen.contents, choice, folderName)}
+        onOpenPage={(url) => {
+          setOverlay("none");
+          openTab(url);
+        }}
+        onShowBookmarks={() => setPanel("bookmarks")}
+      />
       <LinkMenu
         visible={link !== null}
         onClose={() => setLink(null)}

@@ -54,6 +54,20 @@ export interface PinnedSite {
   favicon: string | null;
 }
 
+/**
+ * A bookmark or a folder of them: desktop's bookmark node (`apps/browser/src/store/types.ts`), with one tree for the
+ * whole browser instead of one per profile. The tree hangs off the root folder, `BOOKMARKS_ROOT`; a folder lists its
+ * children in order.
+ */
+export type BookmarkNode =
+  | { kind: "url"; id: string; parentId: string; title: string; url: string; addedAt: number }
+  | { kind: "folder"; id: string; parentId: string | null; title: string; children: string[]; addedAt: number };
+
+export type BookmarkFolder = Extract<BookmarkNode, { kind: "folder" }>;
+
+/** Every bookmark and folder, by id. */
+export type Bookmarks = Record<string, BookmarkNode>;
+
 export interface ArchivedTab extends BrowserTab {
   closedAt: number;
 }
@@ -158,6 +172,7 @@ export interface BrowserData {
   activeTabId: string;
   history: HistoryEntry[];
   pinnedSites: PinnedSite[];
+  bookmarks: Bookmarks;
   archive: ArchivedTab[];
   /** Newest first. */
   downloads: DownloadItem[];

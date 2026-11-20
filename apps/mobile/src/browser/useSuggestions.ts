@@ -3,6 +3,7 @@ import { buildSuggestions, type Suggestion } from "@bay/core/src/suggest.ts";
 import { createSuggestFetcher } from "@bay/core/src/suggestFetcher.ts";
 import { useEffect, useMemo, useState } from "react";
 
+import { bookmarkLinks } from "@/store/bookmarks";
 import type { BrowserData } from "@/store/types";
 
 const fetcher = createSuggestFetcher({ fetch: (url, init) => fetch(url, init) });
@@ -11,7 +12,7 @@ export type Row = Extract<Suggestion, { kind: "page" | "search" | "calc" }>;
 
 const isRow = (item: Suggestion): item is Row => item.kind === "page" || item.kind === "search" || item.kind === "calc";
 
-/** The omnibox rows for typed text, from desktop's ranking: open tabs, history, archived tabs and the engine's suggestions. */
+/** The omnibox rows for typed text, from desktop's ranking: open tabs, history, bookmarks, archived tabs and the engine's suggestions. */
 export function useSuggestions(query: string, engine: SearchEngine, data: BrowserData, currentUrl: string): { rows: Row[]; completion: string } {
   const [remote, setRemote] = useState<readonly string[]>([]);
 
@@ -29,6 +30,9 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
   }, [engine, query, ask]);
   useEffect(() => () => fetcher.cancel(), []);
 
+  // One list per bookmark tree: the ranking indexes a list once and keeps it while the same list comes back.
+  const bookmarks = useMemo(() => bookmarkLinks(data.bookmarks).map((link) => ({ url: link.url, title: link.title, favicon: null })), [data.bookmarks]);
+
   return useMemo(() => {
     if (!query.trim()) {
       // Before typing: recent pages, like Lens.
@@ -42,10 +46,10 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
 
     const result = buildSuggestions(
       query,
-      { tabs: data.tabs.filter((tab) => tab.url), history: data.history, cleaned: data.archive },
+      { tabs: data.tabs.filter((tab) => tab.url), history: data.history, bookmarks, cleaned: data.archive },
       { engine, remote, limit: 7, currentTabId: data.activeTabId, currentUrl },
     );
 
     return { rows: result.items.filter(isRow), completion: result.completion };
-  }, [currentUrl, data, engine, query, remote]);
+  }, [bookmarks, currentUrl, data, engine, query, remote]);
 }

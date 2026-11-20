@@ -51,6 +51,10 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   tune: "slider.horizontal.3",
   visibility: "eye",
   tick: "checkmark",
+  bookmark: "bookmark",
+  bookmarked: "bookmark.fill",
+  folder: "folder",
+  import: "square.and.arrow.down",
 };
 
 // An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them, and
