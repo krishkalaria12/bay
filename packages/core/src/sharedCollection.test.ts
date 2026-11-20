@@ -421,14 +421,17 @@ test("the token boundary is 16000 characters and incompressible collections cann
 test("web and app URL helpers preserve token bytes and use the official fragment routes", () => {
   const value = collection();
   const token = encodeSharedCollection(value);
-  assert.equal(sharedCollectionUrl(value), `https://bay.krishkalaria.in/share/#${token}`);
+  assert.equal(sharedCollectionUrl(value), `https://baybrowser.in/share/#${token}`);
   assert.equal(sharedCollectionAppUrl(token), `bay://share/#${token}`);
 
   for (const prefix of [
-    "https://bay.krishkalaria.in/share#",
+    "https://baybrowser.in/share#",
+    "https://baybrowser.in/share/#",
+    "HTTPS://BAYBROWSER.IN/share/#",
+    // Links shared before the site moved.
     "https://bay.krishkalaria.in/share/#",
-    "bay://share/#",
     "HTTPS://BAY.KRISHKALARIA.IN/share/#",
+    "bay://share/#",
     "BAY://SHARE/#",
   ]) {
     assert.equal(sharedCollectionToken(`${prefix}${token}`), token);
@@ -443,6 +446,14 @@ test("token extraction rejects lookalike origins, credentials, ports, query stri
   const token = encodeSharedCollection(collection());
 
   for (const base of [
+    "http://baybrowser.in/share/",
+    "https://baybrowser.in.evil.example/share/",
+    "https://baybrowser.in:443/share/",
+    "https://user@baybrowser.in/share/",
+    "https://baybrowser.in@evil.example/share/",
+    "https://baybrowser.in/Share/",
+    "https://baybrowser.in/share/?query=1",
+    "https://bay.baybrowser.in/share/",
     "http://bay.krishkalaria.in/share/",
     "https://evil.example/share/",
     "https://bay.krishkalaria.in.evil.example/share/",
