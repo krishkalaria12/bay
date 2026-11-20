@@ -57,25 +57,24 @@ struct HistoryPanel: View {
 
 // MARK: Archive
 
-/// The space's closed tabs by the day they closed, searchable; a tap brings one back as a tab.
-struct ArchivePanel: View {
+/// The space's archived tabs by day, in the bookmarks drawer's Archive, filtered by the drawer's search: a tap brings
+/// one back, its button or a swipe takes it off the list.
+struct ArchiveList: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @ObservedObject var browser: BrowserModel
-  @State private var query = ""
+  let query: String
   @State private var confirming = false
 
   var body: some View {
-    let title = strings.t("archive.title")
     let space = app.activeSpaceId
     let items = app.store.archive(spaceId: space)
     let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
     let matches = needle.isEmpty ? items : items.filter { $0.tab.title.lowercased().contains(needle) || $0.tab.url.lowercased().contains(needle) }
-    PanelSheet(title: title, testID: "archive-screen", words: strings.sheetWords(title), onClose: { browser.panel = nil }) {
+    VStack(alignment: .leading, spacing: 0) {
       if items.isEmpty {
         EmptyNote(title: strings.t("archive.empty"), detail: strings.t("archive.emptyDetail"), testID: "archive-empty")
       } else {
-        SheetSearchField(text: $query, placeholder: strings.t("archive.search"), testID: "archive-search")
         if matches.isEmpty {
           NoMatches(text: strings.t("archive.noMatches", ["query": needle]), testID: "archive-no-matches")
         }
@@ -87,16 +86,23 @@ struct ArchivePanel: View {
               url: item.tab.url, title: rowTitle, detail: "\(siteName(url: item.tab.url)) · \(clockTime(item.closedAt, strings.locale))",
               openLabel: strings.t("history.openLabel", ["title": rowTitle]), removeLabel: strings.t("archive.removeLabel", ["title": rowTitle]),
               testID: "archive-restore-\(item.tab.id)", removeTestID: "archive-remove-\(item.tab.id)",
-              onOpen: { browser.restoreArchived(item.tab.id) },
+              onOpen: {
+                browser.closeDrawer()
+                browser.restoreArchived(item.tab.id)
+              },
               onRemove: { app.dispatch(.removeArchived(id: item.tab.id)) })
           }
         }
-        ClearFooter(
-          confirming: $confirming, label: strings.t("archive.clear"), confirmLabel: strings.t("archive.clear"),
-          detail: strings.t("archive.clear.detail"), keepLabel: strings.t("archive.keep"), testID: "archive-clear"
-        ) { app.dispatch(.clearArchive(spaceId: space)) }
+        if needle.isEmpty {
+          ClearFooter(
+            confirming: $confirming, label: strings.t("archive.clear"), confirmLabel: strings.t("archive.clear"),
+            detail: strings.t("archive.clear.detail"), keepLabel: strings.t("archive.keep"), testID: "archive-clear"
+          ) { app.dispatch(.clearArchive(spaceId: space)) }
+        }
       }
     }
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("archive-screen")
   }
 }
 
@@ -760,6 +766,11 @@ struct BookmarksDrawer: View {
           .accessibilityAddTraits(.isButton)
           .accessibilityIdentifier("drawer-close")
         VStack(alignment: .leading, spacing: Space.md) {
+          DrawerToggle(archive: browser.drawerArchive) { archive in
+            browser.drawerArchive = archive
+            query = ""
+          }
+          .padding(.horizontal, Space.lg)
           SpaceChips(spaces: app.spaces, chosen: app.activeSpaceId) { id in
             query = ""
             browser.switchSpace(id, announce: false)
@@ -773,7 +784,9 @@ struct BookmarksDrawer: View {
               }
               .frame(height: 0)
               if searching { searchField }
-              if searching, !needle.isEmpty {
+              if browser.drawerArchive {
+                ArchiveList(browser: browser, query: searching ? needle : "")
+              } else if searching, !needle.isEmpty {
                 found(needle, rows: rows)
               } else {
                 if rows.isEmpty, let space {
@@ -805,19 +818,7 @@ struct BookmarksDrawer: View {
           .animation(.easeOut(duration: 0.25), value: app.activeSpaceId)
         )
         .overlay(alignment: .bottomTrailing) {
-          Button {
-            browser.closeDrawer()
-            browser.panel = .save
-          } label: {
-            BayIconView(.add, size: IconSize.control, color: BayColor.foreground)
-              .frame(width: 52, height: 52)
-              .background(BayColor.fill, in: Circle())
-          }
-          .buttonStyle(.pressFeedback)
-          .accessibilityLabel(Text(verbatim: strings.t("drawer.saveHere")))
-          .accessibilityIdentifier("drawer-add")
-          .padding(Space.lg)
-          .padding(.bottom, geometry.safeAreaInsets.bottom)
+          if !browser.drawerArchive { saveButton(bottom: geometry.safeAreaInsets.bottom) }
         }
         .offset(x: shift * 0.3)
         // Beside the list's own scrolling, which a plain gesture here would take over.
@@ -854,6 +855,23 @@ struct BookmarksDrawer: View {
         .environmentObject(app)
       }
     }
+  }
+
+  /// The + at the drawer's foot: saves the page showing here.
+  private func saveButton(bottom: CGFloat) -> some View {
+    Button {
+      browser.closeDrawer()
+      browser.panel = .save
+    } label: {
+      BayIconView(.add, size: IconSize.control, color: BayColor.foreground)
+        .frame(width: 52, height: 52)
+        .background(BayColor.fill, in: Circle())
+    }
+    .buttonStyle(.pressFeedback)
+    .accessibilityLabel(Text(verbatim: strings.t("drawer.saveHere")))
+    .accessibilityIdentifier("drawer-add")
+    .padding(Space.lg)
+    .padding(.bottom, bottom)
   }
 
   private func drawerRow(_ row: BookmarkTreeRow, rows: [BookmarkTreeRow]) -> some View {
@@ -948,7 +966,7 @@ struct BookmarksDrawer: View {
   private var searchField: some View {
     HStack(spacing: Space.sm) {
       BayIconView(.search, size: IconSize.small, color: BayColor.muted)
-      TextField(strings.t("bookmarks.search"), text: $query)
+      TextField(strings.t(browser.drawerArchive ? "archive.search" : "bookmarks.search"), text: $query)
         .focused($searchFocused)
         .textInputAutocapitalization(.never)
         .disableAutocorrection(true)
@@ -1243,5 +1261,43 @@ private struct DrawerMoveSheet: View {
       }
       return true
     }
+  }
+}
+
+/// Bookmarks or the archive, side by side at the drawer's top.
+private struct DrawerToggle: View {
+  @EnvironmentObject private var strings: Strings
+  let archive: Bool
+  let choose: (Bool) -> Void
+
+  var body: some View {
+    HStack(spacing: 0) {
+      segment(false, strings.t("drawer.title"), testID: "drawer-bookmarks")
+      segment(true, strings.t("archive.title"), testID: "drawer-archive")
+    }
+    .padding(3)
+    .frame(height: 40)
+    .background(BayColor.fill, in: Capsule())
+    .animation(.easeOut(duration: 0.18), value: archive)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("drawer-toggle")
+  }
+
+  private func segment(_ isArchive: Bool, _ label: String, testID: String) -> some View {
+    let picked = isArchive == archive
+    return Button {
+      guard !picked else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      choose(isArchive)
+    } label: {
+      BayText(label, variant: .subhead, weight: .semibold, tone: picked ? .default : .muted).lineLimit(1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(picked ? BayColor.background : .clear, in: Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(Text(verbatim: label))
+    .accessibilityAddTraits(picked ? [.isSelected, .isButton] : .isButton)
+    .accessibilityIdentifier(testID)
   }
 }

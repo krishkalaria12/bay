@@ -50,7 +50,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
+    case page, spaceEdit, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -93,6 +93,8 @@ final class BrowserModel: ObservableObject {
   /// The bookmarks drawer is out, opened on `drawerFolder` when it has one.
   @Published private(set) var drawerOpen = false
   private(set) var drawerFolder: String?
+  /// The drawer shows the space's archived tabs instead of its bookmarks.
+  @Published var drawerArchive = false
   private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
@@ -352,10 +354,11 @@ final class BrowserModel: ObservableObject {
     topNote = nil
   }
 
-  /// Slides the bookmarks drawer out over the page, with `folder` open in it.
-  func openDrawer(folder: String? = nil) {
+  /// Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive.
+  func openDrawer(folder: String? = nil, archive: Bool = false) {
     panel = nil
     drawerFolder = folder
+    drawerArchive = archive
     drawerOpen = true
   }
 

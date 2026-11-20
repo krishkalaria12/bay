@@ -149,7 +149,7 @@ struct WallpaperView: View {
   }
 }
 
-/// The floating bar: archive, search and settings over the start page; tabs, the site and more over a page.
+/// The floating bar: tabs, search and settings over the start page; tabs, the site and more over a page.
 struct BrowserBar: View {
   @EnvironmentObject private var strings: Strings
   @ObservedObject var browser: BrowserModel
@@ -168,7 +168,7 @@ struct BrowserBar: View {
     let app = browser.app
     HStack(spacing: Space.md) {
       if browser.overlay == .tabs {
-        GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.panel = .archive }
+        GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.openDrawer(archive: true) }
           .accessibilityIdentifier("bar-archive")
         SpacesCapsule(browser: browser)
         GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
@@ -188,8 +188,8 @@ struct BrowserBar: View {
           }
         }
       } else {
-        GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.panel = .archive }
-          .accessibilityIdentifier("bar-archive")
+        // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
+        tabsButton
         capsule
         GlassIconButton(.settings, label: strings.t("bar.settings"), action: onSettings)
           .simultaneousGesture(LongPressGesture(minimumDuration: 0.8).onEnded { _ in onChecks() })
