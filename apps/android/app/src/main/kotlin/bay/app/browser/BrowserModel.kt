@@ -96,7 +96,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -179,9 +179,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The tab whose card was held, for the pin sheet. */
     var pinTab by mutableStateOf<BrowserTab?>(null)
         private set
-
-    /** The folder picked in the tabs menu, which it renames or deletes. */
-    var activeFolderId by mutableStateOf<String?>(null)
 
     var zoom by mutableStateOf<Zoom?>(null)
         private set
@@ -769,32 +766,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     /** A space with the next default name ("Space 3"). */
     fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
-
-    fun newFolder(name: String) {
-        val folder = BrowserFolder(UUID.randomUUID().toString(), app.activeSpaceId, name)
-        app.dispatch(Action.NewFolder(folder))
-        activeFolderId = folder.id
-    }
-
-    fun renameFolder(id: String, name: String) = app.dispatch(Action.RenameFolder(id, name))
-
-    /** Deletes a folder; its pinned rows return to the top level. */
-    fun deleteFolder(id: String) {
-        if (activeFolderId == id) activeFolderId = null
-        app.dispatch(Action.DeleteFolder(id))
-    }
-
-    /**
-     * Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
-     * desktop's Pinned folders hold pinned rows).
-     */
-    fun moveActiveTab(spaceId: String, folderId: String?) {
-        val id = app.activeTabId
-        app.dispatch(Action.MoveTab(id, spaceId, null))
-        activeFolderId = folderId
-        if (folderId != null) app.dispatch(Action.PinSite(id, UUID.randomUUID().toString(), PinKind.ROW, folderId))
-        refreshMounted()
-    }
 
     /** The pin sheet for a held tab card. Private and blank tabs have nothing to pin. */
     fun showPinMenu(tab: BrowserTab) {

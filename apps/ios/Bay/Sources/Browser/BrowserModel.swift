@@ -49,7 +49,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, save, downloads, siteSettings, link, tabs, pin, request, reader, inspect, `import`
+    case page, spaceEdit, archive, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -143,8 +143,6 @@ final class BrowserModel: ObservableObject {
   private var autoReaderUrl: String?
   /// The tab whose card was held, for the pin sheet.
   @Published private(set) var pinTab: BrowserTab?
-  /// The folder picked in the tabs menu, which it renames or deletes.
-  @Published var activeFolderId: String?
   /// The link (or bare image) a long press on the page showing opened the link menu for.
   @Published private(set) var link: LinkPress?
 
@@ -675,32 +673,6 @@ final class BrowserModel: ObservableObject {
   /// A space with the next default name ("Space 3").
   func newSpace() {
     createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
-  }
-
-  func newFolder(_ name: String) {
-    let folder = BrowserFolder(id: UUID().uuidString, spaceId: app.activeSpaceId, name: name)
-    app.dispatch(.newFolder(folder: folder))
-    activeFolderId = folder.id
-  }
-
-  func renameFolder(_ id: String, _ name: String) {
-    app.dispatch(.renameFolder(id: id, name: name))
-  }
-
-  /// Deletes a folder; its pinned rows return to the top level.
-  func deleteFolder(_ id: String) {
-    if activeFolderId == id { activeFolderId = nil }
-    app.dispatch(.deleteFolder(id: id))
-  }
-
-  /// Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
-  /// desktop's Pinned folders hold pinned rows).
-  func moveActiveTab(spaceId: String, folderId: String?) {
-    let id = app.activeTabId
-    app.dispatch(.moveTab(id: id, spaceId: spaceId, folderId: nil))
-    activeFolderId = folderId
-    if let folderId { app.dispatch(.pinSite(tabId: id, pinId: UUID().uuidString, kind: .row, folderId: folderId)) }
-    refreshMounted()
   }
 
   /// The pin sheet for a held tab card. Private and blank tabs have nothing to pin.

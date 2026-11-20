@@ -273,7 +273,7 @@ fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, 
     CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks, slide) }
 }
 
-/** Holding Tabs with more than one space: whether the row of spaces is up, what's under the finger, and where things are. */
+/** Holding Tabs: whether the row of spaces is up, what's under the finger, and where things are. */
 private class SpaceSlide {
     var sliding by mutableStateOf(false)
     var target by mutableStateOf<SlideTarget?>(null)
@@ -387,9 +387,9 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
 }
 
 /**
- * Tabs, with the open tabs' count. Holding it with more than one space brings the column of spaces: slide to one and
- * lift to switch, or lift without sliding for the Tabs menu. TalkBack, which can't hold and slide, gets each other space
- * as an action.
+ * Tabs, with the open tabs' count. Holding it brings the column of spaces, the one showing on a soft grey circle: slide
+ * to one and lift to switch, or to + for a new one. Lifting without sliding puts it away. TalkBack, which can't hold and
+ * slide, gets each other space and a new one as actions.
  */
 @Composable
 private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlide) {
@@ -401,13 +401,13 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
     val space = browser.activeSpace
     val tabsLabel = if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs")
     val label = if (spaced && space != null) strings.t("bar.inSpace", mapOf("label" to tabsLabel, "space" to spaceName(space, strings))) else tabsLabel
-    var held by remember { mutableStateOf(false) }
+    // When a hold last let go, so the click its lift also makes doesn't open the tab view.
+    var holdEnded by remember { mutableStateOf(0L) }
     val cell = with(density) { SLIDE_CELL.toPx() }
     val inset = with(density) { Space.sm.toPx() }
-    val hold = if (!spaced) Modifier else Modifier.pointerInput(app.spaces.size) {
+    val hold = Modifier.pointerInput(app.spaces.size) {
         detectDragGesturesAfterLongPress(
             onDragStart = {
-                held = true
                 slide.moved = 0f
                 slide.sliding = true
                 Haptics.tick(view)
@@ -425,15 +425,17 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
                 val target = slide.target
                 slide.sliding = false
                 slide.target = null
+                holdEnded = android.os.SystemClock.uptimeMillis()
                 when (target) {
                     is SlideTarget.Space -> browser.switchSpace(app.spaces[target.index].id)
                     SlideTarget.Add -> browser.newSpace()
-                    null -> if (slide.moved <= 12.dp.toPx()) browser.panel = Panel.TABS
+                    null -> Unit
                 }
             },
             onDragCancel = {
                 slide.sliding = false
                 slide.target = null
+                holdEnded = android.os.SystemClock.uptimeMillis()
             },
         )
     }
@@ -447,29 +449,23 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
     Box(
         Modifier.onGloballyPositioned { slide.button = it.positionInWindow() }.then(hold)
             .semantics {
-                if (spaced) {
-                    customActions = app.spaces.filter { it.id != app.activeSpaceId }.map { other ->
-                        androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.switchSpace", mapOf("name" to spaceName(other, strings)))) {
-                            browser.switchSpace(other.id)
-                            true
-                        }
-                    } + androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabsMenu.newSpace")) {
-                        browser.newSpace()
+                customActions = app.spaces.filter { it.id != app.activeSpaceId }.map { other ->
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.switchSpace", mapOf("name" to spaceName(other, strings)))) {
+                        browser.switchSpace(other.id)
                         true
                     }
+                } + androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabsMenu.newSpace")) {
+                    browser.newSpace()
+                    true
                 }
             },
     ) {
         BarButton(
             "bar-tabs", label,
             {
-                // Held, the button opened the menu or switched space instead.
-                if (held) held = false else browser.showTabs()
+                // A hold's lift comes as a click too.
+                if (!slide.sliding && android.os.SystemClock.uptimeMillis() - holdEnded > 400) browser.showTabs()
             },
-            onLongClick = if (spaced) null else ({
-                Haptics.tick(view)
-                browser.panel = Panel.TABS
-            }),
         ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
         TabCount(count, Modifier.align(Alignment.TopEnd))
         // The spaces stand in a column above the button while it's held, the nearest first. It's placed without taking

@@ -1105,11 +1105,8 @@
               wash of its own colour, with its name in a pill over the column, and ticks. Lift on it to switch. (A row across the bar came first; a column over
               the button was the better reach.)
             </li>
-            <li>Lift without sliding, or slide back onto Tabs, and nothing changes; a hold with no slide opens the Tabs menu, as now.</li>
-            <li>
-              With only one space, holding Tabs works exactly as now (no column), like desktop, which only shows space controls once there are two
-              (<code>SpaceIndicator</code>).
-            </li>
+            <li>Lift without sliding, or slide back onto Tabs, and nothing changes. The Tabs menu sheet is gone; holding Tabs only ever shows the column.</li>
+            <li>With only one space, the column holds that space and <b>+ New space</b>, so the hold always does the same thing.</li>
           </ul>
         </li>
         <li>
@@ -1476,8 +1473,8 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
         </dd>
         <dt>D6 · How to switch spaces from a page</dt>
         <dd>
-          <span class="rec">Settled:</span> hold Tabs, slide to a space, lift. Lifting without sliding still opens the Tabs menu. The Tabs button always shows
-          the space, and a short pill appears after a switch. The tab view's sideways swipe follows the finger. See section 6c.
+          <span class="rec">Settled:</span> hold Tabs, slide to a space, lift. Lifting without sliding puts the column away; there is no Tabs menu. The Tabs
+          button always shows the space, and a short pill appears after a switch. The tab view's sideways swipe follows the finger. See section 6c.
         </dd>
         <dt>D4 · The shortcut row fills itself</dt>
         <dd>
@@ -1540,6 +1537,10 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           <b>Gap:</b> the spaces either side of the tab view's swipe are drawn live (their name, and their tabs on iPhone) rather than from saved pictures.
         </li>
         <li><b>Gap:</b> the mini player off switch is checked on iPhone only (soundhelix.com); the Android emulator had no media to play in that run.</li>
+        <li>
+          <b>Gap:</b> with the Tabs menu gone, a tab can't be moved to another space or into a folder, and tab folders can't be made, renamed or deleted on the
+          phone. Their new home is still to be settled.
+        </li>
         <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.

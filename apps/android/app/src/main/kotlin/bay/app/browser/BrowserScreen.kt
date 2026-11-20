@@ -223,7 +223,6 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         PageMenu(browser, strings, browser.panel == Panel.PAGE, onSettings)
         SiteSettingsPanel(browser, strings, browser.panel == Panel.SITE_SETTINGS, onSettings)
         LinkMenu(browser, strings, browser.panel == Panel.LINK)
-        TabsMenu(browser, strings, browser.panel == Panel.TABS)
         PinPanel(browser, strings, browser.panel == Panel.PIN)
         PageRequestPanel(browser, strings, browser.panel == Panel.REQUEST)
         ReaderPanel(browser, strings, browser.panel == Panel.READER)
