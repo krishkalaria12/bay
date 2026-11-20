@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.util.Log
 import android.view.MotionEvent
@@ -616,7 +617,12 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
     override fun onBottomControlsChanged(offset: Int) {
       if (disposed || barHeight <= 0) return
-      emit(EngineEvent.BarMoved((offset.toFloat() / barHeight).coerceIn(0f, 1f)))
+      val hidden = (offset.toFloat() / barHeight).coerceIn(0f, 1f)
+      // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
+      // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
+      if (hidden > barHidden && !touchedLately()) return
+      barHidden = hidden
+      emit(EngineEvent.BarMoved(hidden))
     }
   }
 
@@ -633,6 +639,25 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   }
 
   // MARK: Touch
+
+  /** How far the bar is slid away, as last reported. */
+  private var barHidden = 0f
+  /** A finger is on the page, or when the last one lifted: a fling goes on scrolling for a while after. */
+  private var touching = false
+  private var lastTouchUp = 0L
+
+  private fun touchedLately() = touching || SystemClock.uptimeMillis() - lastTouchUp < FLING_MS
+
+  override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN -> touching = true
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+        touching = false
+        lastTouchUp = SystemClock.uptimeMillis()
+      }
+    }
+    return super.dispatchTouchEvent(event)
+  }
 
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean =
     gestures.onInterceptTouchEvent(event) ?: super.onInterceptTouchEvent(event)
@@ -663,6 +688,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   companion object {
     /** The page on screen, which saves images from its menu with its own cookies (BayEngineBackend.saveImage). */
     internal var lastActive: BayEngineView? = null
+
+    /** How long after a finger lifts the page's fling can still move the bar. */
+    private const val FLING_MS = 2_500L
 
     /** The page views not yet disposed, oldest first. */
     private val live = LinkedHashSet<BayEngineView>()
