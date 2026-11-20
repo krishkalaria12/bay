@@ -41,13 +41,14 @@ pub enum SettingsPage {
     Wallpaper,
     AppIcon,
     TextSize,
+    SiteFont,
     Archive,
     StartPage,
     SyncJoin,
     SyncPhrase,
 }
 
-pub const SETTINGS_PAGES: [SettingsPage; 21] = [
+pub const SETTINGS_PAGES: [SettingsPage; 22] = [
     SettingsPage::General,
     SettingsPage::Search,
     SettingsPage::Appearance,
@@ -65,6 +66,7 @@ pub const SETTINGS_PAGES: [SettingsPage; 21] = [
     SettingsPage::Wallpaper,
     SettingsPage::AppIcon,
     SettingsPage::TextSize,
+    SettingsPage::SiteFont,
     SettingsPage::Archive,
     SettingsPage::StartPage,
     SettingsPage::SyncJoin,
@@ -92,6 +94,7 @@ impl SettingsPage {
             Self::Wallpaper => "wallpaper",
             Self::AppIcon => "appIcon",
             Self::TextSize => "textSize",
+            Self::SiteFont => "siteFont",
             Self::Archive => "archive",
             Self::StartPage => "startPage",
             Self::SyncJoin => "syncJoin",
@@ -106,7 +109,9 @@ impl SettingsPage {
                 Some(Self::General)
             }
             Self::CustomEngine => Some(Self::Search),
-            Self::Wallpaper | Self::AppIcon | Self::TextSize => Some(Self::Appearance),
+            Self::Wallpaper | Self::AppIcon | Self::TextSize | Self::SiteFont => {
+                Some(Self::Appearance)
+            }
             Self::Archive | Self::StartPage => Some(Self::Tabs),
             Self::SyncJoin | Self::SyncPhrase => Some(Self::Sync),
             _ => None,

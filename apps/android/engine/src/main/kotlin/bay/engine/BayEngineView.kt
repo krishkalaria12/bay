@@ -9,8 +9,6 @@ import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.util.Log
@@ -24,7 +22,6 @@ import org.bay.engine.BayTabClient
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.suspendCoroutine
-import kotlin.math.max
 
 /**
  * A page in Bay's own Chromium (org.bay.engine.BayTab), with the same props, events and functions as iOS's WebKit
@@ -60,11 +57,6 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   private val pendingExternal = mutableMapOf<String, String>()
   private val density = resources.displayMetrics.density
   private var scrollOffset = 0.0
-  private var lastScrollOffset = 0.0
-  private var lastScrollEmission = 0L
-  private val scrollHandler = Handler(Looper.getMainLooper())
-  private var scrollPending = false
-  private val emitPendingScroll = Runnable { scrollPending = false; if (!disposed) emitScroll() }
   private val snapshots = BaySnapshotWriter(context)
   private val fullscreen = BayFullscreen(context)
   private val gestures = BayPageGestures(this, object : BayPageGestures.Page {
@@ -126,14 +118,28 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   /** Hidden tabs stay mounted; keep them out of TalkBack. */
   var isActive = true
     set(value) {
+      val was = field
       field = value
       tab?.view?.importantForAccessibility = accessibility()
       if (value) lastActive = this
       // The tab on screen draws: it takes the window's one compositor from the tab that had it.
-      if (value) tab?.showPage()
+      if (value && !was) takeSurface()
       // Leaving the screen is a good moment to save (B6): the tab may be the next one unmounted for memory.
       if (!value) saveState()
     }
+
+  /**
+   * Puts the page on the window's compositor. A page that has finished loading sends no new frame of its own, so the
+   * new surface would stay blank until it next changed: hiding and showing it again makes its renderer draw one, as a
+   * tab switch does in Chrome.
+   */
+  private fun takeSurface() {
+    val current = tab ?: return
+    current.showPage()
+    if (isSuspended) return
+    current.setVisible(false)
+    current.setVisible(true)
+  }
 
   /** Hidden tabs that aren't playing media stop drawing, and their timers slow. */
   var isSuspended = false
@@ -149,6 +155,31 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       if (field == value) return
       field = value
       tab?.setDesktopMode(value)
+    }
+
+  /**
+   * How much of the page's bottom the app's bar covers, in pixels; 0 for none (a fullscreen site). The page keeps its
+   * size: Chromium treats the bar as its bottom toolbar, lifting what the page pins to its bottom above it while it
+   * shows, sliding it away with the page as it scrolls down and back as it scrolls up (EngineEvent.BarMoved).
+   */
+  var barHeight = 0
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.setBottomControlsHeight(value)
+    }
+
+  /** Brings the bar back with the page's room for it, as a new page does. */
+  fun showBar() {
+    tab?.showBrowserControls(true)
+  }
+
+  /** Blink's own forced dark mode for this tab: pages without a dark look of their own are drawn dark. */
+  var forceDark = false
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.setForceDark(value)
     }
 
   /** The tab's saved state (B6): its tab id, or null for private tabs. */
@@ -188,7 +219,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     tab = created
     created.view.importantForAccessibility = accessibility()
     created.setDesktopMode(desktopMode)
+    created.setForceDark(forceDark)
     created.setVisible(!isSuspended)
+    created.setBottomControlsHeight(barHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     if (isActive) {
       lastActive = this
@@ -580,29 +613,17 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
     override fun onScroll(offsetY: Float, deltaY: Float) {
       scrollOffset = offsetY.toDouble()
-      scheduleScroll()
     }
-  }
 
-  private fun scheduleScroll() {
-    if (disposed) return
-    val elapsed = SystemClock.uptimeMillis() - lastScrollEmission
-    if (elapsed >= 50) {
-      scrollHandler.removeCallbacks(emitPendingScroll)
-      scrollPending = false
-      emitScroll()
-    } else if (!scrollPending) {
-      scrollPending = true
-      scrollHandler.postDelayed(emitPendingScroll, 50 - elapsed)
+    override fun onBottomControlsChanged(offset: Int) {
+      if (disposed || barHeight <= 0) return
+      val hidden = (offset.toFloat() / barHeight).coerceIn(0f, 1f)
+      // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
+      // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
+      if (hidden > barHidden && !touchedLately()) return
+      barHidden = hidden
+      emit(EngineEvent.BarMoved(hidden))
     }
-  }
-
-  private fun emitScroll() {
-    val offset = max(0.0, scrollOffset)
-    val delta = offset - lastScrollOffset
-    lastScrollOffset = offset
-    lastScrollEmission = SystemClock.uptimeMillis()
-    emit(EngineEvent.Scroll(offset, delta))
   }
 
   /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */
@@ -619,6 +640,25 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
   // MARK: Touch
 
+  /** How far the bar is slid away, as last reported. */
+  private var barHidden = 0f
+  /** A finger is on the page, or when the last one lifted: a fling goes on scrolling for a while after. */
+  private var touching = false
+  private var lastTouchUp = 0L
+
+  private fun touchedLately() = touching || SystemClock.uptimeMillis() - lastTouchUp < FLING_MS
+
+  override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN -> touching = true
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+        touching = false
+        lastTouchUp = SystemClock.uptimeMillis()
+      }
+    }
+    return super.dispatchTouchEvent(event)
+  }
+
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean =
     gestures.onInterceptTouchEvent(event) ?: super.onInterceptTouchEvent(event)
 
@@ -633,7 +673,6 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     if (disposed) return
     cancelPageRequests()
     disposed = true
-    scrollHandler.removeCallbacksAndMessages(null)
     hideFullscreen()
     BayFileChooser.cancelPending()
     destroyTab()
@@ -641,7 +680,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     // A page shown over the tab (a link's preview) gives the window's compositor back to the tab on screen.
     val onScreen = live.lastOrNull { it.isActive && it.tab != null }
     if (lastActive === this) lastActive = onScreen
-    onScreen?.tab?.showPage()
+    onScreen?.takeSurface()
   }
 
   private class PendingPermission(val request: Int, val name: String, val system: Array<String>, val requireAll: Boolean = true)
@@ -649,6 +688,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   companion object {
     /** The page on screen, which saves images from its menu with its own cookies (BayEngineBackend.saveImage). */
     internal var lastActive: BayEngineView? = null
+
+    /** How long after a finger lifts the page's fling can still move the bar. */
+    private const val FLING_MS = 2_500L
 
     /** The page views not yet disposed, oldest first. */
     private val live = LinkedHashSet<BayEngineView>()

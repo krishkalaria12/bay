@@ -2,6 +2,9 @@ package bay.app.browser
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -48,8 +51,26 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -64,7 +85,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import bay.app.Strings
-import bay.core.BrowserFolder
 import bay.core.BrowserSpace
 import bay.core.BrowserTab
 import bay.core.PinKind
@@ -151,32 +171,87 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     val essentials = app.pins.filter { it.kind == PinKind.ESSENTIAL }
     val rows = app.pins.filter { it.kind == PinKind.ROW }
     val activeUrl = browser.activeTab?.url
-    var shift by remember { mutableFloatStateOf(0f) }
+    // A folder name being typed in the Pinned section.
+    var naming by remember { mutableStateOf<FolderNaming?>(null) }
+    // How far the space has been pulled sideways, following the finger; the next space comes in from that side.
+    val shift = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableFloatStateOf(1f) }
+    val index = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+    val incoming = when {
+        shift.value < 0 -> app.spaces.getOrNull(index + 1)
+        shift.value > 0 -> app.spaces.getOrNull(index - 1)
+        else -> null
+    }
+    val progress = (abs(shift.value) / width).coerceIn(0f, 1f)
+    val wash = if (incoming != null) androidx.compose.ui.graphics.lerp(color, spaceColor(incoming.color), progress) else color
     Box(
-        Modifier.fillMaxSize().testTag("tab-switcher").pointerInput(app.spaces.size, app.activeSpaceId) {
+        Modifier.fillMaxSize().testTag("tab-switcher").onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(app.spaces.size, app.activeSpaceId) {
             detectHorizontalDragGestures(
                 onDragEnd = {
-                    val index = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
-                    val next = index + if (shift < 0) 1 else -1
-                    if (abs(shift) > 80.dp.toPx() * 0.35f && next in app.spaces.indices) {
-                        Haptics.tick(view)
-                        browser.selectSpace(app.spaces[next].id)
+                    val at = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
+                    val step = if (shift.value < 0) 1 else -1
+                    val next = app.spaces.getOrNull(at + step)
+                    scope.launch {
+                        if (next != null && abs(shift.value) > width * 0.25f) {
+                            Haptics.tick(view)
+                            // Out the rest of the way, then the new space slides in from the side it came from.
+                            shift.animateTo(-step * width, tween(160))
+                            browser.selectSpace(next.id)
+                            shift.snapTo(step * width * 0.35f)
+                            shift.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f))
+                        } else {
+                            shift.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
+                        }
                     }
-                    shift = 0f
                 },
-                onDragCancel = { shift = 0f },
-                onHorizontalDrag = { _, amount -> if (app.spaces.size > 1) shift += amount * 0.35f },
+                onDragCancel = { scope.launch { shift.animateTo(0f) } },
+                onHorizontalDrag = { change, amount ->
+                    change.consume()
+                    val target = shift.value + amount
+                    val ahead = if (target < 0) app.spaces.getOrNull(index + 1) else app.spaces.getOrNull(index - 1)
+                    // A stretch at the first and last space: it gives a little and comes back.
+                    scope.launch { shift.snapTo(if (ahead != null) target else shift.value + amount * 0.3f) }
+                },
             )
         },
     ) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to color.copy(alpha = 0.34f), 0.55f to color.copy(alpha = 0.08f), 1f to Color.Transparent)))
-        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift }) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to wash.copy(alpha = 0.34f), 0.55f to wash.copy(alpha = 0.08f), 1f to Color.Transparent)))
+        // The space coming in: its name at the top, a page's width beyond the edge it's pulled from.
+        if (incoming != null) {
+            val name = spaceName(incoming, strings)
+            Row(
+                Modifier.statusBarsPadding().padding(horizontal = Space.gutter).padding(top = Space.sm).heightIn(min = 44.dp)
+                    .graphicsLayer { translationX = shift.value + if (shift.value < 0) width else -width }
+                    .clearAndSetSemantics {},
+                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SpaceGlyph(incoming, name, 30.dp)
+                BayText(name, variant = TextVariant.TITLE, maxLines = 1)
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift.value }) {
             val inner = maxWidth - Space.gutter * 2
             // Half a point narrower than an exact fit, so rounding never wraps the last card onto a row of its own.
             val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS - 0.5.dp
             val essentialWidth = (inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS - 0.5.dp
+            // Opens on the tab showing: scrolled, as it comes up, just far enough for that tab's card to sit clear of the
+            // bar, so the page has its card to shrink into.
+            val scroll = rememberScrollState()
+            // Places from an earlier opening are stale: the cards report theirs again as they're laid out.
+            DisposableEffect(Unit) { onDispose { browser.cardFrames.clear() } }
+            var viewport by remember { mutableStateOf(Rect.Zero) }
+            val clearOfBar = with(LocalDensity.current) { (52.dp + Space.xxl).toPx() } + WindowInsets.navigationBars.getBottom(LocalDensity.current)
+            LaunchedEffect(Unit) {
+                val card = snapshotFlow { browser.cardFrames[app.activeTabId]?.takeIf { viewport.height > 0f } }.filterNotNull().first()
+                val past = card.bottom - (viewport.bottom - clearOfBar)
+                if (past > 0f) scroll.scrollTo(scroll.value + past.toInt())
+            }
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = Space.sm, bottom = 52.dp + Space.xxl),
+                Modifier.fillMaxSize().onGloballyPositioned { viewport = it.boundsInRoot() }
+                    .verticalScroll(scroll).padding(horizontal = Space.gutter).padding(top = Space.sm, bottom = 52.dp + Space.xxl),
                 verticalArrangement = Arrangement.spacedBy(Space.lg),
             ) {
                 if (space != null) {
@@ -202,26 +277,37 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(GAP), verticalArrangement = Arrangement.spacedBy(GAP), maxItemsInEachRow = ESSENTIAL_COLUMNS) {
                         essentials.forEachIndexed { index, pin ->
                             val active = pin.url == activeUrl
+                            var menu by remember(pin.id) { mutableStateOf(false) }
                             Box(
                                 Modifier.size(essentialWidth, 64.dp)
                                     .testTag("tab-essential-$index")
-                                    .clearAndSetSemantics { contentDescription = pin.title.ifEmpty { displayUrl(pin.url) }; role = Role.Button; selected = active }
-                                    .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = { unpin(browser, pin, view) }) { browser.openPin(pin) }
+                                    .clearAndSetSemantics {
+                                        contentDescription = pin.title.ifEmpty { displayUrl(pin.url) }
+                                        role = Role.Button
+                                        selected = active
+                                        customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("pin.unpin")) { browser.unpin(pin); true })
+                                    }
+                                    .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = {
+                                        Haptics.tick(view)
+                                        menu = true
+                                    }) { browser.openPin(pin) }
                                     .background(Theme.colors.fill, RoundedCornerShape(Radius.tile))
                                     .border(2.dp, if (active) Theme.colors.accent else Color.Transparent, RoundedCornerShape(Radius.tile)),
                                 contentAlignment = Alignment.Center,
-                            ) { SiteIcon(app, pin.url, 30.dp) }
+                            ) {
+                                SiteIcon(app, pin.url, 30.dp)
+                                if (menu) {
+                                    HoldMenu(onDismiss = { menu = false }) {
+                                        MenuChoice(strings.t("pin.makeRow")) { menu = false; browser.movePin(pin, PinKind.ROW, null) }
+                                        MenuChoice(strings.t("pin.unpin"), destructive = true) { menu = false; browser.unpin(pin) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                if (rows.isNotEmpty() || app.folders.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BayText(strings.t("tabs.pinned"), Modifier.padding(bottom = Space.xs), variant = TextVariant.FOOTNOTE, weight = FontWeight.Medium, color = Theme.colors.overWallpaper)
-                        rows.filter { it.folderId == null }.forEach { row -> PinRow(browser, row, row.url == activeUrl, indent = false) }
-                        app.folders.forEach { folder ->
-                            PinFolder(browser, folder, rows.filter { it.folderId == folder.id }, activeUrl)
-                        }
-                    }
+                if (rows.isNotEmpty() || app.folders.isNotEmpty() || naming != null) {
+                    PinnedSection(browser, strings, rows, activeUrl, naming) { naming = it }
                 }
                 if (tabs.isNotEmpty() || (essentials.isEmpty() && rows.isEmpty())) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically) {
@@ -259,50 +345,6 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     }
 }
 
-/** A pinned row: its site's icon and name; a tap opens its tab, a long press unpins it. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PinRow(browser: BrowserModel, row: PinnedSite, active: Boolean, indent: Boolean) {
-    val view = LocalView.current
-    Row(
-        Modifier.fillMaxWidth().testTag("tab-pinned-${row.id}")
-            .semantics { selected = active }
-            .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = { unpin(browser, row, view) }) { browser.openPin(row) }
-            .background(if (active) Theme.colors.fill else Color.Transparent, RoundedCornerShape(Radius.control))
-            .heightIn(min = 40.dp).padding(start = if (indent) Space.xl + Space.sm else Space.sm, end = Space.sm),
-        horizontalArrangement = Arrangement.spacedBy(Space.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SiteIcon(browser.app, row.url, 20.dp)
-        BayText(row.title.ifEmpty { displayUrl(row.url) }, Modifier.weight(1f), variant = TextVariant.CALLOUT, weight = if (active) FontWeight.SemiBold else null, maxLines = 1)
-    }
-}
-
-/** A pinned folder: a row that opens to show the pinned rows in it. A folder holding the page on screen starts open. */
-@Composable
-private fun PinFolder(browser: BrowserModel, folder: BrowserFolder, rows: List<PinnedSite>, activeUrl: String?) {
-    var open by remember(folder.id) { mutableStateOf(rows.any { it.url == activeUrl }) }
-    Row(
-        Modifier.fillMaxWidth().testTag("tab-folder-${folder.id}")
-            .semantics(mergeDescendants = true) { stateDescription = if (open) "expanded" else "collapsed" }
-            .pressFeedback { open = !open }
-            .heightIn(min = 40.dp).padding(horizontal = Space.sm),
-        horizontalArrangement = Arrangement.spacedBy(Space.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BayIconView(BayIcon.FOLDER, size = IconSize.small)
-        BayText(folder.name, Modifier.weight(1f), variant = TextVariant.CALLOUT, maxLines = 1)
-        if (rows.isNotEmpty()) BayText("${rows.size}", variant = TextVariant.FOOTNOTE, color = Theme.colors.overWallpaper)
-        BayIconView(BayIcon.CHEVRON, Modifier.graphicsLayer { rotationZ = if (open) 90f else 0f }, size = IconSize.inline, color = Theme.colors.muted)
-    }
-    if (open) rows.forEach { PinRow(browser, it, it.url == activeUrl, indent = true) }
-}
-
-private fun unpin(browser: BrowserModel, site: PinnedSite, view: android.view.View) {
-    Haptics.tick(view)
-    browser.unpin(site)
-}
-
 /** A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. A flick up closes it into the archive. */
 @Composable
 private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, index: Int, count: Int, width: Dp, active: Boolean) {
@@ -312,6 +354,11 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
     val lift = remember { Animatable(0f) }
     // Where the card sits on screen, so the page can grow out of it.
     var frame by remember { mutableStateOf(Rect.Zero) }
+    // Held and moved: the card follows the finger, to a space in the bar below.
+    var carried by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    var origin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val dropping = carried != null && browser.cardDropSpace != null
+    val shrink by androidx.compose.animation.core.animateFloatAsState(if (carried == null) 1f else if (dropping) 0.6f else 0.9f, label = "carry")
     val height = width * CARD_RATIO
     val title = tab.title.ifEmpty { if (tab.url.isEmpty()) strings.t("tabs.newTab") else displayUrl(tab.url) }
     val site = if (tab.url.isEmpty()) title else displayUrl(tab.url).removePrefix("www.").substringBefore('/')
@@ -321,8 +368,16 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
         browser.archive(tab.id)
     }
     Column(
-        Modifier.width(width)
-            .graphicsLayer { translationY = lift.value; alpha = 1f - minOf(1f, -lift.value / 600f) }
+        Modifier.width(width).zIndex(if (carried != null) 1f else 0f)
+            .graphicsLayer {
+                translationX = carried?.x ?: 0f
+                translationY = carried?.y ?: lift.value
+                scaleX = shrink
+                scaleY = shrink
+                // While the page shrinks into this card, or grows out of it, the page is the card.
+                val morphing = browser.opening?.id == tab.id || browser.zoom?.tab?.id == tab.id
+                alpha = if (morphing) 0f else 1f - minOf(1f, -lift.value / 600f)
+            }
             .pointerInput(tab.id) {
                 detectVerticalDragGestures(
                     onDragEnd = {
@@ -344,16 +399,62 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                         stateDescription = strings.t(if (tab.private) "tabs.privatePosition" else "tabs.position", mapOf("index" to "${index + 1}", "count" to "$count"))
                         role = Role.Button
                         selected = active
+                        onClick { browser.pick(tab, frame); true }
+                        // TalkBack can't carry a card to a space, so each card offers the other spaces.
+                        customActions = app.spaces.filter { it.id != tab.spaceId }.map { space ->
+                            androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.moveToSpace", mapOf("name" to spaceName(space, strings)))) {
+                                browser.moveTab(tab, space.id)
+                                true
+                            }
+                        }
                     }
-                    .onGloballyPositioned { frame = it.boundsInRoot() }
-                    .combinedClickable(
-                        remember { MutableInteractionSource() },
-                        null,
-                        onLongClick = {
-                            Haptics.tick(view)
-                            browser.showPinMenu(tab)
-                        },
-                    ) { browser.pick(tab, frame) }
+                    .onGloballyPositioned {
+                        frame = it.boundsInRoot()
+                        // Unclipped: a card scrolled out of sight still has its place, which boundsInRoot cuts to nothing.
+                        browser.cardFrames[tab.id] = Rect(it.positionInRoot(), it.size.toSize())
+                        if (carried == null) origin = it.positionInWindow()
+                    }
+                    // A tap opens the tab. Held and let go where it was, the card's sheet opens (pinning it, its space);
+                    // held and moved, it follows the finger, and let go over a space in the bar below, the tab moves there.
+                    .pointerInput(tab.id) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            var cancelled = false
+                            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                            }
+                            when {
+                                up != null -> {
+                                    up.consume()
+                                    browser.pick(tab, frame)
+                                }
+                                cancelled -> {}
+                                else -> {
+                                    Haptics.tick(view)
+                                    val start = origin + down.position
+                                    var moved = androidx.compose.ui.geometry.Offset.Zero
+                                    drag(down.id) { change ->
+                                        moved += change.positionChange()
+                                        change.consume()
+                                        if (carried != null || moved.getDistance() > 10.dp.toPx()) {
+                                            carried = moved
+                                            if (browser.cardDragged(start + moved)) Haptics.press(view)
+                                        }
+                                    }
+                                    val target = browser.cardDropSpace
+                                    browser.cardDragged(null)
+                                    when {
+                                        carried == null -> browser.showPinMenu(tab)
+                                        target != null -> {
+                                            carried = null
+                                            browser.moveTab(tab, target)
+                                        }
+                                        else -> carried = null
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .clip(shape)
                     .background(if (tab.private) Color(0xFF171717) else Theme.colors.surface, shape)
                     .border(if (active) 2.5.dp else 1.dp, if (active) Theme.colors.accent else Theme.colors.hairline, shape),

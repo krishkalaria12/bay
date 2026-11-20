@@ -6,6 +6,8 @@
 
 pub mod address;
 pub mod app_urls;
+pub mod bang_list;
+pub mod bangs;
 pub mod calc;
 pub mod clean;
 pub mod emoji;
@@ -13,7 +15,9 @@ pub mod engines;
 pub mod ffi;
 pub mod idn;
 pub mod quick_create;
+pub mod scope_suggest;
 pub mod search_field;
+pub mod site_search;
 pub mod suggest;
 pub mod url;
 

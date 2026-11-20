@@ -113,6 +113,24 @@ final class AppModel: ObservableObject {
     try? store.flush()
   }
 
+  // MARK: Bangs
+
+  /// The bang list: the one saved here (or Bay's own), and a newer one once a day.
+  private var bangs: BangList?
+
+  /// Puts the saved bang list in use, and asks for a newer one when a day has gone by.
+  func refreshBangs() {
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+    let known = bangs
+    Task.detached(priority: .utility) { [http, weak self] in
+      let list = known ?? BangList.open(documentsDir: documents)
+      if known == nil { await MainActor.run { self?.bangs = list } }
+      let now = { Int64(Date().timeIntervalSince1970 * 1000) }
+      guard let request = list.request(now: now()), let response = try? await http.send(request: request) else { return }
+      _ = list.answer(response: response, now: now())
+    }
+  }
+
   // MARK: Sync
 
   /// Syncs every half minute while Bay is in front.

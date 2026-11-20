@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 import { FIND_CLEAR_SCRIPT, findScript, findStepScript } from "../src/pagescripts/find.ts";
 import { INSPECT_SCRIPT } from "../src/pagescripts/inspect.ts";
-import { parseMediaMessage, PIP_MEDIA_SCRIPT, seekMediaScript } from "../src/pagescripts/media.ts";
+import { parseMediaMessage, PIP_MEDIA_SCRIPT, seekMediaScript, WATCH_MEDIA_SCRIPT } from "../src/pagescripts/media.ts";
 import { START_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
 
 function page(body: string, { highlights = false } = {}) {
@@ -138,6 +138,37 @@ test("media reports from the page are checked before they're used", () => {
   });
   assert.equal(parseMediaMessage(JSON.stringify({ type: "media", playing: "yes", title: "Song", video: false })), null);
   assert.equal(parseMediaMessage("not json"), null);
+});
+
+test("only media that can be heard is reported: a muted preview isn't, until it's unmuted", () => {
+  const { run, window, document } = page(`<video id="preview" muted src="/preview.mp4"></video>`);
+  const posts: { playing: boolean }[] = [];
+  // SAFETY: the fixture's post is a no-op; this test collects what the watcher reports instead.
+  (window as any).post = (message: { playing: boolean }) => posts.push(message);
+  run(WATCH_MEDIA_SCRIPT);
+  // SAFETY: the fixture HTML contains `#preview`, so getElementById can't come back empty for it.
+  const preview = document.getElementById("preview") as HTMLVideoElement;
+  preview.muted = true;
+  // jsdom doesn't play media: the element is set as playing and its events sent by hand.
+  Object.defineProperty(preview, "paused", { configurable: true, get: () => false });
+  preview.dispatchEvent(new window.Event("play"));
+  preview.dispatchEvent(new window.Event("playing"));
+  assert.deepEqual(posts, []);
+
+  preview.muted = false;
+  preview.dispatchEvent(new window.Event("volumechange"));
+  assert.deepEqual(
+    posts.map((post) => post.playing),
+    [true],
+  );
+
+  // Muted again while it plays: paused, as far as the player is concerned.
+  preview.muted = true;
+  preview.dispatchEvent(new window.Event("volumechange"));
+  assert.deepEqual(
+    posts.map((post) => post.playing),
+    [true, false],
+  );
 });
 
 test("seeking moves the media the page reported, and clamps at the start", () => {

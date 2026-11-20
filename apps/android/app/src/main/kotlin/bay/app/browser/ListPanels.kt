@@ -105,8 +105,7 @@ private const val LIST_FRACTION = 0.85f
 @Composable
 fun ListPanels(browser: BrowserModel, strings: Strings) {
     HistoryPanel(browser, strings, browser.panel == Panel.HISTORY)
-    ArchivePanel(browser, strings, browser.panel == Panel.ARCHIVE)
-    BookmarksPanel(browser, strings, browser.panel == Panel.BOOKMARKS)
+    SavePanel(browser, strings, browser.panel == Panel.SAVE)
     DownloadsPanel(browser, strings, browser.panel == Panel.DOWNLOADS)
     ImportPanel(browser, strings, browser.panel == Panel.IMPORT)
 }
@@ -155,24 +154,24 @@ private fun HistoryPanel(browser: BrowserModel, strings: Strings, visible: Boole
 
 // Archive
 
-/** The space's closed tabs by the day they closed, searchable; a tap brings one back as a tab. */
+/**
+ * The space's archived tabs by day, in the bookmarks drawer's Archive, filtered by the drawer's search: a tap brings one
+ * back, its button takes it off the list.
+ */
 @Composable
-private fun ArchivePanel(browser: BrowserModel, strings: Strings, visible: Boolean) {
+fun ArchiveList(browser: BrowserModel, strings: Strings, query: String) {
     val app = browser.app
-    var query by rememberSaveable(visible) { mutableStateOf("") }
-    var confirming by remember(visible) { mutableStateOf(false) }
-    val title = strings.t("archive.title")
+    var confirming by remember(app.activeSpaceId) { mutableStateOf(false) }
     val space = app.activeSpaceId
     val items = remember(app.revision, space) { app.store.archive(space) }
     val needle = query.trim().lowercase()
     val matches = if (needle.isEmpty()) items else items.filter { it.tab.title.lowercase().contains(needle) || it.tab.url.lowercase().contains(needle) }
-    PanelSheet(visible, title, "archive-screen", strings.sheetWords(title), { browser.panel = null }, maxFraction = LIST_FRACTION) {
+    Column(Modifier.testTag("archive-screen")) {
         if (items.isEmpty()) {
             EmptyNote(strings.t("archive.empty"), strings.t("archive.emptyDetail"), "archive-empty")
-            return@PanelSheet
+            return@Column
         }
-        SheetSearchField(query, { query = it }, strings.t("archive.search"), "archive-search")
-        if (matches.isEmpty()) NoMatches(strings.t("archive.noMatches", mapOf("query" to needle)), "archive-no-matches")
+        if (matches.isEmpty()) NoMatches(strings.t("archive.noMatches", mapOf("query" to query.trim())), "archive-no-matches")
         dayGroups(matches) { it.closedAt }.forEach { (id, group) ->
             SectionLabel(strings.t("history.group.${id.name.lowercase()}"))
             group.forEach { item ->
@@ -181,139 +180,22 @@ private fun ArchivePanel(browser: BrowserModel, strings: Strings, visible: Boole
                     browser, item.tab.url, rowTitle, "${siteName(item.tab.url)} · ${clockTime(item.closedAt, strings.locale)}",
                     strings.t("history.openLabel", mapOf("title" to rowTitle)), strings.t("archive.removeLabel", mapOf("title" to rowTitle)),
                     "archive-restore-${item.tab.id}", "archive-remove-${item.tab.id}",
-                    onOpen = { browser.restoreArchived(item.tab.id) },
-                    onRemove = { app.dispatch(Action.RemoveArchived(item.tab.id)) },
-                )
-            }
-        }
-        ClearFooter(
-            confirming, { confirming = it }, strings.t("archive.clear"), strings.t("archive.clear"),
-            strings.t("archive.clear.detail"), strings.t("archive.keep"), "archive-clear",
-        ) { app.dispatch(Action.ClearArchive(space)) }
-    }
-}
-
-// Bookmarks
-
-/**
- * The space's bookmark tree a folder at a time, in the order it was saved. Search looks through every link, whichever
- * folder it's in. Removing a folder asks first, since it takes everything inside with it.
- */
-@Composable
-private fun BookmarksPanel(browser: BrowserModel, strings: Strings, visible: Boolean) {
-    val app = browser.app
-    // Each opening starts at the top, with no search.
-    var folderId by remember(visible) { mutableStateOf("bookmarks") }
-    var query by remember(visible) { mutableStateOf("") }
-    // The folder whose remove button was tapped: its row asks before anything goes.
-    var confirming by remember(visible) { mutableStateOf<String?>(null) }
-    val space = app.activeSpaceId
-    val listing = remember(app.revision, space, folderId, query) { app.store.bookmarkListing(space, folderId, query) }
-    val parent = listing.parentId
-    val title = if (parent == null) strings.t("bookmarks.title") else listing.title.ifEmpty { strings.t("bookmarks.untitled") }
-    val needle = query.trim()
-    val enter = { id: String ->
-        confirming = null
-        folderId = id
-    }
-    PanelSheet(
-        visible, title, "bookmarks-screen", strings.sheetWords(title), { browser.panel = null },
-        onBack = parent?.let { { enter(it) } }, maxFraction = LIST_FRACTION,
-    ) {
-        // The way to bring bookmarks from another browser, under the list's top.
-        val importRow = @Composable {
-            ActionRow(strings.t("bookmarks.import"), "bookmarks-import", icon = BayIcon.IMPORT, chevron = true) { browser.panel = Panel.IMPORT }
-        }
-        if (listing.nodes == 0u) {
-            EmptyNote(strings.t("bookmarks.empty"), strings.t("bookmarks.emptyDetail"), "bookmarks-empty")
-            importRow()
-            return@PanelSheet
-        }
-        SheetSearchField(query, { query = it }, strings.t("bookmarks.search"), "bookmarks-search")
-        if (listing.rows.isEmpty()) {
-            NoMatches(
-                if (needle.isEmpty()) strings.t("bookmarks.folderEmpty") else strings.t("bookmarks.noMatches", mapOf("query" to needle)),
-                "bookmarks-no-matches",
-            )
-        }
-        listing.rows.forEach { row ->
-            when (val node = row.node) {
-                is BookmarkNode.Url -> {
-                    val rowTitle = pageTitle(node.title, node.url)
-                    SiteRow(
-                        browser, node.url, rowTitle, siteName(node.url),
-                        strings.t("history.openLabel", mapOf("title" to rowTitle)), strings.t("bookmarks.removeLabel", mapOf("title" to rowTitle)),
-                        "bookmark-open-${node.url}", "bookmark-remove-${node.url}",
-                        onOpen = { browser.openListed(node.url) },
-                        onRemove = { app.dispatch(Action.RemoveBookmark(space, node.id)) },
-                    )
-                }
-                is BookmarkNode.Folder -> FolderRow(
-                    strings, node.title.ifEmpty { strings.t("bookmarks.untitled") }, row.links, confirming == node.id,
-                    onOpen = { enter(node.id) },
-                    onAskRemove = { confirming = node.id },
-                    onRemove = {
-                        confirming = null
-                        app.dispatch(Action.RemoveBookmark(space, node.id))
+                    onOpen = {
+                        browser.closeDrawer()
+                        browser.restoreArchived(item.tab.id)
                     },
-                    onKeep = { confirming = null },
+                    onRemove = { app.dispatch(Action.RemoveArchived(item.tab.id)) },
+                    // The drawer draws its own wash under the rows, and swipes sideways between spaces.
+                    flat = true,
                 )
             }
         }
-        if (parent == null && needle.isEmpty()) {
-            Box(Modifier.padding(top = Space.lg)) { importRow() }
+        if (needle.isEmpty()) {
+            ClearFooter(
+                confirming, { confirming = it }, strings.t("archive.clear"), strings.t("archive.clear"),
+                strings.t("archive.clear.detail"), strings.t("archive.keep"), "archive-clear",
+            ) { app.dispatch(Action.ClearArchive(space)) }
         }
-    }
-}
-
-@Composable
-private fun FolderRow(
-    strings: Strings,
-    name: String,
-    links: UInt,
-    confirming: Boolean,
-    onOpen: () -> Unit,
-    onAskRemove: () -> Unit,
-    onRemove: () -> Unit,
-    onKeep: () -> Unit,
-) {
-    val colors = Theme.colors
-    val detail = when (links) {
-        0u -> strings.t("bookmarks.folderEmpty")
-        1u -> strings.t("bookmarks.folderOne")
-        else -> strings.t("bookmarks.folderCount", mapOf("count" to "$links"))
-    }
-    if (confirming) {
-        Column(Modifier.fillMaxWidth().padding(vertical = Space.sm).testTag("bookmark-folder-confirm-$name")) {
-            ActionRow(
-                strings.t("bookmarks.removeFolder", mapOf("title" to name)), "bookmark-folder-remove-confirm", icon = BayIcon.DELETE,
-                detail = detail, destructive = true, onClick = onRemove,
-            )
-            ActionRow(strings.t("bookmarks.keep"), "bookmark-folder-keep", onClick = onKeep)
-        }
-        return
-    }
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).hairline(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            Modifier.weight(1f).testTag("bookmark-folder-$name")
-                .clearAndSetSemantics {
-                    contentDescription = strings.t("bookmarks.openFolderLabel", mapOf("title" to name))
-                    stateDescription = detail
-                    role = Role.Button
-                }
-                .pressFeedback(onClick = onOpen)
-                .padding(vertical = Space.sm),
-            horizontalArrangement = Arrangement.spacedBy(Space.md),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { BayIconView(BayIcon.FOLDER, size = IconSize.control, color = colors.accent) }
-            Column(Modifier.weight(1f)) {
-                BayText(name, variant = TextVariant.CALLOUT, maxLines = 1)
-                BayText(detail, variant = TextVariant.FOOTNOTE, tone = TextTone.MUTED, maxLines = 1)
-            }
-            BayIconView(BayIcon.CHEVRON, size = IconSize.inline, color = colors.muted)
-        }
-        RemoveButton(strings.t("bookmarks.removeLabel", mapOf("title" to name)), "bookmark-folder-remove-$name", onAskRemove)
     }
 }
 
@@ -492,6 +374,7 @@ private fun SiteRow(
     removeTestID: String,
     onOpen: () -> Unit,
     onRemove: () -> Unit,
+    flat: Boolean = false,
 ) {
     val colors = Theme.colors
     val density = LocalDensity.current
@@ -510,10 +393,10 @@ private fun SiteRow(
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
                 .graphicsLayer { translationX = offset.value }
-                .background(colors.surface)
+                .then(if (flat) Modifier else Modifier.background(colors.surface))
                 .hairline()
                 // Sideways only: a vertical drag scrolls the list, and a tap still opens the page.
-                .pointerInput(Unit) {
+                .then(if (flat) Modifier else Modifier.pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             scope.launch {
@@ -528,7 +411,7 @@ private fun SiteRow(
                         onDragCancel = { scope.launch { offset.animateTo(0f, spring()) } },
                         onHorizontalDrag = { _, amount -> scope.launch { offset.snapTo(minOf(0f, offset.value + amount)) } },
                     )
-                },
+                }),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(

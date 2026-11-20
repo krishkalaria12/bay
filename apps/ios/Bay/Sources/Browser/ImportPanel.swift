@@ -223,7 +223,7 @@ struct ImportPanel: View {
       HStack(spacing: Space.sm) {
         Spacer(minLength: 0)
         if counts.bookmarks > 0 {
-          PillButton(strings.t("import.done.showBookmarks")) { browser.panel = .bookmarks }.accessibilityIdentifier("import-show-bookmarks")
+          PillButton(strings.t("import.done.showBookmarks")) { browser.openDrawer() }.accessibilityIdentifier("import-show-bookmarks")
         }
         PillButton(strings.t("import.done.finish"), action: close).accessibilityIdentifier("import-finish")
       }

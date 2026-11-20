@@ -368,7 +368,7 @@ private fun Done(browser: BrowserModel, strings: Strings, counts: ImportCounts, 
     }
     Row(Modifier.fillMaxWidth().padding(top = Space.xl), horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End)) {
         if (counts.bookmarks > 0u) {
-            PillButton(strings.t("import.done.showBookmarks"), Modifier.testTag("import-show-bookmarks")) { browser.panel = Panel.BOOKMARKS }
+            PillButton(strings.t("import.done.showBookmarks"), Modifier.testTag("import-show-bookmarks")) { browser.openDrawer() }
         }
         PillButton(strings.t("import.done.finish"), Modifier.testTag("import-finish"), onClick = close)
     }

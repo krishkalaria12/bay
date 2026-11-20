@@ -44,6 +44,11 @@ val SettingsPage.id: String
  * write the pages (`context`). The core writes every page; this runs what its rows ask for (`perform`).
  */
 class SettingsModel(private val appContext: Context, val app: AppModel, val browser: BrowserModel, val strings: Strings) {
+    init {
+        // The bookmarks drawer slides out over the page, so Settings steps aside for it.
+        browser.leaveSettings = ::close
+    }
+
     var visible by mutableStateOf(false)
 
     /** The saved sign-ins Settings › Passwords lists, read when Settings opens and after one is forgotten. */
@@ -148,7 +153,7 @@ class SettingsModel(private val appContext: Context, val app: AppModel, val brow
             }
             // The browser's own sheets open over Settings.
             is IndexEntry.Action -> when (entry.action) {
-                IndexAction.BOOKMARKS -> browser.panel = Panel.BOOKMARKS
+                IndexAction.BOOKMARKS -> browser.openDrawer()
                 IndexAction.HISTORY -> browser.panel = Panel.HISTORY
                 IndexAction.DOWNLOADS -> browser.panel = Panel.DOWNLOADS
                 IndexAction.IMPORT -> browser.panel = Panel.IMPORT

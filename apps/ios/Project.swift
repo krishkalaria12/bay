@@ -83,7 +83,12 @@ let project = Project(
         "BayCanBeDefaultBrowser": .boolean(claimsBrowser),
       ]),
       sources: ["Bay/Sources/**"],
-      resources: ["Bay/Resources/**"],
+      resources: [
+        "Bay/Resources/**",
+        // The fonts pages can show in, and their licences, one set shared with Android (packages/mobile-core/design/fonts).
+        "\(core)/design/fonts/*.woff2",
+        "\(core)/design/fonts/OFL-*.txt",
+      ],
       entitlements: claimsBrowser ? .dictionary(["com.apple.developer.web-browser": true]) : nil,
       dependencies: [
         .target(name: "BayCore"), .target(name: "BayDesign"), .target(name: "BayEngine"), .target(name: "BayShare"), .target(name: "BayWidgets"),

@@ -238,6 +238,12 @@ public enum BayIcon: CaseIterable, Sendable {
   case minus
   case globe
   case sync
+  case tools
+  case unfold
+  case font
+  case fullscreen
+  case dark
+  case swipe
 
   /// The icon a name from the core stands for ("palette", "chevron"), as the Expo app's icon names were.
   public init?(name: String) {
@@ -298,6 +304,12 @@ public enum BayIcon: CaseIterable, Sendable {
     case "minus": self = .minus
     case "globe": self = .globe
     case "sync": self = .sync
+    case "tools": self = .tools
+    case "unfold": self = .unfold
+    case "font": self = .font
+    case "fullscreen": self = .fullscreen
+    case "dark": self = .dark
+    case "swipe": self = .swipe
     default: return nil
     }
   }
@@ -361,6 +373,12 @@ public enum BayIcon: CaseIterable, Sendable {
     case .minus: return "minus"
     case .globe: return "globe"
     case .sync: return "arrow.triangle.2.circlepath"
+    case .tools: return "hammer"
+    case .unfold: return "chevron.up.chevron.down"
+    case .font: return "textformat"
+    case .fullscreen: return "arrow.up.left.and.arrow.down.right"
+    case .dark: return "moon"
+    case .swipe: return "hand.draw"
     }
   }
 }

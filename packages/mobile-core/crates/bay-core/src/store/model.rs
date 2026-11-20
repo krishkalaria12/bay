@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use super::bookmarks::{
-    BOOKMARKS_ROOT, add_bookmarks, empty_bookmarks, folder_children, is_bookmarked,
-    remove_bookmark, remove_bookmarks_of,
+    BOOKMARKS_ROOT, add_bookmarks, empty_bookmarks, folder_children, is_bookmarked, move_bookmark,
+    remove_bookmark, remove_bookmarks_of, rename_bookmark, save_bookmark,
 };
 use super::parse::{
     parse_preferences, parse_reader_settings, parse_selectors, parse_site_setting_input,
@@ -322,6 +322,18 @@ pub struct SiteSettingInput {
     pub desktop_mode: bool,
     pub block_off: Vec<SiteBlockGroup>,
     pub swipe: Option<SwipeMode>,
+    #[serde(default)]
+    pub font: Option<SiteFont>,
+    #[serde(default)]
+    pub fullscreen: bool,
+    #[serde(default)]
+    pub force_dark: bool,
+    #[serde(default = "on")]
+    pub mini_player: bool,
+}
+
+fn on() -> bool {
+    true
 }
 
 /// When Bay opens on a fresh start page: never, or after this many hours away. Its own type rather than an optional
@@ -380,6 +392,8 @@ pub struct PreferencesUpdate {
     pub swipe_to_navigate: Option<SwipeMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_links: Option<AppLinks>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_font: Option<SiteFont>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
@@ -456,6 +470,27 @@ pub enum Action {
         space_id: String,
         bookmark: BookmarkNode,
     },
+    /// A page saved into a folder of a space (`bookmark`'s parent): moved there and renamed if the space has it already.
+    SaveBookmark {
+        space_id: String,
+        bookmark: BookmarkNode,
+    },
+    /// A bookmark or folder moved into `parent_id`, at `index` among its children (at the end without one).
+    MoveBookmark {
+        space_id: String,
+        id: String,
+        parent_id: String,
+        #[serde(default)]
+        index: Option<i64>,
+    },
+    /// A bookmark's new title (and address), or a folder's new name.
+    RenameBookmark {
+        space_id: String,
+        id: String,
+        title: String,
+        #[serde(default)]
+        url: Option<String>,
+    },
     ActivateTab {
         id: String,
         now: i64,
@@ -525,6 +560,13 @@ pub enum Action {
     DeleteFolder {
         id: String,
     },
+    /// A pinned folder dragged onto another: put after it when `after`, else before it.
+    MoveFolder {
+        id: String,
+        beside: String,
+        #[serde(default)]
+        after: bool,
+    },
     MoveTab {
         id: String,
         space_id: String,
@@ -537,10 +579,16 @@ pub enum Action {
         #[serde(default)]
         folder_id: Option<String>,
     },
+    /// A pin made an Essential or a pinned row, into a folder or out of one, and put beside the pin `beside` when given
+    /// (a row dragged onto another): after it when `after`, else before it.
     MovePin {
         id: String,
         kind: PinKind,
         folder_id: Option<String>,
+        #[serde(default)]
+        beside: Option<String>,
+        #[serde(default)]
+        after: bool,
     },
     SyncSpacePins {
         space_id: String,
@@ -816,6 +864,47 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
                 data,
                 space_id,
                 remove_bookmark(&space_bookmarks(data, space_id), id),
+            );
+        }
+
+        Action::SaveBookmark { space_id, bookmark } => {
+            let BookmarkNode::Url { url, .. } = bookmark else {
+                return None;
+            };
+            if !js::is_web_address(url) || !has_space(data, space_id) {
+                return None;
+            }
+            return with_space_bookmarks(
+                data,
+                space_id,
+                save_bookmark(&space_bookmarks(data, space_id), bookmark),
+            );
+        }
+
+        Action::MoveBookmark {
+            space_id,
+            id,
+            parent_id,
+            index,
+        } => {
+            let index = index.and_then(|index| usize::try_from(index).ok());
+            return with_space_bookmarks(
+                data,
+                space_id,
+                move_bookmark(&space_bookmarks(data, space_id), id, parent_id, index),
+            );
+        }
+
+        Action::RenameBookmark {
+            space_id,
+            id,
+            title,
+            url,
+        } => {
+            return with_space_bookmarks(
+                data,
+                space_id,
+                rename_bookmark(&space_bookmarks(data, space_id), id, title, url.as_deref()),
             );
         }
 
@@ -1135,6 +1224,19 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
             }
         }
 
+        Action::MoveFolder { id, beside, after } => {
+            if id == beside {
+                return None;
+            }
+            let at = next.folders.iter().position(|folder| &folder.id == id)?;
+            let folder = next.folders.remove(at);
+            let place = next
+                .folders
+                .iter()
+                .position(|folder| &folder.id == beside)?;
+            next.folders.insert(place + usize::from(*after), folder);
+        }
+
         Action::DeleteFolder { id } => {
             if !data.folders.iter().any(|folder| &folder.id == id) {
                 return None;
@@ -1309,12 +1411,20 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
             id,
             kind,
             folder_id,
+            beside,
+            after,
         } => {
             let folder_id = valid_pin_folder(data, *kind, folder_id.as_deref());
-            for site in next.pinned_sites.iter_mut().filter(|site| &site.id == id) {
-                site.kind = *kind;
-                site.folder_id = folder_id.clone();
-            }
+            let at = next.pinned_sites.iter().position(|site| &site.id == id)?;
+            let mut site = next.pinned_sites.remove(at);
+            site.kind = *kind;
+            site.folder_id = folder_id;
+            let place = beside
+                .as_ref()
+                .filter(|beside| *beside != id)
+                .and_then(|beside| next.pinned_sites.iter().position(|site| &site.id == beside))
+                .map_or(at, |place| place + usize::from(*after));
+            next.pinned_sites.insert(place, site);
         }
 
         Action::RemovePin { id } => next.pinned_sites.retain(|site| &site.id != id),

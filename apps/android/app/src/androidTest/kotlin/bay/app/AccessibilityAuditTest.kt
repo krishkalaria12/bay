@@ -51,10 +51,11 @@ class AccessibilityAuditTest {
         tag("address-input").performImeAction()
         await("bar-more")
         tag("bar-more").performClick()
-        await("page-menu-close")
+        await("page-menu")
         check("page menu")
 
-        tag("page-menu-close").performClick()
+        // Sheets have no close button: Back closes them.
+        androidx.test.espresso.Espresso.pressBack()
         await("bar-tabs")
         tag("bar-tabs").performClick()
         await("tab-switcher-settings")

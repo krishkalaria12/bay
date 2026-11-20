@@ -2,28 +2,25 @@ import BayCore
 import BayDesign
 import SwiftUI
 
-/// The page menu's measures, as Arc Search draws it.
+/// The page menu's measures.
 private enum MenuLayout {
-  static let capsuleHeight: CGFloat = 47
-  static let tilesGap: CGFloat = 17
-  static let tileSpacing: CGFloat = 16
-  static let tileHeight: CGFloat = 64
-  static let tileRadius: CGFloat = 22
-  static let rowHeight: CGFloat = 48
+  static let addressHeight: CGFloat = 48
+  static let tileHeight: CGFloat = 76
+  static let rowHeight: CGFloat = 52
   static let zoomMin = 80
   static let zoomMax = 200
 }
 
-/// What to do with the page showing (bar-more): where to go, the four things done most, display options, this site,
-/// the page's tools one step away, and what blocking did on it.
+/// What to do with the page showing (bar-more), as one floating sheet: the address with back, forward, copy and reload
+/// on top; Share, Pin, Save and Find; this site's settings and Developer tools a step away; Reader, Hide elements,
+/// Translate and the page's zoom;
+/// Bookmarks, History, Downloads and Settings.
 struct PageMenu: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
-  // Rarely used page tools sit one step away, and the display options open in place, so the menu fits.
   @State private var tools = false
-  @State private var display = false
 
   var body: some View {
     if tools {
@@ -42,99 +39,94 @@ struct PageMenu: View {
   }
 
   private var mainPage: some View {
-    let navigation = browser.activeNavigation
     let title = strings.t("pageMenu.title")
-    let blocking = browser.blocking
     let zoom = browser.pageZoom
+    let reading = browser.readerTab == app.activeTabId
+    let readerHere = browser.siteSetting.reader
     return PanelSheet(
       title: title, testID: "page-menu", words: strings.sheetWords(title), onClose: { browser.panel = nil },
-      header: AnyView(SiteHeader(browser: browser, blocking: blocking).environmentObject(strings).environmentObject(app))
+      header: AnyView(AddressRow(browser: browser, act: act).environmentObject(strings).environmentObject(app))
     ) {
-      SheetIconButton(.settings, label: strings.t("pageMenu.settings"), tone: .default, action: act(onSettings))
-        .accessibilityIdentifier("page-settings")
-    } content: {
-      // The address capsule's controls: where to go, and a fresh tab.
-      HStack(spacing: 0) {
-        NavigationAction(id: "page-back", icon: .back, label: strings.t("pageMenu.back"), disabled: !navigation.canGoBack, action: act(browser.goBack))
-        NavigationAction(
-          id: "page-forward", icon: .forward, label: strings.t("pageMenu.forward"), disabled: !navigation.canGoForward, action: act(browser.goForward))
-        if navigation.isLoading {
-          NavigationAction(id: "page-stop", icon: .close, label: strings.t("pageMenu.stop"), action: act(browser.stop))
-        } else {
-          NavigationAction(id: "page-reload", icon: .reload, label: strings.t("pageMenu.reload"), action: act(browser.reload))
-        }
-        NavigationAction(id: "page-new-tab", icon: .add, label: strings.t("pageMenu.newTab"), action: act { browser.search(inNewTab: true) })
-      }
-      .padding(.horizontal, Space.xs)
-      .background(BayColor.fill, in: Capsule())
-      .padding(.top, Space.xs)
-
-      HStack(alignment: .top, spacing: MenuLayout.tileSpacing) {
-        Tile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
-        let reading = browser.readerTab == app.activeTabId
-        Tile(
-          id: "page-reader", icon: .reader, label: strings.t("pageMenu.reader"),
-          accessibilityLabel: strings.t(reading ? "pageMenu.readerSettings" : "pageMenu.reader"), active: reading,
-          action: { browser.openReader() })
+      HStack(spacing: Space.sm) {
+        MenuTile(id: "page-share", icon: .share, label: strings.t("pageMenu.share"), action: act(browser.share))
+        let pinned = browser.isPinned
+        MenuTile(
+          id: "page-pin", icon: pinned ? .unpin : .pin, label: strings.t("pageMenu.pin"),
+          accessibilityLabel: strings.t(pinned ? "pageMenu.unpin" : "pageMenu.pinToStart"), active: pinned, action: act(browser.togglePin))
         let bookmarked = browser.isBookmarked
-        Tile(
-          id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.bookmark"),
-          accessibilityLabel: bookmarked ? strings.t("pageMenu.removeBookmark") : strings.t("pageMenu.bookmark"), active: bookmarked,
-          action: act(browser.toggleBookmark))
-        Tile(id: "page-share", icon: .share, label: strings.t("pageMenu.share"), action: act(browser.share))
+        MenuTile(
+          id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.save"),
+          accessibilityLabel: strings.t("pageMenu.bookmark"), active: bookmarked,
+          action: { browser.panel = .save })
+        MenuTile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
       }
-      .padding(.top, MenuLayout.tilesGap)
 
-      RowGroup {
-        ActionRow(
-          strings.t("pageMenu.displayOptions"), testID: "page-display-options", icon: .textSize, value: zoom == 100 ? nil : strings.percent(zoom),
-          chevron: !display
-        ) { withAnimation(.easeOut(duration: 0.2)) { display.toggle() } }
-        if display {
+      VStack(spacing: Space.md) {
+        RowGroup {
+          ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true) { browser.panel = .siteSettings }
           RowDivider()
-          ActionRow(strings.t("pageMenu.translate"), testID: "page-translate", icon: .translate, action: act(browser.translate))
+          ActionRow(strings.t("pageMenu.developerTools"), testID: "page-more-tools", icon: .tools, chevron: true) { tools = true }
+        }
+        RowGroup {
+          ListRow(
+            label: strings.t(reading ? "pageMenu.readerSettings" : "pageMenu.showReader"), testID: "page-reader", icon: .reader,
+            primary: { browser.openReader() }
+          ) {
+            Button(strings.t(reading ? "pageMenu.readerSettings" : "pageMenu.showReader")) { browser.openReader() }
+            if reading {
+              Button(strings.t("reader.exit")) { act(browser.exitReader)() }
+            }
+            Button {
+              browser.changeSiteSetting { $0.reader = !readerHere }
+            } label: {
+              if readerHere {
+                Label(strings.t("site.reader"), systemImage: "checkmark")
+              } else {
+                Text(verbatim: strings.t("site.reader"))
+              }
+            }
+          }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, action: act { browser.startPicking(.hide) })
+          RowDivider()
+          ListRow(label: strings.t("pageMenu.translatePage"), testID: "page-translate", icon: .translate, primary: act { browser.translate() }) {
+            ForEach(translationLanguages, id: \.id) { language in
+              Button(language.name) { act { browser.translate(to: language.id) }() }
+            }
+          }
           RowDivider()
           ZoomRow(zoom: zoom, onZoom: browser.setZoom)
-          RowDivider()
-          let desktop = browser.siteSetting.desktopMode
-          ActionRow(strings.t("site.desktop"), testID: "page-desktop", icon: .desktop, toggle: desktop) { browser.setDesktop(!desktop) }
         }
-        RowDivider()
-        ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true) { browser.panel = .siteSettings }
-        RowDivider()
-        ActionRow(strings.t("pageMenu.tools"), testID: "page-more-tools", icon: .more, chevron: true) { tools = true }
+        RowGroup {
+          ActionRow(strings.t("pageMenu.bookmarks"), testID: "page-bookmarks", icon: .bookmark, chevron: true) { browser.openDrawer() }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true) { browser.panel = .history }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.downloads"), testID: "page-downloads", icon: .download, chevron: true) { browser.panel = .downloads }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.settings"), testID: "page-settings", icon: .settings, chevron: true, action: act(onSettings))
+        }
       }
-      .padding(.top, Space.lg)
-
-      if blocking != .off {
-        BlockingCard(browser: browser, blocking: blocking, onRestore: act(browser.restoreOriginal))
-          .padding(.top, Space.lg)
-      }
+      .padding(.top, Space.md)
     }
   }
 
+  /// Bay's languages to translate into, the one it's in first.
+  private var translationLanguages: [LocaleInfo] {
+    let all = locales()
+    let current = strings.locale
+    return all.filter { $0.id == current } + all.filter { $0.id != current }
+  }
+
   private var toolsPage: some View {
-    let title = strings.t("pageMenu.toolsTitle")
-    let pinned = browser.isPinned
+    let title = strings.t("pageMenu.developerTools")
+    let hidden = browser.activeHidden.count
     return PanelSheet(title: title, testID: "page-menu", words: strings.sheetWords(title), onClose: { browser.panel = nil }, onBack: { tools = false }) {
-      VStack(spacing: Space.lg) {
+      VStack(spacing: Space.md) {
         RowGroup {
-          ActionRow(
-            pinned ? strings.t("pageMenu.unpin") : strings.t("pageMenu.pinToStart"), testID: "page-pin", icon: pinned ? .unpin : .pin,
-            action: act(browser.togglePin))
-          RowDivider()
-          ActionRow(strings.t("pageMenu.copyLink"), testID: "page-copy", icon: .link, action: act(browser.copyLink))
-          RowDivider()
-          ActionRow(strings.t("pageMenu.privateTab"), testID: "page-new-private", icon: .private, action: act { browser.search(inNewTab: true, privately: true) })
-          RowDivider()
-          ActionRow(
-            strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, detail: strings.t("pageMenu.hideElements.detail"),
-            action: act { browser.startPicking(.hide) })
-          RowDivider()
           ActionRow(
             strings.t("pageMenu.inspect"), testID: "page-inspect", icon: .inspect, detail: strings.t("pageMenu.inspect.detail"),
             action: act { browser.startPicking(.inspect) })
-          let hidden = browser.activeHidden.count
           if hidden > 0 {
             RowDivider()
             ActionRow(
@@ -147,9 +139,7 @@ struct PageMenu: View {
             action: act(browser.copyMarkdown))
         }
         RowGroup {
-          ActionRow(strings.t("pageMenu.history"), testID: "page-history", icon: .history, chevron: true) { browser.panel = .history }
-          RowDivider()
-          ActionRow(strings.t("pageMenu.downloads"), testID: "page-downloads", icon: .download, chevron: true) { browser.panel = .downloads }
+          ActionRow(strings.t("pageMenu.privateTab"), testID: "page-new-private", icon: .private, action: act { browser.search(inNewTab: true, privately: true) })
           RowDivider()
           ActionRow(strings.t("pageMenu.archiveTab"), testID: "page-close-tab", icon: .archive, action: act { browser.archive(app.activeTabId) })
         }
@@ -158,28 +148,59 @@ struct PageMenu: View {
   }
 }
 
-/// A round icon button for the navigation row: the icons say enough on their own.
-private struct NavigationAction: View {
-  let id: String
-  let icon: BayIcon
-  let label: String
-  var disabled = false
-  let action: () -> Void
+/// The page's address in one capsule: back and forward at its left, the lock (or a warning) and the address cut short
+/// at its end, and copy and reload (or stop) at its right. Tapping the address opens search with it filled in.
+private struct AddressRow: View {
+  @EnvironmentObject private var strings: Strings
+  @ObservedObject var browser: BrowserModel
+  let act: (@escaping () -> Void) -> () -> Void
 
   var body: some View {
+    let navigation = browser.activeNavigation
+    let url = browser.activeUrl
+    let insecure = url.hasPrefix("http:")
+    HStack(spacing: 0) {
+      icon(.back, id: "page-back", label: strings.t("pageMenu.back"), disabled: !navigation.canGoBack, action: act(browser.goBack))
+      icon(.forward, id: "page-forward", label: strings.t("pageMenu.forward"), disabled: !navigation.canGoForward, action: act(browser.goForward))
+      Button(action: act { browser.search(inNewTab: false) }) {
+        HStack(spacing: Space.xs) {
+          BayIconView(insecure ? .error : .lock, size: IconSize.inline, color: insecure ? BayColor.danger : BayColor.muted)
+          BayText(displayUrl(url: url), variant: .callout).lineLimit(1).truncationMode(.tail)
+            .accessibilityIdentifier("page-menu-url")
+          Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: MenuLayout.addressHeight)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(Text(verbatim: "\(strings.t(insecure ? "pageMenu.notSecure" : "pageMenu.secure")), \(url)"))
+      icon(.link, id: "page-copy", label: strings.t("pageMenu.copyLink"), action: act(browser.copyLink))
+      if navigation.isLoading {
+        icon(.close, id: "page-stop", label: strings.t("pageMenu.stop"), action: act(browser.stop))
+      } else {
+        icon(.reload, id: "page-reload", label: strings.t("pageMenu.reload"), action: act(browser.reload))
+      }
+    }
+    .padding(.horizontal, Space.xs)
+    .background(BayColor.background, in: Capsule())
+    .overlay(Capsule().strokeBorder(BayColor.hairline, lineWidth: 1))
+  }
+
+  private func icon(_ icon: BayIcon, id: String, label: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      BayIconView(icon, size: IconSize.control).frame(maxWidth: .infinity).frame(height: MenuLayout.capsuleHeight).contentShape(Rectangle())
+      BayIconView(icon, size: IconSize.row, color: disabled ? BayColor.muted.opacity(0.5) : BayColor.foreground)
+        .frame(width: 40, height: MenuLayout.addressHeight)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.pressFeedback)
     .disabled(disabled)
-    .opacity(disabled ? 0.35 : 1)
     .accessibilityLabel(Text(verbatim: label))
     .accessibilityIdentifier(id)
   }
 }
 
-/// A square with an icon and its label under it, four to a row.
-private struct Tile: View {
+/// A rounded square with an icon over its label, four to a row: the page menu's and the tab sheet's.
+struct MenuTile: View {
   let id: String
   let icon: BayIcon
   let label: String
@@ -189,18 +210,52 @@ private struct Tile: View {
 
   var body: some View {
     Button(action: action) {
-      VStack(spacing: Space.sm) {
-        BayIconView(icon, size: IconSize.control + 2, color: active ? BayColor.accent : BayColor.foreground)
-          .frame(maxWidth: .infinity)
-          .frame(height: MenuLayout.tileHeight)
-          .background(active ? BayColor.accent.opacity(0.15) : BayColor.fill, in: RoundedRectangle(cornerRadius: MenuLayout.tileRadius, style: .continuous))
-        BayText(label, variant: .caption, tone: active ? .accent : .default).lineLimit(1)
+      VStack(spacing: Space.xs) {
+        BayIconView(icon, size: IconSize.control, color: active ? BayColor.accent : BayColor.foreground)
+        BayText(label, variant: .caption, weight: .medium, tone: active ? .accent : .default).lineLimit(1)
       }
+      .frame(maxWidth: .infinity)
+      .frame(height: MenuLayout.tileHeight)
+      .background(active ? BayColor.accent.opacity(0.15) : BayColor.fill, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
     .buttonStyle(.pressFeedback)
     .accessibilityLabel(Text(verbatim: accessibilityLabel ?? label))
     .accessibilityAddTraits(active ? .isSelected : [])
     .accessibilityIdentifier(id)
+  }
+}
+
+/// A row that does its main thing when tapped and offers a short list behind ⌃⌄ (Reader's choices, Translate's
+/// languages); VoiceOver gets the list as the row's actions.
+private struct ListRow<Items: View>: View {
+  let label: String
+  let testID: String
+  let icon: BayIcon
+  let primary: () -> Void
+  @ViewBuilder let items: () -> Items
+
+  var body: some View {
+    HStack(spacing: 0) {
+      Button(action: primary) {
+        HStack(spacing: 14) {
+          BayIconView(icon, size: IconSize.control)
+          BayText(label).lineLimit(1)
+          Spacer(minLength: 0)
+        }
+        .padding(.leading, Space.lg)
+        .frame(minHeight: MenuLayout.rowHeight)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.pressFeedback)
+      .accessibilityIdentifier(testID)
+      Menu(content: items) {
+        BayIconView(.unfold, size: IconSize.small, color: BayColor.muted)
+          .frame(width: 52, height: MenuLayout.rowHeight)
+          .contentShape(Rectangle())
+      }
+      .accessibilityLabel(Text(verbatim: label))
+      .accessibilityIdentifier("\(testID)-choices")
+    }
   }
 }
 
@@ -244,7 +299,7 @@ private struct ZoomRow: View {
 
 /// What blocking did on this page: the count where the engine has one, the switch for this site, and a way to see the
 /// page as the site made it when blocking broke something.
-private struct BlockingCard: View {
+struct BlockingCard: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
   @ObservedObject var browser: BrowserModel
@@ -276,41 +331,6 @@ private struct BlockingCard: View {
         .buttonStyle(.pressFeedback)
         .accessibilityLabel(Text(verbatim: strings.t("pageMenu.restore")))
         .accessibilityIdentifier("page-restore")
-      }
-    }
-  }
-}
-
-/// The page's title and address, its site behind a lock (or a warning when it isn't encrypted), and what's blocked.
-private struct SiteHeader: View {
-  @EnvironmentObject private var strings: Strings
-  @EnvironmentObject private var app: AppModel
-  @ObservedObject var browser: BrowserModel
-  let blocking: BrowserModel.PageBlocking
-
-  var body: some View {
-    let url = browser.activeUrl
-    let title = browser.activeNavigation.title.isEmpty ? (browser.activeTab?.title ?? "") : browser.activeNavigation.title
-    let web = url.hasPrefix("http:") || url.hasPrefix("https:")
-    let insecure = url.hasPrefix("http:")
-    let status = [
-      web ? (insecure ? strings.t("pageMenu.notSecure") : strings.t("pageMenu.secure")) : "",
-      blocking == .on ? strings.t("pageMenu.blocked") : blocking == .off ? "" : strings.t("pageMenu.blockingPaused"),
-    ].filter { !$0.isEmpty }.joined(separator: " · ")
-    HStack(spacing: Space.md) {
-      if !url.isEmpty { SiteIcon(url: url, size: 44) }
-      VStack(alignment: .leading, spacing: 0) {
-        BayText(title.isEmpty ? url : title, variant: .headline).lineLimit(2).accessibilityAddTraits(.isHeader)
-        BayText(url, variant: .footnote, tone: .muted).lineLimit(1).truncationMode(.middle).accessibilityIdentifier("page-menu-url")
-        if !status.isEmpty {
-          HStack(spacing: Space.xs) {
-            if web { BayIconView(insecure ? .error : .lock, size: IconSize.inline - 2, color: insecure ? BayColor.danger : BayColor.muted) }
-            BayText(status, variant: .caption, weight: .regular, tone: insecure ? .danger : .muted).lineLimit(2)
-          }
-          .padding(.top, Space.xxs)
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel(Text(verbatim: status))
-        }
       }
     }
   }

@@ -1,6 +1,7 @@
 //! The rows under the search field, ranked as the desktop ranks them: the typed address or a matching site first,
 //! the search, open tabs, history, bookmarks and archived tabs by match and frecency, the engine's suggestions, and
-//! the calculator, emoji and quick-create rows. Bang searches, site scopes and commands are the desktop's alone.
+//! the calculator, emoji and quick-create rows. Sites to search and bangs are added over these by the phone's
+//! search field (`search_field.rs`); commands are the desktop's alone.
 
 use std::collections::{HashMap, HashSet};
 
@@ -91,6 +92,14 @@ pub struct SuggestOptions {
     pub calculator_enabled: bool,
 }
 
+/// A bookmark's place: its space, and the folder it's in ("" at the top of the space's bookmarks).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
+pub struct BookmarkPlace {
+    pub space_id: String,
+    pub folder: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, uniffi::Enum)]
 #[serde(
     tag = "kind",
@@ -110,6 +119,9 @@ pub enum Suggestion {
         bookmarked: bool,
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         visited: bool,
+        /// Where the page is saved as a bookmark, filled in by the phone's search field.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        location: Option<BookmarkPlace>,
     },
     Search {
         query: String,
@@ -132,6 +144,17 @@ pub enum Suggestion {
         title: String,
         url: String,
         site: String,
+    },
+    /// "Search IMDb": a site the typed text names. Choosing it turns the field into the site's chip.
+    Scope {
+        scope: super::site_search::SearchScope,
+    },
+    /// A result from the site being searched (an IMDb title, a Wikipedia article), opened directly.
+    Result {
+        title: String,
+        detail: String,
+        image: Option<String>,
+        url: String,
     },
 }
 
@@ -517,6 +540,7 @@ fn page_suggestion(
         tab_id,
         bookmarked: c.bookmarked,
         visited: c.visits > 0.0,
+        location: None,
     }
 }
 
@@ -527,6 +551,8 @@ fn suggestion_key(s: &Suggestion) -> String {
         Suggestion::Calc { expression, .. } => format!("calc:{expression}"),
         Suggestion::Emoji { value, .. } => format!("emoji:{value}"),
         Suggestion::Create { id, .. } => format!("create:{id}"),
+        Suggestion::Scope { scope } => format!("scope:{}", scope.host),
+        Suggestion::Result { url, .. } => format!("result:{url}"),
     }
 }
 
@@ -654,6 +680,7 @@ fn site_row(site: &Site) -> Suggestion {
         cleaned_id: None,
         bookmarked: false,
         visited: true,
+        location: None,
     }
 }
 
@@ -820,6 +847,7 @@ pub fn build_suggestions(
                 cleaned_id: None,
                 bookmarked: false,
                 visited: false,
+                location: None,
             };
         }
         row.unwrap_or(Suggestion::Page {
@@ -830,6 +858,7 @@ pub fn build_suggestions(
             cleaned_id: None,
             bookmarked: false,
             visited: false,
+            location: None,
         })
     };
 

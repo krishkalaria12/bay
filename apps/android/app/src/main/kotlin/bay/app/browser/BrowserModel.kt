@@ -9,7 +9,9 @@ import android.os.Build
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
+import android.util.Base64
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +43,7 @@ import bay.core.ReaderSettings
 import bay.core.ReaderSettingsInput
 import bay.core.ScriptTiming
 import bay.core.SearchEngine
+import bay.core.SiteFont
 import bay.core.SiteSetting
 import bay.core.SiteSettingInput
 import bay.core.SpaceColor
@@ -61,6 +64,7 @@ import bay.core.parsePickedMessage
 import bay.core.readerVariables
 import bay.core.scriptsFor
 import bay.core.searchEngine
+import bay.core.siteFontFace
 import bay.core.siteHost
 import bay.engine.BayEngineView
 import bay.engine.Engine
@@ -77,6 +81,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -92,7 +98,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, BOOKMARKS, DOWNLOADS, SITE_SETTINGS, LINK, TABS, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -105,6 +111,12 @@ data class FindState(val query: String = "", val count: Int? = null, val index: 
 
 /** A card growing into its page: the tab and where its card sat on screen, in pixels. */
 data class Zoom(val tab: BrowserTab, val frame: androidx.compose.ui.geometry.Rect)
+
+/**
+ * A short notice at the top of the screen, under the status bar: the space just switched to, where a bookmark went.
+ * Tapping it does `action`, when it has one.
+ */
+data class TopNote(val id: Long, val text: String, val space: BrowserSpace? = null, val action: (() -> Unit)? = null)
 
 /** One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer. */
 /** A short message above the bar; a reading tool's notice (Inspect, Reader, the element picker) has its own id. */
@@ -170,18 +182,58 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var pinTab by mutableStateOf<BrowserTab?>(null)
         private set
 
-    /** The folder picked in the tabs menu, which it renames or deletes. */
-    var activeFolderId by mutableStateOf<String?>(null)
-
     var zoom by mutableStateOf<Zoom?>(null)
         private set
 
     var toast by mutableStateOf<ToastMessage?>(null)
         private set
-
-    /** The bar is scrolled away while the page scrolls down. */
-    var barHidden by mutableStateOf(false)
+    var topNote by mutableStateOf<TopNote?>(null)
         private set
+    private var topNoteTimer: Job? = null
+    /** The bookmarks drawer is out, opened on `drawerFolder` when it has one. */
+    var drawerOpen by mutableStateOf(false)
+        private set
+    var drawerFolder: String? = null
+        private set
+    /** The drawer shows the space's archived tabs instead of its bookmarks. */
+    var drawerArchive by mutableStateOf(false)
+
+    /**
+     * How far the bar has slid away with the page showing: 0 in full, 1 gone. The engine moves it as Chrome moves its
+     * bottom toolbar, in step with the page as it scrolls (BayEngineView.barHeight).
+     */
+    var barGone by mutableFloatStateOf(0f)
+        private set
+
+    /** How much of a page's bottom the bar covers, in pixels, as the screen lays it out. */
+    private var barCover = 0
+
+    /** The bar brought back for a moment on a site set to Always fullscreen, by a tap on the bottom edge. */
+    var peeking by mutableStateOf(false)
+        private set
+    private var peekJob: Job? = null
+
+    /** The page showing is on a site set to Always fullscreen, with nothing over it: no bar, no status bar. */
+    val fullscreen: Boolean
+        get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !drawerOpen && !peeking &&
+            app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
+
+    /** The screen's layout of the bar: each page leaves that much room for it at its bottom while it shows. */
+    fun barCoverChanged(pixels: Int) {
+        if (barCover == pixels) return
+        barCover = pixels
+        for ((id, view) in views) configure(view, pageUrl(id))
+    }
+
+    fun peekBar() {
+        peeking = true
+        barGone = 0f
+        peekJob?.cancel()
+        peekJob = scope.launch {
+            delay(4_000)
+            peeking = false
+        }
+    }
 
     /** Media playing (or paused) in each tab, as its page reports it. */
     val media = mutableStateMapOf<String, TabMedia>()
@@ -216,8 +268,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
 
-    /** The colour along each tab's page's bottom edge, for what sits behind the bar. */
-    val pageBottomColors = mutableStateMapOf<String, List<Double>>()
+    /**
+     * A page colour as the page shows it: on a site with Force dark, Blink draws a light page dark, which the page's own
+     * styles (what the colour is read from) don't say.
+     */
+    fun shownColor(rgb: List<Double>?): List<Double>? {
+        if (app.preferences.siteSettings[siteHost(activeUrl)]?.forceDark != true) return rgb
+        if (rgb == null || rgb.size < 3) return listOf(18.0, 18.0, 18.0)
+        val light = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255
+        return if (light > 0.5) rgb.map { 255 - it } else rgb
+    }
 
     /** Find on page, while it is open over the page showing. */
     var find by mutableStateOf<FindState?>(null)
@@ -318,7 +378,6 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         visited.clear()
         media.clear()
         pageColors.clear()
-        pageBottomColors.clear()
         failure = null
         mounted = emptyList()
         Engine.setMediaSession(context, null, "", false)
@@ -327,6 +386,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     // Actions
 
     fun search(inNewTab: Boolean, privately: Boolean = false) {
+        // A fresh picture of the page, drawn blurred behind the search sheet.
+        if (!inNewTab && hasPage) capture(app.activeTabId)
         searchInNewTab = inNewTab
         searchPrivately = privately
         overlay = Overlay.SEARCH
@@ -395,7 +456,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
-        barHidden = false
+        barGone = 0f
+        views[id]?.showBar()
         refreshMounted()
     }
 
@@ -429,6 +491,45 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun showToast(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) = show(ToastMessage(System.nanoTime(), text, actionLabel, action))
 
+    /** A notice at the top of the screen for a moment; one with an action stays a little longer. */
+    fun showTopNote(note: TopNote) {
+        topNote = note
+        topNoteTimer?.cancel()
+        topNoteTimer = scope.launch {
+            delay(if (note.action == null) 1_400 else 3_000)
+            if (topNote?.id == note.id) topNote = null
+        }
+    }
+
+    fun dismissTopNote() {
+        topNote = null
+    }
+
+    /** Switches space and says so at the top: for switching from a page, where nothing else shows which space it is. */
+    fun switchSpace(id: String, announce: Boolean = true) {
+        if (id == app.activeSpaceId) return
+        val space = app.spaces.firstOrNull { it.id == id } ?: return
+        selectSpace(id)
+        // Not where the screen already shows the space (the bookmarks drawer).
+        if (announce) showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
+    }
+
+    /** Closes Settings when something opens over the page instead (the drawer); Settings sets it. */
+    var leaveSettings: () -> Unit = {}
+
+    /** Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive. */
+    fun openDrawer(folder: String? = null, archive: Boolean = false) {
+        if (covered) leaveSettings()
+        panel = null
+        drawerFolder = folder
+        drawerArchive = archive
+        drawerOpen = true
+    }
+
+    fun closeDrawer() {
+        drawerOpen = false
+    }
+
     /** A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't. */
     fun showNotice(text: String) = show(ToastMessage(System.nanoTime(), text, notice = true))
 
@@ -447,18 +548,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     // The bar
 
-    /** Moves to the tab before (-1) or after (1) the one showing, in the switcher's order. */
-    fun swipeTabs(step: Int) {
-        val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-        val next = app.tabs.getOrNull(index + step) ?: return
+    /** Sliding the bar sideways between tabs. */
+    val tabSwipe = TabSwipe(this)
+
+    /** A swipe along the bar carried the page off to the tab beside it. */
+    fun swipedTo(id: String) {
         app.dispatch(Action.TipSeen(TipId.BAR))
         capture(app.activeTabId)
-        activate(next.id)
-    }
-
-    private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
-        if (tabId != app.activeTabId) return
-        if (offsetY < 24 || deltaY < -8) barHidden = false else if (deltaY > 8) barHidden = true
+        activate(id)
     }
 
     // Media
@@ -467,8 +564,22 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     val player: Pair<BrowserTab, TabMedia>?
         get() {
             val onScreen = if (overlay == Overlay.NONE && hasPage) app.activeTabId else null
-            return latestMedia { it.id != onScreen && !(locked && it.private) }
+            return latestMedia { it.id != onScreen && !(locked && it.private) && keepsPlayer(it.url) }
         }
+
+    /** Media from this site goes on in the mini player once its tab is left (on unless the site turned it off). */
+    private fun keepsPlayer(url: String) = app.preferences.siteSettings[siteHost(url)]?.miniPlayer != false
+
+    /** Media left playing in a tab that's no longer showing, from a site with the mini player off, pauses. */
+    fun pauseLeftMedia() {
+        val onScreen = if (overlay == Overlay.NONE && hasPage) app.activeTabId else null
+        val tabs = app.allTabs
+        for ((id, state) in media) {
+            if (id == onScreen || !state.report.playing) continue
+            val tab = tabs.firstOrNull { it.id == id } ?: continue
+            if (!keepsPlayer(tab.url)) stopMedia(id)
+        }
+    }
 
     private fun latestMedia(include: (BrowserTab) -> Boolean): Pair<BrowserTab, TabMedia>? {
         val tabs = app.allTabs
@@ -529,15 +640,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         updateMediaSession()
     }
 
-    /** A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from. */
+    /** A card picked in the switcher grows into its page (`TabZoom`). */
     fun pick(tab: BrowserTab, frame: androidx.compose.ui.geometry.Rect) {
-        if (tab.snapshot == null) activate(tab.id) else zoom = Zoom(tab, frame)
+        if (zoom != null || zoomLoading != null) return
+        zoomLoading = scope.launch {
+            // At the page's size, read before it grows, so it never starts as a plain tile.
+            preloadFileImage(tab.snapshot, TAB_PICTURE_WIDTH)
+            zoom = Zoom(tab, frame)
+            zoomLoading = null
+        }
     }
+    private var zoomLoading: Job? = null
 
     fun zoomFinished() {
         val current = zoom ?: return
         zoom = null
         activate(current.tab.id)
+        if (current.tab.url.isNotEmpty()) tabSwipe.cover(current.tab)
     }
 
     // Tips
@@ -617,18 +736,52 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return app.tabs.filter { it.url.isEmpty() || it.url !in pinned }
         }
 
+    /** Where each tab's card sits in the switcher, in the window: the page shrinks into it and grows out of it. */
+    val cardFrames = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The page shrinking into its card as the switcher opens, until it lands (`openingDone`). */
+    var opening by mutableStateOf<BrowserTab?>(null)
+        private set
+    private var openingJob: Job? = null
+
+    /**
+     * Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+     * its card is the page as it is now.
+     */
     fun showTabs() {
-        if (hasPage) capture(app.activeTabId)
-        overlay = Overlay.TABS
+        val tab = activeTab
+        if (!hasPage || tab == null) {
+            overlay = Overlay.TABS
+            return
+        }
+        if (openingJob?.isActive == true) return
+        openingJob = scope.launch {
+            val fresh = captureAsync(tab.id)
+            kotlinx.coroutines.withTimeoutOrNull(OPEN_PICTURE_MS) { fresh?.await() }
+            val shown = app.tabs.firstOrNull { it.id == tab.id } ?: tab
+            preloadFileImage(shown.snapshot, TAB_PICTURE_WIDTH)
+            opening = shown
+            overlay = Overlay.TABS
+        }
+    }
+
+    fun openingDone() {
+        opening = null
     }
 
     /** Takes the tab's picture for the switcher now. Private tabs and failed pages keep none. */
     fun capture(tabId: String) {
-        val view = views[tabId] ?: return
-        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return
-        scope.launch {
-            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@launch
+        captureAsync(tabId)
+    }
+
+    /** The tab's picture as it comes in (its file's address), or null when it keeps none. */
+    private fun captureAsync(tabId: String): kotlinx.coroutines.Deferred<String?>? {
+        val view = views[tabId] ?: return null
+        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return null
+        return scope.async {
+            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@async null
             app.dispatch(Action.UpdateTab(tabId, TabUpdate(null, null, null, null, uri)))
+            uri
         }
     }
 
@@ -661,34 +814,54 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         refreshMounted()
     }
 
-    /** A space with the next default name ("Space 3"). */
-    fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
-
-    fun newFolder(name: String) {
+    /** A pinned folder in the space showing, named [name]; answers its id. */
+    fun newFolder(name: String): String {
         val folder = BrowserFolder(UUID.randomUUID().toString(), app.activeSpaceId, name)
         app.dispatch(Action.NewFolder(folder))
-        activeFolderId = folder.id
+        return folder.id
     }
 
     fun renameFolder(id: String, name: String) = app.dispatch(Action.RenameFolder(id, name))
 
-    /** Deletes a folder; its pinned rows return to the top level. */
-    fun deleteFolder(id: String) {
-        if (activeFolderId == id) activeFolderId = null
-        app.dispatch(Action.DeleteFolder(id))
-    }
+    /** Deletes a pinned folder; its pinned rows stay pinned, loose in the space. */
+    fun deleteFolder(id: String) = app.dispatch(Action.DeleteFolder(id))
+
+    /** Puts a pinned folder before the folder [beside], or after it when [after]. */
+    fun moveFolder(id: String, beside: String, after: Boolean) = app.dispatch(Action.MoveFolder(id, beside, after))
 
     /**
-     * Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
-     * desktop's Pinned folders hold pinned rows).
+     * Makes a pin an Essential or a pinned row, in [folderId] or loose, and beside the pin [beside] when it was dropped
+     * on one (after it when [after]).
      */
-    fun moveActiveTab(spaceId: String, folderId: String?) {
-        val id = app.activeTabId
-        app.dispatch(Action.MoveTab(id, spaceId, null))
-        activeFolderId = folderId
-        if (folderId != null) app.dispatch(Action.PinSite(id, UUID.randomUUID().toString(), PinKind.ROW, folderId))
+    fun movePin(site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = null, after: Boolean = false) =
+        app.dispatch(Action.MovePin(site.id, kind, folderId, beside, after))
+
+    /** Moves a tab to another space, where it becomes that space's newest tab, and says where at the top. */
+    fun moveTab(tab: BrowserTab, spaceId: String) {
+        if (tab.spaceId == spaceId) return
+        val space = app.spaces.firstOrNull { it.id == spaceId } ?: return
+        app.dispatch(Action.MoveTab(tab.id, spaceId, null))
         refreshMounted()
+        showTopNote(TopNote(System.nanoTime(), strings.t("tabs.movedTo", mapOf("space" to spaceName(space, strings))), space))
     }
+
+    /** A tab card being dragged in the tab view: the space in the bar it's over, which lights up and takes it when let go. */
+    var cardDropSpace by mutableStateOf<String?>(null)
+        private set
+
+    /** Where each space sits in the tab view's bar, in the window, for a dragged card to find the one it's over. */
+    val spaceDropFrames = mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The space in the bar under [point], a dragged card's place in the window; answers whether that changed. */
+    fun cardDragged(point: androidx.compose.ui.geometry.Offset?): Boolean {
+        val over = point?.let { at -> spaceDropFrames.entries.firstOrNull { it.value.inflate(16f).contains(at) }?.key }
+        if (over == cardDropSpace) return false
+        cardDropSpace = over
+        return over != null
+    }
+
+    /** A space with the next default name ("Space 3"). */
+    fun newSpace() = createSpace(strings.t("space.default", mapOf("index" to "${app.spaces.size + 1}")))
 
     /** The pin sheet for a held tab card. Private and blank tabs have nothing to pin. */
     fun showPinMenu(tab: BrowserTab) {
@@ -697,10 +870,22 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         panel = Panel.PIN
     }
 
-    /** Pins a tab's page that way, or unpins it when it is already pinned so. */
-    fun pin(tab: BrowserTab, kind: PinKind, folderId: String?) {
-        panel = null
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+    /**
+     * Sets how a tab's page is pinned from its sheet, which stays open: null unpins it (with Undo), and a pin already
+     * there moves rather than toggling off.
+     */
+    fun setPin(tab: BrowserTab, kind: PinKind?, folderId: String?) {
+        val current = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            kind == null -> current?.let(::unpin)
+            current == null -> app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), kind, folderId))
+            current.kind != kind || current.folderId != folderId -> movePin(current, kind, folderId)
+        }
+    }
+
+    /** A copy of a tab beside it, in the background. */
+    fun duplicate(tab: BrowserTab) {
+        if (tab.url.isNotEmpty()) openTab(tab.url, tab.private, background = true)
     }
 
     /** Answers the page question on show, then shows the next one waiting, if any. */
@@ -864,7 +1049,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                     }
                 }
             }
-            is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
+            is EngineEvent.BarMoved -> if (tabId == app.activeTabId) barGone = event.hidden
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
                 link = event
@@ -905,14 +1090,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
         if (finished && view != null) {
             scope.launch {
-                suspend fun color(args: Map<String, Any?>?): List<Double>? {
-                    val json = runCatching { view.runScript(PageScript.PAGE_COLOR, args) }.getOrNull()
-                    return json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
-                }
-                val top = color(null)
+                val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
+                val top = json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
                 if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
-                val bottom = color(mapOf("edge" to "bottom"))
-                if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
             }
             // The site's icon, unless the tab is private: its icon would say what was opened privately.
             if (!isPrivate(tabId)) fetchIcon(view, state.url)
@@ -967,10 +1147,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun stop() = activeView?.stop()
 
+    /** The page showing is pinned in its space, either way. */
     val isPinned: Boolean
         get() {
             val url = activeTab?.url
-            return app.pins.any { it.kind == PinKind.ESSENTIAL && it.url == url }
+            return app.pins.any { it.url == url }
         }
 
     val isBookmarked: Boolean
@@ -979,11 +1160,21 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return !url.isNullOrEmpty() && app.store.isBookmarked(app.activeSpaceId, url)
         }
 
+    /**
+     * The page menu's Pin: unpins a pinned page; otherwise pins it as an Essential, or, when the space has folders, offers
+     * the ways to pin it.
+     */
     fun togglePin() {
         val tab = activeTab ?: return
-        val pinned = isPinned
-        app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
-        showToast(if (pinned) strings.t("toast.unpinned") else strings.t("toast.pinned"))
+        val pin = app.pins.firstOrNull { it.url == tab.url }
+        when {
+            pin != null -> unpin(pin)
+            app.folders.isNotEmpty() -> showPinMenu(tab)
+            else -> {
+                app.dispatch(Action.PinSite(tab.id, UUID.randomUUID().toString(), PinKind.ESSENTIAL, null))
+                showToast(strings.t("toast.pinned"))
+            }
+        }
     }
 
     fun toggleBookmark() {
@@ -994,7 +1185,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (bookmarked) {
             showToast(strings.t("toast.unbookmarked"))
         } else {
-            showToast(strings.t("toast.bookmarked"), strings.t("toast.showBookmarks")) { panel = Panel.BOOKMARKS }
+            showToast(strings.t("toast.bookmarked"), strings.t("toast.showBookmarks")) { openDrawer() }
         }
     }
 
@@ -1029,10 +1220,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     }
 
     /** The page through Google Translate, into the app's language. */
-    fun translate() {
+    /** The page translated into Bay's language. */
+    fun translate() = translate(strings.locale)
+
+    /** The page translated into `locale` (one of Bay's: "pt-BR" translates into Portuguese). */
+    fun translate(locale: String) {
         val url = activeUrl
         if (url.isEmpty() || Regex("^https://[^/]+\\.translate\\.goog/").containsMatchIn(url)) return
-        val language = strings.locale.substringBefore('-').ifEmpty { "en" }
+        val language = locale.substringBefore('-').ifEmpty { "en" }
         navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=$language&u=${Uri.encode(url)}")
     }
 
@@ -1210,11 +1405,18 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     fun setDesktop(on: Boolean) = changeSiteSetting { it.copy(desktopMode = on) }
 
+    /** The font this site shows in, or none for the one set for all websites. */
+    fun setSiteFont(font: SiteFont?) = changeSiteSetting { it.copy(font = font) }
+
     fun changeSiteSetting(change: (SiteSettingInput) -> SiteSettingInput) {
         val host = siteHost(activeUrl)
         if (host.isEmpty()) return
         val setting = siteSetting
-        val input = SiteSettingInput(setting.textSize?.toDouble(), setting.reader, setting.desktopMode, setting.blockOff, setting.swipe)
+        val input = SiteSettingInput(
+            textSize = setting.textSize?.toDouble(), reader = setting.reader, desktopMode = setting.desktopMode,
+            blockOff = setting.blockOff, swipe = setting.swipe, font = setting.font, fullscreen = setting.fullscreen,
+            forceDark = setting.forceDark, miniPlayer = setting.miniPlayer,
+        )
         app.dispatch(Action.SiteSettings(host, change(input)))
         preferencesChanged()
     }
@@ -1222,21 +1424,27 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** A changed preference or site setting reaches the open pages at once. */
     fun preferencesChanged() {
         for ((id, view) in views) {
-            val url = navigation[id]?.url ?: app.tabs.firstOrNull { it.id == id }?.url.orEmpty()
+            val url = pageUrl(id)
             configure(view, url)
             applyTweaks(id, url)
         }
         applyBlockingPauses()
     }
 
+    /** The address a tab's page shows: where it navigated, else the tab's saved one. */
+    private fun pageUrl(tabId: String): String = navigation[tabId]?.url ?: app.tabs.firstOrNull { it.id == tabId }?.url.orEmpty()
+
     /** The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices. */
     private fun configure(view: BayEngineView, url: String) {
         val preferences = app.preferences
         val setting = if (url.isEmpty()) null else app.store.siteSetting(url)
         view.desktopMode = setting?.desktopMode == true
+        view.forceDark = setting?.forceDark == true
         view.swipeMode = (setting?.swipe ?: preferences.swipeToNavigate).name.lowercase()
         view.pullToRefreshEnabled = preferences.pullToRefresh
         view.appLinks = preferences.appLinks.name.lowercase()
+        // A fullscreen site has no bar over it.
+        view.barHeight = if (setting?.fullscreen == true) 0 else barCover
     }
 
     /** Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows. */
@@ -1248,6 +1456,39 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         scope.launch {
             val result = runCatching { view.runScript(PageScript.PAGE_TWEAKS, mapOf("textSize" to zoom, "skipAmp" to skipAmp)) }.getOrNull()
             if (result == "\"amp\"") ampLeft.getOrPut(tabId) { HashSet() } += url
+        }
+        applyFont(tabId, view, url)
+    }
+
+    /** Each bundled font file as base64, read from the APK's assets the first time a page needs it. */
+    private val fontFiles = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Tabs given one of Bay's fonts on their current page, so a change back to the site's own takes it off again. */
+    private val fontedTabs = HashSet<String>()
+
+    /** Tabs whose page wouldn't take Bay's font, and shows in the phone's instead; Site settings says so. */
+    val fontBlocked = androidx.compose.runtime.mutableStateListOf<String>()
+
+    /** The site's font (else the one for all websites) on the page a tab shows; nothing to do for the site's own. */
+    private fun applyFont(tabId: String, view: BayEngineView, url: String) {
+        val face = siteFontFace(app.store.siteFont(url))
+        if (face.family.isEmpty() && tabId !in fontedTabs) return
+        if (face.family.isEmpty()) fontedTabs -= tabId else fontedTabs += tabId
+        scope.launch {
+            val faces = withContext(Dispatchers.IO) {
+                face.files.mapNotNull { file ->
+                    val data = fontFiles[file.file] ?: runCatching {
+                        Base64.encodeToString(context.assets.open(file.file).use { it.readBytes() }, Base64.NO_WRAP)
+                    }.getOrNull()?.also { fontFiles[file.file] = it }
+                    data?.let { mapOf("data" to it, "italic" to file.italic, "weight" to file.weight) }
+                }
+            }
+            val result = runCatching { view.runScript(PageScript.PAGE_FONT, mapOf("family" to face.family, "faces" to faces)) }.getOrNull()
+            if (result == "\"blocked\"") {
+                if (tabId !in fontBlocked) fontBlocked += tabId
+            } else if (result != null) {
+                fontBlocked -= tabId
+            }
         }
     }
 
@@ -1359,6 +1600,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     companion object {
         /** At most this many pages stay loaded; the rest reload from their saved state when shown again. */
         const val MAX_LIVE = 4
+
+        /** How long opening the switcher waits for a fresh picture of the page before shrinking the last one. */
+        const val OPEN_PICTURE_MS = 400L
+
+        /** Tab pictures are this wide (BaySnapshotWriter.MAX_WIDTH): decoded as they are, wherever they're drawn. */
+        const val TAB_PICTURE_WIDTH = 640
 
         /** A settled download's toast stays this long. */
         private const val DOWNLOAD_TOAST_MS = 6_000L

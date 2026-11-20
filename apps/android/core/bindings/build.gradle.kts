@@ -38,6 +38,8 @@ val cargoPath = "$home/.cargo/bin:${System.getenv("PATH")}"
 
 abstract class CargoNdk @Inject constructor(private val exec: ExecOperations) : DefaultTask() {
     @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val crates: DirectoryProperty
+    /** What the crates compile in from beside them: the words (`strings/`) and the tables (`data/`, the bang list). */
+    @get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) abstract val compiledIn: org.gradle.api.file.ConfigurableFileCollection
     @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val lockfile: org.gradle.api.file.RegularFileProperty
     @get:Input abstract val ndk: Property<String>
     @get:Input abstract val searchPath: Property<String>
@@ -83,6 +85,7 @@ abstract class UniffiKotlin @Inject constructor(private val exec: ExecOperations
 
 val cargoNdk = tasks.register<CargoNdk>("cargoNdk") {
     crates.set(core.resolve("crates"))
+    compiledIn.from(core.resolve("strings"), core.resolve("data"))
     lockfile.set(core.resolve("Cargo.lock"))
     ndk.set(androidComponents.sdkComponents.ndkDirectory.map { it.asFile.absolutePath })
     searchPath.set(cargoPath)

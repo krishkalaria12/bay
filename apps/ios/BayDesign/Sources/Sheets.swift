@@ -13,9 +13,10 @@ public struct SheetWords: Sendable {
   }
 }
 
-/// A panel's content: a header with its title (or a back arrow and the title of a sub-page), round buttons beside the
-/// close button, and the rows below, scrolling when they're taller than the sheet. The system draws the sheet itself
-/// (Liquid Glass on iOS 26); `baySheet` sizes it to what it holds.
+/// A panel's content: a small title centred at the top (with a round back button on a sub-page), the sheet's own round
+/// buttons on the right, and the rows below, scrolling when they're taller than the sheet. There's no close button: a
+/// sheet closes by a tap outside it, a drag down, or VoiceOver's escape. The system draws the sheet itself, floating as
+/// glass on iOS 26; `baySheet` sizes it to what it holds.
 public struct PanelSheet<Content: View, Accessory: View>: View {
   private let title: String
   private let testID: String
@@ -43,15 +44,14 @@ public struct PanelSheet<Content: View, Accessory: View>: View {
 
   public var body: some View {
     VStack(spacing: 0) {
-      HStack(alignment: header != nil && onBack == nil ? .top : .center, spacing: Space.md) {
+      Group {
         if let header, onBack == nil {
-          header.frame(maxWidth: .infinity, alignment: .leading)
+          HStack(alignment: .top, spacing: Space.md) {
+            header.frame(maxWidth: .infinity, alignment: .leading)
+            accessory
+          }
         } else {
           titleRow
-        }
-        HStack(spacing: Space.sm) {
-          accessory
-          SheetIconButton(.close, label: words.close, action: onClose).accessibilityIdentifier("\(testID)-close")
         }
       }
       .padding(.horizontal, Space.gutter)
@@ -68,16 +68,22 @@ public struct PanelSheet<Content: View, Accessory: View>: View {
     .accessibilityIdentifier(testID)
   }
 
+  /// The title centred over the sheet, the back button at its left and the sheet's own buttons at its right.
   private var titleRow: some View {
-    HStack(spacing: Space.xs) {
-      if let onBack {
-        SheetIconButton(.back, label: words.back, tone: .default, action: onBack)
-          .accessibilityIdentifier("\(testID)-back")
-          .padding(.trailing, Space.xs)
+    ZStack {
+      BayText(title, variant: .headline, weight: .semibold).lineLimit(1)
+        .padding(.horizontal, 52)
+        .accessibilityAddTraits(.isHeader)
+      HStack(spacing: Space.sm) {
+        if let onBack {
+          SheetIconButton(.back, label: words.back, tone: .default, action: onBack)
+            .accessibilityIdentifier("\(testID)-back")
+        }
+        Spacer(minLength: 0)
+        accessory
       }
-      BayText(title, variant: .title).lineLimit(1).accessibilityAddTraits(.isHeader)
-      Spacer(minLength: 0)
     }
+    .frame(minHeight: 36)
   }
 }
 
@@ -212,6 +218,8 @@ public struct ActionRow: View {
   private let icon: BayIcon?
   private let tint: Color?
   private let detail: String?
+  /// A short tag after the label ("Beta").
+  private let badge: String?
   private let value: String?
   private let chevron: Bool
   private let toggle: Bool?
@@ -228,7 +236,7 @@ public struct ActionRow: View {
   @Environment(\.dynamicTypeSize) private var sizeCategory
 
   public init(
-    _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, value: String? = nil,
+    _ label: String, testID: String, icon: BayIcon? = nil, tint: Color? = nil, detail: String? = nil, badge: String? = nil, value: String? = nil,
     chevron: Bool = false, toggle: Bool? = nil, selected: Bool = false, destructive: Bool = false, disabled: Bool = false,
     leading: AnyView? = nil, inset: CGFloat? = nil, gap: CGFloat? = nil, action: @escaping () -> Void
   ) {
@@ -240,6 +248,7 @@ public struct ActionRow: View {
     self.icon = icon
     self.tint = tint
     self.detail = detail
+    self.badge = badge
     self.value = value
     self.chevron = chevron
     self.toggle = toggle
@@ -262,7 +271,15 @@ public struct ActionRow: View {
           BayIconView(icon, size: IconSize.control, color: destructive ? BayColor.danger : BayColor.foreground)
         }
         VStack(alignment: .leading, spacing: 1) {
-          BayText(label, tone: destructive ? .danger : .default)
+          HStack(spacing: Space.sm) {
+            BayText(label, tone: destructive ? .danger : .default)
+            if let badge {
+              BayText(badge, variant: .caption, weight: .semibold, tone: .muted)
+                .padding(.horizontal, Space.sm)
+                .padding(.vertical, 2)
+                .background(BayColor.fill, in: Capsule())
+            }
+          }
           // At the largest text sizes the value goes under the name, which would have no room beside it.
           if let value, stacksValue { valueText(value).accessibilityIdentifier("\(testID)-value") }
           if let detail { BayText(detail, variant: .subhead, tone: .muted).lineLimit(2) }
@@ -280,7 +297,7 @@ public struct ActionRow: View {
     .buttonStyle(.pressFeedback)
     .disabled(disabled)
     .opacity(disabled ? 0.4 : 1)
-    .accessibilityLabel(Text(verbatim: label))
+    .accessibilityLabel(Text(verbatim: [label, badge].compactMap { $0 }.joined(separator: ", ")))
     .accessibilityValue(Text(verbatim: [value, detail].compactMap { $0 }.joined(separator: ", ")))
     .accessibilityAddTraits(selected || toggle == true ? .isSelected : [])
     .accessibilityIdentifier(testID)

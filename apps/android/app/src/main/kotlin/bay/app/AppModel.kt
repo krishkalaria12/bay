@@ -168,6 +168,19 @@ class AppModel(context: Context, barTitle: String) {
         runCatching { store.flush() }
     }
 
+    /** The bang list: the one saved here (or Bay's own), and a newer one once a day. */
+    @Volatile private var bangs: bay.core.BangList? = null
+
+    /** Puts the saved bang list in use, and asks for a newer one when a day has gone by. */
+    fun refreshBangs() {
+        scope.launch(Dispatchers.IO) {
+            val list = bangs ?: bay.core.BangList.open(documents).also { bangs = it }
+            val request = list.request(now()) ?: return@launch
+            val response = runCatching { http.send(request) }.getOrNull() ?: return@launch
+            list.answer(response, now())
+        }
+    }
+
     /** Syncs every half minute while Bay is in front. */
     fun startSyncing() {
         cycles?.cancel()

@@ -80,6 +80,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
     private boolean mDesktopMode;
     private boolean mFullscreen;
     private float mLastScrollOffset;
+    private int mBottomControlsHeight;
 
     public BayTab(Activity activity, BayProfile profile, BayTabClient client) {
         ThreadUtils.assertOnUiThread();
@@ -87,7 +88,13 @@ public final class BayTab extends WebContentsDelegateAndroid {
         mClient = client;
         mNativeTab = BayTabJni.get().create(this, profile.nativePointer());
         mWebContents = (WebContents) BayTabJni.get().getWebContents(mNativeTab);
-        mView = new BayTabView(activity, mWebContents, BayEngine.windowFor(activity), BayEngine.getVersion());
+        mView =
+                new BayTabView(
+                        activity,
+                        mWebContents,
+                        BayEngine.windowFor(activity),
+                        BayEngine.getVersion(),
+                        offset -> mClient.onBottomControlsChanged(offset));
         BayTabJni.get().initializeAutofill(mNativeTab);
         mObserver = new Observer(mWebContents);
         mScrollListener =
@@ -143,6 +150,31 @@ public final class BayTab extends WebContentsDelegateAndroid {
                 .getNavigationController()
                 .setUseDesktopUserAgent(
                         desktop, /* reloadOnChange= */ !getUrl().isEmpty(), /* skipOnInitialNavigation= */ false);
+    }
+
+    /**
+     * Force dark: the engine darkens a page that has no dark look of its own, at once and for the pages after it, until
+     * it's turned off. A page with its own dark look is left as it is.
+     */
+    public void setForceDark(boolean dark) {
+        if (mNativeTab != 0) BayTabJni.get().setForceDark(mNativeTab, dark);
+    }
+
+    /**
+     * How much of the page's bottom the app's bar covers, in physical pixels (0 for none), as Chrome's bottom toolbar
+     * does. The page keeps its size: as the bar shows, the compositor lifts what the page pins to its bottom above it and
+     * lets the last of the page scroll clear of it; scrolling down slides the bar away with the page, and scrolling up
+     * brings it back ({@link BayTabClient#onBottomControlsChanged} says where it is). Nothing is laid out again.
+     */
+    public void setBottomControlsHeight(int height) {
+        if (mBottomControlsHeight == height) return;
+        mBottomControlsHeight = height;
+        mWebContents.notifyBrowserControlsHeightChanged();
+    }
+
+    /** Brings the bar back, as a new page does. */
+    public void showBrowserControls(boolean animate) {
+        if (mNativeTab != 0) BayTabJni.get().showBrowserControls(mNativeTab, animate);
     }
 
     /** The back/forward history with each page's scroll position and form text, or null with nothing to keep. */
@@ -428,6 +460,25 @@ public final class BayTab extends WebContentsDelegateAndroid {
         return mFullscreen;
     }
 
+    @Override
+    public int getBottomControlsHeight() {
+        return mBottomControlsHeight;
+    }
+
+    @Override
+    public boolean shouldAnimateBrowserControlsHeightChanges() {
+        return true;
+    }
+
+    /**
+     * The bar never resizes the page: Blink keeps the page's size and the compositor makes room for the bar as it
+     * shows, so a page isn't laid out again as the bar comes and goes.
+     */
+    @Override
+    public boolean controlsResizeView() {
+        return false;
+    }
+
     /** Leaves a page's fullscreen video (the app's Back button). */
     public void exitFullscreen() {
         if (mFullscreen) mWebContents.exitFullscreen();
@@ -475,6 +526,8 @@ public final class BayTab extends WebContentsDelegateAndroid {
                 // Page tools' answers belong to the document that ran them.
                 rejectEvaluations("The page changed before the script finished.");
                 mLastScrollOffset = 0;
+                // A new page starts with the bar showing, as in Chrome.
+                showBrowserControls(true);
             }
             mClient.onNavigationStateChanged();
         }
@@ -532,5 +585,9 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void initializeAutofill(long tabPtr);
 
         void setDesktopMode(long tabPtr, boolean desktop);
+
+        void setForceDark(long tabPtr, boolean dark);
+
+        void showBrowserControls(long tabPtr, boolean animate);
     }
 }

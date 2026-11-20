@@ -12,7 +12,10 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::Action;
-use super::bookmarks::{BookmarkListing, bookmark_listing, empty_bookmarks, is_bookmarked};
+use super::bookmarks::{
+    BOOKMARKS_ROOT, BookmarkFolderChoice, BookmarkListing, bookmark_folders, bookmark_listing,
+    bookmark_of, empty_bookmarks, folder_children, is_bookmarked,
+};
 use super::model::{
     PERSONAL_SPACE_ID, create_tab, initial_browser_data, persisted_browser_data, reduce,
     unused_space_icon,
@@ -383,6 +386,17 @@ impl BrowserStore {
             .unwrap_or(SiteSetting::EMPTY)
     }
 
+    /// The font a page shows in: its site's own, else the one set for all websites.
+    pub fn site_font(&self, url: String) -> SiteFont {
+        let state = lock(&self.state);
+        let preferences = &state.data.preferences;
+        preferences
+            .site_settings
+            .get(&site_host(&url))
+            .and_then(|setting| setting.font)
+            .unwrap_or(preferences.site_font)
+    }
+
     /// The elements hidden on a page's site, as selectors.
     pub fn hidden_selectors(&self, url: String) -> Vec<String> {
         let host = crate::input::url::host_of(&url);
@@ -402,6 +416,93 @@ impl BrowserStore {
             .bookmarks
             .get(&space_id)
             .is_some_and(|bookmarks| is_bookmarked(bookmarks, &url))
+    }
+
+    /// A space's bookmarks as the drawer lists them, with the folders in `open` opened.
+    pub fn bookmark_tree_rows(
+        &self,
+        space_id: String,
+        open: Vec<String>,
+    ) -> Vec<super::bookmarks::BookmarkTreeRow> {
+        let state = lock(&self.state);
+        match state.data.bookmarks.get(&space_id) {
+            Some(tree) => super::bookmarks::bookmark_tree_rows(tree, &open),
+            None => Vec::new(),
+        }
+    }
+
+    /// Where a bookmark dragged in the drawer goes when dropped beside another row.
+    pub fn bookmark_drop(
+        &self,
+        space_id: String,
+        id: String,
+        target: String,
+        after: bool,
+    ) -> Option<BookmarkDrop> {
+        let state = lock(&self.state);
+        super::bookmarks::bookmark_drop(state.data.bookmarks.get(&space_id)?, &id, &target, after)
+    }
+
+    /// A space's folders to save a bookmark into, the top first.
+    pub fn bookmark_folders(&self, space_id: String) -> Vec<BookmarkFolderChoice> {
+        let state = lock(&self.state);
+        match state.data.bookmarks.get(&space_id) {
+            Some(tree) => bookmark_folders(tree),
+            None => bookmark_folders(&empty_bookmarks()),
+        }
+    }
+
+    /// Where a page is saved: in the space showing if it's there, else the first other space that has it.
+    pub fn bookmark_location(&self, url: String) -> Option<BookmarkLocation> {
+        let state = lock(&self.state);
+        let data = &state.data;
+        let active = data.active_space_id.as_str();
+        std::iter::once(active)
+            .chain(
+                data.spaces
+                    .iter()
+                    .map(|space| space.id.as_str())
+                    .filter(|id| *id != active),
+            )
+            .find_map(|space_id| {
+                let node = bookmark_of(data.bookmarks.get(space_id)?, &url)?;
+                let BookmarkNode::Url {
+                    id,
+                    parent_id,
+                    title,
+                    ..
+                } = node
+                else {
+                    return None;
+                };
+                Some(BookmarkLocation {
+                    space_id: space_id.to_owned(),
+                    id: id.clone(),
+                    parent_id: parent_id.clone(),
+                    title: title.clone(),
+                })
+            })
+    }
+
+    /// The folder a new bookmark in a space starts in: where its newest bookmark went, else the top.
+    pub fn last_bookmark_folder(&self, space_id: String) -> String {
+        let state = lock(&self.state);
+        let Some(tree) = state.data.bookmarks.get(&space_id) else {
+            return BOOKMARKS_ROOT.into();
+        };
+        tree.values()
+            .filter_map(|node| match node {
+                BookmarkNode::Url {
+                    parent_id,
+                    added_at,
+                    ..
+                } => Some((added_at, parent_id)),
+                BookmarkNode::Folder { .. } => None,
+            })
+            .max_by_key(|(added_at, _)| **added_at)
+            .map(|(_, parent)| parent.clone())
+            .filter(|parent| folder_children(tree, parent).is_some())
+            .unwrap_or_else(|| BOOKMARKS_ROOT.into())
     }
 
     /// Each site's saved icon, by host without "www.".
@@ -459,7 +560,7 @@ impl BrowserStore {
 #[cfg(test)]
 mod tests {
     use super::super::bookmarks::BOOKMARKS_ROOT;
-    use super::super::model::SiteSettingInput;
+    use super::super::model::{PreferencesUpdate, SiteSettingInput};
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -507,6 +608,192 @@ mod tests {
     }
 
     #[test]
+    fn a_moved_pin_goes_into_its_folder_and_beside_the_pin_it_was_dropped_on() {
+        let dir = temp_dir("pins");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        for (id, url) in [
+            ("a", "https://a.example/"),
+            ("b", "https://b.example/"),
+            ("c", "https://c.example/"),
+        ] {
+            store.dispatch(Action::NewTab {
+                tab: tab(id, url),
+                background: false,
+            });
+            store.dispatch(Action::PinSite {
+                tab_id: id.into(),
+                pin_id: format!("pin-{id}"),
+                kind: PinKind::Row,
+                folder_id: None,
+            });
+        }
+        store.dispatch(Action::NewFolder {
+            folder: BrowserFolder {
+                id: "read".into(),
+                space_id: PERSONAL_SPACE_ID.into(),
+                name: "Reading".into(),
+            },
+        });
+        let pins = || store.pinned_sites(PERSONAL_SPACE_ID.into());
+        let order = || pins().iter().map(|pin| pin.id.clone()).collect::<Vec<_>>();
+        store.dispatch(Action::MovePin {
+            id: "pin-c".into(),
+            kind: PinKind::Row,
+            folder_id: None,
+            beside: Some("pin-a".into()),
+            after: false,
+        });
+        assert_eq!(order(), ["pin-c", "pin-a", "pin-b"]);
+        store.dispatch(Action::MovePin {
+            id: "pin-c".into(),
+            kind: PinKind::Row,
+            folder_id: None,
+            beside: Some("pin-b".into()),
+            after: true,
+        });
+        assert_eq!(order(), ["pin-a", "pin-b", "pin-c"]);
+        store.dispatch(Action::MovePin {
+            id: "pin-b".into(),
+            kind: PinKind::Row,
+            folder_id: Some("read".into()),
+            beside: None,
+            after: false,
+        });
+        assert_eq!(order(), ["pin-a", "pin-b", "pin-c"]);
+        assert_eq!(pins()[1].folder_id.as_deref(), Some("read"));
+        // A folder that isn't there leaves it loose; an Essential has no folder.
+        store.dispatch(Action::MovePin {
+            id: "pin-b".into(),
+            kind: PinKind::Essential,
+            folder_id: Some("read".into()),
+            beside: None,
+            after: false,
+        });
+        assert_eq!(pins()[1].folder_id, None);
+    }
+
+    #[test]
+    fn a_dragged_folder_lands_before_or_after_the_folder_it_was_dropped_on() {
+        let dir = temp_dir("folders");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        for id in ["a", "b", "c"] {
+            store.dispatch(Action::NewFolder {
+                folder: BrowserFolder {
+                    id: id.into(),
+                    space_id: PERSONAL_SPACE_ID.into(),
+                    name: id.into(),
+                },
+            });
+        }
+        let order = || {
+            store
+                .folders(PERSONAL_SPACE_ID.into())
+                .into_iter()
+                .map(|folder| folder.id)
+                .collect::<Vec<_>>()
+        };
+        store.dispatch(Action::MoveFolder {
+            id: "c".into(),
+            beside: "a".into(),
+            after: false,
+        });
+        assert_eq!(order(), ["c", "a", "b"]);
+        store.dispatch(Action::MoveFolder {
+            id: "c".into(),
+            beside: "b".into(),
+            after: true,
+        });
+        assert_eq!(order(), ["a", "b", "c"]);
+        // Onto itself or a folder that isn't there, nothing moves.
+        store.dispatch(Action::MoveFolder {
+            id: "a".into(),
+            beside: "gone".into(),
+            after: false,
+        });
+        assert_eq!(order(), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn a_saved_page_says_where_it_is_and_new_ones_start_in_the_last_folder() {
+        let dir = temp_dir("save");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        let space = || PERSONAL_SPACE_ID.to_owned();
+        assert_eq!(store.last_bookmark_folder(space()), BOOKMARKS_ROOT);
+        store.dispatch(Action::AddBookmarks {
+            space_id: space(),
+            nodes: vec![BookmarkNode::Folder {
+                id: "watch".into(),
+                parent_id: Some(BOOKMARKS_ROOT.into()),
+                title: "Watchlist".into(),
+                children: Vec::new(),
+                added_at: 1,
+            }],
+        });
+        let link = |id: &str, url: &str, added_at: i64| BookmarkNode::Url {
+            id: id.into(),
+            parent_id: "watch".into(),
+            title: id.into(),
+            url: url.into(),
+            added_at,
+        };
+        store.dispatch(Action::SaveBookmark {
+            space_id: space(),
+            bookmark: link("a", "https://a.example/", 2),
+        });
+        assert_eq!(store.last_bookmark_folder(space()), "watch");
+        let place = store
+            .bookmark_location("https://a.example/".into())
+            .unwrap();
+        assert_eq!(
+            (
+                place.space_id.as_str(),
+                place.parent_id.as_str(),
+                place.id.as_str()
+            ),
+            (PERSONAL_SPACE_ID, "watch", "a")
+        );
+        assert!(
+            store
+                .bookmark_location("https://b.example/".into())
+                .is_none()
+        );
+
+        let folders: Vec<String> = store
+            .bookmark_folders(space())
+            .into_iter()
+            .map(|folder| folder.id)
+            .collect();
+        assert_eq!(folders, [BOOKMARKS_ROOT, "watch"]);
+
+        store.dispatch(Action::MoveBookmark {
+            space_id: space(),
+            id: "a".into(),
+            parent_id: BOOKMARKS_ROOT.into(),
+            index: Some(0),
+        });
+        assert_eq!(
+            store
+                .bookmark_location("https://a.example/".into())
+                .unwrap()
+                .parent_id,
+            BOOKMARKS_ROOT
+        );
+        store.dispatch(Action::RenameBookmark {
+            space_id: space(),
+            id: "a".into(),
+            title: "Ay".into(),
+            url: None,
+        });
+        assert_eq!(
+            store
+                .bookmark_location("https://a.example/".into())
+                .unwrap()
+                .title,
+            "Ay"
+        );
+    }
+
+    #[test]
     fn a_page_reads_its_site_setting_and_bookmark() {
         let dir = temp_dir("site");
         let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
@@ -518,13 +805,45 @@ mod tests {
                 desktop_mode: true,
                 block_off: Vec::new(),
                 swipe: None,
+                font: Some(SiteFont::Lora),
+                fullscreen: false,
+                force_dark: true,
+                mini_player: false,
             },
         });
         let setting = store.site_setting("https://www.Example.com/a".into());
         assert_eq!((setting.text_size, setting.desktop_mode), (Some(120), true));
         assert_eq!(
+            (setting.force_dark, setting.mini_player, setting.fullscreen),
+            (true, false, false)
+        );
+        assert_eq!(
             store.site_setting("https://other.org/".into()),
             SiteSetting::EMPTY
+        );
+
+        // The site's font comes first, then the one for all websites.
+        assert_eq!(
+            store.site_font("https://example.com/".into()),
+            SiteFont::Lora
+        );
+        assert_eq!(
+            store.site_font("https://other.org/".into()),
+            SiteFont::Original
+        );
+        store.dispatch(Action::Preferences {
+            update: PreferencesUpdate {
+                site_font: Some(SiteFont::Inter),
+                ..Default::default()
+            },
+        });
+        assert_eq!(
+            store.site_font("https://other.org/".into()),
+            SiteFont::Inter
+        );
+        assert_eq!(
+            store.site_font("https://example.com/".into()),
+            SiteFont::Lora
         );
 
         let url = "https://example.com/a";

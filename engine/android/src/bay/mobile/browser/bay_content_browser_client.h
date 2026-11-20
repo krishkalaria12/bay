@@ -22,6 +22,11 @@ class BayContentBrowserClient : public content::ContentBrowserClient {
   BayContentBrowserClient& operator=(const BayContentBrowserClient&) = delete;
   ~BayContentBrowserClient() override;
 
+  // Force dark, per tab (BayTab::SetForceDark).
+  void OverrideWebPreferences(content::WebContents* web_contents,
+                              content::SiteInstance& main_frame_site,
+                              blink::web_pref::WebPreferences* prefs) override;
+
   // content::ContentBrowserClient:
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(bool is_integration_test) override;
   void GetAdditionalMappedFilesForChildProcess(const base::CommandLine& command_line,
@@ -59,6 +64,9 @@ class BayContentBrowserClient : public content::ContentBrowserClient {
   void RegisterAssociatedInterfaceBindersForRenderFrameHost(
       content::RenderFrameHost& render_frame_host,
       blink::AssociatedInterfaceRegistry& associated_registry) override;
+  void RegisterBrowserInterfaceBindersForFrame(
+      content::RenderFrameHost* render_frame_host,
+      mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
   void ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,
                                   blink::AssociatedInterfaceRegistry* associated_registry,
                                   content::RenderProcessHost* render_process_host) override;

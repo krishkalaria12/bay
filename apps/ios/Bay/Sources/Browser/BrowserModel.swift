@@ -4,6 +4,7 @@ import BayEngine
 import Combine
 import Foundation
 import LocalAuthentication
+import SwiftUI
 import UIKit
 
 /// What a search opens: a page, an open tab, or a tab back from the archive.
@@ -14,6 +15,16 @@ enum OpenTarget: Equatable {
 }
 
 /// One short message above the bar; a newer one replaces it. One with an action (Undo) stays longer.
+/// A short notice at the top of the screen, by the Dynamic Island: the space just switched to, where a bookmark went.
+/// Tapping it does `action`, when it has one.
+struct TopNote: Identifiable {
+  let id = UUID()
+  let text: String
+  /// The space it's about, whose glyph shows beside the words.
+  var space: BrowserSpace?
+  var action: (() -> Void)?
+}
+
 struct ToastMessage: Identifiable {
   let id = UUID()
   let text: String
@@ -39,7 +50,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, bookmarks, downloads, siteSettings, link, tabs, pin, request, reader, inspect, `import`
+    case page, spaceEdit, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -78,8 +89,20 @@ final class BrowserModel: ObservableObject {
   /// A card growing into its page: the tab and where its card sat on screen.
   @Published private(set) var zoom: (tab: BrowserTab, frame: CGRect)?
   @Published private(set) var toast: ToastMessage?
+  @Published private(set) var topNote: TopNote?
+  /// The bookmarks drawer is out, opened on `drawerFolder` when it has one.
+  @Published private(set) var drawerOpen = false
+  private(set) var drawerFolder: String?
+  /// The drawer shows the space's archived tabs instead of its bookmarks.
+  @Published var drawerArchive = false
+  private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
+  /// Tabs whose page wouldn't take Bay's font, and shows in the phone's instead.
+  @Published private(set) var fontBlocked: Set<String> = []
+  /// The bar is back for a moment on a site that keeps it hidden, after a tap on the screen's bottom edge.
+  @Published private(set) var fullscreenPeek = false
+  private var peekTimer: Task<Void, Never>?
   /// Media playing (or paused) in each tab, as its page reports it.
   @Published private(set) var media: [String: TabMedia] = [:]
   /// Private tabs are covered once Bay has been in the background, until the owner unlocks them.
@@ -123,8 +146,6 @@ final class BrowserModel: ObservableObject {
   private var autoReaderUrl: String?
   /// The tab whose card was held, for the pin sheet.
   @Published private(set) var pinTab: BrowserTab?
-  /// The folder picked in the tabs menu, which it renames or deletes.
-  @Published var activeFolderId: String?
   /// The link (or bare image) a long press on the page showing opened the link menu for.
   @Published private(set) var link: LinkPress?
 
@@ -317,6 +338,43 @@ final class BrowserModel: ObservableObject {
     show(ToastMessage(text: text, actionLabel: actionLabel, action: action))
   }
 
+  /// A notice at the top of the screen for a moment; one with an action stays a little longer.
+  func showTopNote(_ note: TopNote) {
+    topNote = note
+    UIAccessibility.post(notification: .announcement, argument: note.text)
+    topNoteTimer?.cancel()
+    topNoteTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: note.action == nil ? 1_400_000_000 : 3_000_000_000)
+      guard !Task.isCancelled, self?.topNote?.id == note.id else { return }
+      self?.topNote = nil
+    }
+  }
+
+  func dismissTopNote() {
+    topNote = nil
+  }
+
+  /// Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive.
+  func openDrawer(folder: String? = nil, archive: Bool = false) {
+    panel = nil
+    drawerFolder = folder
+    drawerArchive = archive
+    drawerOpen = true
+  }
+
+  func closeDrawer() {
+    drawerOpen = false
+  }
+
+  /// Switches space and says so at the top: for switching from a page, where nothing else shows which space it is.
+  /// `announce` false where the screen already shows the space (the bookmarks drawer).
+  func switchSpace(_ id: String, announce: Bool = true) {
+    guard id != app.activeSpaceId, let space = app.spaces.first(where: { $0.id == id }) else { return }
+    Haptics.tick()
+    selectSpace(id)
+    if announce { showTopNote(TopNote(text: spaceName(space, strings), space: space)) }
+  }
+
   /// A reading tool's notice: what Inspect, Reader or the element picker did, or why it couldn't.
   func showNotice(_ text: String) {
     show(ToastMessage(text: text, actionLabel: nil, action: nil, notice: true))
@@ -339,29 +397,162 @@ final class BrowserModel: ObservableObject {
 
   // MARK: The bar
 
-  /// Moves to the tab before (-1) or after (1) the one showing, in the switcher's order.
-  func swipeTabs(_ step: Int) {
-    guard let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }), app.tabs.indices.contains(index + step) else { return }
-    app.dispatch(.tipSeen(id: .bar))
-    capture(app.activeTabId)
-    activate(app.tabs[index + step].id)
+  // MARK: Sliding between tabs
+
+  /// Sliding the bar sideways, as Arc Search does: the page follows the finger and the tab beside it comes in as its
+  /// picture; let go far or fast enough and it carries on to that tab, else it springs back. The picture stays over the
+  /// page it became for a moment, while a page that wasn't loaded draws.
+  @Published private(set) var swipeOffset: CGFloat = 0
+  /// The tab coming in beside the page, while there is one that way.
+  @Published private(set) var swipeIncoming: BrowserTab?
+  /// The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`).
+  @Published private(set) var swipeCover: BrowserTab?
+  @Published private(set) var swipeCoverShown = false
+  private var swipeSettling: DispatchWorkItem?
+
+  /// The tab the other side of the page, in the switcher's order: left of it for a drag right, and so on.
+  private func neighbour(towards: CGFloat) -> BrowserTab? {
+    guard towards != 0, let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }) else { return nil }
+    let next = index + (towards < 0 ? 1 : -1)
+    return app.tabs.indices.contains(next) ? app.tabs[next] : nil
   }
 
+  /// The finger has moved `distance` along the bar since the drag began.
+  func swipeMoved(_ distance: CGFloat) {
+    swipeSettling?.cancel()
+    if swipeCover != nil {
+      coverTask?.cancel()
+      swipeCover = nil
+      swipeCoverShown = false
+    }
+    let next = neighbour(towards: distance)
+    if next?.id != swipeIncoming?.id { swipeIncoming = next }
+    // Past the first or last tab the page gives a little, and comes back.
+    swipeOffset = next == nil ? distance * 0.18 : distance
+  }
+
+  /// The finger left after `distance`, heading for `predicted`: on to the tab coming in, or back.
+  func swipeEnded(_ distance: CGFloat, predicted: CGFloat, width: CGFloat) {
+    let target = neighbour(towards: distance)
+    let flicked = abs(predicted - distance) > 120 && (predicted - distance).sign == distance.sign
+    guard let target, abs(distance) > width * 0.28 || flicked else {
+      withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { swipeOffset = 0 }
+      settle(after: 0.32) { [weak self] in self?.swipeIncoming = nil }
+      return
+    }
+    Haptics.press()
+    withAnimation(.spring(response: 0.26, dampingFraction: 1)) { swipeOffset = distance < 0 ? -width : width }
+    settle(after: 0.24) { [weak self] in
+      guard let self else { return }
+      self.cover(target)
+      self.swipeIncoming = nil
+      self.swipeOffset = 0
+      self.app.dispatch(.tipSeen(id: .bar))
+      self.capture(self.app.activeTabId)
+      self.activate(target.id)
+    }
+  }
+
+  /// Holds `tab`'s picture over its page until the page has drawn (most of the way loaded), so a tab coming back from
+  /// its saved state never shows white. A page already drawn gets none.
+  func cover(_ tab: BrowserTab) {
+    coverTask?.cancel()
+    // WebKit keeps every loaded page drawn: one that's there already needs no picture, which would only ghost over it.
+    guard !drawn(tab.id) else {
+      swipeCover = nil
+      swipeCoverShown = false
+      return
+    }
+    swipeCover = tab
+    swipeCoverShown = true
+    coverTask = Task { [weak self] in
+      let start = Date()
+      try? await Task.sleep(nanoseconds: 140_000_000)
+      while !Task.isCancelled, let self, self.app.activeTabId == tab.id, !self.drawn(tab.id), Date().timeIntervalSince(start) < 4 {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      guard !Task.isCancelled, let self else { return }
+      withAnimation(.easeOut(duration: 0.18)) { self.swipeCoverShown = false }
+      try? await Task.sleep(nanoseconds: 180_000_000)
+      if !Task.isCancelled { self.swipeCover = nil }
+    }
+  }
+
+  private var coverTask: Task<Void, Never>?
+
+  /// The page has something on screen: it finished loading, or is most of the way there.
+  private func drawn(_ id: String) -> Bool {
+    guard let state = navigation[id], !state.url.isEmpty else { return false }
+    return !state.isLoading || state.progress >= 0.5
+  }
+
+  private func settle(after seconds: Double, _ work: @escaping @MainActor () -> Void) {
+    let item = DispatchWorkItem { MainActor.assumeIsolated { work() } }
+    swipeSettling = item
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: item)
+  }
+
+  /// The page showing is on a site that keeps the bar and status bar hidden, and the bar isn't back for a moment. Find
+  /// and the element picker bring it back while they're open.
+  var fullscreen: Bool {
+    overlay == .none && hasPage && !covered && find == nil && picking == nil && !fullscreenPeek && siteSetting.fullscreen
+  }
+
+  /// The bar is out of sight: scrolled away, or on a fullscreen site.
+  var barAway: Bool {
+    (barHidden && overlay == .none) || fullscreen
+  }
+
+  /// A tap on the bottom edge of a fullscreen site: the bar for a few seconds.
+  func peekBar() {
+    fullscreenPeek = true
+    barHidden = false
+    peekTimer?.cancel()
+    peekTimer = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 4_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.fullscreenPeek = false
+    }
+  }
+
+  /// How far the person has scrolled the page one way since it last turned: down positive, up negative.
+  private var scrollRun = 0.0
+
+  /// The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
+  /// of the finger, or the page shifting itself as it loads (no delta), leaves it be.
   private func scrolled(_ tabId: String, offsetY: Double, deltaY: Double) {
     guard tabId == app.activeTabId else { return }
-    if offsetY < 24 || deltaY < -8 {
+    if offsetY < 24 {
+      scrollRun = 0
       if barHidden { barHidden = false }
-    } else if deltaY > 8, !barHidden {
+      return
+    }
+    guard deltaY != 0 else { return }
+    scrollRun = (deltaY > 0) == (scrollRun > 0) ? scrollRun + deltaY : deltaY
+    if scrollRun > 48, !barHidden {
       barHidden = true
+    } else if scrollRun < -24, barHidden {
+      barHidden = false
     }
   }
 
   // MARK: Media
 
-  /// The tab whose media the mini player shows: the latest playing one that isn't on screen.
+  /// The tab whose media the mini player shows: the latest playing one that isn't on screen, from a site that keeps
+  /// its mini player.
   var player: (tab: BrowserTab, media: TabMedia)? {
     let onScreen = overlay == .none && hasPage ? app.activeTabId : nil
-    return latestMedia { $0.id != onScreen && !(locked && $0.private) }
+    return latestMedia { $0.id != onScreen && !(locked && $0.private) && app.store.siteSetting(url: $0.url).miniPlayer }
+  }
+
+  /// Media from a site with its mini player turned off pauses once its tab is left (another tab, or the tab view).
+  func pauseMediaLeft() {
+    let onScreen = overlay != .tabs && hasPage ? app.activeTabId : nil
+    let tabs = app.allTabs
+    for (id, state) in media where state.report.playing && id != onScreen {
+      guard let tab = tabs.first(where: { $0.id == id }), !app.store.siteSetting(url: tab.url).miniPlayer else { continue }
+      command(id, .pauseMedia)
+    }
   }
 
   private func latestMedia(where include: (BrowserTab) -> Bool) -> (tab: BrowserTab, media: TabMedia)? {
@@ -429,12 +620,15 @@ final class BrowserModel: ObservableObject {
     stopped.remove(tabId)
     media[tabId] = TabMedia(report: report, at: Date())
     updateMediaSession()
+    if report.playing { pauseMediaLeft() }
   }
 
-  /// A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from.
+  /// A card picked in the switcher grows into its page (`TabMorph`).
   func pick(_ tab: BrowserTab, frame: CGRect) {
-    guard tab.snapshot != nil, !UIAccessibility.isReduceMotionEnabled else {
+    guard zoom == nil else { return }
+    guard !UIAccessibility.isReduceMotionEnabled else {
       activate(tab.id)
+      if !tab.url.isEmpty { cover(tab) }
       return
     }
     zoom = (tab, frame)
@@ -444,6 +638,7 @@ final class BrowserModel: ObservableObject {
     guard let zoom else { return }
     self.zoom = nil
     activate(zoom.tab.id)
+    if !zoom.tab.url.isEmpty { cover(zoom.tab) }
   }
 
   // MARK: Tips
@@ -534,17 +729,58 @@ final class BrowserModel: ObservableObject {
     return app.tabs.filter { $0.url.isEmpty || !pinned.contains($0.url) }
   }
 
+  /// Where each tab's card sits in the switcher, on screen: the page shrinks into it and grows out of it.
+  var cardFrames: [String: CGRect] = [:]
+  /// The page shrinking into its card as the switcher opens, until it lands (`openingDone`).
+  @Published private(set) var opening: BrowserTab?
+  private var openingTask: Task<Void, Never>?
+
+  /// Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+  /// its card is the page as it is now.
   func showTabs() {
-    if hasPage { capture(app.activeTabId) }
-    overlay = .tabs
+    guard hasPage, let tab = activeTab, !UIAccessibility.isReduceMotionEnabled else {
+      if hasPage { capture(app.activeTabId) }
+      overlay = .tabs
+      return
+    }
+    guard openingTask == nil else { return }
+    openingTask = Task { [weak self] in
+      guard let self else { return }
+      await self.captureNow(tab.id, waiting: Self.openPictureWait)
+      self.opening = self.app.tabs.first { $0.id == tab.id } ?? tab
+      self.overlay = .tabs
+      self.openingTask = nil
+    }
+  }
+
+  func openingDone() {
+    opening = nil
+  }
+
+  /// How long opening the switcher waits for a fresh picture of the page before shrinking the last one.
+  private static let openPictureWait: UInt64 = 400_000_000
+
+  /// Takes the tab's picture, waiting at most `waiting` nanoseconds for it; one that comes later still lands.
+  private func captureNow(_ tabId: String, waiting: UInt64) async {
+    guard let task = captureTask(tabId) else { return }
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { await task.value }
+      group.addTask { try? await Task.sleep(nanoseconds: waiting) }
+      await group.next()
+      group.cancelAll()
+    }
   }
 
   /// Takes the tab's picture for the switcher now. Private tabs and failed pages keep none.
   func capture(_ tabId: String) {
+    _ = captureTask(tabId)
+  }
+
+  private func captureTask(_ tabId: String) -> Task<Void, Never>? {
     guard let view = views[tabId], !failed.contains(tabId),
           app.tabs.first(where: { $0.id == tabId })?.private == false
-    else { return }
-    Task { [weak self] in
+    else { return nil }
+    return Task { [weak self] in
       guard let uri = try? await view.snapshot() else { return }
       self?.app.dispatch(
         .updateTab(id: tabId, update: TabUpdate(url: nil, title: nil, favicon: nil, lastVisit: nil, snapshot: .some(uri))))
@@ -581,35 +817,62 @@ final class BrowserModel: ObservableObject {
     refreshMounted()
   }
 
-  /// A space with the next default name ("Space 3").
-  func newSpace() {
-    createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
-  }
-
-  func newFolder(_ name: String) {
+  /// A pinned folder in the space showing, named `name`; answers its id.
+  @discardableResult
+  func newFolder(_ name: String) -> String {
     let folder = BrowserFolder(id: UUID().uuidString, spaceId: app.activeSpaceId, name: name)
     app.dispatch(.newFolder(folder: folder))
-    activeFolderId = folder.id
+    return folder.id
   }
 
   func renameFolder(_ id: String, _ name: String) {
     app.dispatch(.renameFolder(id: id, name: name))
   }
 
-  /// Deletes a folder; its pinned rows return to the top level.
+  /// Deletes a pinned folder; its pinned rows stay pinned, loose in the space.
   func deleteFolder(_ id: String) {
-    if activeFolderId == id { activeFolderId = nil }
     app.dispatch(.deleteFolder(id: id))
   }
 
-  /// Moves the tab showing to a space, or into one of the space's folders, where its page is pinned as a row (as the
-  /// desktop's Pinned folders hold pinned rows).
-  func moveActiveTab(spaceId: String, folderId: String?) {
-    let id = app.activeTabId
-    app.dispatch(.moveTab(id: id, spaceId: spaceId, folderId: nil))
-    activeFolderId = folderId
-    if let folderId { app.dispatch(.pinSite(tabId: id, pinId: UUID().uuidString, kind: .row, folderId: folderId)) }
+  /// Puts a pinned folder before the folder `beside`, or after it when `after`.
+  func moveFolder(_ id: String, beside: String, after: Bool) {
+    Haptics.tick()
+    app.dispatch(.moveFolder(id: id, beside: beside, after: after))
+  }
+
+  /// Makes a pin an Essential or a pinned row, in `folderId` or loose, and beside the pin `beside` when it was dropped
+  /// on one (after it when `after`).
+  func movePin(_ site: PinnedSite, kind: PinKind, folderId: String?, beside: String? = nil, after: Bool = false) {
+    Haptics.tick()
+    app.dispatch(.movePin(id: site.id, kind: kind, folderId: folderId, beside: beside, after: after))
+  }
+
+  /// Moves a tab to another space, where it becomes that space's newest tab, and says where at the top.
+  func moveTab(_ tab: BrowserTab, to spaceId: String) {
+    guard tab.spaceId != spaceId, let space = app.spaces.first(where: { $0.id == spaceId }) else { return }
+    Haptics.press()
+    app.dispatch(.moveTab(id: tab.id, spaceId: spaceId, folderId: nil))
     refreshMounted()
+    showTopNote(TopNote(text: strings.t("tabs.movedTo", ["space": spaceName(space, strings)]), space: space))
+  }
+
+  /// A tab card being dragged in the tab view: the space in the bar it's over, which lights up and takes it when let go.
+  @Published var cardDropSpace: String?
+  /// Where each space sits in the tab view's bar, on screen, for a dragged card to find the one it's over.
+  var spaceDropFrames: [String: CGRect] = [:]
+
+  /// The space in the bar under `point`, a dragged card's place on screen.
+  func cardDragged(to point: CGPoint?) {
+    let over = point.flatMap { point in spaceDropFrames.first { $0.value.insetBy(dx: -6, dy: -14).contains(point) }?.key }
+    if over != cardDropSpace {
+      if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
+      cardDropSpace = over
+    }
+  }
+
+  /// A space with the next default name ("Space 3").
+  func newSpace() {
+    createSpace(name: strings.t("space.default", ["index": "\(app.spaces.count + 1)"]))
   }
 
   /// The pin sheet for a held tab card. Private and blank tabs have nothing to pin.
@@ -620,10 +883,31 @@ final class BrowserModel: ObservableObject {
     panel = .pin
   }
 
-  /// Pins a tab's page that way, or unpins it when it is already pinned so.
-  func pin(_ tab: BrowserTab, kind: PinKind, folderId: String?) {
-    panel = nil
-    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: kind, folderId: folderId))
+  /// Sets how a tab's page is pinned from its sheet, which stays open: nil unpins it (with Undo), and a pin already
+  /// there moves rather than toggling off.
+  func setPin(_ tab: BrowserTab, kind: PinKind?, folderId: String?) {
+    let current = app.pins.first { $0.url == tab.url }
+    guard let kind else {
+      if let current {
+        Haptics.tick()
+        unpin(current)
+      }
+      return
+    }
+    if let current {
+      guard current.kind != kind || current.folderId != folderId else { return }
+      movePin(current, kind: kind, folderId: folderId)
+    } else {
+      Haptics.tick()
+      app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: kind, folderId: folderId))
+    }
+  }
+
+  /// A copy of a tab beside it, in the background.
+  func duplicate(_ tab: BrowserTab) {
+    guard !tab.url.isEmpty else { return }
+    Haptics.tick()
+    openTab(tab.url, privately: tab.private, background: true)
   }
 
   /// A pin's page: its tab in the space when one is open there, else a new one.
@@ -957,9 +1241,10 @@ extension BrowserModel {
   func reload() { activeView?.reload() }
   func stop() { activeView?.stop() }
 
+  /// The page showing is pinned in its space, either way.
   var isPinned: Bool {
     let url = activeTab?.url
-    return app.pins.contains { $0.kind == .essential && $0.url == url }
+    return app.pins.contains { $0.url == url }
   }
 
   var isBookmarked: Bool {
@@ -967,12 +1252,20 @@ extension BrowserModel {
     return app.store.isBookmarked(spaceId: app.activeSpaceId, url: url)
   }
 
+  /// The page menu's Pin: unpins a pinned page; otherwise pins it as an Essential, or, when the space has folders,
+  /// offers the ways to pin it.
   func togglePin() {
     guard let tab = activeTab else { return }
-    Haptics.tick()
-    let pinned = isPinned
-    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: .essential, folderId: nil))
-    showToast(pinned ? strings.t("toast.unpinned") : strings.t("toast.pinned"))
+    if let pin = app.pins.first(where: { $0.url == tab.url }) {
+      Haptics.tick()
+      unpin(pin)
+    } else if !app.folders.isEmpty {
+      showPinMenu(tab)
+    } else {
+      Haptics.tick()
+      app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: .essential, folderId: nil))
+      showToast(strings.t("toast.pinned"))
+    }
   }
 
   func toggleBookmark() {
@@ -986,7 +1279,7 @@ extension BrowserModel {
     if bookmarked {
       showToast(strings.t("toast.unbookmarked"))
     } else {
-      showToast(strings.t("toast.bookmarked"), actionLabel: strings.t("toast.showBookmarks")) { [weak self] in self?.panel = .bookmarks }
+      showToast(strings.t("toast.bookmarked"), actionLabel: strings.t("toast.showBookmarks")) { [weak self] in self?.openDrawer() }
     }
   }
 
@@ -999,11 +1292,17 @@ extension BrowserModel {
   }
 
   /// The page through Google Translate, into the app's language.
+  /// The page translated into Bay's language.
   func translate() {
+    translate(to: strings.locale)
+  }
+
+  /// The page translated into `locale` (one of Bay's: "pt-BR" translates into Portuguese).
+  func translate(to locale: String) {
     let url = activeUrl
     guard !url.isEmpty else { return }
     if url.range(of: #"^https://[^/]+\.translate\.goog/"#, options: .regularExpression) != nil { return }
-    let language = strings.locale.split(separator: "-").first.map(String.init) ?? "en"
+    let language = locale.split(separator: "-").first.map(String.init) ?? "en"
     let encoded = url.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? url
     navigate(app.activeTabId, "https://translate.google.com/translate?sl=auto&tl=\(language)&u=\(encoded)")
   }
@@ -1209,7 +1508,7 @@ extension BrowserModel {
     let setting = siteSetting
     var input = SiteSettingInput(
       textSize: setting.textSize.map(Double.init), reader: setting.reader, desktopMode: setting.desktopMode, blockOff: setting.blockOff,
-      swipe: setting.swipe)
+      swipe: setting.swipe, font: setting.font, fullscreen: setting.fullscreen, forceDark: setting.forceDark, miniPlayer: setting.miniPlayer)
     change(&input)
     app.dispatch(.siteSettings(host: host, update: input))
     preferencesChanged()
@@ -1225,25 +1524,41 @@ extension BrowserModel {
     applyBlockingPauses()
   }
 
-  /// The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices.
+  /// The page view's settings for the page it shows: its site's desktop mode, swipe and dark look, and Bay's own choices.
   private func configure(_ view: EngineView, url: String) {
     let preferences = app.preferences
-    let setting = url.isEmpty ? SiteSetting(textSize: nil, reader: false, desktopMode: false, blockOff: [], swipe: nil) : app.store.siteSetting(url: url)
+    let setting = app.store.siteSetting(url: url)
     view.desktopMode = setting.desktopMode
+    // Forced dark asks the page for its own dark look first; the page script darkens a page that has none.
+    view.overrideUserInterfaceStyle = setting.forceDark ? .dark : .unspecified
     view.swipeMode = setting.swipe ?? preferences.swipeToNavigate
     view.pullToRefreshEnabled = preferences.pullToRefresh
     view.appLinks = preferences.appLinks
   }
 
-  /// Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows.
+  /// Bay's page zoom (the site's own first), the AMP swap, the font and forced dark, on the page a tab shows.
   private func applyTweaks(_ tabId: String, url: String) {
     guard let view = views[tabId], isWebUrl(value: url) else { return }
     let setting = app.store.siteSetting(url: url)
     let zoom = setting.textSize ?? app.preferences.textSize
     let skipAmp = app.preferences.skipAmp && !(ampLeft[tabId]?.contains(url) ?? false)
+    let face = siteFontFace(font: app.store.siteFont(url: url))
+    let forceDark = setting.forceDark
     Task { [weak self] in
       let result = try? await view.runScript(.pageTweaks, args: ["textSize": zoom, "skipAmp": skipAmp])
       if result == "\"amp\"" { self?.ampLeft[tabId, default: []].insert(url) }
+      let font = try? await view.runScript(.pageFont, args: ["family": face.family, "faces": SiteFonts.faces(face)])
+      if font == "\"blocked\"" {
+        self?.fontBlocked.insert(tabId)
+      } else if font != nil {
+        self?.fontBlocked.remove(tabId)
+      }
+      let dark = try? await view.runScript(.forceDark, args: ["on": forceDark])
+      // Darkened or put back: the strip behind the status bar takes the page's new colour.
+      if dark != "\"off\"" || self?.pageColors[tabId] != nil {
+        let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
+        self?.pageColors[tabId] = color
+      }
     }
   }
 

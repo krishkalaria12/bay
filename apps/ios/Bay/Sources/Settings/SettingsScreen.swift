@@ -275,7 +275,19 @@ private struct SettingsRowView: View {
   let lit: Bool
   let tap: () -> Void
 
-  var body: some View {
+  @ViewBuilder var body: some View {
+    // The font for websites: each name set in its own font, as Site settings lists them.
+    if row.testId.hasPrefix("settings-site-font-"), case .choice(let selected, _) = row.kind,
+      let font = siteFonts().first(where: { "\($0)" == row.id })
+    {
+      FontRow(name: row.label, font: SiteFonts.font(font, size: TextVariant.body.size), selected: selected, testID: row.testId, action: tap)
+        .background(lit ? BayColor.accent.opacity(0.15) : .clear)
+    } else {
+      plain
+    }
+  }
+
+  private var plain: some View {
     let (chevron, toggle, selected): (Bool, Bool?, Bool) = {
       switch row.kind {
       case .page(_, let checked): return (true, nil, checked)
@@ -285,7 +297,7 @@ private struct SettingsRowView: View {
       }
     }()
     let icon = row.icon.flatMap { $0 == "mark" ? nil : BayIcon(name: $0) }
-    ActionRow(
+    return ActionRow(
       row.label, testID: row.testId, icon: icon, detail: row.detail, value: row.value, chevron: chevron, toggle: toggle,
       selected: selected, destructive: row.danger, disabled: row.disabled, action: tap
     )

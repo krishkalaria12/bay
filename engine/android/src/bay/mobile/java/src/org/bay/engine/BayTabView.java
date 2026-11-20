@@ -13,6 +13,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.embedder_support.view.ContentViewRenderView;
@@ -45,13 +46,18 @@ final class BayTabView extends FrameLayout {
     private final AutofillProvider mAutofillProvider;
     private boolean mVisible = true;
 
-    BayTabView(Context context, WebContents webContents, WindowAndroid window, String productVersion) {
+    BayTabView(
+            Context context,
+            WebContents webContents,
+            WindowAndroid window,
+            String productVersion,
+            Callback<Integer> onBottomControlsChanged) {
         super(context);
         mWebContents = webContents;
         mWindow = window;
 
         mContentView = ContentView.createContentView(context, webContents);
-        AutofillDelegate delegate = new AutofillDelegate(mContentView);
+        PageViewDelegate delegate = new PageViewDelegate(mContentView, onBottomControlsChanged);
         webContents.setDelegates(
                 productVersion,
                 delegate,
@@ -134,12 +140,27 @@ final class BayTabView extends FrameLayout {
         removeAllViews();
     }
 
-    /** Answers the framework's autofill calls on the content view with the page's forms. */
-    private static final class AutofillDelegate extends ViewAndroidDelegate {
+    /**
+     * Answers the framework's autofill calls on the content view with the page's forms, and says where the bottom
+     * controls (the app's bar) are as the page scrolls them.
+     */
+    private static final class PageViewDelegate extends ViewAndroidDelegate {
         AutofillProvider mAutofillProvider;
+        private final Callback<Integer> mOnBottomControlsChanged;
 
-        AutofillDelegate(ContentView containerView) {
+        PageViewDelegate(ContentView containerView, Callback<Integer> onBottomControlsChanged) {
             super(containerView);
+            mOnBottomControlsChanged = onBottomControlsChanged;
+        }
+
+        @Override
+        public void onControlsChanged(
+                int topControlsOffsetY,
+                int topContentOffsetY,
+                int topControlsMinHeightOffsetY,
+                int bottomControlsOffsetY,
+                int bottomControlsMinHeightOffsetY) {
+            mOnBottomControlsChanged.onResult(bottomControlsOffsetY);
         }
 
         @Override

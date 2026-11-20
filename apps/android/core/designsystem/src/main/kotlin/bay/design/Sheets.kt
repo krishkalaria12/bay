@@ -65,9 +65,10 @@ import androidx.compose.ui.unit.dp
 data class SheetWords(val close: String, val back: String)
 
 /**
- * A panel: a solid sheet rising from the bottom over a dim backdrop, sized to what it holds up to `maxFraction` of the
- * screen. Its header holds the title (or a back arrow and a sub-page's title), round buttons and the close button;
- * the rows below scroll when they're taller. A tap on the backdrop, a drag down by the header or Back closes it.
+ * A panel: Android's bottom sheet over a dim backdrop, along the bottom edge with its top corners rounded and a drag
+ * handle, sized to what it holds up to `maxFraction` of the screen. Its top has a small centred title (with a round
+ * back button on a sub-page) and the sheet's own round buttons on the right; the rows below scroll when they're taller.
+ * There's no close button: a tap on the backdrop, a drag down by the top, or Back closes it.
  */
 @Composable
 fun PanelSheet(
@@ -130,21 +131,30 @@ fun PanelSheet(
                     Box(Modifier.fillMaxWidth().padding(top = Space.sm, bottom = Space.xs), contentAlignment = Alignment.Center) {
                         Box(Modifier.size(36.dp, 5.dp).background(colors.foreground.copy(alpha = 0.2f), CircleShape))
                     }
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md),
-                        horizontalArrangement = Arrangement.spacedBy(Space.md),
-                        verticalAlignment = if (header != null && onBack == null) Alignment.Top else Alignment.CenterVertically,
-                    ) {
-                        if (header != null && onBack == null) {
+                    if (header != null && onBack == null) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md),
+                            horizontalArrangement = Arrangement.spacedBy(Space.md),
+                            verticalAlignment = Alignment.Top,
+                        ) {
                             header()
-                        } else {
-                            if (onBack != null) {
-                                SheetIconButton(BayIcon.BACK, words.back, Modifier.testTag("$testID-back"), muted = false, onClick = onBack)
-                            }
-                            BayText(title, Modifier.weight(1f).semantics { heading() }, variant = TextVariant.TITLE, maxLines = 1)
+                            accessory()
                         }
-                        accessory()
-                        SheetIconButton(BayIcon.CLOSE, words.close, Modifier.testTag("$testID-close"), onClick = onClose)
+                    } else {
+                        // The title centred over the sheet, the back button at its left and the sheet's own buttons at its right.
+                        Box(Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(start = Space.gutter, end = Space.gutter, top = Space.xs, bottom = Space.md)) {
+                            BayText(
+                                title,
+                                Modifier.align(Alignment.Center).padding(horizontal = 52.dp).semantics { heading() },
+                                variant = TextVariant.HEADLINE,
+                                weight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            if (onBack != null) {
+                                SheetIconButton(BayIcon.BACK, words.back, Modifier.align(Alignment.CenterStart).testTag("$testID-back"), muted = false, onClick = onBack)
+                            }
+                            Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(Space.sm), content = accessory)
+                        }
                     }
                 }
                 Column(
@@ -184,22 +194,23 @@ fun SectionLabel(text: String, inset: Boolean = false) {
 private val ROW_INSET = Space.lg
 private val ROW_GAP = 14.dp
 
-/** Rows on one rounded card, split by hairlines. */
+/**
+ * A section of rows, as Android lists them: flat on the sheet, after a full-width hairline, under its label when it
+ * has one. (iPhone puts a section on a rounded card instead.)
+ */
 @Composable
 fun RowGroup(label: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.colors.hairline))
         if (label != null) SectionLabel(label, inset = true)
-        Column(Modifier.fillMaxWidth().background(Theme.colors.fill, RoundedCornerShape(Radius.card)), content = content)
+        Column(Modifier.fillMaxWidth().padding(vertical = Space.xs), content = content)
     }
 }
 
-/** A hairline between grouped rows, starting where the rows' text does. */
+/** Between rows in a section: Android lists them without lines, so it only keeps the call sites the same as iPhone's. */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun RowDivider(afterIcon: Boolean = true) {
-    Box(
-        Modifier.fillMaxWidth().padding(start = if (afterIcon) ROW_INSET + IconSize.control + ROW_GAP else ROW_INSET).height(1.dp)
-            .background(Theme.colors.foreground.copy(alpha = 0.1f)),
-    )
 }
 
 /** One tappable row: an icon (or a tinted square), a label with a detail line, and its value, chevron, switch or check. */
