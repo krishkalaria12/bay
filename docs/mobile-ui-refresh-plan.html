@@ -1563,6 +1563,29 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           does.
         </li>
         <li>
+          <b>Tab switch done (Android):</b> a tab taking the window's one compositor back hides and shows its page once, so a page that has finished loading
+          draws a frame for the new surface instead of staying white.
+        </li>
+        <li>
+          <b>Bar swipe done (Android):</b> the page follows the finger along the bar and the next tab's picture comes in beside it; let go past a quarter of
+          the width (or with a flick) and it carries on to that tab, else it springs back. The picture stays over the page for a moment while the page draws.
+        </li>
+        <li>
+          <b>Loading line done (Android):</b> within one load the line only moves forward (Chromium's progress starts over on redirects and frames), creeps on
+          while the page is busy, waits a moment before finishing a stopped load, and runs to the end before it fades.
+        </li>
+        <li>
+          <b>New tab and archive done (Android):</b> a new tab's bar keeps Tabs where a page has it (holding it brings the spaces); the archive is in the
+          drawer, behind a Bookmarks / Archive toggle at its top, and the tab view's Archive button opens the drawer there.
+        </li>
+        <li>
+          <b>Search sheet done (Android):</b> while the field still holds the page's address, the rows are the space's recent pages, as on an empty field;
+          with nothing to list (a new person, before typing) the sheet is only the field, on the keyboard.
+        </li>
+        <li>
+          <b>Gap:</b> iPhone still has Archive on a new tab's bar and in its own sheet, and its search sheet keeps its full height with the address alone.
+        </li>
+        <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.
         </li>
