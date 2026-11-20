@@ -666,3 +666,35 @@ test("a window that opens while the runtime isn't ready asks again, and says why
   other.snapshots[0].reject(new Error("projection refused"));
   await assert.rejects(failing.ready, /browser runtime snapshot failed: projection refused/);
 });
+
+test("a reply naming only its revision resolves once that commit arrives", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const { fake, client } = await connect(copy(first.commit));
+  let settled = false;
+
+  const pending = client.dispatch({ method: "newTab", windowId: first.value, options: { url: "https://two.example/" } }).then((value) => {
+    settled = true;
+
+    return value;
+  });
+
+  await tick();
+  const [sent] = fake.commands;
+  const reply = await authority.dispatch(sent.request);
+  const { epoch, revision } = reply.commit;
+  sent.resolve({ clientId: "window-1", requestId: sent.request.requestId, commit: { epoch, revision }, value: reply.value });
+  await tick();
+  assert.equal(settled, false);
+  fake.emit(copy(reply.commit));
+  assert.equal(await pending, reply.value);
+  assert.equal(client.getSnapshot().revision, revision);
+  assert.ok(client.getSnapshot().state.tabs[reply.value]);
+
+  // A malformed revision is a broken protocol.
+  const broken = client.dispatch({ method: "newTab", windowId: first.value, options: { url: "https://three.example/" } });
+  await tick();
+  fake.commands[1].resolve({ clientId: "window-1", requestId: fake.commands[1].request.requestId, commit: { epoch, revision: -1 }, value: "x" });
+  await assert.rejects(broken, { code: "invalid_protocol" });
+  authority.close();
+});

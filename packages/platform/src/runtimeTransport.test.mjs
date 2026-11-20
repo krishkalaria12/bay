@@ -471,3 +471,27 @@ test("an incoming commit is frozen all the way down", async () => {
   for (const node of [commit, commit.state, commit.state.tabs, commit.state.tabs.a, commit.state.tabs.a.list, commit.state.tabs.a.list[0]])
     assert.ok(Object.isFrozen(node));
 });
+
+test("a reply's commit may name only its revision, but nothing else", async () => {
+  const reply = (commit) =>
+    endpoints("window", {
+      dispatch: async (json) => {
+        const input = JSON.parse(json);
+
+        return envelope({ clientId: input.clientId, requestId: input.requestId, commit, value: null });
+      },
+    });
+
+  const stamped = await createAppRuntimeTransport(reply({ epoch: "epoch-1", revision: 4 }));
+  assert.deepEqual((await stamped.dispatch(request())).commit, { epoch: "epoch-1", revision: 4 });
+
+  for (const commit of [
+    { epoch: "epoch-1" },
+    { epoch: "epoch-1", revision: 4, extra: 1 },
+    { epoch: "epoch-1", revision: -1 },
+    { epoch: "other", revision: 4 },
+  ]) {
+    const connection = await createAppRuntimeTransport(reply(commit));
+    await assert.rejects(connection.dispatch(request()));
+  }
+});

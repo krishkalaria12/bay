@@ -7,9 +7,12 @@ import { jsonKind } from "@bay/platform/json";
 import type { BrowserCommand, BrowserCommit, CommandReply, CommandRequest } from "./authority";
 import type { BrowserProjection } from "./projection";
 
+/** A command's reply as the browser sends it: its commit may name only the revision, without the state. */
+type ClientReply = Omit<CommandReply, "commit"> & { commit: BrowserCommit | Pick<BrowserCommit, "epoch" | "revision"> };
+
 export type BrowserClientTransport = {
   getSnapshot(): Promise<BrowserCommit>;
-  dispatch(request: CommandRequest): Promise<CommandReply>;
+  dispatch(request: CommandRequest): Promise<ClientReply>;
   subscribeCommits(listener: (commit: BrowserCommit) => void): () => void;
   subscribeClose(listener: () => void): () => void;
 };
@@ -42,6 +45,7 @@ function record(value: JsonInput): JsonObject {
   return value;
 }
 
+const TEXT = v.string();
 const NUMBER = v.number();
 
 /** A frozen copy of JSON data that reuses `previous`'s nodes wherever they hold the same data, so a subscriber sees
@@ -333,7 +337,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     listeners.clear();
   }
 
-  function sameEpoch(commit: BrowserCommit) {
+  function sameEpoch(commit: Pick<BrowserCommit, "epoch">) {
     const expected = current?.epoch ?? buffered?.epoch;
 
     if (expected && commit.epoch !== expected) {
@@ -475,7 +479,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
       });
   }
 
-  function receiveReply(command: Pending, input: CommandReply) {
+  function receiveReply(command: Pending, input: ClientReply) {
     if (terminalError || !pending.has(command.request.requestId)) return;
 
     // SAFETY: the checks above established this shape.
@@ -491,11 +495,24 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         invalid();
 
       if (!validateBrowserCommandResult(command.request.command, reply.value)) invalid();
-      const held = heldRevision(reply.commit);
-      const commit = held === null ? timed("Bay.client decodeReply", () => decodeBrowserCommit(checked<JsonInput>(reply.commit), current)) : null;
+      const stamp = record(reply.commit);
+      let revision = heldRevision(stamp);
+      let commit: BrowserCommit | null = null;
 
-      if (commit && !sameEpoch(commit)) return;
-      const revision = commit?.revision ?? held!;
+      if (revision === null && Object.hasOwn(stamp, "state")) {
+        commit = timed("Bay.client decodeReply", () => decodeBrowserCommit(stamp, current));
+
+        if (!sameEpoch(commit)) return;
+        revision = commit.revision;
+      } else if (revision === null) {
+        // Only the revision: its commit reaches this window as a commit (or in a snapshot), and settle() waits for it.
+        const { epoch, revision: named } = stamp;
+
+        if (Object.keys(stamp).length !== 2 || !v.is(TEXT, epoch) || !epoch || !v.is(NUMBER, named) || !Number.isSafeInteger(named) || named < 0) invalid();
+
+        if (!sameEpoch({ epoch })) return;
+        revision = named;
+      }
 
       if (revision < command.baseRevision) invalid();
       command.reply = { revision, value: copyJson(checked<JsonInput>(reply.value)) };

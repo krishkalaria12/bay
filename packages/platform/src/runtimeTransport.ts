@@ -7,7 +7,14 @@ export type RuntimeCommit<State> = Readonly<{ epoch: string; revision: number; s
 
 export type RuntimeRequest<Command> = Readonly<{ epoch: string; clientId: string; requestId: number; originWindowId?: string; command: Command }>;
 
-export type RuntimeReply<State, Value> = Readonly<{ clientId: string; requestId: number; commit: RuntimeCommit<State>; value: Value }>;
+/** A command's reply names the commit that carries its result. The browser may leave that commit's state out: the
+ *  window gets the commit itself as a commit, or in a snapshot. */
+export type RuntimeReply<State, Value> = Readonly<{
+  clientId: string;
+  requestId: number;
+  commit: RuntimeCommit<State> | Readonly<{ epoch: string; revision: number }>;
+  value: Value;
+}>;
 
 export type RuntimeResolution<Value> =
   | Readonly<{ epoch: string; revision: number; value: Value }>
@@ -542,7 +549,15 @@ export async function createAppRuntimeTransport<State, Command, Value>({
             exact(reply, ["clientId", "requestId", "commit", "value"]);
 
             if (reply.clientId !== assigned.clientId || reply.requestId !== request.requestId) invalid("Runtime reply identity mismatch");
-            commitFrom<State>(reply.commit, assigned.epoch);
+            const stamp = object(reply.commit);
+
+            if (Object.hasOwn(stamp, "state")) commitFrom<State>(stamp, assigned.epoch);
+            else {
+              exact(stamp, ["epoch", "revision"]);
+
+              if (id(stamp.epoch) !== assigned.epoch) throw new NativeBridgeError("stale_epoch", "Browser runtime epoch changed");
+              revision(stamp.revision);
+            }
 
             // SAFETY: the checks above established this shape.
             return checked<RuntimeReply<State, Value>>(reply);
