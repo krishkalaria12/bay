@@ -673,6 +673,47 @@ mod tests {
     }
 
     #[test]
+    fn a_dragged_folder_lands_before_or_after_the_folder_it_was_dropped_on() {
+        let dir = temp_dir("folders");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        for id in ["a", "b", "c"] {
+            store.dispatch(Action::NewFolder {
+                folder: BrowserFolder {
+                    id: id.into(),
+                    space_id: PERSONAL_SPACE_ID.into(),
+                    name: id.into(),
+                },
+            });
+        }
+        let order = || {
+            store
+                .folders(PERSONAL_SPACE_ID.into())
+                .into_iter()
+                .map(|folder| folder.id)
+                .collect::<Vec<_>>()
+        };
+        store.dispatch(Action::MoveFolder {
+            id: "c".into(),
+            beside: "a".into(),
+            after: false,
+        });
+        assert_eq!(order(), ["c", "a", "b"]);
+        store.dispatch(Action::MoveFolder {
+            id: "c".into(),
+            beside: "b".into(),
+            after: true,
+        });
+        assert_eq!(order(), ["a", "b", "c"]);
+        // Onto itself or a folder that isn't there, nothing moves.
+        store.dispatch(Action::MoveFolder {
+            id: "a".into(),
+            beside: "gone".into(),
+            after: false,
+        });
+        assert_eq!(order(), ["a", "b", "c"]);
+    }
+
+    #[test]
     fn a_saved_page_says_where_it_is_and_new_ones_start_in_the_last_folder() {
         let dir = temp_dir("save");
         let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);

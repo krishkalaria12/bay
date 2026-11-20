@@ -560,6 +560,13 @@ pub enum Action {
     DeleteFolder {
         id: String,
     },
+    /// A pinned folder dragged onto another: put after it when `after`, else before it.
+    MoveFolder {
+        id: String,
+        beside: String,
+        #[serde(default)]
+        after: bool,
+    },
     MoveTab {
         id: String,
         space_id: String,
@@ -1215,6 +1222,19 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
             for folder in next.folders.iter_mut().filter(|folder| &folder.id == id) {
                 folder.name = js::slice(name, NAME_LIMIT);
             }
+        }
+
+        Action::MoveFolder { id, beside, after } => {
+            if id == beside {
+                return None;
+            }
+            let at = next.folders.iter().position(|folder| &folder.id == id)?;
+            let folder = next.folders.remove(at);
+            let place = next
+                .folders
+                .iter()
+                .position(|folder| &folder.id == beside)?;
+            next.folders.insert(place + usize::from(*after), folder);
         }
 
         Action::DeleteFolder { id } => {
