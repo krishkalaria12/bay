@@ -1,13 +1,10 @@
 package bay.app.browser
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,7 +85,9 @@ sealed interface FolderNaming {
 
 /** A pinned row being dragged: which, how far it has come, what it's over ("top", "folder:<id>", "pin:<id>"), and where everything sits in the window. */
 private class PinDrag {
+    /** The pinned row being dragged, or the folder being dragged among the others. */
     var id by mutableStateOf<String?>(null)
+    var folder by mutableStateOf<String?>(null)
     var offset by mutableFloatStateOf(0f)
     var target by mutableStateOf<String?>(null)
     val frames = mutableMapOf<String, Rect>()
@@ -108,7 +107,8 @@ fun PinnedSection(browser: BrowserModel, strings: Strings, rows: List<PinnedSite
     val drag = remember { PinDrag() }
     val loose = rows.filter { it.folderId == null }
     val folders = app.folders.map { folder -> folder to rows.filter { it.folderId == folder.id } }
-    fun isOpen(id: String, inside: List<PinnedSite>) = toggles[id] ?: inside.any { it.url == activeUrl }
+    // A folder being dragged shows closed, so only its row moves.
+    fun isOpen(id: String, inside: List<PinnedSite>) = drag.folder != id && (toggles[id] ?: inside.any { it.url == activeUrl })
     val visible = loose.map { it.id } + folders.flatMap { (folder, inside) -> if (isOpen(folder.id, inside)) inside.map { it.id } else emptyList() }
 
     // A dragged row let go over a target: onto "Pinned" it comes out of its folder, onto a folder it goes in, onto
@@ -162,9 +162,7 @@ fun PinnedSection(browser: BrowserModel, strings: Strings, rows: List<PinnedSite
                         if (name != null && name != folder.name) browser.renameFolder(folder.id, name)
                     }
                 } else {
-                    FolderRow(browser, strings, folder, inside.size, isOpen(folder.id, inside), drag.target == "folder:${folder.id}", { toggles[folder.id] = !isOpen(folder.id, inside) }, { onNaming(FolderNaming.Rename(folder.id)) }) {
-                        drag.frames["folder:${folder.id}"] = it
-                    }
+                    FolderRow(browser, strings, folder, inside.size, isOpen(folder.id, inside), drag, { toggles[folder.id] = !isOpen(folder.id, inside) }, { onNaming(FolderNaming.Rename(folder.id)) })
                 }
             }
             if (isOpen(folder.id, inside)) inside.forEach { pinRow(it, indent = true) }
@@ -178,29 +176,96 @@ fun PinnedSection(browser: BrowserModel, strings: Strings, rows: List<PinnedSite
     }
 }
 
-/** A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do; held, Rename and Delete. */
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * A pinned folder: a row that opens to show the pinned rows in it, as the desktop's Pinned folders do. Held and moved,
+ * it lifts and lands before or after the folder it's let go on; held and let go where it was, Rename and Delete.
+ */
 @Composable
-private fun FolderRow(browser: BrowserModel, strings: Strings, folder: BrowserFolder, count: Int, open: Boolean, targeted: Boolean, onToggle: () -> Unit, onRename: () -> Unit, onPlaced: (Rect) -> Unit) {
+private fun FolderRow(browser: BrowserModel, strings: Strings, folder: BrowserFolder, count: Int, open: Boolean, drag: PinDrag, onToggle: () -> Unit, onRename: () -> Unit) {
+    val app = browser.app
     val view = LocalView.current
     val colors = Theme.colors
     var menu by remember { mutableStateOf(false) }
-    Box {
+    val key = "folder:${folder.id}"
+    val lifted = drag.folder == folder.id
+    val index = app.folders.indexOfFirst { it.id == folder.id }
+    Box(
+        Modifier.zIndex(if (lifted) 1f else 0f).graphicsLayer {
+            translationY = if (lifted) drag.offset else 0f
+            shadowElevation = if (lifted) 12.dp.toPx() else 0f
+            shape = RoundedCornerShape(Radius.control)
+        },
+    ) {
         Row(
             Modifier.fillMaxWidth().testTag("tab-folder-${folder.id}")
-                .onGloballyPositioned { onPlaced(it.boundsInWindow()) }
+                .onGloballyPositioned { if (!lifted) drag.frames[key] = it.boundsInWindow() }
                 .semantics(mergeDescendants = true) {
                     stateDescription = if (open) "expanded" else "collapsed"
-                    customActions = listOf(
+                    role = Role.Button
+                    onClick { onToggle(); true }
+                    customActions = listOfNotNull(
                         CustomAccessibilityAction(strings.t("tabs.renameFolder")) { onRename(); true },
                         CustomAccessibilityAction(strings.t("tabs.deleteFolder")) { browser.deleteFolder(folder.id); true },
+                        app.folders.getOrNull(index - 1)?.let { up -> CustomAccessibilityAction(strings.t("tabs.folderUp")) { browser.moveFolder(folder.id, up.id, false); true } },
+                        app.folders.getOrNull(index + 1)?.let { down -> CustomAccessibilityAction(strings.t("tabs.folderDown")) { browser.moveFolder(folder.id, down.id, true); true } },
                     )
                 }
-                .combinedClickable(remember { MutableInteractionSource() }, null, onLongClick = {
-                    Haptics.tick(view)
-                    menu = true
-                }, onClick = onToggle)
-                .background(colors.accent.copy(alpha = if (targeted) 0.25f else 0f), RoundedCornerShape(Radius.control))
+                .pointerInput(folder.id) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        var cancelled = false
+                        val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                        }
+                        when {
+                            up != null -> {
+                                up.consume()
+                                onToggle()
+                            }
+                            cancelled -> {}
+                            else -> {
+                                Haptics.tick(view)
+                                val start = (drag.frames[key]?.topLeft ?: Offset.Zero) + down.position
+                                var moved = 0f
+                                drag(down.id) { change ->
+                                    val dy = change.positionChange().y
+                                    change.consume()
+                                    moved += kotlin.math.abs(dy)
+                                    if (drag.folder == null && moved > 8.dp.toPx()) {
+                                        drag.folder = folder.id
+                                        drag.offset = 0f
+                                    }
+                                    if (drag.folder != folder.id) return@drag
+                                    drag.offset += dy
+                                    val y = start.y + drag.offset
+                                    val over = drag.frames.entries.firstOrNull { it.key.startsWith("folder:") && it.key != key && y >= it.value.top && y < it.value.bottom }?.key
+                                    if (over != drag.target) {
+                                        drag.target = over
+                                        if (over != null) Haptics.press(view)
+                                    }
+                                }
+                                val target = drag.target?.removePrefix("folder:")
+                                val carried = drag.folder == folder.id
+                                drag.folder = null
+                                drag.offset = 0f
+                                drag.target = null
+                                when {
+                                    !carried -> menu = true
+                                    target != null -> browser.moveFolder(folder.id, target, index < app.folders.indexOfFirst { it.id == target })
+                                }
+                            }
+                        }
+                    }
+                }
+                .background(
+                    when {
+                        drag.target == key -> colors.accent.copy(alpha = 0.25f)
+                        // Solid while it's carried, so the row it passes over doesn't show through.
+                        lifted -> colors.surface
+                        else -> Color.Transparent
+                    },
+                    RoundedCornerShape(Radius.control),
+                )
                 .heightIn(min = 40.dp).padding(horizontal = Space.sm),
             horizontalArrangement = Arrangement.spacedBy(Space.md),
             verticalAlignment = Alignment.CenterVertically,
@@ -232,7 +297,13 @@ private fun PinRow(browser: BrowserModel, strings: Strings, row: PinnedSite, act
     val lifted = drag.id == row.id
     val key = "pin:${row.id}"
     val title = row.title.ifEmpty { displayUrl(row.url) }
-    Box(Modifier.zIndex(if (lifted) 1f else 0f).graphicsLayer { translationY = if (lifted) drag.offset else 0f }) {
+    Box(
+        Modifier.zIndex(if (lifted) 1f else 0f).graphicsLayer {
+            translationY = if (lifted) drag.offset else 0f
+            shadowElevation = if (lifted) 12.dp.toPx() else 0f
+            shape = RoundedCornerShape(Radius.control)
+        },
+    ) {
         Row(
             Modifier.fillMaxWidth().testTag("tab-pinned-${row.id}")
                 .onGloballyPositioned { if (!lifted) drag.frames[key] = it.boundsInWindow() }
@@ -286,7 +357,8 @@ private fun PinRow(browser: BrowserModel, strings: Strings, row: PinnedSite, act
                 .background(
                     when {
                         drag.target == key -> colors.accent.copy(alpha = 0.25f)
-                        lifted || active -> colors.fill
+                        lifted -> colors.surface
+                        active -> colors.fill
                         else -> Color.Transparent
                     },
                     RoundedCornerShape(Radius.control),

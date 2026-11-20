@@ -776,6 +776,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** Deletes a pinned folder; its pinned rows stay pinned, loose in the space. */
     fun deleteFolder(id: String) = app.dispatch(Action.DeleteFolder(id))
 
+    /** Puts a pinned folder before the folder [beside], or after it when [after]. */
+    fun moveFolder(id: String, beside: String, after: Boolean) = app.dispatch(Action.MoveFolder(id, beside, after))
+
     /**
      * Makes a pin an Essential or a pinned row, in [folderId] or loose, and beside the pin [beside] when it was dropped
      * on one (after it when [after]).
