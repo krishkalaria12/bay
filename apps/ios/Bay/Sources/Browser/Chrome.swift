@@ -221,7 +221,8 @@ struct BrowserBar: View {
       if sliding {
         SpaceSlideColumn(spaces: app.spaces, current: app.activeSpaceId, target: slideTarget)
           .fixedSize()
-          .alignmentGuide(.bottom) { $0[.bottom] + SpaceSlideColumn.gap + tabsFrame.height }
+          // Lifted clear of the button: an alignment guide here was dropped, which left the column over the button.
+          .offset(y: -(SpaceSlideColumn.gap + tabsFrame.height))
           .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
       }
     }
