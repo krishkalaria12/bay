@@ -105,6 +105,60 @@ packs it unstripped (the symbols' copy; `release.sh` strips the app's), uploads 
 `packages/chromium/prebuilt-engines.tsv`: commit and push that line. Until then, releases of a commit whose `engine/`
 changed fail in **plan**, saying so; `engine/` must be committed and pushed first.
 
+## Linux
+
+Linux ships beside a Mac release, with the same version: its packages go on the release `v<version>`, so publish that
+first. One run of `.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage,
+then its **publish** job runs `scripts/linux/publish.sh`:
+
+```bash
+gh workflow run linux-build.yml --ref feat/linux -f version=<version> -f publish=true
+```
+
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or a
+secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would upload
+without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
+
+What a release publishes:
+
+| Where | What |
+|---|---|
+| Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
+| Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
+| AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
+
+The site serves both repositories at `bay.krishkalaria.in/linux/` (`apps/web/public/_redirects`): indexes and keys
+redirect to `linux-repo`, and each package to its release, so `apt`, `dnf` and `zypper` download from GitHub. The
+repositories list only the newest release. The redirects deploy with the site from `main`, so they have to be there
+before the first Linux release. Users set it up with `docs/linux-install.md`.
+
+### One-time setup
+
+1. **Signing key.** Every installed copy trusts this key from then on, so keep it backed up with the other signing files
+   and never replace it lightly. RSA keeps older rpm and zypper happy; no passphrase, since the secret is the protection.
+
+   ```bash
+   gpg --batch --passphrase '' --quick-gen-key 'Bay Linux packages' rsa4096 sign 0
+   key=$(gpg --list-secret-keys --with-colons 'Bay Linux packages' | awk -F: '$1 == "fpr" { print $10; exit }')
+   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-signing-key.asc
+   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-signing-key.asc
+   ```
+
+2. **AUR.** Make an account at aur.archlinux.org, then give it a key of its own:
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C bay-aur -f ~/.ssh/aur
+   # aur.archlinux.org › My Account › SSH Public Key: paste ~/.ssh/aur.pub
+   gh secret set AUR_SSH_PRIVATE_KEY <~/.ssh/aur
+   ```
+
+   The first publish creates `bay-bin`. `publish.sh` checks the AUR's published host key.
+
+3. **Site.** Get the `/linux/` lines of `apps/web/public/_redirects` onto `main` and deployed.
+
+Not published yet: Flathub, the Snap Store and nixpkgs need packaging of their own. The `.deb` doesn't add the APT
+repository on its own, so a `.deb` installed by hand doesn't update.
+
 ## Reading a Linux or Windows crash report
 
 Crash reports from the desktop host name each frame by module and offset: a minidump has no symbols. Linux builds keep
