@@ -2,6 +2,11 @@ import type { NativeHostInfo, NativeTransport, JSONValue } from "@bay/platform/n
 import { checked } from "../lib/checked";
 import type { JsonValue } from "../lib/json";
 
+declare global {
+  var __bayPreviewDocuments: Record<string, string> | undefined;
+  var __bayPreviewCalls: Record<string, number> | undefined;
+}
+
 /** Local UI fixture. This transport is never selected by a privileged WebUI. */
 export function createPreviewTransport(): NativeTransport {
   const query = new URLSearchParams(location.search);
@@ -11,6 +16,9 @@ export function createPreviewTransport(): NativeTransport {
     : {
         "onboarding.json": JSON.stringify({ version: 1, completedAt: 1 }),
       };
+
+  // A benchmark (scripts/perf/web-bench.mjs) seeds the preview's documents before it loads.
+  Object.assign(documents, globalThis.__bayPreviewDocuments);
 
   const listeners = new Map<string, Set<(value: JsonValue) => void>>();
 
@@ -111,6 +119,10 @@ export function createPreviewTransport(): NativeTransport {
       const args: unknown[] = JSON.parse(json);
       const key = `${module}.${method}`;
       const ok = (value: JsonValue = null) => JSON.stringify({ value });
+      const calls = globalThis.__bayPreviewCalls;
+
+      // web-bench.mjs counts the native calls an interaction makes.
+      if (calls) calls[key] = (calls[key] ?? 0) + 1;
 
       if (noResult.has(key)) return ok();
 
