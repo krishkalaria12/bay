@@ -69,6 +69,9 @@ std::string Failure(const char* code, const char* message) {
   return Json(base::DictValue().Set(
       "error", base::DictValue().Set("code", code).Set("message", message)));
 }
+std::string JsonText(const base::Value& value) {
+  return base::WriteJson(value).value_or("null");
+}
 std::optional<base::DictValue> Parse(const std::string& value, size_t maximum) {
   if (value.size() > maximum)
     return std::nullopt;
@@ -124,6 +127,8 @@ class RuntimeConnection final
     info.Set("epoch", runtime_->epoch_);
     info.Set("clientId", id_);
     if (is_coordinator_) {
+      // The coordinator may publish deltas (see Publish).
+      info.Set("partialCommits", true);
       runtime_->coordinator_ = weak_factory_.GetWeakPtr();
       if (runtime_->accepted_)
         info.Set("recoveryState",
@@ -214,6 +219,10 @@ class RuntimeConnection final
                 *runtime_->accepted_->FindString("epoch") == runtime_->epoch_
             ? *RuntimeInteger(*runtime_->accepted_, "revision") + 1
             : 0;
+    if (commit && commit->contains("partial")) {
+      PublishDelta(std::move(*commit), next, std::move(callback));
+      return;
+    }
     bool valid;
     {
       TRACE_EVENT("browser", "Bay.Runtime.ValidateCommit");
@@ -235,6 +244,71 @@ class RuntimeConnection final
         runtime_->accepted_ ? runtime_->accepted_->FindDict("state") : nullptr,
         *commit->FindDict("state"));
     runtime_->accepted_ = std::move(*commit);
+    Accepted(/*changed=*/nullptr);
+    std::move(callback).Run(Success());
+  }
+  // A delta carries the top-level fields that changed since the accepted
+  // commit. They are swapped into the accepted state, and swapped back out if
+  // the result is refused, so the whole state is never copied.
+  void PublishDelta(base::DictValue delta,
+                    double next,
+                    PublishCallback callback) {
+    const auto refuse = [&](const char* message) {
+      std::move(callback).Run(Failure("invalid_commit", message));
+    };
+    auto* state =
+        runtime_->accepted_ ? runtime_->accepted_->FindDict("state") : nullptr;
+    auto* fields = delta.FindDict("state");
+    const auto* epoch = delta.FindString("epoch");
+    const auto revision = RuntimeInteger(delta, "revision");
+    if (!state || next == 0 || delta.size() != 4 ||
+        delta.FindBool("partial") != true || !epoch ||
+        *epoch != runtime_->epoch_ || !revision || *revision != next ||
+        !fields) {
+      refuse("Expected a delta from the accepted application state");
+      return;
+    }
+    for (const auto [key, value] : *fields) {
+      if (!state->contains(key)) {
+        refuse("Expected a delta from the accepted application state");
+        return;
+      }
+    }
+    std::set<std::string> changed;
+    // After the swap `fields` holds the values the delta replaced.
+    const auto swap_fields = [&] {
+      for (auto [key, value] : *fields)
+        std::swap(value, *state->Find(key));
+    };
+    swap_fields();
+    bool valid;
+    {
+      TRACE_EVENT("browser", "Bay.Runtime.ValidateCommit");
+      valid = IsRuntimeState(*state);
+    }
+    if (!valid) {
+      swap_fields();
+      refuse("Expected the next complete application state");
+      return;
+    }
+    if (!runtime_->ValidatePageOpens(*state)) {
+      swap_fields();
+      refuse("Page adoption does not match its native offer");
+      return;
+    }
+    for (const auto [key, value] : *fields)
+      changed.emplace(key);
+    // Park live pages before either renderer sees ownership change. The tabs
+    // before are the replaced ones when the delta has tabs.
+    TabBroker::Get().PreserveTransfers(
+        fields->contains("tabs") ? fields : state, *state);
+    runtime_->accepted_->Set("revision", delta.Find("revision")->Clone());
+    Accepted(&changed);
+    std::move(callback).Run(Success());
+  }
+  // The rest of a publication, once the accepted state holds the new commit.
+  // `changed` names the fields a delta changed; null when all may have.
+  void Accepted(const std::set<std::string>* changed) {
     runtime_->ReconcilePageOpens();
     // Pages Chrome opened on its own may have been waiting for this window.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -247,20 +321,14 @@ class RuntimeConnection final
           continue;
         const std::string& client = id;
         TRACE_EVENT("browser", "Bay.Runtime.SendCommit", "client", client);
-        auto projection = runtime_->Snapshot(*connection);
-        if (!projection)
+        auto json = runtime_->CommitFor(*connection, changed);
+        if (!json)
           continue;
-        std::string json;
-        {
-          TRACE_EVENT("browser", "Bay.Runtime.WriteJson");
-          json = Json(std::move(*projection));
-        }
         TRACE_EVENT_INSTANT("browser", "Bay.Runtime.CommitSent", "client",
-                            client, "bytes", json.size());
-        connection->client_->OnCommit(std::move(json));
+                            client, "bytes", json->size());
+        connection->client_->OnCommit(std::move(*json));
       }
     }
-    std::move(callback).Run(Success());
   }
   void Resolve(const std::string& token,
                const std::string& reply_json,
@@ -308,6 +376,10 @@ class RuntimeConnection final
   const std::string id_;
   bool connected_ = false;
   double last_request_id_ = 0;
+  // The JSON of each field of this window's projection at projected_revision_,
+  // the last commit sent to it. Self-projected fields aren't kept.
+  std::map<std::string, std::string> projected_fields_;
+  double projected_revision_ = -1;
   mojo::Remote<mojom::AppRuntimeClient> client_;
   base::WeakPtrFactory<RuntimeConnection> weak_factory_{this};
 };
@@ -845,6 +917,71 @@ std::optional<base::DictValue> AppRuntime::Snapshot(
       .Set("epoch", *accepted_->FindString("epoch"))
       .Set("revision", accepted_->Find("revision")->Clone())
       .Set("state", std::move(*projection));
+}
+std::optional<std::string> AppRuntime::CommitFor(
+    RuntimeConnection& connection,
+    const std::set<std::string>* changed) {
+  const auto revision = *RuntimeInteger(*accepted_, "revision");
+  // A delta applies on the revision before it, which this window was sent:
+  // the fields it leaves out are that revision's.
+  const bool follows =
+      changed && connection.projected_revision_ == revision - 1;
+  connection.projected_revision_ = -1;
+  if (!follows)
+    connection.projected_fields_.clear();
+  if (!ready_ || !connection.client_.is_bound())
+    return std::nullopt;
+  std::set<std::string> skip;
+  std::set<std::string> self_projected;
+  for (const char* key : kSelfProjectedFields) {
+    self_projected.emplace(key);
+    if (follows && !changed->contains(key))
+      skip.emplace(key);
+  }
+  const auto id = connection.window_
+                      ? WindowRegistry::Get().IdFor(connection.window_.get())
+                      : "";
+  std::optional<base::DictValue> projection;
+  {
+    TRACE_EVENT("browser", "Bay.Runtime.Snapshot");
+    projection = ProjectRuntimeState(
+        *accepted_->FindDict("state"), id,
+        WindowRegistry::Get().IsUtility(connection.window_.get()), skip);
+  }
+  if (!projection)
+    return std::nullopt;
+  TRACE_EVENT("browser", "Bay.Runtime.WriteJson");
+  std::string fields;
+  bool partial = false;
+  for (const auto [key, value] : *projection) {
+    if (skip.contains(key)) {
+      partial = true;
+      continue;
+    }
+    std::string text = JsonText(value);
+    if (!self_projected.contains(key)) {
+      auto& sent = connection.projected_fields_[key];
+      if (follows && sent == text) {
+        partial = true;
+        continue;
+      }
+      sent = text;
+    }
+    if (!fields.empty())
+      fields += ",";
+    fields += JsonText(base::Value(key));
+    fields += ":";
+    fields += text;
+  }
+  connection.projected_revision_ = revision;
+  std::string json = "{\"epoch\":";
+  json += JsonText(*accepted_->Find("epoch"));
+  json += ",\"revision\":";
+  json += JsonText(*accepted_->Find("revision"));
+  json += ",\"state\":{";
+  json += fields;
+  json += partial ? "},\"partial\":true}" : "}}";
+  return json;
 }
 bool AppRuntime::CanProject(RuntimeConnection& connection) const {
   // What Snapshot needs, without projecting: ProjectRuntimeState fails only

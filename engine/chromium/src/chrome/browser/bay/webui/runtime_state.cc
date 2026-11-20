@@ -997,7 +997,8 @@ bool IsRuntimeState(const base::DictValue& state) {
 std::optional<base::DictValue> ProjectRuntimeState(
     const base::DictValue& state,
     const std::string& window_id,
-    bool utility) {
+    bool utility,
+    const std::set<std::string>& skip) {
   if (!IsRuntimeState(state))
     return std::nullopt;
   const auto* own =
@@ -1019,7 +1020,10 @@ std::optional<base::DictValue> ProjectRuntimeState(
     if (!PrivateSpace(space) || (is_private && space == own_space))
       tabs.emplace(id);
   }
-  auto result = state.Clone();
+  base::DictValue result;
+  for (const auto [key, value] : state)
+    result.Set(key, skip.contains(key) ? base::Value(base::DictValue())
+                                       : value.Clone());
   // Undo snapshots retain deleted tabs and local paths. Renderers need only
   // their own stack availability; the full edits stay in coordinator recovery.
   base::DictValue undo;
@@ -1180,41 +1184,45 @@ std::optional<base::DictValue> ProjectRuntimeState(
   // A private bookmark root must not leave its detached nodes behind. Walk
   // regular roots plus this window's own private roots, preserving shared
   // nodes.
-  auto* bookmarks = result.FindDict("bookmarks");
-  auto* roots = bookmarks->FindDict("roots");
-  auto* nodes = bookmarks->FindDict("nodes");
-  std::vector<std::string> private_roots;
-  std::vector<std::string> visit;
-  for (const auto [profile, root] : *roots) {
-    if ((PrivateSpace(profile) && (!is_private || profile != own_space)) ||
-        !root.is_dict()) {
-      private_roots.emplace_back(profile);
-      continue;
+  if (!skip.contains("bookmarks")) {
+    auto* bookmarks = result.FindDict("bookmarks");
+    auto* roots = bookmarks->FindDict("roots");
+    auto* nodes = bookmarks->FindDict("nodes");
+    std::vector<std::string> private_roots;
+    std::vector<std::string> visit;
+    for (const auto [profile, root] : *roots) {
+      if ((PrivateSpace(profile) &&
+           (!is_private || profile != own_space)) ||
+          !root.is_dict()) {
+        private_roots.emplace_back(profile);
+        continue;
+      }
+      for (const auto [kind, id] : root.GetDict())
+        if (id.is_string())
+          visit.push_back(id.GetString());
     }
-    for (const auto [kind, id] : root.GetDict())
-      if (id.is_string())
-        visit.push_back(id.GetString());
+    for (const auto& id : private_roots)
+      roots->Remove(id);
+    std::set<std::string> reachable;
+    while (!visit.empty()) {
+      std::string id = std::move(visit.back());
+      visit.pop_back();
+      if (!reachable.insert(id).second)
+        continue;
+      const auto* node = nodes->FindDict(id);
+      if (const auto* children =
+              node ? node->FindList("children") : nullptr)
+        for (const auto& child : *children)
+          if (child.is_string())
+            visit.push_back(child.GetString());
+    }
+    std::vector<std::string> orphaned_nodes;
+    for (const auto [id, node] : *nodes)
+      if (!reachable.contains(id))
+        orphaned_nodes.emplace_back(id);
+    for (const auto& id : orphaned_nodes)
+      nodes->Remove(id);
   }
-  for (const auto& id : private_roots)
-    roots->Remove(id);
-  std::set<std::string> reachable;
-  while (!visit.empty()) {
-    std::string id = std::move(visit.back());
-    visit.pop_back();
-    if (!reachable.insert(id).second)
-      continue;
-    const auto* node = nodes->FindDict(id);
-    if (const auto* children = node ? node->FindList("children") : nullptr)
-      for (const auto& child : *children)
-        if (child.is_string())
-          visit.push_back(child.GetString());
-  }
-  std::vector<std::string> orphaned_nodes;
-  for (const auto [id, node] : *nodes)
-    if (!reachable.contains(id))
-      orphaned_nodes.emplace_back(id);
-  for (const auto& id : orphaned_nodes)
-    nodes->Remove(id);
   for (const auto* key : {"closedWindows", "closedTabs", "cleanedTabs",
                           "closedGroups", "deletedGroups"})
     result.FindList(key)->EraseIf(

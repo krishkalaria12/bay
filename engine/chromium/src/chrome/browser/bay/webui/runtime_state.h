@@ -4,6 +4,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 #include "base/values.h"
@@ -31,10 +32,17 @@ bool IsRuntimeReply(const base::DictValue& reply,
 // A utility window (Settings, Import, Task Manager) has no record in the
 // state. It reads what a public window reads and acts for any public main
 // window, so commands that name a window may name one of those.
+// Fields named in `skip` are left out of the work and come back empty; only a
+// field in kSelfProjectedFields may be skipped.
 std::optional<base::DictValue> ProjectRuntimeState(
     const base::DictValue& state,
     const std::string& window_id,
-    bool utility = false);
+    bool utility = false,
+    const std::set<std::string>& skip = {});
+// The fields a window's projection makes from that field alone (and the
+// window's own fixed identity): unchanged in the state, unchanged for the
+// window.
+inline constexpr const char* kSelfProjectedFields[] = {"history", "bookmarks"};
 // Checks an authenticated window's command against the accepted full state.
 // Reducer-level validation still runs inside the coordinator.
 bool CanDispatchRuntimeCommand(const base::DictValue& state,
