@@ -6,6 +6,7 @@ import { hideDragCard, showDragCard } from "./webDragCard";
 import { create } from "zustand";
 import { focus } from "../../lib/actions";
 import { lastPicture, startTabPictures } from "../../lib/tabThumbnails";
+import { captureHeldPointer } from "../../lib/pointerCapture";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Frame } from "../../store/types";
@@ -80,6 +81,8 @@ let begun = false;
 
 export function beginTabDrag(tabId: string | null, tabIds: string[] = tabId ? [tabId] : []): number {
   if (begun) dragPreview.cancel();
+  // The drag goes over pages, which would otherwise take its moves and its drop.
+  captureHeldPointer();
   begun = false;
   picture = null;
   sentStyle = "hidden";
