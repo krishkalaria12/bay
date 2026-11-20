@@ -10,6 +10,7 @@ export const SETTINGS_PAGES = [
   "search",
   "appearance",
   "tabs",
+  "sync",
   "privacy",
   "passwords",
   "youtube",
@@ -20,9 +21,12 @@ export const SETTINGS_PAGES = [
   "appLinks",
   "customEngine",
   "wallpaper",
+  "appIcon",
   "textSize",
   "archive",
   "startPage",
+  "syncJoin",
+  "syncPhrase",
 ] as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
@@ -35,7 +39,7 @@ export type IndexEntry = { type: "page"; page: SettingsPage } | { type: "action"
 
 /** The index's cards, as Yab groups its own: the basic pages, what Bay keeps and guards, your things, then Bay itself. */
 export const INDEX: readonly (readonly IndexEntry[])[] = [
-  [page("general"), page("search"), page("appearance"), page("tabs")],
+  [page("general"), page("search"), page("appearance"), page("tabs"), page("sync")],
   [page("privacy"), page("passwords"), page("youtube")],
   [action("bookmarks"), action("history"), action("downloads"), action("import")],
   [page("about"), action("report")],
@@ -168,6 +172,7 @@ export const PARENT: Record<SettingsPage, SettingsPage | null> = {
   search: null,
   appearance: null,
   tabs: null,
+  sync: null,
   privacy: null,
   passwords: null,
   youtube: null,
@@ -178,9 +183,12 @@ export const PARENT: Record<SettingsPage, SettingsPage | null> = {
   appLinks: "general",
   customEngine: "search",
   wallpaper: "appearance",
+  appIcon: "appearance",
   textSize: "appearance",
   archive: "tabs",
   startPage: "tabs",
+  syncJoin: "sync",
+  syncPhrase: "sync",
 };
 
 /** The pages to open for a page: its parents first, so ‹ goes where it would have. */

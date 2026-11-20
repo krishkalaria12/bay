@@ -1,6 +1,6 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { useState, type JSX } from "react";
-import { Image, useColorScheme, View } from "react-native";
+import { Image, useColorScheme, View, type ImageSourcePropType } from "react-native";
 
 import { Text } from "@/chrome/Text";
 import { useBrowserStore } from "@/store/browser";
@@ -9,14 +9,16 @@ import { siteHost } from "@/store/model";
 const tints = ["#DCE8F5", "#F3E2D6", "#E3EEDF", "#ECE1F2", "#F5E9C9", "#DDEEEE"];
 
 /**
- * The site's saved icon on a tile matching the theme, else a monogram. Icons are local files (`favicons.ts`), so this
- * never loads anything. It always sits beside the site's name, so screen readers skip it.
+ * The site's saved icon on a tile matching the theme, else the picture given, else a monogram. Icons are local files
+ * (`favicons.ts`) or pictures shipped with Bay, so this never loads anything. It always sits beside the site's name, so
+ * screen readers skip it.
  */
 export function SiteIcon({
   url,
   size = 28,
   bare = false,
   color,
+  image,
 }: {
   url: string;
   size?: number;
@@ -24,6 +26,8 @@ export function SiteIcon({
   bare?: boolean;
   /** A bare monogram's colour, for tiles the theme doesn't colour (a private card, a photo). */
   color?: string;
+  /** A picture shipped with Bay for a site this phone hasn't been to yet (the welcome's sites). */
+  image?: ImageSourcePropType;
 }): JSX.Element {
   const host = siteHost(url);
   const icon = useBrowserStore((state) => state.data.favicons[host]);
@@ -38,22 +42,27 @@ export function SiteIcon({
     useBrowserStore.getState().dispatch({ type: "favicon", host, uri: null });
   };
 
-  if (icon && broken !== icon && bare) {
+  const saved = icon && broken !== icon ? icon : null;
+  // Drawn from the whole file and scaled on the GPU: Android's "resize" (and "auto", for a file) decodes a smaller
+  // bitmap, rounding down to a power of two that can land under the tile's pixels and blur it. Icons are small files.
+  const source = saved ? { uri: saved, width: size, height: size } : image;
+
+  if (source && bare) {
     return (
       <Image
         accessible={false}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        source={{ uri: icon, width: size, height: size }}
+        source={source}
         style={{ width: size, height: size, borderRadius: radius * 0.5 }}
-        resizeMethod="resize"
+        resizeMethod="scale"
         fadeDuration={0}
-        onError={() => forget(icon)}
+        onError={saved ? () => forget(saved) : undefined}
       />
     );
   }
 
-  if (icon && broken !== icon) {
+  if (source) {
     const inner = Math.round(size * 0.72);
 
     return (
@@ -65,11 +74,11 @@ export function SiteIcon({
         style={{ width: size, height: size, borderRadius: radius, backgroundColor: tile }}
       >
         <Image
-          source={{ uri: icon, width: inner, height: inner }}
+          source={saved ? { uri: saved, width: inner, height: inner } : source}
           style={{ width: inner, height: inner, borderRadius: radius * 0.5 }}
-          resizeMethod="resize"
+          resizeMethod="scale"
           fadeDuration={0}
-          onError={() => forget(icon)}
+          onError={saved ? () => forget(saved) : undefined}
         />
       </View>
     );

@@ -91,6 +91,10 @@ export function SkipButton({ testID, label, visible, onPress }: SkipButtonProps)
 /** Inter's heaviest face, loaded with the others for the welcome's name (`useAppFonts`). */
 export const NAME_FACE = "Inter_900Black";
 
+/**
+ * The name in solid ink. iOS draws it in glass that bends the sites behind;
+ * Android has no glass, and a plate-coloured name vanished into the ground (in the dark almost the same colour).
+ */
 export function Name({ text, width, height }: NameProps): JSX.Element {
   const colors = useFirstRunColors();
   // Inter's black letters fill about four fifths of the size from the cap height down: the size fits them to the box.
@@ -98,17 +102,7 @@ export function Name({ text, width, height }: NameProps): JSX.Element {
 
   return (
     <Svg width={width} height={height} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <SvgText
-        x={width / 2}
-        y={height * 0.86}
-        textAnchor="middle"
-        fontFamily={NAME_FACE}
-        fontSize={size}
-        letterSpacing={-size * 0.045}
-        fill={colors.plate}
-        stroke={colors.hairline}
-        strokeWidth={1.5}
-      >
+      <SvgText x={width / 2} y={height * 0.86} textAnchor="middle" fontFamily={NAME_FACE} fontSize={size} letterSpacing={-size * 0.045} fill={colors.ink}>
         {text}
       </SvgText>
     </Svg>

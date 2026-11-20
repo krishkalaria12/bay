@@ -32,6 +32,12 @@ export interface TabPageProps {
   onPageColor: (color: [number, number, number] | null) => void;
   /** The last colour onPageColor reported: fills the gap above the page while Android's pull to refresh pulls it down. */
   pageColor: [number, number, number] | null;
+  /**
+   * How much of the page's bottom Bay's floating bar covers, in points. iOS tells WebKit (its obscured inset): content
+   * scrolls under the glass, and what a page pins to its bottom sits above the bar. Android's engine has no such inset,
+   * so the page ends above the bar, over the page's own colour. 0 while the bar is away.
+   */
+  coveredBottom: number;
   /** Hidden pages stay mounted, so switching back keeps their scroll position and history. */
   visible: boolean;
   /** Paused in the background (see EngineView `suspended`). */
@@ -75,6 +81,7 @@ export function TabPage({
   onPageMessage,
   onPageColor,
   pageColor,
+  coveredBottom,
 }: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
   const timing = useRef(initialTiming());
@@ -92,7 +99,6 @@ export function TabPage({
       void current.saveState().catch(() => {});
       register(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The page may be mid-navigation; the next finished load applies the rules again.
@@ -106,7 +112,6 @@ export function TabPage({
     const selectors = JSON.parse(selectorsKey) as string[];
 
     if (shouldHide(timing.current, selectors.length > 0)) applyHiddenElements(selectors);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectorsKey]);
 
   const tweaksKey = JSON.stringify(tweaks);
@@ -115,7 +120,8 @@ export function TabPage({
   const ampLeft = useRef(new Set<string>());
   const currentUrl = useRef(tab.url);
 
-  function applyTweaks(url = currentUrl.current): void {
+  function applyTweaks(address?: string): void {
+    const url = address ?? currentUrl.current;
     const current = view.current;
 
     if (!current) return;
@@ -137,7 +143,6 @@ export function TabPage({
     }
 
     applyTweaks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tweaksKey]);
 
   return (
@@ -155,6 +160,8 @@ export function TabPage({
         initialUrl={initialUrl || undefined}
         stateKey={tab.private ? undefined : tab.id}
         private={tab.private ?? false}
+        profile={tab.spaceId}
+        obscuredBottom={coveredBottom}
         active={visible}
         suspended={suspended}
         desktopMode={desktopMode}
@@ -163,7 +170,7 @@ export function TabPage({
         onSwipeNavigation={({ nativeEvent }) => onSwipeNavigation(nativeEvent.action)}
         onBlockedCount={({ nativeEvent }) => onBlockedCount(nativeEvent.count)}
         pullToRefreshEnabled={pullToRefresh}
-        style={{ flex: 1 }}
+        style={{ flex: 1, marginBottom: Platform.OS === "android" ? coveredBottom : 0 }}
         onNavigationStateChange={({ nativeEvent }) => {
           onNavigation(nativeEvent);
           const run = scriptsFor(timing.current, nativeEvent, hiddenSelectors.length > 0);

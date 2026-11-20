@@ -82,12 +82,38 @@ internal object BayEngineBackend {
   // Website data -----------------------------------------------------------------------------------------------
 
   /** Clears cookies, site storage and the network cache; `done` gets null on success or the error to reject with. */
-  fun clearWebsiteData(context: Context, done: (BayEngineError?) -> Unit) {
+  // Spaces' profiles --------------------------------------------------------------------------------------------
+
+  /** The space whose data is the engine's normal profile. */
+  const val PERSONAL_PROFILE = "personal"
+
+  /**
+   * A space's profile: its own cookies, storage and cache, as each desktop space has. The personal space keeps the
+   * normal profile, so what it held before spaces had their own stays. The engine must have started.
+   */
+  fun profileFor(space: String): BayProfile =
+    if (space == PERSONAL_PROFILE || space.isEmpty()) BayProfile.normal() else BayProfile.forSpace(space)
+
+  /** Clears every listed space's website data, the normal profile's included. */
+  fun clearWebsiteData(context: Context, profiles: List<String>, done: (BayEngineError?) -> Unit) {
     whenStarted(context, ready = {
-      BayProfile.normal().clearData { complete ->
-        done(if (complete) null else BayEngineError("E_CLEAR_DATA", "Some website data couldn't be cleared."))
+      val targets = (profiles + PERSONAL_PROFILE).distinct().map(::profileFor)
+      var left = targets.size
+      var allCleared = true
+      for (profile in targets) {
+        profile.clearData { complete ->
+          allCleared = allCleared && complete
+          left -= 1
+          if (left == 0) done(if (allCleared) null else BayEngineError("E_CLEAR_DATA", "Some website data couldn't be cleared."))
+        }
       }
     }, failed = { done(BayEngineError("E_ENGINE", "Bay's engine didn't start.")) })
+  }
+
+  /** A deleted space's website data goes with it. The personal space's never does. */
+  fun deleteProfile(context: Context, space: String, done: () -> Unit) {
+    if (space == PERSONAL_PROFILE || space.isEmpty()) return done()
+    whenStarted(context, ready = { profileFor(space).clearData { done() } }, failed = { done() })
   }
 
   // Content blocking -------------------------------------------------------------------------------------------

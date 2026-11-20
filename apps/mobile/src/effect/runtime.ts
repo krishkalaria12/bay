@@ -27,6 +27,8 @@ import { ImportFiles } from "./ports/importFiles.ts";
 import { Lifecycle } from "./ports/lifecycle.ts";
 import { Links } from "./ports/links.ts";
 import { SecureStore } from "./ports/secureStore.ts";
+import { PhoneSync } from "../sync/service.ts";
+import { syncPlatform } from "../sync/platform.ts";
 
 /** The services every mobile workflow can rely on. */
 export type AppServices =
@@ -46,7 +48,8 @@ export type AppServices =
   | PrivateSession
   | IncomingLinks
   | LinkResolver
-  | ClearData;
+  | ClearData
+  | PhoneSync;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -76,6 +79,11 @@ const privateSession = PrivateSession.layer.pipe(Layer.provide(Layer.mergeAll(En
 const incomingLinks = IncomingLinks.layer.pipe(Layer.provide(Layer.mergeAll(links, BrowserState.layer)));
 const linkResolver = LinkResolver.layer.pipe(Layer.provide(Http.layer));
 
+// Sync with the other devices through Bay's relay (src/sync): its key in the secure store, its state in the documents.
+const phoneSync = PhoneSync.layer(syncPlatform).pipe(
+  Layer.provide(Layer.mergeAll(Files.layer, SecureStore.layer, BrowserState.layer, Lifecycle.layer, diagnostics)),
+);
+
 // Clearing browsing data stops the tabs' work before the engine clears what pages kept.
 const clearData = ClearData.layer.pipe(Layer.provide(Layer.mergeAll(tabWork, Engine.layer)));
 
@@ -101,6 +109,7 @@ export const appLayer = Layer.mergeAll(
   incomingLinks,
   linkResolver,
   clearData,
+  phoneSync,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -205,6 +214,11 @@ const startServices = (): Promise<void> =>
               const privateSession = yield* PrivateSession;
 
               yield* privateSession.start;
+            }),
+            Effect.gen(function* () {
+              const sync = yield* PhoneSync;
+
+              yield* sync.start;
             }),
             startDownloads,
           ];

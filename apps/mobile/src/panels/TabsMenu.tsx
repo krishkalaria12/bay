@@ -8,6 +8,7 @@ import { useT } from "@/i18n";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace } from "@/store/types";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface TabsMenuProps {
   visible: boolean;
@@ -22,8 +23,8 @@ export interface TabsMenuProps {
   activeSpaceId: string;
   onSelectSpace: (id: string) => void;
   onNewSpace: () => void;
-  onRenameSpace: (id: string, name: string) => void;
-  onDeleteSpace: (id: string) => void;
+  /** Opens the space's editor: its name, emoji, colour, place and deleting it. */
+  onEditSpace: () => void;
   /** Folders in the active space. */
   folders: readonly BrowserFolder[];
   activeFolderId: string | null;
@@ -35,10 +36,10 @@ export interface TabsMenuProps {
   onMoveTab: (spaceId: string, folderId: string | null) => void;
 }
 
-type MenuPage = "main" | "move" | "renameSpace" | "renameFolder" | "newFolder";
+type MenuPage = "main" | "move" | "renameFolder" | "newFolder";
 
 /** Long-pressing the Tabs button: quick tab actions, spaces (B21) and folders, without opening the switcher. */
-export function TabsMenu(props: TabsMenuProps): JSX.Element {
+function TabsMenuSheet(props: TabsMenuProps): JSX.Element {
   const [page, setPage] = useState<MenuPage>("main");
   const [name, setName] = useState("");
   const foreground = useThemeColor("foreground");
@@ -54,18 +55,11 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
   const activeSpaceName = activeSpace ? spaceName(activeSpace, t) : t("space.unnamed");
   const folders = props.folders;
 
-  // A rename or a new folder: one input row and a done row, inside this same sheet.
-  if (page === "renameSpace" || page === "renameFolder" || page === "newFolder") {
+  // A folder's rename or a new folder: one input row and a done row, inside this same sheet.
+  if (page === "renameFolder" || page === "newFolder") {
     const folderName = folders.find((folder) => folder.id === props.activeFolderId)?.name;
 
-    const title =
-      page === "renameSpace"
-        ? t("tabsMenu.rename", { name: activeSpaceName })
-        : page === "newFolder"
-          ? t("tabsMenu.newFolderTitle")
-          : folderName
-            ? t("tabsMenu.rename", { name: folderName })
-            : t("tabsMenu.renameFolder");
+    const title = page === "newFolder" ? t("tabsMenu.newFolderTitle") : folderName ? t("tabsMenu.rename", { name: folderName }) : t("tabsMenu.renameFolder");
 
     return (
       <PanelSheet visible={props.visible} onClose={props.onClose} title={title} testID="tabs-menu" height="45%">
@@ -82,8 +76,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
 
               if (!trimmed) return;
 
-              if (page === "renameSpace" && activeSpace) act(() => props.onRenameSpace(activeSpace.id, trimmed));
-              else if (page === "newFolder") act(() => props.onNewFolder(trimmed));
+              if (page === "newFolder") act(() => props.onNewFolder(trimmed));
               else if (page === "renameFolder" && props.activeFolderId) act(() => props.onRenameFolder(props.activeFolderId!, trimmed));
             }}
             style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
@@ -151,27 +144,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
         />
       ))}
       <ActionRow testID="tabs-menu-new-space" icon="add" label={t("tabsMenu.newSpace")} onPress={() => act(props.onNewSpace)} />
-      {activeSpace ? (
-        <>
-          <ActionRow
-            testID="tabs-menu-rename-space"
-            label={t("tabsMenu.rename", { name: activeSpaceName })}
-            onPress={() => {
-              setName(activeSpace.name);
-              setPage("renameSpace");
-            }}
-          />
-          {props.spaces.length > 1 ? (
-            <ActionRow
-              testID="tabs-menu-delete-space"
-              label={t("tabsMenu.deleteSpace", { name: activeSpaceName })}
-              detail={t("tabsMenu.deleteSpace.detail")}
-              destructive
-              onPress={() => act(() => props.onDeleteSpace(activeSpace.id))}
-            />
-          ) : null}
-        </>
-      ) : null}
+      <ActionRow testID="tabs-menu-edit-space" icon="tune" label={t("tabsMenu.editSpace", { name: activeSpaceName })} onPress={() => act(props.onEditSpace)} />
       <SectionLabel>{t("tabsMenu.moveTab")}</SectionLabel>
       <ActionRow testID="tabs-menu-move" label={t("tabsMenu.moveTabTo")} onPress={() => setPage("move")} />
       <SectionLabel>{t("tabsMenu.folders")}</SectionLabel>
@@ -210,3 +183,5 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
     </PanelSheet>
   );
 }
+
+export const TabsMenu = quietWhileClosed(TabsMenuSheet);

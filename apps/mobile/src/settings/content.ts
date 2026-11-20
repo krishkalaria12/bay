@@ -9,6 +9,8 @@ import { START_PAGE_HOURS } from "../store/model.ts";
 import type { AppLinks, SimplePreferences, SwipeMode, ThemeChoice } from "../store/types.ts";
 import type { IndexAction, IndexEntry, SearchEntry, SettingsPage, SettingsRow, SettingsSection } from "./model.ts";
 import { INDEX } from "./model.ts";
+import type { SyncTypes } from "../sync/engine.ts";
+import type { SyncStatus, SyncView } from "../sync/state.ts";
 
 /** The colours of the index's tiles, white glyphs on them, one per kind of page (as iOS Settings has them). */
 export const TILE = {
@@ -39,6 +41,7 @@ export const ENTRIES: Record<Exclude<SettingsPage, SubPage> | IndexAction, Entry
   search: { title: "settings.page.search", keywords: "settings.keywords.search", tile: { icon: "search", tint: TILE.blue } },
   appearance: { title: "settings.appearance", keywords: "settings.keywords.appearance", tile: { icon: "palette", tint: TILE.pink } },
   tabs: { title: "settings.page.tabs", keywords: "settings.keywords.tabs", tile: { icon: "tabs", tint: TILE.orange } },
+  sync: { title: "settings.page.sync", keywords: "settings.keywords.sync", tile: { icon: "sync", tint: TILE.green } },
   privacy: { title: "settings.privacy", keywords: "settings.keywords.privacy", tile: { icon: "lock", tint: TILE.indigo } },
   passwords: { title: "settings.page.passwords", keywords: "settings.keywords.passwords", tile: { icon: "key", tint: TILE.grey } },
   youtube: { title: "settings.group.youtube", keywords: "settings.keywords.youtube", tile: { icon: "video", tint: TILE.red } },
@@ -56,7 +59,19 @@ export function isIndexPage(page: SettingsPage): page is Exclude<SettingsPage, S
 }
 
 /** The pages that open from a row on another page rather than from the index. */
-type SubPage = "defaultBrowser" | "language" | "swipe" | "appLinks" | "customEngine" | "wallpaper" | "textSize" | "archive" | "startPage";
+type SubPage =
+  | "defaultBrowser"
+  | "language"
+  | "swipe"
+  | "appLinks"
+  | "customEngine"
+  | "wallpaper"
+  | "appIcon"
+  | "textSize"
+  | "archive"
+  | "startPage"
+  | "syncJoin"
+  | "syncPhrase";
 
 /** A page's name, as its header and the head say it. */
 export const PAGE_TITLE: Record<SettingsPage, MessageKey> = {
@@ -64,6 +79,7 @@ export const PAGE_TITLE: Record<SettingsPage, MessageKey> = {
   search: "settings.page.search",
   appearance: "settings.appearance",
   tabs: "settings.page.tabs",
+  sync: "settings.page.sync",
   privacy: "settings.privacy",
   passwords: "settings.page.passwords",
   youtube: "settings.group.youtube",
@@ -74,9 +90,12 @@ export const PAGE_TITLE: Record<SettingsPage, MessageKey> = {
   appLinks: "settings.appLinks",
   customEngine: "settings.page.customEngine",
   wallpaper: "settings.wallpaper",
+  appIcon: "settings.group.appIcon",
   textSize: "settings.pageZoom",
   archive: "settings.archiveInactive",
   startPage: "settings.startPageAfter",
+  syncJoin: "settings.page.syncJoin",
+  syncPhrase: "settings.page.syncPhrase",
 };
 
 /** A page's one line under its name; the pages a row opens have none, as in Yab. */
@@ -85,6 +104,7 @@ export const PAGE_BLURB: Partial<Record<SettingsPage, MessageKey>> = {
   search: "settings.blurb.search",
   appearance: "settings.blurb.appearance",
   tabs: "settings.blurb.tabs",
+  sync: "settings.blurb.sync",
   privacy: "settings.blurb.privacy",
   passwords: "settings.blurb.passwords",
   youtube: "settings.blurb.youtube",
@@ -101,8 +121,8 @@ export function pageTile(page: SettingsPage): Tile | null {
   return null;
 }
 
-/** Pages that draw their own body below their sections (a field, the wallpapers, the zoom's preview). */
-export const DRAWN_PAGES: readonly SettingsPage[] = ["customEngine", "wallpaper", "textSize"];
+/** Pages that draw their own body below their sections (a field, the wallpapers, the app icons, the zoom's preview). */
+export const DRAWN_PAGES: readonly SettingsPage[] = ["customEngine", "wallpaper", "appIcon", "textSize", "syncJoin", "syncPhrase"];
 
 export const ARCHIVE_OPTIONS: readonly { days: number | null; label: MessageKey; short: MessageKey }[] = [
   { days: 0.5, label: "settings.archive.halfDay", short: "settings.archive.halfDayShort" },
@@ -183,6 +203,8 @@ export interface SettingsContext {
   setLockPrivateTabs: (on: boolean) => void;
   /** The wallpaper's name, said on its row. */
   wallpaperName: string;
+  /** The home screen icon's name, said on its row; null where the phone can't change it. */
+  appIconName: string | null;
   /** The language Bay was told to use (null follows the phone), the one it uses, and the phone's. */
   language: { saved: Locale | null; current: Locale; device: Locale };
   setLanguage: (locale: Locale | null) => void;
@@ -197,6 +219,18 @@ export interface SettingsContext {
   clear: { stage: ClearStage; ask: () => void; confirm: () => void; keep: () => void };
   showWelcome: () => void;
   openLink: (url: string) => void;
+  sync: SyncSettings;
+}
+
+/** Sync with the other devices (src/sync): what it says, and what its rows do. */
+export interface SyncSettings {
+  view: SyncView;
+  now: number;
+  syncNow: () => void;
+  setType: (type: keyof SyncTypes, on: boolean) => void;
+  leave: () => void;
+  /** Opens another device's tab here. */
+  openTab: (url: string) => void;
 }
 
 /** What the index says under an entry's name: the setting it is on, or how many there are. */
@@ -239,6 +273,8 @@ export function indexValue(entry: IndexEntry, ctx: SettingsContext, counts: Inde
       return ctx.pausedHosts.length ? t("settings.paused.count", { count: ctx.pausedHosts.length }) : ctx.blockContent ? t("settings.blockContent") : undefined;
     case "about":
       return ctx.version;
+    case "sync":
+      return ctx.sync.view.status === "off" ? undefined : syncStatusText(ctx.sync.view.status, ctx.t);
     default:
       return undefined;
   }
@@ -315,9 +351,16 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
         {
           id: "launch",
           rows: [
-            toggle("searchOnLaunch", "settings-search-on-launch", t("settings.searchOnLaunch"), prefs.searchOnLaunch, (on) => change({ searchOnLaunch: on }), {
-              icon: "keyboard",
-            }),
+            toggle(
+              "openSearchOnLaunch",
+              "settings-search-on-launch",
+              t("settings.searchOnLaunch"),
+              prefs.openSearchOnLaunch,
+              (on) => change({ openSearchOnLaunch: on }),
+              {
+                icon: "keyboard",
+              },
+            ),
           ],
           footer: t("settings.searchOnLaunch.detail"),
         },
@@ -381,6 +424,15 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
             opens("textSize", "settings-text-size", t("settings.pageZoom"), "textSize", { icon: "textSize", value: `${prefs.textSize}%` }),
           ],
         },
+        ...(ctx.appIconName === null
+          ? []
+          : [
+              {
+                id: "appIcon",
+                rows: [opens("appIcon", "settings-app-icon", t("settings.group.appIcon"), "appIcon", { icon: "mark", value: ctx.appIconName })],
+                footer: t("settings.appIcon.note"),
+              },
+            ]),
       ];
     case "tabs": {
       const archive = ARCHIVE_OPTIONS.find((option) => option.days === ctx.archiveAfterDays);
@@ -605,9 +657,14 @@ export function sections(page: SettingsPage, ctx: SettingsContext): SettingsSect
           footer: t("settings.startPage.note"),
         },
       ];
+    case "sync":
+      return sync(ctx);
     case "customEngine":
     case "wallpaper":
+    case "appIcon":
     case "textSize":
+    case "syncJoin":
+    case "syncPhrase":
       return [];
   }
 }
@@ -696,6 +753,129 @@ function clearFooter(stage: ClearStage, t: Translate): Pick<SettingsSection, "fo
     default:
       return { footer: t("settings.clearAllData.detail") };
   }
+}
+
+const SYNC_STATUS: Record<SyncStatus, MessageKey> = {
+  off: "sync.notYet",
+  syncing: "sync.status.syncing",
+  synced: "sync.status.synced",
+  waiting: "sync.status.waiting",
+  offline: "sync.status.offline",
+  failed: "sync.status.failed",
+};
+
+export const syncStatusText = (status: SyncStatus, t: Translate): string => t(SYNC_STATUS[status]);
+
+/** "Synced 5 min ago", and the like. */
+export function syncedAgo(at: number, now: number, t: Translate): string {
+  const minutes = Math.floor((now - at) / 60_000);
+
+  if (minutes < 1) return t("sync.justNow");
+
+  if (minutes < 60) return t("sync.minutesAgo", { count: minutes });
+
+  if (minutes < 60 * 24) return t("sync.hoursAgo", { count: Math.floor(minutes / 60) });
+
+  return t("sync.daysAgo", { count: Math.floor(minutes / (60 * 24)) });
+}
+
+const SYNC_TYPES: readonly { type: keyof SyncTypes; label: MessageKey; icon: IconName }[] = [
+  { type: "tabs", label: "sync.type.tabs", icon: "tabs" },
+  { type: "bookmarks", label: "sync.type.bookmarks", icon: "bookmark" },
+  { type: "history", label: "sync.type.history", icon: "history" },
+];
+
+/** The host a tab's row says under its title. */
+const hostOf = (url: string) =>
+  url
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/.*$/, "");
+
+function sync(ctx: SettingsContext): SettingsSection[] {
+  const { t } = ctx;
+  const { view, now } = ctx.sync;
+
+  if (view.status === "off") {
+    return [
+      {
+        id: "join",
+        rows: [
+          { id: "joinCode", testID: "sync-join-code", icon: "desktop", label: t("sync.join.code"), kind: { type: "page", page: "syncJoin" } },
+          { id: "joinPhrase", testID: "sync-join-phrase", icon: "key", label: t("sync.join.phrase"), kind: { type: "page", page: "syncPhrase" } },
+        ],
+        footer: t("sync.join.note"),
+      },
+    ];
+  }
+
+  const result: SettingsSection[] = [
+    {
+      id: "status",
+      rows: [
+        {
+          id: "status",
+          testID: "sync-status",
+          icon: "sync",
+          label: t("sync.status"),
+          value: syncStatusText(view.status, t),
+          detail: view.lastSyncedAt ? syncedAgo(view.lastSyncedAt, now, t) : undefined,
+          kind: { type: "info" },
+        },
+        { id: "now", testID: "sync-now", label: t("sync.now"), disabled: view.status === "syncing", kind: { type: "action", run: ctx.sync.syncNow } },
+      ],
+    },
+  ];
+
+  if (view.devices.length) {
+    result.push({
+      id: "devices",
+      title: t("sync.devices"),
+      rows: view.devices.map((device) => ({
+        id: `device.${device.id}`,
+        testID: `sync-device-${device.id}`,
+        label: device.name,
+        value: device.current ? t("sync.thisPhone") : device.lastSeen ? syncedAgo(device.lastSeen, now, t) : t("sync.notYet"),
+        kind: { type: "info" },
+      })),
+    });
+  }
+
+  for (const device of view.remoteTabs) {
+    result.push({
+      id: `tabs.${device.deviceId}`,
+      title: t("sync.tabsOn", { device: device.name }),
+      rows: device.tabs.map((tab, index) => ({
+        id: `tab.${device.deviceId}.${index}`,
+        testID: `sync-tab-${device.deviceId}-${index}`,
+        label: tab.t || hostOf(tab.u),
+        detail: hostOf(tab.u),
+        kind: { type: "action", run: () => ctx.sync.openTab(tab.u) },
+      })),
+    });
+  }
+
+  result.push(
+    {
+      id: "what",
+      title: t("sync.what"),
+      rows: SYNC_TYPES.map(({ type, label, icon }) => ({
+        id: `type.${type}`,
+        testID: `sync-type-${type}`,
+        icon,
+        label: t(label),
+        kind: { type: "toggle", on: view.types[type], set: (on: boolean) => ctx.sync.setType(type, on) },
+      })),
+      footer: t("sync.what.note"),
+    },
+    {
+      id: "leave",
+      rows: [{ id: "leave", testID: "sync-leave", label: t("sync.leave"), danger: true, kind: { type: "action", run: ctx.sync.leave } }],
+      footer: t("sync.leave.note"),
+    },
+  );
+
+  return result;
 }
 
 /** Sub-pages whose rows the search reads under their parent's entry. */

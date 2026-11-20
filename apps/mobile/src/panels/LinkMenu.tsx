@@ -10,6 +10,7 @@ import type { CommandResult } from "@/effect/commands";
 import { useScopedWork } from "@/effect/react";
 import { useT, type Translate } from "@/i18n";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 export interface LinkMenuProps {
   visible: boolean;
@@ -30,7 +31,7 @@ export interface LinkMenuProps {
   onSave: () => void;
 }
 
-export function LinkMenu(props: LinkMenuProps): JSX.Element {
+function LinkMenuSheet(props: LinkMenuProps): JSX.Element {
   const t = useT();
 
   return (
@@ -169,3 +170,5 @@ function Peek({ url, privately, desktopMode }: { url: string; privately: boolean
     </View>
   );
 }
+
+export const LinkMenu = quietWhileClosed(LinkMenuSheet);

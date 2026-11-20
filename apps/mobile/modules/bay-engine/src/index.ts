@@ -84,6 +84,18 @@ export interface EngineViewProps extends ViewProps {
    * tab closes (`setPrivateSessionActive`). Set at creation.
    */
   private?: boolean;
+  /**
+   * The space whose website data (cookies, storage, cache) the page uses, as each desktop space has its own profile.
+   * Defaults to "personal", the engine's default store. A page that has loaded moves to the new space's data and opens
+   * its address again. On iOS before 17 every space shares the default store.
+   */
+  profile?: string;
+  /**
+   * How far up from the bottom the app's own controls cover the page, in points. iOS 26+ shrinks the layout viewport
+   * by it (`obscuredContentInsets`), so fixed and sticky elements stay in view while content scrolls underneath;
+   * earlier iOS insets the scroll view. Android ignores it: lay the view out above the controls instead.
+   */
+  obscuredBottom?: number;
   /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
   active?: boolean;
   /** Defaults to false. Hidden tabs that aren't playing media pass true so the engine pauses their timers, animations and drawing; snapshots then resolve null. */
@@ -155,7 +167,8 @@ export interface PageRequest {
 export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 
 const nativeEngine = requireNativeModule<{
-  clearData(): Promise<void>;
+  clearData(profiles: string[]): Promise<void>;
+  deleteProfile(profile: string): Promise<void>;
   setPrivateSessionActive(active: boolean): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
   pruneTabStates(keep: string[]): Promise<void>;
@@ -215,9 +228,17 @@ export function setPrivateSessionActive(active: boolean): Promise<void> {
   return nativeEngine.setPrivateSessionActive(active);
 }
 
-/** Clear cookies, website storage, network cache and tab snapshots. Close page views first to prevent websites writing new data. */
-export function clearData(): Promise<void> {
-  return nativeEngine.clearData();
+/**
+ * Clear cookies, website storage, network cache and tab snapshots, in every space's profile (`profiles` names them).
+ * Close page views first to prevent websites writing new data.
+ */
+export function clearData(profiles: readonly string[]): Promise<void> {
+  return nativeEngine.clearData([...profiles]);
+}
+
+/** A deleted space's website data goes with it. Its pages should be closed first. */
+export function deleteProfile(profile: string): Promise<void> {
+  return nativeEngine.deleteProfile(profile);
 }
 
 /** Deletes tab snapshots that aren't in `keep` (file URIs), except ones written in the last 30 seconds. */

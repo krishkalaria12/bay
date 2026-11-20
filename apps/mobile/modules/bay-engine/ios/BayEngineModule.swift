@@ -51,10 +51,8 @@ public class BayEngineModule: Module {
       BayPrivateBrowsing.setActive(active)
     }.runOnQueue(.main)
 
-    AsyncFunction("clearData") { (promise: Promise) in
-      WKWebsiteDataStore.default().removeData(
-        ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
-      ) {
+    AsyncFunction("clearData") { (_: [String], promise: Promise) in
+      BaySpaceProfiles.clearAll {
         do {
           try BayEngineSnapshots.clear()
           try BayEngineTabStates.clear()
@@ -63,6 +61,10 @@ public class BayEngineModule: Module {
           promise.reject(error)
         }
       }
+    }.runOnQueue(.main)
+
+    AsyncFunction("deleteProfile") { (profile: String, promise: Promise) in
+      BaySpaceProfiles.delete(profile) { promise.resolve() }
     }.runOnQueue(.main)
 
     AsyncFunction("pruneSnapshots") { (keep: [String]) in
@@ -128,6 +130,12 @@ public class BayEngineModule: Module {
       }
       Prop("private", false) { (view: BayEngineView, isPrivate: Bool) in
         view.isPrivate = isPrivate
+      }
+      Prop("obscuredBottom", 0.0) { (view: BayEngineView, inset: Double) in
+        view.obscuredBottom = CGFloat(max(0, inset))
+      }
+      Prop("profile", "personal") { (view: BayEngineView, profile: String) in
+        view.profile = profile
       }
       Prop("active", true) { (view: BayEngineView, active: Bool) in
         view.isActive = active

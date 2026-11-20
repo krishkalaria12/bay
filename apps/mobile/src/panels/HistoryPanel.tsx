@@ -19,6 +19,7 @@ import { formatDate, useT, type MessageKey } from "@/i18n";
 import type { HistoryEntry } from "@/store/types";
 import { groupByDay, type DayGroupId } from "./historyGroups";
 import { ActionRow, PanelSheet, SectionLabel, SheetFitEnd } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 const SHOWN = 200;
 
@@ -63,7 +64,7 @@ export const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
 /** A page's title, or its site when the title is missing or just an address. */
 export const pageTitle = (title: string, url: string) => (!title || /^[a-z][a-z0-9+.-]*:\/\//i.test(title) ? siteName(url) : title);
 
-export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onClear }: HistoryPanelProps): JSX.Element {
+function HistoryPanelSheet({ visible, onClose, history, onOpen, onRemove, onClear }: HistoryPanelProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
@@ -293,3 +294,5 @@ export function SiteRow(props: {
     </View>
   );
 }
+
+export const HistoryPanel = quietWhileClosed(HistoryPanelSheet);

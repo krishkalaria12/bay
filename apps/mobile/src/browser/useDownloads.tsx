@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { useThemeColor } from "heroui-native";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useEffectEvent, useState, type JSX } from "react";
 import { PermissionsAndroid, Platform, Pressable, View } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -46,6 +46,21 @@ export function useDownloads(onError: (message: string) => void) {
   const [toastId, setToastId] = useState<string | null>(null);
   const toast = data.downloads.find((item) => item.id === toastId) ?? null;
 
+  function open(item: DownloadItem): void {
+    runCommand(
+      { name: "downloads.open", resource: item.id },
+      // A file nothing can open is told in a toast: it is the answer to the tap, not a failure to report.
+      openDownload(item).pipe(
+        Effect.catchTag("EngineError", (error) =>
+          Effect.sync(() => onError(error.cause instanceof Error ? error.cause.message : translate("toast.fileNotOpened"))),
+        ),
+      ),
+    );
+  }
+
+  // A finished file opens with the newest of the screen's handlers.
+  const openFinished = useEffectEvent((item: DownloadItem) => open(item));
+
   // The app records each update in the store; the screen follows them for its toast.
   useEffect(
     () =>
@@ -58,7 +73,7 @@ export function useDownloads(onError: (message: string) => void) {
           requestAnimationFrame(() => {
             const item = useBrowserStore.getState().data.downloads.find((entry) => entry.id === update.id);
 
-            if (item) openRef.current(item);
+            if (item) openFinished(item);
           });
         }
       }),
@@ -72,21 +87,6 @@ export function useDownloads(onError: (message: string) => void) {
 
     return () => clearTimeout(timer);
   }, [settled, toastId]);
-
-  const openRef = useRef<(item: DownloadItem) => void>(() => {});
-  openRef.current = open;
-
-  function open(item: DownloadItem): void {
-    runCommand(
-      { name: "downloads.open", resource: item.id },
-      // A file nothing can open is told in a toast: it is the answer to the tap, not a failure to report.
-      openDownload(item).pipe(
-        Effect.catchTag("EngineError", (error) =>
-          Effect.sync(() => onError(error.cause instanceof Error ? error.cause.message : translate("toast.fileNotOpened"))),
-        ),
-      ),
-    );
-  }
 
   return {
     downloads: data.downloads,
@@ -107,7 +107,6 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
   // Read out when the download starts and when it ends, not with every progress step.
   useEffect(() => {
     announce(item.state === "downloading" ? item.filename : `${heading}. ${status}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id, item.state]);
 
   return (
@@ -154,7 +153,7 @@ function DownloadBadge({ state }: { state: DownloadItem["state"] }): JSX.Element
   const bob = useSharedValue(0);
   useEffect(() => {
     if (state !== "downloading") return;
-    bob.value = withRepeat(withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }), -1, true);
+    bob.set(withRepeat(withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }), -1, true));
 
     return () => cancelAnimation(bob);
   }, [state, bob]);

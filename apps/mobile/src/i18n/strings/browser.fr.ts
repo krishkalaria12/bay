@@ -35,6 +35,16 @@ export const browserFr: BrowserStrings = {
   "tabs.closeLabel": "Fermer {title}",
   "tabs.openLabel": "Ouvrir {title}",
   "tabs.swipeToClose": "Glissez vers le haut pour fermer",
+  "tabs.clear": "Effacer",
+  "tabs.switchSpace": "Passer à {name}",
+  "tabs.scrubSpacesHint": "Maintenez et glissez pour changer d’espace",
+  "tabs.pinned": "Épinglés",
+  "pin.unpinHint": "Maintenez appuyé pour désépingler",
+  "pin.essential": "Ajouter aux Essentiels",
+  "pin.row": "Épingler l’onglet",
+  "pin.into": "Épingler dans {folder}",
+  "pin.unpin": "Désépingler",
+  "pin.close": "Fermer l’onglet",
 
   // Mini player.
   "player.playing": "en lecture",

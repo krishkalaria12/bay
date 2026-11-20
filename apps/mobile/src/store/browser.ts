@@ -6,8 +6,18 @@ import { bookmarkDrafts, draftLinkCount } from "@/import/apply";
 import type { ExportContents } from "@/import/exports";
 
 import { BOOKMARKS_ROOT, bookmarkChildren, bookmarkLinks, bookmarkRoom, draftNodes } from "./bookmarks";
-import { createTab, HISTORY_LIMIT, initialBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
-import type { BrowserData } from "./types";
+import {
+  createTab,
+  HISTORY_LIMIT,
+  initialBrowserData,
+  reduceBrowserData,
+  SPACE_COLORS,
+  spaceBookmarks,
+  spaceHistory,
+  unusedSpaceIcon,
+  type BrowserAction,
+} from "./model";
+import type { BrowserData, SpaceColor } from "./types";
 
 // The store is the state in memory. Reading it from disk, saving it and pruning what it no longer shows belong to the
 // persistence service (`./persistence.ts`), which reaches the store through the BrowserState port.
@@ -27,8 +37,8 @@ interface BrowserStore {
   /** Opens imported links as background tabs, or files them in the archive; returns how many were added. */
   importTabs(tabs: readonly { url: string; title: string }[], target: "tabs" | "archive"): number;
   /**
-   * Adds what an export held: its bookmarks in a folder named for the browser, its favorites to the start page, its
-   * history to Bay's. Returns how many of each were added; what Bay had already isn't counted again.
+   * Adds what an export held to the space showing: its bookmarks in a folder named for the browser, its favorites to the
+   * space's Essentials, its history to the space's. Returns how many of each were added; what Bay had already isn't counted again.
    */
   importExport(contents: ExportContents, choice: ImportChoice, folderName: string): ImportCounts;
   closeTab(id: string): void;
@@ -39,6 +49,10 @@ interface BrowserStore {
   selectSpace(id: string): void;
   createSpace(): void;
   renameSpace(id: string, name: string): void;
+  setSpaceIcon(id: string, icon: string | null): void;
+  setSpaceColor(id: string, color: SpaceColor): void;
+  /** Moves a space one place along the bar: -1 towards the start, 1 towards the end. */
+  moveSpace(id: string, by: -1 | 1): void;
   deleteSpace(id: string): void;
   moveTab(id: string, spaceId: string, folderId: string | null): void;
   newFolder(name: string): void;
@@ -93,21 +107,23 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   importExport(contents, choice, folderName) {
     const now = Date.now();
     const before = get().data;
+    const spaceId = before.activeSpaceId;
+    const tree = spaceBookmarks(before, spaceId);
     const counts: ImportCounts = { bookmarks: 0, favorites: 0, history: 0 };
 
     if (choice.bookmarks) {
-      const drafts = bookmarkDrafts(contents.bookmarks, before.bookmarks);
+      const drafts = bookmarkDrafts(contents.bookmarks, tree);
 
       if (drafts.length) {
         // A second import from the same browser joins the folder the first one made.
-        const folder = bookmarkChildren(before.bookmarks, BOOKMARKS_ROOT).find((node) => node.kind === "folder" && node.title === folderName);
+        const folder = bookmarkChildren(tree, BOOKMARKS_ROOT).find((node) => node.kind === "folder" && node.title === folderName);
 
         const nodes = folder
-          ? draftNodes(drafts, folder.id, newId, now, bookmarkRoom(before.bookmarks))
-          : draftNodes([{ title: folderName, children: drafts, addedAt: now }], BOOKMARKS_ROOT, newId, now, bookmarkRoom(before.bookmarks));
+          ? draftNodes(drafts, folder.id, newId, now, bookmarkRoom(tree))
+          : draftNodes([{ title: folderName, children: drafts, addedAt: now }], BOOKMARKS_ROOT, newId, now, bookmarkRoom(tree));
 
-        get().dispatch({ type: "add-bookmarks", nodes });
-        counts.bookmarks = Math.min(draftLinkCount(drafts), bookmarkLinks(get().data.bookmarks).length - bookmarkLinks(before.bookmarks).length);
+        get().dispatch({ type: "add-bookmarks", spaceId, nodes });
+        counts.bookmarks = Math.min(draftLinkCount(drafts), bookmarkLinks(spaceBookmarks(get().data, spaceId)).length - bookmarkLinks(tree).length);
       }
     }
 
@@ -121,11 +137,11 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
     if (choice.history && contents.history.length) {
       // Only the newest pages can stay: Bay keeps so many.
-      const entries = contents.history.slice(0, HISTORY_LIMIT).map((visit) => ({ ...visit, favicon: null }));
+      const entries = contents.history.slice(0, HISTORY_LIMIT).map((visit) => ({ ...visit, spaceId, favicon: null }));
       const urls = new Set(entries.map((entry) => entry.url));
 
       get().dispatch({ type: "import-history", entries });
-      counts.history = get().data.history.filter((entry) => urls.has(entry.url)).length;
+      counts.history = spaceHistory(get().data, spaceId).filter((entry) => urls.has(entry.url)).length;
     }
 
     return counts;
@@ -157,15 +173,32 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   createSpace() {
     const data = get().data;
     const index = data.spaces.length + 1;
-    const space = { id: newId(), name: t("space.default", { index }), color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]! };
+
+    const space = {
+      id: newId(),
+      name: t("space.default", { index }),
+      color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]!,
+      icon: unusedSpaceIcon(data.spaces),
+    };
 
     get().dispatch({ type: "create-space", space, blankTab: createTab(newId(), Date.now(), "", false, space.id) });
   },
   renameSpace(id, name) {
     get().dispatch({ type: "rename-space", id, name });
   },
+  setSpaceIcon(id, icon) {
+    get().dispatch({ type: "set-space-icon", id, icon });
+  },
+  setSpaceColor(id, color) {
+    get().dispatch({ type: "set-space-color", id, color });
+  },
+  moveSpace(id, by) {
+    const index = get().data.spaces.findIndex((space) => space.id === id);
+
+    if (index >= 0) get().dispatch({ type: "reorder-space", id, to: index + by });
+  },
   deleteSpace(id) {
-    get().dispatch({ type: "delete-space", id });
+    get().dispatch({ type: "delete-space", id, blankTab: createTab(newId(), Date.now()) });
   },
   moveTab(id, spaceId, folderId) {
     get().dispatch({ type: "move-tab", id, spaceId, folderId });

@@ -13,7 +13,7 @@ import {
   isBookmarked,
   parseBookmarks,
 } from "../src/store/bookmarks.ts";
-import { createTab, initialBrowserData, mergeHistory, parseBrowserData, reduceBrowserData } from "../src/store/model.ts";
+import { createTab, initialBrowserData, mergeHistory, parseBrowserData, PERSONAL_SPACE_ID as P, reduceBrowserData } from "../src/store/model.ts";
 import type { JsonValue } from "../src/store/types.ts";
 
 const ids = () => {
@@ -36,21 +36,21 @@ const DRAFTS = [
 
 test("drafts become one tree under the folder they're added to", () => {
   const nodes = draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 100, BOOKMARK_LIMIT);
-  const data = reduceBrowserData(fresh(), { type: "add-bookmarks", nodes });
-  const [safari] = bookmarkChildren(data.bookmarks, BOOKMARKS_ROOT);
+  const data = reduceBrowserData(fresh(), { type: "add-bookmarks", spaceId: P, nodes });
+  const [safari] = bookmarkChildren(data.bookmarks[P]!, BOOKMARKS_ROOT);
 
   assert.equal(safari?.title, "Safari");
   assert.deepEqual(
-    bookmarkLinks(data.bookmarks).map((link) => [link.title, link.addedAt]),
+    bookmarkLinks(data.bookmarks[P]!).map((link) => [link.title, link.addedAt]),
     [
       ["Apple", 5],
       ["Soup", 100],
     ],
   );
-  assert.equal(folderLinkCount(data.bookmarks, safari!.id), 2);
-  const recipes = bookmarkChildren(data.bookmarks, safari!.id)[1]!;
+  assert.equal(folderLinkCount(data.bookmarks[P]!, safari!.id), 2);
+  const recipes = bookmarkChildren(data.bookmarks[P]!, safari!.id)[1]!;
   assert.deepEqual(
-    bookmarkPath(data.bookmarks, recipes.id).map((folder) => folder.title),
+    bookmarkPath(data.bookmarks[P]!, recipes.id).map((folder) => folder.title),
     ["Safari", "Recipes"],
   );
 });
@@ -66,25 +66,25 @@ test("a draft past the room left is dropped, with everything in it", () => {
 });
 
 test("removing a folder removes everything in it and leaves its parent's list", () => {
-  let data = reduceBrowserData(fresh(), { type: "add-bookmarks", nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
-  const safari = bookmarkChildren(data.bookmarks, BOOKMARKS_ROOT)[0]!;
-  data = reduceBrowserData(data, { type: "remove-bookmark", id: safari.id });
+  let data = reduceBrowserData(fresh(), { type: "add-bookmarks", spaceId: P, nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
+  const safari = bookmarkChildren(data.bookmarks[P]!, BOOKMARKS_ROOT)[0]!;
+  data = reduceBrowserData(data, { type: "remove-bookmark", spaceId: P, id: safari.id });
 
-  assert.deepEqual(data.bookmarks, emptyBookmarks());
-  assert.equal(reduceBrowserData(data, { type: "remove-bookmark", id: BOOKMARKS_ROOT }), data);
+  assert.deepEqual(data.bookmarks[P]!, emptyBookmarks());
+  assert.equal(reduceBrowserData(data, { type: "remove-bookmark", spaceId: P, id: BOOKMARKS_ROOT }), data);
 });
 
 test("toggling a page bookmarks it at the top level, and toggling again removes every copy", () => {
-  let data = reduceBrowserData(fresh(), { type: "add-bookmarks", nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
+  let data = reduceBrowserData(fresh(), { type: "add-bookmarks", spaceId: P, nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
   const page = { kind: "url" as const, id: "page", parentId: BOOKMARKS_ROOT, title: "Soup again", url: "https://soup.example/", addedAt: 9 };
 
   // Already bookmarked inside Recipes: the toggle removes it.
-  data = reduceBrowserData(data, { type: "toggle-bookmark", bookmark: page });
-  assert.equal(isBookmarked(data.bookmarks, page.url), false);
+  data = reduceBrowserData(data, { type: "toggle-bookmark", spaceId: P, bookmark: page });
+  assert.equal(isBookmarked(data.bookmarks[P]!, page.url), false);
 
-  data = reduceBrowserData(data, { type: "toggle-bookmark", bookmark: page });
-  assert.equal(bookmarkChildren(data.bookmarks, BOOKMARKS_ROOT).at(-1)?.id, "page");
-  assert.equal(reduceBrowserData(data, { type: "toggle-bookmark", bookmark: { ...page, id: "x", url: "javascript:1" } }), data);
+  data = reduceBrowserData(data, { type: "toggle-bookmark", spaceId: P, bookmark: page });
+  assert.equal(bookmarkChildren(data.bookmarks[P]!, BOOKMARKS_ROOT).at(-1)?.id, "page");
+  assert.equal(reduceBrowserData(data, { type: "toggle-bookmark", spaceId: P, bookmark: { ...page, id: "x", url: "javascript:1" } }), data);
 });
 
 test("the tree stops at the limit", () => {
@@ -97,10 +97,10 @@ test("the tree stops at the limit", () => {
     ]),
   );
 
-  const data = { ...fresh(), bookmarks: { ...emptyBookmarks(), ...full } };
-  const after = reduceBrowserData(data, { type: "add-bookmarks", nodes: draftNodes(drafts, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
+  const data = { ...fresh(), bookmarks: { [P]: { ...emptyBookmarks(), ...full } } };
+  const after = reduceBrowserData(data, { type: "add-bookmarks", spaceId: P, nodes: draftNodes(drafts, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
 
-  assert.equal(Object.keys(after.bookmarks).length, BOOKMARK_LIMIT);
+  assert.equal(Object.keys(after.bookmarks[P]!).length, BOOKMARK_LIMIT);
 });
 
 test("saved bookmarks are repaired: only what the root reaches, each node once, bad nodes and cycles left out", () => {
@@ -123,9 +123,9 @@ test("saved bookmarks are repaired: only what the root reaches, each node once, 
 
 test("a document saved before bookmarks existed reads with none, and bookmarks survive a save and read", () => {
   const before = parseBrowserData({ version: 2, tabs: [] }, fresh());
-  assert.deepEqual(before.bookmarks, emptyBookmarks());
+  assert.deepEqual(before.bookmarks[P]!, emptyBookmarks());
 
-  const data = reduceBrowserData(fresh(), { type: "add-bookmarks", nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
+  const data = reduceBrowserData(fresh(), { type: "add-bookmarks", spaceId: P, nodes: draftNodes(DRAFTS, BOOKMARKS_ROOT, ids(), 0, BOOKMARK_LIMIT) });
   // SAFETY: the browsing state is made of JSON values, which is what the round trip through JSON checks.
   const read = parseBrowserData(JSON.parse(JSON.stringify({ version: 2, ...data })) as JsonValue, fresh());
   assert.deepEqual(read.bookmarks, data.bookmarks);
@@ -152,7 +152,12 @@ test("imported history adds visits to the pages already there and keeps the newe
 });
 
 test("imported pins join after the ones already there, once each", () => {
-  let data = reduceBrowserData(fresh(), { type: "add-pin", site: { id: "p", url: "https://a.example/", title: "A", favicon: null }, index: 0 });
+  let data = reduceBrowserData(fresh(), {
+    type: "add-pin",
+    site: { id: "p", url: "https://a.example/", title: "A", favicon: null, spaceId: "personal", kind: "essential", folderId: null },
+    index: 0,
+  });
+
   data = reduceBrowserData(data, {
     type: "import-pins",
     sites: [

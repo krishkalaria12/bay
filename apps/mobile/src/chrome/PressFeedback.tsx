@@ -1,6 +1,7 @@
-import type { JSX, ReactNode } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { Pressable, StyleSheet, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
+  cubicBezier,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -19,6 +20,9 @@ const HELD_SCALE = 0.04;
 /** How much a held control dims. */
 const HELD_DIM = 0.12;
 
+/** The tap's ease out (motion.ts's TAP: a cubic ease-out), for the transition a control eases by. */
+const TAP_EASE = cubicBezier(0.33, 1, 0.68, 1);
+
 export interface PressFeedbackProps extends Omit<PressableProps, "style"> {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -34,8 +38,62 @@ export interface PressFeedbackProps extends Omit<PressableProps, "style"> {
  * The press feedback every tile and row shares (A4): the control shrinks a little and dims while it is held, then
  * eases back when it is released. With reduced motion the shrink is left out and only the dim stays, so the change is
  * still there without anything travelling.
+ *
+ * A control eases by a CSS transition the UI thread runs on its own, so a sheet of rows mounts no animation worklet per
+ * row (each took a few milliseconds to set up, and a sheet holds dozens). One that moves into place when its row
+ * changes (`layout`, `entering`, `exiting`) keeps the worklet, which those animations need beside it.
  */
-export function PressFeedback({
+export function PressFeedback(props: PressFeedbackProps): JSX.Element {
+  return props.layout || props.entering || props.exiting ? <MovingPressFeedback {...props} /> : <EasedPressFeedback {...props} />;
+}
+
+/** A control whose hold eases by a transition on its style. */
+function EasedPressFeedback({
+  children,
+  style,
+  onPressIn,
+  onPressOut,
+  accessibilityRole = "button",
+  accessibilityState,
+  ...rest
+}: PressFeedbackProps): JSX.Element {
+  const [held, setHeld] = useState(false);
+  const reduced = useReducedMotion();
+  // A row that is turned off is already dim; the press only takes it a little further.
+  const dimmed = StyleSheet.flatten(style)?.opacity ?? 1;
+
+  return (
+    <AnimatedPressable
+      {...rest}
+      // Every tile and row is a control, and a turned-off one says so to VoiceOver and TalkBack.
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{ disabled: Boolean(rest.disabled), ...accessibilityState }}
+      style={[
+        style,
+        {
+          opacity: dimmed * (held ? 1 - HELD_DIM : 1),
+          transform: [{ scale: held && !reduced ? 1 - HELD_SCALE : 1 }],
+          transitionProperty: ["opacity", "transform"],
+          transitionDuration: TAP.duration,
+          transitionTimingFunction: TAP_EASE,
+        },
+      ]}
+      onPressIn={(event: GestureResponderEvent) => {
+        setHeld(true);
+        onPressIn?.(event);
+      }}
+      onPressOut={(event: GestureResponderEvent) => {
+        setHeld(false);
+        onPressOut?.(event);
+      }}
+    >
+      {children}
+    </AnimatedPressable>
+  );
+}
+
+/** A control that also moves into place when its row changes; its hold eases by a worklet beside those animations. */
+function MovingPressFeedback({
   children,
   style,
   layout,

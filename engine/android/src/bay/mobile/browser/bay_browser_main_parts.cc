@@ -46,6 +46,15 @@ BayBrowserContext* BayBrowserMainParts::NormalProfile() {
   return normal_profile_.get();
 }
 
+BayBrowserContext* BayBrowserMainParts::SpaceProfile(const std::string& space_id) {
+  std::unique_ptr<BayBrowserContext>& profile = space_profiles_[space_id];
+  if (!profile) {
+    profile = std::make_unique<BayBrowserContext>(
+        ProfilesDirectory().Append(FILE_PATH_LITERAL("Spaces")).AppendASCII(space_id), false);
+  }
+  return profile.get();
+}
+
 std::unique_ptr<BayBrowserContext> BayBrowserMainParts::CreatePrivateProfile() {
   // Off the record: nothing is written under this path, which only has to be distinct.
   const base::FilePath path =
@@ -59,6 +68,7 @@ int BayBrowserMainParts::PreMainMessageLoopRun() {
 }
 
 void BayBrowserMainParts::PostMainMessageLoopRun() {
+  space_profiles_.clear();
   normal_profile_.reset();
 }
 

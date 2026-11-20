@@ -70,7 +70,7 @@ test("the tabs' work is interrupted before the reset and the native clear", asyn
 
       yield* tabWork.run("tab-1", "logins.signIn 1", Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(() => void events.push("sign-in stopped")))));
       yield* tabWork.run("tab-2", "snapshot", Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(() => void events.push("snapshot stopped")))));
-      yield* clearData.clear({ reset: () => void events.push("reset"), views });
+      yield* clearData.clear({ reset: () => void events.push("reset"), profiles: ["personal"], views });
     }).pipe(Effect.provide(layer)),
   );
 
@@ -87,7 +87,7 @@ test("the native clear waits for the page views to go", async () => {
   await withTestClock(
     Effect.gen(function* () {
       const clearData = yield* ClearData;
-      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), views }));
+      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), profiles: ["personal"], views }));
 
       yield* settle;
       views.delete("tab-1");
@@ -115,7 +115,7 @@ test("a view that never goes holds the clear up for a second at most", async () 
   await withTestClock(
     Effect.gen(function* () {
       const clearData = yield* ClearData;
-      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), views }));
+      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), profiles: ["personal"], views }));
 
       yield* settle;
       yield* TestClock.adjust(VIEWS_GONE_MS - 1);
@@ -140,7 +140,7 @@ test("the native clear isn't interrupted once it has started", async () => {
   await withTestClock(
     Effect.gen(function* () {
       const clearData = yield* ClearData;
-      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), views }));
+      const wipe = yield* Effect.forkChild(clearData.clear({ reset: () => void events.push("reset"), profiles: ["personal"], views }));
 
       yield* settle;
 

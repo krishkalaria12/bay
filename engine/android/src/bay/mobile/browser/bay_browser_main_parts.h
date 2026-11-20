@@ -4,7 +4,9 @@
 #ifndef BAY_MOBILE_BROWSER_BAY_BROWSER_MAIN_PARTS_H_
 #define BAY_MOBILE_BROWSER_BAY_BROWSER_MAIN_PARTS_H_
 
+#include <map>
 #include <memory>
+#include <string>
 
 #include "base/files/file_path.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -26,6 +28,9 @@ class BayBrowserMainParts : public content::BrowserMainParts {
 
   // The persistent profile, made on first use.
   BayBrowserContext* NormalProfile();
+  // A space's persistent profile, made on first use and kept for the life of the process. `space_id` is checked on
+  // the Java side: letters, digits, '-' and '_' only, so it names a directory.
+  BayBrowserContext* SpaceProfile(const std::string& space_id);
   // A new in-memory profile, owned by the caller.
   std::unique_ptr<BayBrowserContext> CreatePrivateProfile();
 
@@ -39,6 +44,7 @@ class BayBrowserMainParts : public content::BrowserMainParts {
 
  private:
   std::unique_ptr<BayBrowserContext> normal_profile_;
+  std::map<std::string, std::unique_ptr<BayBrowserContext>> space_profiles_;
   int private_profiles_ = 0;
 };
 

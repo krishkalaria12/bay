@@ -40,6 +40,8 @@ export class ViewRegistry extends Map<string, Tab> {
 export type ClearingScreen = {
   /** Resets the browser and the screen's own state, which takes every page view off the screen. */
   readonly reset: () => void;
+  /** Every space's profile, read before the reset: each one's website data is cleared. */
+  readonly profiles: readonly string[];
   readonly views: Pick<ViewRegistry, "size" | "onEmpty">;
 };
 
@@ -84,7 +86,7 @@ export class ClearData extends Context.Service<
                 yield* Effect.sync(screen.reset);
 
                 yield* viewsGone(screen.views).pipe(Effect.timeoutOrElse({ duration: VIEWS_GONE_MS, orElse: () => Effect.void }));
-                yield* engine.clearData();
+                yield* engine.clearData(screen.profiles);
               }),
             );
           }),

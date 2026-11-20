@@ -40,6 +40,7 @@ function context(overrides: Partial<SettingsContext> = {}): SettingsContext {
     lockPrivateTabs: false,
     setLockPrivateTabs: noop,
     wallpaperName: "Sea mist",
+    appIconName: "Paper",
     language: { saved: null, current: "en", device: "en" },
     setLanguage: noop,
     defaultBrowser: "not",
@@ -51,6 +52,24 @@ function context(overrides: Partial<SettingsContext> = {}): SettingsContext {
     clear: { stage: "idle", ask: noop, confirm: noop, keep: noop },
     showWelcome: noop,
     openLink: noop,
+    sync: {
+      view: {
+        status: "synced",
+        lastSyncedAt: Date.UTC(2026, 10, 16, 12),
+        devices: [
+          { id: "phone", name: "iPhone", lastSeen: null, current: true },
+          { id: "mac", name: "MacBook", lastSeen: Date.UTC(2026, 10, 16, 11, 55), current: false },
+        ],
+        remoteTabs: [{ deviceId: "mac", name: "MacBook", tabs: [{ u: "https://bay.example/", t: "Bay" }] }],
+        types: { tabs: true, bookmarks: true, history: true },
+        pairing: null,
+      },
+      now: Date.UTC(2026, 10, 16, 12, 1),
+      syncNow: noop,
+      setType: noop,
+      leave: noop,
+      openTab: noop,
+    },
     ...overrides,
   };
 }
@@ -131,4 +150,22 @@ test("clearing data asks first, then says it is working", () => {
   assert.ok(ids("idle").includes("settings-clear-data"));
   assert.ok(ids("confirming").includes("clear-data-confirm"));
   assert.ok(ids("confirming").includes("clear-data-cancel"));
+});
+
+test("Sync says how it's going, lists the devices and their tabs, or how to join", () => {
+  const ctx = context();
+  const rows = sections("sync", ctx).flatMap((section) => section.rows);
+  const status = rows.find((row) => row.testID === "sync-status");
+
+  assert.equal(status?.value, "Up to date");
+  assert.equal(status?.detail, "Synced 1 min ago");
+  assert.equal(rows.find((row) => row.testID === "sync-device-mac")?.value, "Synced 6 min ago");
+  assert.equal(rows.find((row) => row.testID === "sync-tab-mac-0")?.detail, "bay.example");
+
+  const off = sections("sync", context({ sync: { ...ctx.sync, view: { ...ctx.sync.view, status: "off" } } })).flatMap((section) => section.rows);
+
+  assert.deepEqual(
+    off.map((row) => row.testID),
+    ["sync-join-code", "sync-join-phrase"],
+  );
 });

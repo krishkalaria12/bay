@@ -4,6 +4,7 @@ import { createSuggestFetcher } from "@bay/core/src/suggestFetcher.ts";
 import { useEffect, useMemo, useState } from "react";
 
 import { bookmarkLinks } from "@/store/bookmarks";
+import { spaceBookmarks, spaceHistory } from "@/store/model";
 import type { BrowserData } from "@/store/types";
 
 const fetcher = createSuggestFetcher({ fetch: (url, init) => fetch(url, init) });
@@ -31,12 +32,17 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
   useEffect(() => () => fetcher.cancel(), []);
 
   // One list per bookmark tree: the ranking indexes a list once and keeps it while the same list comes back.
-  const bookmarks = useMemo(() => bookmarkLinks(data.bookmarks).map((link) => ({ url: link.url, title: link.title, favicon: null })), [data.bookmarks]);
+  // The space showing: its own history, bookmarks and archive, as the desktop's profile per space.
+  const tree = spaceBookmarks(data, data.activeSpaceId);
+  const bookmarks = useMemo(() => bookmarkLinks(tree).map((link) => ({ url: link.url, title: link.title, favicon: null })), [tree]);
+  const history = useMemo(() => spaceHistory({ history: data.history }, data.activeSpaceId), [data.history, data.activeSpaceId]);
 
   return useMemo(() => {
+    const cleaned = data.archive.filter((tab) => tab.spaceId === data.activeSpaceId);
+
     if (!query.trim()) {
       // Before typing: recent pages, like Lens.
-      const rows = data.history
+      const rows = history
         .filter((entry) => entry.url !== currentUrl)
         .slice(0, 4)
         .map((entry): Row => ({ kind: "page", url: entry.url, title: entry.title, favicon: null, visited: true }));
@@ -46,10 +52,10 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
 
     const result = buildSuggestions(
       query,
-      { tabs: data.tabs.filter((tab) => tab.url), history: data.history, bookmarks, cleaned: data.archive },
+      { tabs: data.tabs.filter((tab) => tab.url), history, bookmarks, cleaned },
       { engine, remote, limit: 7, currentTabId: data.activeTabId, currentUrl },
     );
 
     return { rows: result.items.filter(isRow), completion: result.completion };
-  }, [bookmarks, currentUrl, data, engine, query, remote]);
+  }, [bookmarks, currentUrl, data, engine, history, query, remote]);
 }

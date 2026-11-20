@@ -1,6 +1,6 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { addMediaControlListener, setMediaSession, type MediaControl, type Tab } from "@bay/engine";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { parseMediaMessage, PAUSE_MEDIA_SCRIPT, PIP_MEDIA_SCRIPT, seekMediaScript, TOGGLE_MEDIA_SCRIPT, type MediaMessage } from "@/pagescripts/media";
 import type { BrowserTab } from "@/store/types";
@@ -59,17 +59,17 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
     setMediaSession(sessionTitle === null ? null : { title: sessionTitle, site: sessionSite, playing: sessionPlaying });
   }, [sessionTitle, sessionSite, sessionPlaying]);
 
-  const control = useRef<(action: MediaControl) => void>(() => {});
-  control.current = (action) => {
+  // The system's controls act on the newest session tab.
+  const control = useEffectEvent((action: MediaControl) => {
     if (!sessionTab) return;
 
     if (action === "toggle") command(sessionTab.id, TOGGLE_MEDIA_SCRIPT);
     else if (action === "skip-forward" || action === "skip-backward") command(sessionTab.id, seekMediaScript(action === "skip-forward" ? 10 : -10));
     else stop(sessionTab.id);
-  };
+  });
 
   useEffect(() => {
-    const subscription = addMediaControlListener((action) => control.current(action));
+    const subscription = addMediaControlListener((action) => control(action));
 
     return () => subscription.remove();
   }, []);

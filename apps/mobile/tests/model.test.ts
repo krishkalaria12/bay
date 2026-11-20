@@ -10,8 +10,11 @@ import {
   siteHost,
   siteSettingFor,
   SPACE_COLORS,
+  spaceBookmarks,
+  spaceHistory,
   type DownloadEvent,
 } from "../src/store/model.ts";
+import { isBookmarked } from "../src/store/bookmarks.ts";
 import type { JsonValue } from "../src/store/types.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -59,7 +62,7 @@ test("stale tabs are archived, except the current one and pinned sites", () => {
       page("fresh", "https://fresh.com/", now),
     ],
     activeTabId: "current",
-    pinnedSites: [{ id: "p", url: "https://pinned.com/", title: "Pinned", favicon: null }],
+    pinnedSites: [{ id: "p", url: "https://pinned.com/", title: "Pinned", favicon: null, spaceId: "personal", kind: "essential", folderId: null }],
   };
 
   data = reduceBrowserData(data, { type: "archive-stale", now });
@@ -96,9 +99,9 @@ test("the archive can start after 12 hours", () => {
 
 test("visits count up and move to the top of history", () => {
   let data = initialBrowserData(createTab("a", 0));
-  data = reduceBrowserData(data, { type: "visit", url: "https://a.com/", title: "A", favicon: null, now: 1 });
-  data = reduceBrowserData(data, { type: "visit", url: "https://b.com/", title: "B", favicon: null, now: 2 });
-  data = reduceBrowserData(data, { type: "visit", url: "https://a.com/", title: "A", favicon: null, now: 3 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://a.com/", title: "A", favicon: null, now: 1 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://b.com/", title: "B", favicon: null, now: 2 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://a.com/", title: "A", favicon: null, now: 3 });
   assert.deepEqual(
     data.history.map((entry) => [entry.url, entry.visits]),
     [
@@ -106,7 +109,7 @@ test("visits count up and move to the top of history", () => {
       ["https://b.com/", 1],
     ],
   );
-  assert.equal(reduceBrowserData(data, { type: "visit", url: "javascript:1", title: "", favicon: null, now: 4 }), data);
+  assert.equal(reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "javascript:1", title: "", favicon: null, now: 4 }), data);
 });
 
 test("saved state is validated and repaired", () => {
@@ -152,7 +155,7 @@ test("saved state is validated and repaired", () => {
     youtube: { shorts: false, suggestions: false, distractions: false },
     // Saved before the welcome existed, so its owner has seen Bay already.
     welcomed: true,
-    searchOnLaunch: true,
+    openSearchOnLaunch: false,
     customSearchUrl: null,
     tipsSeen: ["blocking", "bar"],
     swipeToNavigate: "anywhere",
@@ -168,7 +171,7 @@ test("saved state is validated and repaired", () => {
 
 test("a title that arrives after the visit updates its history entry", () => {
   let data = initialBrowserData(createTab("a", 0));
-  data = reduceBrowserData(data, { type: "visit", url: "https://a.com/", title: "", favicon: null, now: 1 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://a.com/", title: "", favicon: null, now: 1 });
   data = reduceBrowserData(data, { type: "page-title", url: "https://a.com/", title: "A" });
   assert.equal(data.history[0]?.title, "A");
   assert.equal(data.history[0]?.visits, 1);
@@ -374,14 +377,14 @@ test("pins can be removed and put back in place; history entries can be removed 
   );
   assert.equal(reduceBrowserData(data, { type: "add-pin", site: removed, index: 0 }), data);
 
-  data = reduceBrowserData(data, { type: "visit", url: "https://a.example/", title: "A", favicon: null, now: 1 });
-  data = reduceBrowserData(data, { type: "visit", url: "https://b.example/", title: "B", favicon: null, now: 2 });
-  data = reduceBrowserData(data, { type: "remove-history", url: "https://a.example/" });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://a.example/", title: "A", favicon: null, now: 1 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://b.example/", title: "B", favicon: null, now: 2 });
+  data = reduceBrowserData(data, { type: "remove-history", spaceId: "personal", url: "https://a.example/" });
   assert.deepEqual(
     data.history.map((entry) => entry.url),
     ["https://b.example/"],
   );
-  data = reduceBrowserData(data, { type: "clear-history" });
+  data = reduceBrowserData(data, { type: "clear-history", spaceId: "personal" });
   assert.equal(data.history.length, 0);
 });
 
@@ -482,13 +485,13 @@ test("site icons are kept per host, and clearing history drops the ones nothing 
 
   let data = {
     ...initialBrowserData(page("a", "https://www.a.com/")),
-    history: [{ url: "https://h.com/", title: "", favicon: null, visits: 1, lastVisit: 1 }],
+    history: [{ spaceId: "personal", url: "https://h.com/", title: "", favicon: null, visits: 1, lastVisit: 1 }],
   };
 
   data = reduceBrowserData(data, { type: "favicon", host: "a.com", uri: "file:///a" });
   data = reduceBrowserData(data, { type: "favicon", host: "h.com", uri: "file:///h" });
   assert.deepEqual(Object.keys(data.favicons), ["a.com", "h.com"]);
-  data = reduceBrowserData(data, { type: "clear-history" });
+  data = reduceBrowserData(data, { type: "clear-history", spaceId: "personal" });
   assert.deepEqual(data.favicons, { "a.com": "file:///a" });
   data = reduceBrowserData(data, { type: "favicon", host: "a.com", uri: null });
   assert.deepEqual(data.favicons, {});
@@ -592,30 +595,107 @@ test("spaces keep their own active tab, switching and closing stay within them",
   );
 });
 
-test("deleting a space files its tabs into the first space and keeps its current tab's page", () => {
+test("deleting a space takes its tabs, pins, folders, history, bookmarks and archive with it", () => {
   let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
   data = reduceBrowserData(data, { type: "new-tab", tab: createTab("b", 1, "https://b.com/"), background: false });
   data = reduceBrowserData(data, {
     type: "create-space",
-    space: { id: "work", name: "Work", color: "orange" },
+    space: { id: "work", name: "Work", color: "orange", icon: "💼" },
     blankTab: createTab("c", 2, "https://c.com/", false, "work"),
   });
   data = reduceBrowserData(data, { type: "new-folder", folder: { id: "articles", spaceId: "work", name: "Articles" } });
   data = reduceBrowserData(data, { type: "move-tab", id: "c", spaceId: "work", folderId: "articles" });
-  // Deleting Work moves c into Personal and clears its folder.
-  data = reduceBrowserData(data, { type: "delete-space", id: "work" });
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "c", pinId: "pin", kind: "essential" });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "work", url: "https://c.com/", title: "C", favicon: null, now: 3 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://b.com/", title: "B", favicon: null, now: 4 });
+  data = reduceBrowserData(data, {
+    type: "toggle-bookmark",
+    spaceId: "work",
+    bookmark: { kind: "url", id: "bm", parentId: "bookmarks", title: "C", url: "https://c.com/", addedAt: 3 },
+  });
+  assert.equal(data.activeSpaceId, "work");
+  data = reduceBrowserData(data, { type: "delete-space", id: "work", blankTab: createTab("blank", 5) });
   assert.deepEqual(
     data.spaces.map((space) => space.name),
     ["Personal"],
   );
+  // The space before it takes the screen, on the tab it was last showing there.
   assert.equal(data.activeSpaceId, "personal");
-  const moved = data.tabs.find((tab) => tab.id === "c");
-  assert.equal(moved?.spaceId, "personal");
-  assert.equal(moved?.folderId, null);
+  assert.deepEqual(
+    data.tabs.map((tab) => tab.id),
+    ["a", "b"],
+  );
+  assert.equal(data.activeTabId, "b");
   assert.equal(data.folders.length, 0);
-  assert.equal(data.activeTabId, "c");
-  // Deleting the last remaining space is a no-op.
-  assert.equal(reduceBrowserData(data, { type: "delete-space", id: "personal" }), data);
+  assert.equal(data.pinnedSites.length, 0);
+  assert.deepEqual(
+    data.history.map((entry) => entry.url),
+    ["https://b.com/"],
+  );
+  assert.equal(data.bookmarks.work, undefined);
+  // The personal space syncs, so it stays; so does the last space.
+  assert.equal(reduceBrowserData(data, { type: "delete-space", id: "personal", blankTab: createTab("x", 6) }), data);
+});
+
+test("each space keeps its own history, bookmarks and archive", () => {
+  let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
+  data = reduceBrowserData(data, {
+    type: "create-space",
+    space: { id: "work", name: "Work", color: "orange", icon: "💼" },
+    blankTab: createTab("w", 1, "", false, "work"),
+  });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "personal", url: "https://a.com/", title: "A", favicon: null, now: 1 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "work", url: "https://a.com/", title: "A", favicon: null, now: 2 });
+  data = reduceBrowserData(data, { type: "visit", spaceId: "work", url: "https://a.com/", title: "A", favicon: null, now: 3 });
+  assert.deepEqual(
+    spaceHistory(data, "work").map((entry) => entry.visits),
+    [2],
+  );
+  assert.equal(spaceHistory(data, "personal")[0]?.visits, 1);
+  data = reduceBrowserData(data, { type: "clear-history", spaceId: "work" });
+  assert.equal(spaceHistory(data, "work").length, 0);
+  assert.equal(spaceHistory(data, "personal").length, 1);
+
+  const page = { kind: "url" as const, id: "bm", parentId: "bookmarks", title: "A", url: "https://a.com/", addedAt: 1 };
+  data = reduceBrowserData(data, { type: "toggle-bookmark", spaceId: "work", bookmark: page });
+  assert.equal(isBookmarked(spaceBookmarks(data, "work"), page.url), true);
+  assert.equal(isBookmarked(spaceBookmarks(data, "personal"), page.url), false);
+
+  // A document from before spaces kept their own reads its history and bookmarks as the personal space's.
+  const older = parseBrowserData(
+    {
+      version: 2,
+      spaces: [{ id: "personal", name: "Personal", color: "blue" }],
+      tabs: [{ id: "a", url: "https://a.com/", title: "", createdAt: 0, lastVisit: 0 }],
+      history: [{ url: "https://a.com/", title: "A", visits: 1, lastVisit: 1 }],
+      bookmarks: { bookmarks: { kind: "folder", id: "bookmarks", title: "", children: ["bm"], addedAt: 0 }, bm: { ...page, parentId: null } },
+    },
+    initialBrowserData(createTab("x", 0)),
+  );
+
+  assert.equal(older.history[0]?.spaceId, "personal");
+  assert.equal(isBookmarked(spaceBookmarks(older, "personal"), page.url), true);
+  // Every space wears an emoji: the personal space's is the house.
+  assert.equal(older.spaces[0]?.icon, "🏠");
+
+  // A space that took the house by default before the personal space had one gives it up for a free one.
+  const crowded = parseBrowserData(
+    {
+      version: 2,
+      spaces: [
+        { id: "personal", name: "Personal", color: "blue" },
+        { id: "two", name: "Two", color: "green", icon: "🏠" },
+        { id: "three", name: "Three", color: "red", icon: "✨" },
+      ],
+      tabs: [{ id: "a", url: "https://a.com/", title: "", createdAt: 0, lastVisit: 0 }],
+    },
+    initialBrowserData(createTab("x", 0)),
+  );
+
+  assert.deepEqual(
+    crowded.spaces.map((space) => space.icon),
+    ["🏠", "📁", "✨"],
+  );
 });
 
 test("folders hold tabs inside a space and round-trip through saved state", () => {
@@ -694,13 +774,15 @@ test("spaces colours cover the palette and don't drift", () => {
   assert.deepEqual(SPACE_COLORS, ["blue", "green", "orange", "red", "violet", "gray"]);
 });
 
-test("Bay opens ready to type unless that is turned off, and an older document opens that way too", () => {
+test("Bay opens without the keyboard unless that is chosen, and the old always-on choice no longer counts", () => {
   let data = initialBrowserData(createTab("a", 0));
-  assert.equal(data.preferences.searchOnLaunch, true);
-  data = reduceBrowserData(data, { type: "preferences", update: { searchOnLaunch: false } });
-  assert.equal(data.preferences.searchOnLaunch, false);
-  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.searchOnLaunch, true);
-  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: false } }, data).preferences.searchOnLaunch, false);
+  assert.equal(data.preferences.openSearchOnLaunch, false);
+  data = reduceBrowserData(data, { type: "preferences", update: { openSearchOnLaunch: true } });
+  assert.equal(data.preferences.openSearchOnLaunch, true);
+  assert.equal(parseBrowserData({ version: 1, preferences: {} }, data).preferences.openSearchOnLaunch, false);
+  // Saved while it was on by default: off now, until it's chosen again.
+  assert.equal(parseBrowserData({ version: 1, preferences: { searchOnLaunch: true } }, data).preferences.openSearchOnLaunch, false);
+  assert.equal(parseBrowserData({ version: 1, preferences: { openSearchOnLaunch: true } }, data).preferences.openSearchOnLaunch, true);
 });
 
 test("a custom search engine needs https and a place for the words", () => {
@@ -782,4 +864,40 @@ test("a site can keep its own swipe to navigate", () => {
     update: { textSize: null, reader: false, desktopMode: false, blockOff: [], swipe: null },
   });
   assert.equal(data.preferences.siteSettings["maps.example"], undefined);
+});
+
+test("a tab's page pins in its space as an Essential or a row, and pinning it the same way again unpins it", () => {
+  let data = initialBrowserData({ ...page("a", "https://a.example/"), spaceId: "personal" });
+
+  data = reduceBrowserData(data, { type: "new-folder", folder: { id: "f", spaceId: "personal", name: "Reading" } });
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "p", kind: "essential" });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => [site.spaceId, site.kind, site.folderId]),
+    [["personal", "essential", null]],
+  );
+
+  // Pinned another way, it moves rather than pinning twice.
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "q", kind: "row", folderId: "f" });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => [site.id, site.kind, site.folderId]),
+    [["p", "row", "f"]],
+  );
+
+  // Its folder going leaves it pinned, loose.
+  const loose = reduceBrowserData(data, { type: "delete-folder", id: "f" });
+
+  assert.equal(loose.pinnedSites[0]?.folderId, null);
+  assert.deepEqual(reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "r", kind: "row", folderId: "f" }).pinnedSites, []);
+});
+
+test("pins saved before spaces had them are the first space's Essentials", () => {
+  const read = parseBrowserData(
+    { version: 2, tabs: [], pinnedSites: [{ id: "p", url: "https://a.example/", title: "A", favicon: null }] },
+    initialBrowserData(createTab("t", 0)),
+  );
+
+  assert.deepEqual(
+    read.pinnedSites.map((site) => [site.spaceId, site.kind, site.folderId]),
+    [["personal", "essential", null]],
+  );
 });

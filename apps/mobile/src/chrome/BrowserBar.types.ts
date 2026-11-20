@@ -5,8 +5,29 @@ import type { Translate } from "@/i18n";
 /** The search capsule's motion while the bar is swiped to change tabs (TabSwipe). */
 export type CapsuleStyle = ReturnType<typeof useAnimatedStyle>;
 
-/** Lens's floating bar: archive, search and settings on the start page and tab switcher; tabs, search and more over a page. */
+/** A space as the tab view's bar shows it: its emoji or a dot in its colour, the one showing larger. */
+export interface BarSpace {
+  id: string;
+  label: string;
+  color: string;
+  /** The space's emoji, drawn in place of its dot. */
+  icon: string | null;
+  active: boolean;
+}
+
+/**
+ * Lens's floating bar: archive, search and settings on the start page; archive, the spaces and a new tab over the tab
+ * view; tabs, search and more over a page.
+ */
 export type BrowserBarProps = (
+  | {
+      mode: "tabs";
+      onArchive: () => void;
+      onNewTab: () => void;
+      spaces: readonly BarSpace[];
+      onSelectSpace: (id: string) => void;
+      onNewSpace: () => void;
+    }
   | {
       mode: "start";
       onArchive: () => void;
@@ -32,8 +53,8 @@ export type BrowserBarProps = (
       tabCount?: number;
       /** The page came over plain http. */
       insecure?: boolean;
-      /** How far the page has loaded, for the capsule's progress line (A6). */
-      progress?: number;
+      /** The tab whose load the capsule's progress line follows (A6). */
+      progressTab?: string;
       /** Whether the page is still loading, for the capsule's progress line (A6). */
       loading?: boolean;
     }
@@ -67,9 +88,9 @@ export function barInsecure(props: BrowserBarProps): boolean {
   return props.mode === "page" && Boolean(props.site) && props.insecure === true;
 }
 
-/** How far the page has loaded, for the capsule's progress line (A6). */
-export function barProgress(props: BrowserBarProps): number {
-  return props.mode === "page" ? (props.progress ?? 0) : 0;
+/** The tab whose load the capsule's progress line follows (A6), if any. */
+export function barProgressTab(props: BrowserBarProps): string | null {
+  return props.mode === "page" ? (props.progressTab ?? null) : null;
 }
 
 /** Whether the page is still loading, for the capsule's progress line (A6). */
@@ -81,7 +102,16 @@ export function barLoading(props: BrowserBarProps): boolean {
 export function barButtons(
   props: BrowserBarProps,
   t: Translate,
-): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
+): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" | "add" }] {
+  if (props.mode === "tabs") {
+    return [
+      { id: "bar-archive", label: t("bar.archive"), icon: "archive", onPress: props.onArchive },
+      { id: "bar-new-space", label: t("tabsMenu.newSpace"), onPress: props.onNewSpace },
+      // The id the capsule had here before, so tests and habits that opened a new tab from the tab view still do.
+      { id: "bar-search", label: t("bar.newTab"), icon: "add", onPress: props.onNewTab },
+    ];
+  }
+
   return props.mode === "start"
     ? [
         { id: "bar-archive", label: t("bar.archive"), icon: "archive", onPress: props.onArchive },

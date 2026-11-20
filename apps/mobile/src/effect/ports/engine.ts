@@ -49,8 +49,10 @@ export class Engine extends Context.Service<
     readonly snapshot: (tab: Tab) => Effect.Effect<string | null, EngineError>;
     /** Saves the page's history, scroll position and form text now. */
     readonly saveState: (tab: Tab) => Effect.Effect<void, EngineError>;
-    /** Clears cookies, website storage, the network cache and the tab snapshots. */
-    readonly clearData: () => Effect.Effect<void, EngineError>;
+    /** Clears cookies, website storage, the network cache and the tab snapshots, in each space's profile. */
+    readonly clearData: (profiles: readonly string[]) => Effect.Effect<void, EngineError>;
+    /** Deletes a deleted space's website data. */
+    readonly deleteProfile: (profile: string) => Effect.Effect<void, EngineError>;
     /** Says whether a private tab is open, so the private session starts or ends. */
     readonly setPrivateSessionActive: (active: boolean) => Effect.Effect<void, EngineError>;
     /** Deletes the snapshots that aren't in `keep`. */
@@ -155,7 +157,8 @@ export class Engine extends Context.Service<
             try: () => tab.saveState(),
             catch: (cause) => new EngineError({ operation: { name: "engine.saveState" }, cause }),
           }),
-        clearData: () => call({ name: "engine.clearData" }, (engine) => engine.clearData()),
+        clearData: (profiles) => call({ name: "engine.clearData" }, (engine) => engine.clearData(profiles)),
+        deleteProfile: (profile) => call({ name: "engine.deleteProfile" }, (engine) => engine.deleteProfile(profile)),
         setPrivateSessionActive: (active) => call({ name: "engine.setPrivateSessionActive" }, (engine) => engine.setPrivateSessionActive(active)),
         pruneSnapshots: (keep) => call({ name: "engine.pruneSnapshots" }, (engine) => engine.pruneSnapshots(keep)),
         pruneTabStates: (keep) => call({ name: "engine.pruneTabStates" }, (engine) => engine.pruneTabStates(keep)),

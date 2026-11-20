@@ -35,6 +35,16 @@ export const browserEs: BrowserStrings = {
   "tabs.closeLabel": "Cerrar {title}",
   "tabs.openLabel": "Abrir {title}",
   "tabs.swipeToClose": "Desliza arriba para cerrar",
+  "tabs.clear": "Limpiar",
+  "tabs.switchSpace": "Cambiar a {name}",
+  "tabs.scrubSpacesHint": "Mantén pulsado y desliza para cambiar de espacio",
+  "tabs.pinned": "Fijadas",
+  "pin.unpinHint": "Mantén pulsado para desfijar",
+  "pin.essential": "Añadir a Esenciales",
+  "pin.row": "Fijar pestaña",
+  "pin.into": "Fijar en {folder}",
+  "pin.unpin": "Desfijar",
+  "pin.close": "Cerrar pestaña",
 
   // Mini player.
   "player.playing": "reproduciendo",

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { MessageKey } from "@/i18n";
 
@@ -51,15 +51,15 @@ export function useTyping(active: boolean, reduced: boolean, words: (key: Messag
   const [lit, setLit] = useState<number | null>(null);
   const [restart, setRestart] = useState(0);
   const phrase = useRef(0);
-  const wordsRef = useRef(words);
-  wordsRef.current = words;
+  // The typing reads the newest language without starting over when it changes.
+  const word = useEffectEvent((key: MessageKey) => words(key));
 
   useEffect(() => {
     if (!active) return;
     setTyped("");
 
     if (reduced) {
-      setLanded([wordsRef.current(PHRASES[0].landed), wordsRef.current(PHRASES[1].landed), wordsRef.current(PHRASES[2].landed)]);
+      setLanded([word(PHRASES[0].landed), word(PHRASES[1].landed), word(PHRASES[2].landed)]);
 
       return;
     }
@@ -72,7 +72,7 @@ export function useTyping(active: boolean, reduced: boolean, words: (key: Messag
       while (!cancelled) {
         const { typed: key, way, landed: landedKey } = PHRASES[phrase.current % PHRASES.length]!;
         phrase.current += 1;
-        const text = wordsRef.current(key);
+        const text = word(key);
 
         for (let i = 1; i <= text.length && !cancelled; i++) {
           setTyped(text.slice(0, i));
@@ -85,7 +85,7 @@ export function useTyping(active: boolean, reduced: boolean, words: (key: Messag
         setTyped("");
         setLanded((now) => {
           const next: [string, string, string] = [...now];
-          next[way] = wordsRef.current(landedKey);
+          next[way] = word(landedKey);
 
           return next;
         });

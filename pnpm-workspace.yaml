@@ -9,6 +9,8 @@ packages:
   - "!apps/videos"
   # The mobile app is a standalone Expo project on a newer React Native (apps/mobile).
   - "!apps/mobile"
+  # The sync relay is a standalone Cloudflare Worker with its own lockfile (apps/sync-relay).
+  - "!apps/sync-relay"
 
 # React Native + CocoaPods expect a flat node_modules (the Podfile and Metro
 # resolve react-native-macos by path), so hoist instead of pnpm's symlink store.

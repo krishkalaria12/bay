@@ -14,6 +14,8 @@ export interface BrowserSpace {
   id: string;
   name: string;
   color: SpaceColor;
+  /** An emoji, as the desktop's spaces have. Every space wears one; one saved without gets a free one. */
+  icon?: string | null;
 }
 
 /** A named group of tabs inside a space. Kept local; sync can map a space with its folders later. */
@@ -40,6 +42,8 @@ export interface BrowserTab {
 }
 
 export interface HistoryEntry {
+  /** The space whose history this is: each space keeps its own, as each desktop space's profile does. */
+  spaceId: string;
   url: string;
   title: string;
   favicon: string | null;
@@ -47,12 +51,22 @@ export interface HistoryEntry {
   lastVisit: number;
 }
 
+/**
+ * A pinned page, as the desktop keeps them in each space: an Essential (a tile above the space's tabs, and on the start
+ * page) or a pinned row (in the space's Pinned section, loose or in one of its folders). It syncs as the desktop's pin.
+ */
 export interface PinnedSite {
   id: string;
   url: string;
   title: string;
   favicon: string | null;
+  spaceId: string;
+  kind: PinKind;
+  /** A pinned row's folder; Essentials have none. */
+  folderId: string | null;
 }
+
+export type PinKind = "essential" | "row";
 
 /**
  * A bookmark or a folder of them: desktop's bookmark node (`apps/browser/src/store/types.ts`), with one tree for the
@@ -125,7 +139,7 @@ export interface BrowserPreferences {
   /** The welcome has been seen (or skipped); a fresh install shows it once. */
   welcomed: boolean;
   /** Bay opens ready to type: the search card and keyboard come up when it starts (C1). */
-  searchOnLaunch: boolean;
+  openSearchOnLaunch: boolean;
   /** The custom search engine's address, https with `%s` where the words go; used while `searchEngineId` is "custom". */
   customSearchUrl: string | null;
   /** The first-run tips already shown (U7), so each shows once. */
@@ -179,7 +193,7 @@ export const SIMPLE_PREFERENCE_KEYS = [
   "startPageAfterHours",
   "youtube",
   "welcomed",
-  "searchOnLaunch",
+  "openSearchOnLaunch",
   "swipeToNavigate",
   "appLinks",
 ] as const;
@@ -199,7 +213,11 @@ export interface BrowserData {
   activeTabId: string;
   history: HistoryEntry[];
   pinnedSites: PinnedSite[];
-  bookmarks: Bookmarks;
+  /**
+   * Each space's own bookmark tree, by space id, as each desktop space's profile has its own. A space without an entry
+   * has none yet. The personal space's tree is the one that syncs with the computer's default profile.
+   */
+  bookmarks: Record<string, Bookmarks>;
   archive: ArchivedTab[];
   /** Newest first. */
   downloads: DownloadItem[];

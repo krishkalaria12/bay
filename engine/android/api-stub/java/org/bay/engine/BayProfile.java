@@ -15,6 +15,10 @@ public final class BayProfile {
         throw new UnsupportedOperationException();
     }
 
+    public static BayProfile forSpace(String spaceId) {
+        throw new UnsupportedOperationException();
+    }
+
     public static BayProfile createPrivate() {
         throw new UnsupportedOperationException();
     }

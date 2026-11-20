@@ -13,6 +13,7 @@ import { Backdrop } from "./Controls";
 import { hero, LINK, LINKS, MORPH } from "./flow";
 import { GREEN } from "./palette";
 import { useRun } from "./run";
+import { WELCOME_ICONS } from "./siteIcons";
 
 const CARD = hero("links");
 const PILL = { x: 201 - 95, y: -6, width: 190, height: 40 };
@@ -90,7 +91,7 @@ export function TabCard(): JSX.Element {
         }}
       >
         <Backdrop radius={17} tone="clear" />
-        <SiteIcon url={`https://${link.host}`} size={14} bare />
+        <SiteIcon url={`https://${link.host}`} size={14} bare image={WELCOME_ICONS[link.host]} />
         <Text variant="footnote" color="#1C1B19">
           {link.host}
         </Text>

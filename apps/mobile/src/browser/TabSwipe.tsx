@@ -40,7 +40,7 @@ export function TabSwipe({
   // Read inside the gesture's worklets, which keep the values they were created with.
   const edges = useSharedValue({ previous: hasPrevious, next: hasNext });
   useEffect(() => {
-    edges.value = { previous: hasPrevious, next: hasNext };
+    edges.set({ previous: hasPrevious, next: hasNext });
   }, [edges, hasPrevious, hasNext]);
 
   // After a switch the capsule waits off to one side, hidden, for the new tab's text.
@@ -55,9 +55,9 @@ export function TabSwipe({
     // On the UI thread, so the spring starts from the far side and not from where the capsule slid out.
     scheduleOnUI((from: number) => {
       "worklet";
-      offset.value = from;
-      offset.value = withSpring(0, SPRING);
-      opacity.value = withTiming(1, { duration: 180 });
+      offset.set(from);
+      offset.set(withSpring(0, SPRING));
+      opacity.set(withTiming(1, { duration: 180 }));
     }, pending.from);
   }
 
@@ -85,10 +85,10 @@ export function TabSwipe({
     onUpdate: (event) => {
       "worklet";
       const x = event.translationX;
-      const open = x < 0 ? edges.value.next : edges.value.previous;
-      offset.value = x * (open ? 0.4 : 0.12);
+      const open = x < 0 ? edges.get().next : edges.get().previous;
+      offset.set(x * (open ? 0.4 : 0.12));
       // Fades as it nears the round buttons (16 points away), so it never covers them.
-      opacity.value = 1 - Math.min(Math.abs(offset.value) / 110, 0.6);
+      opacity.set(1 - Math.min(Math.abs(offset.get()) / 110, 0.6));
     },
     onDeactivate: (event) => {
       "worklet";
@@ -96,30 +96,32 @@ export function TabSwipe({
       let step: 1 | -1 | 0 = 0;
 
       if (!event.canceled) {
-        if ((distance <= -DISTANCE || velocity <= -VELOCITY) && edges.value.next) step = 1;
-        else if ((distance >= DISTANCE || velocity >= VELOCITY) && edges.value.previous) step = -1;
+        if ((distance <= -DISTANCE || velocity <= -VELOCITY) && edges.get().next) step = 1;
+        else if ((distance >= DISTANCE || velocity >= VELOCITY) && edges.get().previous) step = -1;
       }
 
       if (step === 0) {
-        offset.value = withSpring(0, SPRING);
-        opacity.value = withTiming(1, { duration: 160 });
+        offset.set(withSpring(0, SPRING));
+        opacity.set(withTiming(1, { duration: 160 }));
 
         return;
       }
 
       // Next tab: out to the left, in from the right; previous: the other way round.
       const direction = step === 1 ? -1 : 1;
-      opacity.value = withTiming(0, { duration: 110 });
-      offset.value = withTiming(direction * SLIDE, { duration: 120, easing: Easing.in(Easing.quad) }, (finished) => {
-        if (!finished) return;
-        scheduleOnRN(switched, step, -direction * SLIDE * 0.8);
-      });
+      opacity.set(withTiming(0, { duration: 110 }));
+      offset.set(
+        withTiming(direction * SLIDE, { duration: 120, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (!finished) return;
+          scheduleOnRN(switched, step, -direction * SLIDE * 0.8);
+        }),
+      );
     },
   });
 
   const capsuleStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateX: offset.value }, { scale: 1 - Math.min(Math.abs(offset.value) / 1600, 0.04) }],
+    opacity: opacity.get(),
+    transform: [{ translateX: offset.get() }, { scale: 1 - Math.min(Math.abs(offset.get()) / 1600, 0.04) }],
   }));
 
   return (

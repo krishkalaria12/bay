@@ -11,6 +11,7 @@ import { useT } from "@/i18n";
 import { groupByDay } from "./historyGroups";
 import { DAY_GROUP_LABELS, pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
 import { ActionRow, PanelSheet, SectionLabel, SheetFitEnd } from "./PanelSheet";
+import { quietWhileClosed } from "./quietWhileClosed";
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; item: ArchiveItem };
 
@@ -30,7 +31,7 @@ export interface ArchivePanelProps {
   onClear: () => void;
 }
 
-export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onClear }: ArchivePanelProps): JSX.Element {
+function ArchivePanelSheet({ visible, onClose, items, onRestore, onRemove, onClear }: ArchivePanelProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
@@ -143,3 +144,5 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
     </PanelSheet>
   );
 }
+
+export const ArchivePanel = quietWhileClosed(ArchivePanelSheet);

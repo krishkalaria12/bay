@@ -63,14 +63,19 @@ class BayEngineModule : Module() {
       BayEngineBackend.setPrivateSessionActive(active)
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("clearData") { promise: Promise ->
+    AsyncFunction("deleteProfile") { profile: String, promise: Promise ->
+      val context = appContext.reactContext ?: return@AsyncFunction promise.resolve(null)
+      BayEngineBackend.deleteProfile(context, profile) { promise.resolve(null) }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("clearData") { profiles: List<String>, promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
         promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
         return@AsyncFunction
       }
       try {
-        BayEngineBackend.clearWebsiteData(context) { error ->
+        BayEngineBackend.clearWebsiteData(context, profiles) { error ->
           if (error != null) {
             promise.reject(error.code, error.message, error.cause)
             return@clearWebsiteData
@@ -118,6 +123,7 @@ class BayEngineModule : Module() {
       Prop("appLinks") { view: BayEngineView, mode: String -> view.appLinks = mode }
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
+      Prop("profile") { view: BayEngineView, profile: String? -> view.profile = profile ?: BayEngineBackend.PERSONAL_PROFILE }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
       Prop("suspended") { view: BayEngineView, suspended: Boolean -> view.isSuspended = suspended }
       Prop("desktopMode") { view: BayEngineView, desktop: Boolean -> view.desktopMode = desktop }

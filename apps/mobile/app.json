@@ -42,7 +42,7 @@
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
       "expo-router",
-      // The icons people can switch to in Settings › Appearance (src/panels/appIcons.ts); scripts/make-icon.sh at the repo
+      // The icons people can switch to in Settings › Appearance (src/settings/appIcons.ts); scripts/make-icon.sh at the repo
       // root draws them. Android launches through an activity alias per icon, so the browser's link filters stay on
       // MainActivity.
       [
