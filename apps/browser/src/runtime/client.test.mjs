@@ -537,6 +537,92 @@ test("unchanged JSON nodes keep their identities across full snapshot commits", 
   authority.close();
 });
 
+const deepFreeze = (value) => {
+  if (value && Object(value) === value) Object.values(value).forEach(deepFreeze);
+
+  return Object.freeze(value);
+};
+
+test("a frozen commit from the transport is kept where it changed and shares the rest", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value, options: { url: "https://two.example/" } }));
+  const { fake, client } = await connect(copy(second.commit));
+
+  const before = client.getSnapshot().state,
+    unchanged = second.value,
+    active = Object.keys(before.tabs).find((id) => id !== unchanged);
+
+  const changed = await authority.dispatch(request(3, { method: "navigate", tabId: active, url: "https://changed.example/" }));
+  const incoming = deepFreeze(copy(changed.commit));
+  fake.emit(incoming);
+  const after = client.getSnapshot().state;
+  assert.equal(client.getSnapshot().revision, changed.commit.revision);
+  assert.equal(after.tabs[unchanged], before.tabs[unchanged]);
+  assert.equal(after.settings, before.settings);
+  // The changed tab is the transport's own frozen node, not a copy of it.
+  assert.equal(after.tabs[active], incoming.state.tabs[active]);
+  assert.notEqual(after.tabs, before.tabs);
+  assert.ok(Object.isFrozen(after.tabs));
+  client.close();
+  authority.close();
+});
+
+test("a field that disappears from a node replaces the node", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const { fake, client } = await connect(copy(first.commit));
+  const before = client.getSnapshot().state;
+  const [id] = Object.keys(before.tabs);
+  const keys = Object.keys(before.tabs[id]);
+  const dropped = keys.at(-1);
+
+  for (const frozen of [false, true]) {
+    const next = copy(client.getSnapshot());
+    next.revision++;
+    delete next.state.tabs[id][dropped];
+    // Every remaining field matches the window's own node, which still has the dropped one.
+    fake.emit(frozen ? deepFreeze(next) : next);
+    const tab = client.getSnapshot().state.tabs[id];
+    assert.equal(client.getSnapshot().revision, next.revision);
+    assert.ok(!Object.hasOwn(tab, dropped));
+    assert.deepEqual(Object.keys(tab), keys.slice(0, -1));
+    assert.ok(Object.isFrozen(tab));
+    // Put it back for the next round.
+    const restored = copy(client.getSnapshot());
+    restored.revision++;
+    restored.state.tabs[id][dropped] = before.tabs[id][dropped];
+    fake.emit(restored);
+  }
+
+  client.close();
+  authority.close();
+});
+
+test("a reply carrying a revision the window already holds settles without decoding it again", async () => {
+  const authority = makeAuthority();
+  const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
+  const { fake, client } = await connect(copy(first.commit));
+  const pending = client.dispatch({ method: "newTab", windowId: first.value, options: { url: "https://two.example/" } });
+  await tick();
+  const [sent] = fake.commands;
+  const reply = await authority.dispatch(sent.request);
+  fake.emit(copy(reply.commit));
+  const installed = client.getSnapshot();
+  // The reply's copy of the state is broken: it is never read, since the window holds that revision.
+  sent.resolve({
+    clientId: "window-1",
+    requestId: sent.request.requestId,
+    commit: { epoch: reply.commit.epoch, revision: reply.commit.revision, state: null },
+    value: reply.value,
+  });
+  assert.equal(await pending, reply.value);
+  assert.equal(client.getSnapshot(), installed);
+  assert.equal(client.getStatus(), "ready");
+  client.close();
+  authority.close();
+});
+
 test("a command held by resync rejects replies predating its actual send", async () => {
   const authority = makeAuthority(),
     initial = authority.getSnapshot(),

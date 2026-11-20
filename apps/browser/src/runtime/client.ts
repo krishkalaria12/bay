@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from "../store/settings";
 import { checked } from "../lib/checked";
 import { isJsonObject, type JsonInput, type JsonObject, type JsonValue } from "../lib/json";
 import { span, spanStart, timed } from "@bay/platform/profiling";
+import { jsonKind } from "@bay/platform/json";
 import type { BrowserCommand, BrowserCommit, CommandReply, CommandRequest } from "./authority";
 import type { BrowserProjection } from "./projection";
 
@@ -41,42 +42,102 @@ function record(value: JsonInput): JsonObject {
   return value;
 }
 
-function copyJson(value: JsonInput, previous?: JsonInput, ancestors = new Set<object>(), depth = 0, omitUndefined = false): JsonValue {
-  if (value === null || v.is(v.string(), value) || v.is(v.boolean(), value)) return value;
+const NUMBER = v.number();
 
-  if (v.is(v.number(), value) && Number.isFinite(value)) return value;
+/** A frozen copy of JSON data that reuses `previous`'s nodes wherever they hold the same data, so a subscriber sees
+ *  an unchanged node as the same object. With `adopt`, deeply frozen input nodes are kept rather than copied: only
+ *  the transport's freshly parsed, frozen messages are passed that way. */
+function copyJson(value: JsonInput, previous?: JsonInput, ancestors = new Set<object>(), depth = 0, omitUndefined = false, adopt = false): JsonValue {
+  const kind = jsonKind(value);
 
-  if (!isJsonObject(value) && !Array.isArray(value)) return invalid();
+  if (kind === "leaf") return value!;
 
-  if (depth > 128 || ancestors.has(value)) return invalid();
+  // SAFETY: jsonKind found an array or a plain object.
+  const node = checked<JsonValue[] | JsonObject>(value);
 
-  if (!Array.isArray(value)) record(value);
-  // SAFETY: the checks above established this shape.
-  ancestors.add(value);
+  if (kind === null || depth > 128 || ancestors.has(node)) return invalid();
+  ancestors.add(node);
 
   try {
-    if (Array.isArray(value)) {
-      const before = Array.isArray(previous) ? previous : undefined;
-      const copied = Array.from(value, (item, index) => copyJson(item, before?.[index], ancestors, depth + 1, omitUndefined));
+    // Kept whole when every item is the input's own (adopt) or the previous node's.
+    const keep = adopt && Object.isFrozen(node);
 
-      if (before?.length === copied.length && copied.every((item, index) => item === before[index])) return before;
+    if (Array.isArray(node)) {
+      const before = Array.isArray(previous) && previous.length === node.length ? previous : undefined;
+      let copied: JsonValue[] | undefined;
+      let same = !!before;
+      let own = keep;
+
+      for (let index = 0; index < node.length; index++) {
+        const item = copyJson(node[index], before?.[index], ancestors, depth + 1, omitUndefined, adopt);
+        const sameNow = same && item === before![index];
+        const ownNow = own && item === node[index];
+
+        // The items so far are the previous node's while `same` holds, else the input's own.
+        if (!copied && !sameNow && !ownNow) copied = (same ? before! : node).slice(0, index);
+        same = sameNow;
+        own = ownNow;
+        copied?.push(item);
+      }
+
+      if (same) return before!;
+
+      if (own) return node;
 
       // SAFETY: a frozen array still holds the JSON values it was copied from.
-      return Object.freeze(copied) as JsonValue[];
+      return Object.freeze(copied ?? []) as JsonValue[];
     }
 
     const before = isJsonObject(previous) ? previous : undefined;
+    const keys = Object.keys(node);
+    let copied: JsonObject | undefined;
+    let count = 0;
+    let same = !!before;
+    let own = keep;
 
-    const entries = Object.entries(value)
-      .filter(([, item]) => !omitUndefined || item !== undefined)
-      .map(([key, item]) => [key, copyJson(item, before?.[key], ancestors, depth + 1, omitUndefined)] as const);
+    // The fields so far are the previous node's while `same` holds, else the input's own.
+    const start = (upTo: string | null) => {
+      const source = same ? before! : node;
+      copied = {};
 
-    if (before && Object.keys(before).length === entries.length && entries.every(([key, item]) => Object.hasOwn(before, key) && before[key] === item))
-      return before;
+      for (const key of keys) {
+        if (key === upTo) break;
 
-    return Object.freeze(Object.fromEntries(entries));
+        if (!(omitUndefined && node[key] === undefined)) copied[key] = source[key]!;
+      }
+    };
+
+    for (const key of keys) {
+      const field = node[key];
+
+      if (omitUndefined && field === undefined) {
+        if (!copied && !same && own) start(key);
+        own = false;
+        continue;
+      }
+
+      const item = copyJson(field, before?.[key], ancestors, depth + 1, omitUndefined, adopt);
+      const sameNow = same && Object.hasOwn(before!, key) && before![key] === item;
+      const ownNow = own && item === field;
+
+      if (!copied && !sameNow && !ownNow) start(key);
+      same = sameNow;
+      own = ownNow;
+      count++;
+
+      if (copied) copied[key] = item;
+    }
+
+    if (same && Object.keys(before!).length === count) return before!;
+
+    if (own) return node;
+
+    // Every field matched the previous node's, but it had others.
+    if (!copied) start(null);
+
+    return Object.freeze(copied!);
   } finally {
-    ancestors.delete(value);
+    ancestors.delete(node);
   }
 }
 
@@ -123,7 +184,7 @@ const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
 };
 
 export function decodeBrowserCommit(value: JsonInput, previous: BrowserCommit | null = null): BrowserCommit {
-  const input = record(copyJson(value, checked<JsonInput>(previous)));
+  const input = record(copyJson(value, checked<JsonInput>(previous), new Set(), 0, false, true));
 
   if (Object.keys(input).length !== 3 || Object.keys(input).some((key) => !["epoch", "revision", "state"].includes(key))) invalid();
 
@@ -229,7 +290,13 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
   let unsubscribeClose = () => {};
   const listeners = new Set<() => void>();
 
-  type Pending = { request: CommandRequest; baseRevision: number; reply?: CommandReply; resolve(value: JsonValue): void; reject(error: Error): void };
+  type Pending = {
+    request: CommandRequest;
+    baseRevision: number;
+    reply?: { revision: number; value: JsonValue };
+    resolve(value: JsonValue): void;
+    reject(error: Error): void;
+  };
 
   const pending = new Map<number, Pending>();
 
@@ -282,7 +349,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     if (status !== "ready" || !current) return;
 
     for (const [id, command] of pending) {
-      if (!command.reply || command.reply.commit.revision > current.revision) continue;
+      if (!command.reply || command.reply.revision > current.revision) continue;
       pending.delete(id);
       command.resolve(checked<JsonValue>(command.reply.value));
     }
@@ -302,8 +369,17 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     requestSnapshot();
   }
 
+  /** The revision of a commit this window already holds, read without decoding it: each commit reaches the window
+   *  twice when it answers the window's own command, once as a commit and once in the reply. */
+  function heldRevision(input: JsonInput): number | null {
+    if (!current || !isJsonObject(input) || input.epoch !== current.epoch) return null;
+    const revision = input.revision;
+
+    return v.is(NUMBER, revision) && Number.isSafeInteger(revision) && revision >= 0 && revision <= current.revision ? revision : null;
+  }
+
   function acceptCommit(input: BrowserCommit) {
-    if (terminalError) return;
+    if (terminalError || heldRevision(checked<JsonInput>(input)) !== null) return;
     let commit: BrowserCommit;
 
     try {
@@ -415,15 +491,16 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         invalid();
 
       if (!validateBrowserCommandResult(command.request.command, reply.value)) invalid();
-      const commit = timed("Bay.client decodeReply", () => decodeBrowserCommit(checked<JsonInput>(reply.commit), current));
+      const held = heldRevision(reply.commit);
+      const commit = held === null ? timed("Bay.client decodeReply", () => decodeBrowserCommit(checked<JsonInput>(reply.commit), current)) : null;
 
-      // SAFETY: the checks above established this shape.
+      if (commit && !sameEpoch(commit)) return;
+      const revision = commit?.revision ?? held!;
 
-      if (!sameEpoch(commit)) return;
+      if (revision < command.baseRevision) invalid();
+      command.reply = { revision, value: copyJson(checked<JsonInput>(reply.value)) };
 
-      if (commit.revision < command.baseRevision) invalid();
-      command.reply = Object.freeze({ clientId, requestId: command.request.requestId, commit, value: copyJson(checked<JsonInput>(reply.value)) });
-      acceptValidatedCommit(commit);
+      if (commit) acceptValidatedCommit(commit);
       settle();
     } catch {
       fail(new BrowserClientError("invalid_protocol", "invalid browser runtime command reply"));
