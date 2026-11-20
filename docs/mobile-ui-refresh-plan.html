@@ -1538,9 +1538,14 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
         </li>
         <li><b>Gap:</b> the mini player off switch is checked on iPhone only (soundhelix.com); the Android emulator had no media to play in that run.</li>
         <li>
-          <b>Gap:</b> with the Tabs menu gone, a tab can't be moved to another space or into a folder, and tab folders can't be made, renamed or deleted on the
-          phone. Their new home is still to be settled.
+          <b>Pinned folders done:</b> tab things live in the tab view, bookmark things in the drawer. "Pinned" has a + for a new folder, named where it will
+          sit; holding a folder offers Rename and Delete (its pins stay pinned); holding a pinned row lifts it into a folder, out of one (onto "Pinned") or
+          beside another row, or, let go where it was, offers the other folders and Unpin. Holding a tab card and letting go opens its sheet: the space chips
+          (another one moves the tab there), Essential, Pinned, each folder and a new folder; carried instead, the card follows the finger and lands on a space
+          in the bar below, which lights in its colour. The page menu's Pin offers the same choices once the space has folders. The core's
+          <code>MovePin</code> takes a pin beside another (before or after it).
         </li>
+        <li><b>Gap:</b> folders keep the order they were made in; there's no dragging one folder above another yet.</li>
         <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.
