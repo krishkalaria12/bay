@@ -19,6 +19,11 @@ struct BrowserScreen: View {
   /// The space whose page shows, and how far the page is still to slide in after a switch to another.
   @State private var shownSpace = ""
   @State private var pageSlide: CGFloat = 0
+  /// The switcher has come up: from a page it fades in behind the page shrinking into its card.
+  @State private var switcherRevealed = true
+
+  /// How small the switcher goes as a card grows back into its page.
+  private static let switcherFrom: CGFloat = 0.94
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
   /// It stays put while the bar scrolls away: a change lays the page out again, and mid-scroll that shook the page.
@@ -44,8 +49,21 @@ struct BrowserScreen: View {
         TabPicture(tab: tab, color: browser.pageColors[tab.id]).opacity(browser.swipeCoverShown ? 1 : 0)
       }
       if browser.overlay == .tabs {
+        // In from a page, the page shrinks into its card as the switcher comes up behind it; back to a page, the card
+        // grows into it as the switcher falls away.
+        let shownSwitcher = switcherRevealed && browser.zoom == nil
         WallpaperView(id: app.preferences.wallpaper)
         TabSwitcher(browser: browser, onSettings: onSettings)
+          .opacity(shownSwitcher ? 1 : 0)
+          // Only falling away: coming up it keeps its size, so the cards are where the page reads them to land.
+          .scaleEffect(browser.zoom == nil ? 1 : Self.switcherFrom)
+          .animation(Motion.open.animation, value: browser.zoom == nil)
+          .onAppear(perform: revealSwitcher)
+        if let tab = browser.opening {
+          TabMorph(
+            tab: tab, color: browser.pageColors[tab.id], wallpaper: app.preferences.wallpaper, card: { [browser] in browser.cardFrames[tab.id] },
+            shrinking: true, onDone: browser.openingDone)
+        }
       } else if browser.hasPage {
         if let failure = browser.failure, failure.tabId == app.activeTabId {
           PageErrorView(message: failure.message, retry: browser.retry)
@@ -54,8 +72,10 @@ struct BrowserScreen: View {
       } else if browser.overlay == .none {
         startScreen.offset(x: pageSlide)
       }
-      if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path, let image = UIImage(contentsOfFile: path) {
-        TabZoom(snapshot: image, from: zoom.frame, onDone: browser.zoomFinished)
+      if let zoom = browser.zoom {
+        TabMorph(
+          tab: zoom.tab, color: browser.pageColors[zoom.tab.id], wallpaper: app.preferences.wallpaper, card: { zoom.frame }, shrinking: false,
+          onDone: browser.zoomFinished)
       }
       if browser.locked, browser.activeTab?.private == true, browser.overlay == .none {
         PrivateLockView(onUnlock: browser.unlock)
@@ -195,6 +215,18 @@ struct BrowserScreen: View {
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }
   }
 
+  /// The switcher comes up behind the page shrinking into its card; opened any other way it's simply there.
+  private func revealSwitcher() {
+    guard browser.opening != nil else {
+      switcherRevealed = true
+      return
+    }
+    switcherRevealed = false
+    DispatchQueue.main.async {
+      withAnimation(Motion.settle.animation) { switcherRevealed = true }
+    }
+  }
+
   /// Another space from a page: its page slides in from the side the space sits on, the next one from the right.
   private func spaceSwitched(_ id: String) {
     defer { shownSpace = id }
@@ -295,9 +327,11 @@ struct TabPicture: View {
     ZStack(alignment: .top) {
       back
       if let image {
-        Image(uiImage: image).resizable().scaledToFill()
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-          .clipped()
+        // Across the width, top at the top, as the page lies: zoomed to fill, it didn't line up with the page.
+        GeometryReader { geometry in
+          Image(uiImage: image).resizable().aspectRatio(contentMode: .fit).frame(width: geometry.size.width)
+        }
+        .clipped()
       } else {
         VStack(spacing: Space.md) {
           SiteIcon(url: tab.url, size: 48)

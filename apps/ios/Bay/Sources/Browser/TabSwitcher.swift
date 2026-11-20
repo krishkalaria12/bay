@@ -92,6 +92,7 @@ struct TabSwitcher: View {
         let inner = geometry.size.width - 2 * Space.gutter
         let cardWidth = floor((inner - Self.gap * CGFloat(Self.columns - 1)) / CGFloat(Self.columns))
         let essentialWidth = floor((inner - Self.gap * CGFloat(Self.essentialColumns - 1)) / CGFloat(Self.essentialColumns))
+        ScrollViewReader { reader in
         ScrollView(showsIndicators: false) {
           VStack(alignment: .leading, spacing: Space.lg) {
             if let space { header(space) }
@@ -112,6 +113,11 @@ struct TabSwitcher: View {
           .padding(.horizontal, Space.gutter)
           .padding(.top, Space.sm)
           .padding(.bottom, 52 + Space.xxl)
+        }
+        // Opened from a page, on that page's card, so the page has its card to shrink into.
+        .onAppear {
+          if browser.opening != nil { reader.scrollTo(app.activeTabId, anchor: .center) }
+        }
         }
         .offset(x: shift)
         if shift != 0, let index {
@@ -657,8 +663,14 @@ private struct TabCard: View {
                 .stroke(active ? BayColor.accent : BayColor.hairline, lineWidth: active ? 2.5 : 1 / UIScreen.main.scale))
             .background(GeometryReader { geometry in
               Color.clear
-                .onAppear { frame = geometry.frame(in: .global) }
-                .onChange(of: geometry.frame(in: .global)) { frame = $0 }
+                .onAppear {
+                  frame = geometry.frame(in: .global)
+                  browser.cardFrames[tab.id] = frame
+                }
+                .onChange(of: geometry.frame(in: .global)) {
+                  frame = $0
+                  browser.cardFrames[tab.id] = $0
+                }
             })
         }
         .buttonStyle(.plain)
@@ -673,6 +685,8 @@ private struct TabCard: View {
         .accessibilityAddTraits(active ? .isSelected : [])
         .modifier(MoveToSpaceActions(tab: tab, browser: browser))
         .accessibilityIdentifier("tab-card-\(index)")
+        // While the page shrinks into this card, or grows out of it, the page is the card.
+        .opacity(browser.opening?.id == tab.id || browser.zoom?.tab.id == tab.id ? 0 : 1)
         Button(action: close) {
           BayIconView(.close, size: 12, color: .white)
             .frame(width: 22, height: 22)

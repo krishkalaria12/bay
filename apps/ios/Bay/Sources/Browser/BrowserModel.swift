@@ -453,10 +453,16 @@ final class BrowserModel: ObservableObject {
     }
   }
 
-  /// Holds `tab`'s picture over its page until the page has drawn: at once for a page that's loaded, else once it's
-  /// most of the way loaded, so a tab coming back from its saved state never shows white.
+  /// Holds `tab`'s picture over its page until the page has drawn (most of the way loaded), so a tab coming back from
+  /// its saved state never shows white. A page already drawn gets none.
   func cover(_ tab: BrowserTab) {
     coverTask?.cancel()
+    // WebKit keeps every loaded page drawn: one that's there already needs no picture, which would only ghost over it.
+    guard !drawn(tab.id) else {
+      swipeCover = nil
+      swipeCoverShown = false
+      return
+    }
     swipeCover = tab
     swipeCoverShown = true
     coverTask = Task { [weak self] in
@@ -617,9 +623,10 @@ final class BrowserModel: ObservableObject {
     if report.playing { pauseMediaLeft() }
   }
 
-  /// A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from.
+  /// A card picked in the switcher grows into its page (`TabMorph`).
   func pick(_ tab: BrowserTab, frame: CGRect) {
-    guard tab.snapshot != nil, !UIAccessibility.isReduceMotionEnabled else {
+    guard zoom == nil else { return }
+    guard !UIAccessibility.isReduceMotionEnabled else {
       activate(tab.id)
       if !tab.url.isEmpty { cover(tab) }
       return
@@ -631,7 +638,7 @@ final class BrowserModel: ObservableObject {
     guard let zoom else { return }
     self.zoom = nil
     activate(zoom.tab.id)
-    cover(zoom.tab)
+    if !zoom.tab.url.isEmpty { cover(zoom.tab) }
   }
 
   // MARK: Tips
@@ -722,17 +729,58 @@ final class BrowserModel: ObservableObject {
     return app.tabs.filter { $0.url.isEmpty || !pinned.contains($0.url) }
   }
 
+  /// Where each tab's card sits in the switcher, on screen: the page shrinks into it and grows out of it.
+  var cardFrames: [String: CGRect] = [:]
+  /// The page shrinking into its card as the switcher opens, until it lands (`openingDone`).
+  @Published private(set) var opening: BrowserTab?
+  private var openingTask: Task<Void, Never>?
+
+  /// Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+  /// its card is the page as it is now.
   func showTabs() {
-    if hasPage { capture(app.activeTabId) }
-    overlay = .tabs
+    guard hasPage, let tab = activeTab, !UIAccessibility.isReduceMotionEnabled else {
+      if hasPage { capture(app.activeTabId) }
+      overlay = .tabs
+      return
+    }
+    guard openingTask == nil else { return }
+    openingTask = Task { [weak self] in
+      guard let self else { return }
+      await self.captureNow(tab.id, waiting: Self.openPictureWait)
+      self.opening = self.app.tabs.first { $0.id == tab.id } ?? tab
+      self.overlay = .tabs
+      self.openingTask = nil
+    }
+  }
+
+  func openingDone() {
+    opening = nil
+  }
+
+  /// How long opening the switcher waits for a fresh picture of the page before shrinking the last one.
+  private static let openPictureWait: UInt64 = 400_000_000
+
+  /// Takes the tab's picture, waiting at most `waiting` nanoseconds for it; one that comes later still lands.
+  private func captureNow(_ tabId: String, waiting: UInt64) async {
+    guard let task = captureTask(tabId) else { return }
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { await task.value }
+      group.addTask { try? await Task.sleep(nanoseconds: waiting) }
+      await group.next()
+      group.cancelAll()
+    }
   }
 
   /// Takes the tab's picture for the switcher now. Private tabs and failed pages keep none.
   func capture(_ tabId: String) {
+    _ = captureTask(tabId)
+  }
+
+  private func captureTask(_ tabId: String) -> Task<Void, Never>? {
     guard let view = views[tabId], !failed.contains(tabId),
           app.tabs.first(where: { $0.id == tabId })?.private == false
-    else { return }
-    Task { [weak self] in
+    else { return nil }
+    return Task { [weak self] in
       guard let uri = try? await view.snapshot() else { return }
       self?.app.dispatch(
         .updateTab(id: tabId, update: TabUpdate(url: nil, title: nil, favicon: nil, lastVisit: nil, snapshot: .some(uri))))
