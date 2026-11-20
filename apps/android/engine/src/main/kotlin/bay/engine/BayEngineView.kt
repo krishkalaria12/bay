@@ -117,14 +117,28 @@ class BayEngineView(context: Context) : FrameLayout(context) {
   /** Hidden tabs stay mounted; keep them out of TalkBack. */
   var isActive = true
     set(value) {
+      val was = field
       field = value
       tab?.view?.importantForAccessibility = accessibility()
       if (value) lastActive = this
       // The tab on screen draws: it takes the window's one compositor from the tab that had it.
-      if (value) tab?.showPage()
+      if (value && !was) takeSurface()
       // Leaving the screen is a good moment to save (B6): the tab may be the next one unmounted for memory.
       if (!value) saveState()
     }
+
+  /**
+   * Puts the page on the window's compositor. A page that has finished loading sends no new frame of its own, so the
+   * new surface would stay blank until it next changed: hiding and showing it again makes its renderer draw one, as a
+   * tab switch does in Chrome.
+   */
+  private fun takeSurface() {
+    val current = tab ?: return
+    current.showPage()
+    if (isSuspended) return
+    current.setVisible(false)
+    current.setVisible(true)
+  }
 
   /** Hidden tabs that aren't playing media stop drawing, and their timers slow. */
   var isSuspended = false
@@ -641,7 +655,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     // A page shown over the tab (a link's preview) gives the window's compositor back to the tab on screen.
     val onScreen = live.lastOrNull { it.isActive && it.tab != null }
     if (lastActive === this) lastActive = onScreen
-    onScreen?.tab?.showPage()
+    onScreen?.takeSurface()
   }
 
   private class PendingPermission(val request: Int, val name: String, val system: Array<String>, val requireAll: Boolean = true)
