@@ -155,7 +155,8 @@ struct BrowserBar: View {
   @ObservedObject var browser: BrowserModel
   let onSettings: () -> Void
   var onChecks: () -> Void = {}
-  @State private var swipe: CGFloat = 0
+  /// Which way the drag on the bar went once it could tell: sideways slides between tabs, up opens the tab view.
+  @State private var swipeAxis: Axis?
   /// When a hold on Tabs last let go, so the tap the lift also makes doesn't open the tab view.
   @State private var holdEnded = Date.distantPast
   /// Holding Tabs: the column of spaces above the bar, and the one under the finger.
@@ -273,32 +274,30 @@ struct BrowserBar: View {
       }
   }
 
-  /// Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
+  /// Dragging the bar sideways slides the page to the tab before (right) or after (left) under the finger, as Arc
+  /// Search's bar does (BrowserModel.swipeMoved); dragging it up opens the tab view.
   private var tabSwipe: some Gesture {
     DragGesture(minimumDistance: 16)
       .onChanged { value in
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-        let step = value.translation.width < 0 ? 1 : -1
-        let open = browser.app.tabs.indices.contains((browser.app.tabs.firstIndex { $0.id == browser.app.activeTabId } ?? 0) + step)
-        swipe = value.translation.width * (open ? 0.4 : 0.12)
+        if swipeAxis == nil {
+          swipeAxis = abs(value.translation.width) > abs(value.translation.height) ? .horizontal : .vertical
+        }
+        if swipeAxis == .horizontal { browser.swipeMoved(value.translation.width) }
       }
       .onEnded { value in
-        let distance = value.translation.width
-        let flick = value.predictedEndTranslation.width - distance
-        withAnimation(Motion.settle.animation) { swipe = 0 }
-        // Up opens the tab switcher: far enough, or flicked up.
-        let up = -value.translation.height
-        if up > abs(distance) {
-          if up > 110 || (up > 20 && -value.predictedEndTranslation.height > 260) {
-            Haptics.press()
-            browser.app.dispatch(.tipSeen(id: .bar))
-            browser.showTabs()
-          }
+        let axis = swipeAxis
+        swipeAxis = nil
+        if axis == .horizontal {
+          browser.swipeEnded(value.translation.width, predicted: value.predictedEndTranslation.width, width: UIScreen.main.bounds.width)
           return
         }
-        guard abs(distance) > 64 || abs(flick) > 120 else { return }
-        Haptics.press()
-        browser.swipeTabs(distance < 0 ? 1 : -1)
+        // Up opens the tab switcher: far enough, or flicked up.
+        let up = -value.translation.height
+        if up > 110 || (up > 20 && -value.predictedEndTranslation.height > 260) {
+          Haptics.press()
+          browser.app.dispatch(.tipSeen(id: .bar))
+          browser.showTabs()
+        }
       }
   }
 
@@ -329,8 +328,6 @@ struct BrowserBar: View {
       }
     }
     .buttonStyle(.pressFeedback)
-    .offset(x: swipe)
-    .opacity(1 - min(abs(swipe) / 110, 0.6))
     .accessibilityLabel(Text(verbatim: label))
     .accessibilityIdentifier("bar-search")
   }

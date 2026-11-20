@@ -35,9 +35,13 @@ struct BrowserScreen: View {
         let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
         PagesHost(browser: browser, shown: shown, coveredBottom: coveredBottom)
           .ignoresSafeArea(edges: .bottom)
-          .offset(x: pageSlide)
+          .offset(x: pageSlide + browser.swipeOffset)
           .opacity(shown ? 1 : 0)
           .allowsHitTesting(shown)
+        if shown { swipePictures }
+      }
+      if let tab = browser.swipeCover, browser.overlay == .none {
+        TabPicture(tab: tab, color: browser.pageColors[tab.id]).opacity(browser.swipeCoverShown ? 1 : 0)
       }
       if browser.overlay == .tabs {
         WallpaperView(id: app.preferences.wallpaper)
@@ -206,6 +210,18 @@ struct BrowserScreen: View {
     }
   }
 
+  /// A swipe along the bar: the tab coming in beside the moving page.
+  @ViewBuilder private var swipePictures: some View {
+    if let tab = browser.swipeIncoming {
+      let width = UIScreen.main.bounds.width + Self.swipeGap
+      TabPicture(tab: tab, color: browser.pageColors[tab.id])
+        .offset(x: browser.swipeOffset + (browser.swipeOffset < 0 ? width : -width))
+    }
+  }
+
+  /// The gap between the page and the tab coming in beside it.
+  private static let swipeGap: CGFloat = 12
+
   /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
   private var searchOverDarkPage: Bool {
     guard !browser.searchInNewTab, let rgb = browser.pageColors[app.activeTabId], rgb.count >= 3 else { return false }
@@ -260,5 +276,53 @@ struct BrowserScreen: View {
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
+  }
+}
+
+/// A tab's picture where its page would be, or its title on a plain page when it has none yet.
+struct TabPicture: View {
+  let tab: BrowserTab
+  let color: [Double]?
+  /// Read as the picture first shows, so it never comes in blank.
+  @State private var image: UIImage?
+
+  init(tab: BrowserTab, color: [Double]?) {
+    self.tab = tab
+    self.color = color
+    _image = State(initialValue: Self.load(tab.snapshot))
+  }
+
+  var body: some View {
+    let back = color.flatMap { $0.count >= 3 ? Color(red: $0[0] / 255, green: $0[1] / 255, blue: $0[2] / 255) : nil } ?? BayColor.background
+    ZStack(alignment: .top) {
+      back
+      if let image {
+        Image(uiImage: image).resizable().scaledToFill()
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+          .clipped()
+      } else {
+        VStack(spacing: Space.md) {
+          SiteIcon(url: tab.url, size: 48)
+          BayText(pageTitle(title: tab.title, url: tab.url), variant: .headline).multilineTextAlignment(.center).lineLimit(2)
+          BayText(displayUrl(url: tab.url), variant: .footnote, tone: .muted).lineLimit(1)
+        }
+        .padding(Space.xl)
+        .frame(maxHeight: .infinity)
+      }
+    }
+    .ignoresSafeArea(edges: .bottom)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+
+  /// Pictures are small JPEGs the engine writes; the last few stay decoded, so a drag shows one at once.
+  private static let cache = NSCache<NSString, UIImage>()
+
+  static func load(_ snapshot: String?) -> UIImage? {
+    guard let snapshot, let path = URL(string: snapshot)?.path else { return nil }
+    if let cached = cache.object(forKey: path as NSString) { return cached }
+    guard let image = UIImage(contentsOfFile: path) else { return nil }
+    cache.setObject(image, forKey: path as NSString)
+    return image
   }
 }

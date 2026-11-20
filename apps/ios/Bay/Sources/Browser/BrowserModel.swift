@@ -4,6 +4,7 @@ import BayEngine
 import Combine
 import Foundation
 import LocalAuthentication
+import SwiftUI
 import UIKit
 
 /// What a search opens: a page, an open tab, or a tab back from the archive.
@@ -393,12 +394,93 @@ final class BrowserModel: ObservableObject {
 
   // MARK: The bar
 
-  /// Moves to the tab before (-1) or after (1) the one showing, in the switcher's order.
-  func swipeTabs(_ step: Int) {
-    guard let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }), app.tabs.indices.contains(index + step) else { return }
-    app.dispatch(.tipSeen(id: .bar))
-    capture(app.activeTabId)
-    activate(app.tabs[index + step].id)
+  // MARK: Sliding between tabs
+
+  /// Sliding the bar sideways, as Arc Search does: the page follows the finger and the tab beside it comes in as its
+  /// picture; let go far or fast enough and it carries on to that tab, else it springs back. The picture stays over the
+  /// page it became for a moment, while a page that wasn't loaded draws.
+  @Published private(set) var swipeOffset: CGFloat = 0
+  /// The tab coming in beside the page, while there is one that way.
+  @Published private(set) var swipeIncoming: BrowserTab?
+  /// The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`).
+  @Published private(set) var swipeCover: BrowserTab?
+  @Published private(set) var swipeCoverShown = false
+  private var swipeSettling: DispatchWorkItem?
+
+  /// The tab the other side of the page, in the switcher's order: left of it for a drag right, and so on.
+  private func neighbour(towards: CGFloat) -> BrowserTab? {
+    guard towards != 0, let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }) else { return nil }
+    let next = index + (towards < 0 ? 1 : -1)
+    return app.tabs.indices.contains(next) ? app.tabs[next] : nil
+  }
+
+  /// The finger has moved `distance` along the bar since the drag began.
+  func swipeMoved(_ distance: CGFloat) {
+    swipeSettling?.cancel()
+    if swipeCover != nil {
+      coverTask?.cancel()
+      swipeCover = nil
+      swipeCoverShown = false
+    }
+    let next = neighbour(towards: distance)
+    if next?.id != swipeIncoming?.id { swipeIncoming = next }
+    // Past the first or last tab the page gives a little, and comes back.
+    swipeOffset = next == nil ? distance * 0.18 : distance
+  }
+
+  /// The finger left after `distance`, heading for `predicted`: on to the tab coming in, or back.
+  func swipeEnded(_ distance: CGFloat, predicted: CGFloat, width: CGFloat) {
+    let target = neighbour(towards: distance)
+    let flicked = abs(predicted - distance) > 120 && (predicted - distance).sign == distance.sign
+    guard let target, abs(distance) > width * 0.28 || flicked else {
+      withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { swipeOffset = 0 }
+      settle(after: 0.32) { [weak self] in self?.swipeIncoming = nil }
+      return
+    }
+    Haptics.press()
+    withAnimation(.spring(response: 0.26, dampingFraction: 1)) { swipeOffset = distance < 0 ? -width : width }
+    settle(after: 0.24) { [weak self] in
+      guard let self else { return }
+      self.cover(target)
+      self.swipeIncoming = nil
+      self.swipeOffset = 0
+      self.app.dispatch(.tipSeen(id: .bar))
+      self.capture(self.app.activeTabId)
+      self.activate(target.id)
+    }
+  }
+
+  /// Holds `tab`'s picture over its page until the page has drawn: at once for a page that's loaded, else once it's
+  /// most of the way loaded, so a tab coming back from its saved state never shows white.
+  func cover(_ tab: BrowserTab) {
+    coverTask?.cancel()
+    swipeCover = tab
+    swipeCoverShown = true
+    coverTask = Task { [weak self] in
+      let start = Date()
+      try? await Task.sleep(nanoseconds: 140_000_000)
+      while !Task.isCancelled, let self, self.app.activeTabId == tab.id, !self.drawn(tab.id), Date().timeIntervalSince(start) < 4 {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      guard !Task.isCancelled, let self else { return }
+      withAnimation(.easeOut(duration: 0.18)) { self.swipeCoverShown = false }
+      try? await Task.sleep(nanoseconds: 180_000_000)
+      if !Task.isCancelled { self.swipeCover = nil }
+    }
+  }
+
+  private var coverTask: Task<Void, Never>?
+
+  /// The page has something on screen: it finished loading, or is most of the way there.
+  private func drawn(_ id: String) -> Bool {
+    guard let state = navigation[id], !state.url.isEmpty else { return false }
+    return !state.isLoading || state.progress >= 0.5
+  }
+
+  private func settle(after seconds: Double, _ work: @escaping @MainActor () -> Void) {
+    let item = DispatchWorkItem { MainActor.assumeIsolated { work() } }
+    swipeSettling = item
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: item)
   }
 
   /// The page showing is on a site that keeps the bar and status bar hidden, and the bar isn't back for a moment. Find
@@ -536,6 +618,7 @@ final class BrowserModel: ObservableObject {
   func pick(_ tab: BrowserTab, frame: CGRect) {
     guard tab.snapshot != nil, !UIAccessibility.isReduceMotionEnabled else {
       activate(tab.id)
+      if !tab.url.isEmpty { cover(tab) }
       return
     }
     zoom = (tab, frame)
@@ -545,6 +628,7 @@ final class BrowserModel: ObservableObject {
     guard let zoom else { return }
     self.zoom = nil
     activate(zoom.tab.id)
+    cover(zoom.tab)
   }
 
   // MARK: Tips
