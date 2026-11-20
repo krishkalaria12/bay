@@ -1551,6 +1551,18 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           through the core's <code>MoveFolder</code>; VoiceOver and TalkBack get Move up and Move down.
         </li>
         <li>
+          <b>Steady scrolling done:</b> the page is never resized as the bar scrolls away or comes back. A resize mid-scroll laid the page out again, and on
+          Android it also reallocated the page's surface (a black band for a frame), so the whole page shook, worst while it loaded. On iPhone the bar's inset
+          stays put and the page scrolls under the glass; on Android the page runs to the screen's foot under the floating bar. The bar listens only to the
+          person's own scrolling (a finger or its fling: <code>isTracking</code>/<code>isDecelerating</code> on iPhone, Chromium's scroll and fling gestures on
+          Android), never to a page shifting itself as it loads, and goes after 48 down in one go, back after 24 up.
+        </li>
+        <li>
+          <b>Gap:</b> on Android, what a site pins to its bottom (a cookie banner, a chat box) sits under the bar while it shows. Lifting it needs Chromium's
+          browser controls in the engine (a bottom controls height, the renderer not shrunk, and the controls' offset sent back to move the bar), as Chrome
+          does.
+        </li>
+        <li>
           <b>Choice:</b> typing a site you've visited ("im" with IMDb pages in history) keeps the inline completion, and the site's row comes second, so typing
           an address still goes there.
         </li>
