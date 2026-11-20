@@ -63,4 +63,10 @@ public interface BayTabClient {
 
     /** Vertical scroll, in CSS pixels. */
     void onScroll(float offsetY, float deltaY);
+
+    /**
+     * Where the bar ({@link BayTab#setBottomControlsHeight}) is, in physical pixels below its place: 0 when it shows in
+     * full, its height when it has scrolled away. Called each frame it moves, in step with the page.
+     */
+    default void onBottomControlsChanged(int offset) {}
 }

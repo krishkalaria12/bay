@@ -70,6 +70,7 @@ source_set("lib") {
     "//base",
     "//bay/filter",
     "//bay/filter/mojom",
+    "//cc",
     "//components/android_autofill/browser:android",
     "//components/autofill/content/browser",
     "//components/autofill/content/renderer",
