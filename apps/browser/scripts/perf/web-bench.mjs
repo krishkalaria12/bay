@@ -253,13 +253,19 @@ try {
     traceConfig: { includedCategories: ["toplevel", "devtools.timeline", "blink.user_timing", "v8.execute", "blink", "cc"] },
   });
 
-  const phases = { "no input": 0, click: 0, wheel: 0 };
+  const phases = { "idle 2 s": 0, "no input": 0, hover: 0, click: 0, wheel: 0 };
 
   const phase = async (name, run) => {
     await evaluate(`performance.mark("bench ${name} start")`);
     await run();
     await evaluate(`performance.mark("bench ${name} end")`);
   };
+
+  // Two seconds of nothing, waited out with a timer, so only the app asks for frames: an idle window should draw none.
+  await phase("idle 2 s", async () => {
+    await evaluate(`new Promise((r) => setTimeout(r, 2000))`);
+    phases["idle 2 s"] = 1;
+  });
 
   // Two frames with no input: the floor under the others.
   await phase("no input", async () => {
@@ -275,6 +281,16 @@ try {
       onEach();
     }
   };
+
+  // The pointer moving down the rows, one row at a time: each move leaves one row and enters the next.
+  await phase("hover", async () => {
+    for (let round = 0; round < rounds; round++)
+      for (const [, x, y] of targets) {
+        await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x + 60, y });
+        await evaluate(frames);
+        phases.hover++;
+      }
+  });
 
   await phase("click", async () => {
     for (let round = 0; round < rounds; round++) await clickRows(() => phases.click++);
@@ -338,7 +354,14 @@ try {
 
   let profiledClicks = 0;
   await evaluate(`globalThis.__bayPreviewCalls = {}`);
-  await clickRows(() => profiledClicks++);
+
+  // --react wheel: the profiled round wheels the sidebar instead (its numbers are then per wheel).
+  if (flags.react === "wheel")
+    for (let round = 0; round < 20; round++, profiledClicks++) {
+      await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: 150, y: 450, deltaX: 0, deltaY: round < 10 ? 240 : -240 });
+      await evaluate(frames);
+    }
+  else await clickRows(() => profiledClicks++);
   const nativeCalls = await evaluate(`globalThis.__bayPreviewCalls`);
   const commits = await evaluate(`(globalThis.bayProfiling.stop(), benchCommits)`);
   const roots = await evaluate(`[...benchRoots]`);
@@ -460,7 +483,18 @@ function busyByPhase(events, counts) {
       .map(([key, micros]) => `${key} ${(micros / 1000 / count).toFixed(2)}`)
       .join(", ");
 
-    lines.push(`${name.padEnd(9)} ${(busy / 1000 / count).toFixed(2).padStart(6)} ms busy each (${count})  ${top}`);
+    const frames = within.filter((event) => event.name === "FireAnimationFrame").length;
+    // The tasks that ran animation frames, and what they took in all: the app's animations, which go on after a click.
+    const tasks = within.filter((event) => /RunTask/.test(event.name));
+
+    const animating = tasks.filter((task) =>
+      within.some((event) => event.name === "FireAnimationFrame" && event.ts >= task.ts && event.ts < task.ts + task.dur),
+    );
+
+    const frameMs = animating.reduce((sum, task) => sum + task.dur, 0) / 1000;
+    lines.push(
+      `${name.padEnd(9)} ${(busy / 1000 / count).toFixed(2).padStart(6)} ms busy each (${count}), of it ${(frameMs / count).toFixed(2)} ms in ${(frames / count).toFixed(1)} animation frames  ${top}`,
+    );
   }
 
   return lines.join("\n");
