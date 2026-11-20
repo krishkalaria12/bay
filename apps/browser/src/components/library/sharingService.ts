@@ -26,7 +26,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Http, HttpError } from "../../effect/ports/http";
 
-const ORIGIN = "https://bay.krishkalaria.in";
+const ORIGIN = "https://baybrowser.in";
 const FILE = "easel-shares.json";
 
 const account = (id: string) => `easel-share:${id}`;

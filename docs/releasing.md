@@ -8,7 +8,7 @@ Bay has two channels, both built, signed, notarized and published by `.github/wo
 
 ## Channels
 
-One feed, `appcast.xml` on the latest stable GitHub release (`SUFeedURL`, `bay.krishkalaria.in/appcast.xml`, redirects
+One feed, `appcast.xml` on the latest stable GitHub release (`SUFeedURL`, `baybrowser.in/appcast.xml`, redirects
 there). A stable item has no channel; a nightly's carries `<sparkle:channel>nightly</sparkle:channel>`
 (`generate_appcast --channel nightly`). Sparkle skips an item on a channel the app doesn't allow and allows none by
 default, so every copy on Stable, and every build shipped before channels existed, only sees stable items. A copy on
@@ -29,8 +29,8 @@ Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updat
   prerelease (so latest, `/download` and the feed's home stay on stable) and re-uploads the merged feed onto the latest
   stable release. `publish.sh` merges the new item onto the feed as published at that moment, keeping the newest 3
   per channel, and deletes nightly releases beyond the newest 5 (never one the feed still lists).
-- **Downloads.** Stable: `bay.krishkalaria.in/download` (`Bay.dmg` on the latest release). Nightly:
-  `bay.krishkalaria.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
+- **Downloads.** Stable: `baybrowser.in/download` (`Bay.dmg` on the latest release). Nightly:
+  `baybrowser.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
   each nightly replaces.
 - **Notes.** A stable's are `release-notes/<version>.md` (the site, the GitHub release and the update dialog). A
   nightly's are the `feat`, `fix` and `perf` commit subjects since the previous release
