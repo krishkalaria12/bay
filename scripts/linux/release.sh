@@ -6,7 +6,7 @@
 #
 # Formats default to tar,deb,rpm,appimage,aur; add nix for a NixOS closure. Both aur and nix need tar.
 # Set BAY_GPG_KEY to sign every artifact and
-# SHA256SUMS with detached ASCII signatures. Publishing is a separate step.
+# SHA256SUMS with detached ASCII signatures. scripts/linux/publish.sh publishes them.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -24,6 +24,17 @@ done
 [[ -n "$app" && -n "$version" ]] || { echo "usage: $0 --app DIR --version X.Y.Z [--output DIR] [--formats LIST]" >&2; exit 2; }
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must be X.Y.Z: $version" >&2; exit 2; }
 want() { [[ ",$formats," == *",$1,"* ]]; }
+# makepkg --printsrcinfo's layout for this PKGBUILD's fields, so the AUR copy can be made where makepkg isn't installed.
+srcinfo() (
+  # shellcheck source=/dev/null
+  source "$1"
+  printf 'pkgbase = %s\n\tpkgdesc = %s\n\tpkgver = %s\n\tpkgrel = %s\n\turl = %s\n' "$pkgname" "$pkgdesc" "$pkgver" "$pkgrel" "$url"
+  for field in arch license depends optdepends provides conflicts options source sha256sums; do
+    eval 'values=("${'"$field"'[@]}")'
+    for value in "${values[@]}"; do printf '\t%s = %s\n' "$field" "$value"; done
+  done
+  printf '\npkgname = %s\n' "$pkgname"
+)
 need() { command -v "$1" >/dev/null || { echo "$2 needs $1 on PATH" >&2; exit 1; }; }
 want aur && ! want tar && { echo "the aur format needs tar" >&2; exit 2; }
 want nix && ! want tar && { echo "the nix format needs tar" >&2; exit 2; }
@@ -119,7 +130,9 @@ if want appimage; then
   cp "$root/usr/share/icons/hicolor/256x256/apps/bay.png" "$appdir/bay.png"
   ln -s bay.png "$appdir/.DirIcon"
   image="$output/Bay-$version-x86_64.AppImage"
-  (cd "$output" && ARCH=x86_64 appimagetool --no-appstream -u "gh-releases-zsync|krishkalaria12|bay|latest|Bay-*-x86_64.AppImage.zsync" \
+  # Updates read one fixed file, which scripts/linux/publish.sh points at each release's image, so they don't depend on
+  # GitHub's latest release, which is the Mac app's.
+  (cd "$output" && ARCH=x86_64 appimagetool --no-appstream -u "zsync|https://bay.krishkalaria.in/linux/Bay-x86_64.AppImage.zsync" \
     "$appdir" "$image" >/dev/null)
   artifacts+=("$image" "$image.zsync")
 fi
@@ -127,7 +140,7 @@ fi
 if want aur; then
   mkdir -p "$output/aur"
   sed -e "s/@VERSION@/$version/" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" "$packaging/aur/PKGBUILD.in" >"$output/aur/PKGBUILD"
-  if command -v makepkg >/dev/null; then (cd "$output/aur" && makepkg --printsrcinfo >.SRCINFO); fi
+  srcinfo "$output/aur/PKGBUILD" >"$output/aur/.SRCINFO"
 fi
 
 if want nix; then
