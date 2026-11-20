@@ -736,10 +736,31 @@ final class BrowserModel: ObservableObject {
     panel = .pin
   }
 
-  /// Pins a tab's page that way, or unpins it when it is already pinned so.
-  func pin(_ tab: BrowserTab, kind: PinKind, folderId: String?) {
-    panel = nil
-    app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: kind, folderId: folderId))
+  /// Sets how a tab's page is pinned from its sheet, which stays open: nil unpins it (with Undo), and a pin already
+  /// there moves rather than toggling off.
+  func setPin(_ tab: BrowserTab, kind: PinKind?, folderId: String?) {
+    let current = app.pins.first { $0.url == tab.url }
+    guard let kind else {
+      if let current {
+        Haptics.tick()
+        unpin(current)
+      }
+      return
+    }
+    if let current {
+      guard current.kind != kind || current.folderId != folderId else { return }
+      movePin(current, kind: kind, folderId: folderId)
+    } else {
+      Haptics.tick()
+      app.dispatch(.pinSite(tabId: tab.id, pinId: UUID().uuidString, kind: kind, folderId: folderId))
+    }
+  }
+
+  /// A copy of a tab beside it, in the background.
+  func duplicate(_ tab: BrowserTab) {
+    guard !tab.url.isEmpty else { return }
+    Haptics.tick()
+    openTab(tab.url, privately: tab.private, background: true)
   }
 
   /// A pin's page: its tab in the space when one is open there, else a new one.
