@@ -4,10 +4,11 @@
 // over Mojo. The browser process is left out (it forwards the JSON here). The state is js-bench's seed profile
 // (seed.mjs: 200 tabs, 5000 history entries, 1000 bookmarks).
 //
-//   cd apps/browser && node --no-warnings --import ./src/test-loader.mjs scripts/perf/runtime-bench.mjs [rounds]
+//   cd apps/browser && node --no-warnings --import ./src/test-loader.mjs scripts/perf/runtime-bench.mjs [rounds] [--whole]
 //
-// Prints each stage's median from Bay's own spans, and JSON.stringify/JSON.parse of the same commit as the floor a
-// full-state commit can't go under.
+// Commits are deltas, as with an engine that takes them (`partialCommits`); --whole sends the whole state each time,
+// as an older engine has it. Prints each stage's median from Bay's own spans, and JSON.stringify/JSON.parse of the
+// whole commit, the floor a whole-state commit can't go under.
 
 import { PerformanceObserver } from "node:perf_hooks";
 
@@ -19,7 +20,8 @@ const { createBrowserClient } = await import("../../src/runtime/client.ts");
 const { createAppRuntimeTransport } = await import("../../../../packages/platform/src/runtimeTransport.ts");
 const { buildSeed } = await import("./seed.mjs");
 
-const rounds = Number(process.argv[2] ?? 60);
+const rounds = Number(process.argv.slice(2).find((arg) => /^\d+$/.test(arg)) ?? 60);
+const whole = process.argv.includes("--whole");
 const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1] ?? 0;
 const tick = () => new Promise(setImmediate);
 
@@ -80,8 +82,16 @@ function endpoints(bootstrap, onPublish) {
 let latest = "";
 const windows = [];
 
-const coordinatorEnds = endpoints({ version: 1, role: "coordinator", epoch, clientId: "coordinator" }, (json) => {
-  latest = json;
+const sent = [];
+
+const coordinatorBootstrap = { version: 1, role: "coordinator", epoch, clientId: "coordinator" };
+
+if (!whole) coordinatorBootstrap.partialCommits = true;
+
+const coordinatorEnds = endpoints(coordinatorBootstrap, (json) => {
+  // A window's snapshot is the whole state: the first commit is.
+  latest ||= json;
+  sent.push(json.length);
 
   for (const window of windows) window.emit("commit", json);
 });
@@ -149,7 +159,9 @@ if (client.getSnapshot()?.revision !== revision) throw new Error(`the window is 
 
 const row = (name, values) => console.log(`${name.padEnd(36)} ${median(values).toFixed(3).padStart(8)} ms`);
 
-console.log(`commit: ${(latest.length / 1024).toFixed(0)} KB, ${rounds} rounds, one window\n`);
+console.log(
+  `${whole ? "whole commits" : "deltas"}: ${(median(sent.slice(1)) / 1024).toFixed(1)} KB each (the whole state is ${(latest.length / 1024).toFixed(0)} KB), ${rounds} rounds, one window\n`,
+);
 
 row("coordinator project", totals.project);
 
