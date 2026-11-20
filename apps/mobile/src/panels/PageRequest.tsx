@@ -32,7 +32,7 @@ const permissionMessages: Record<NonNullable<PageRequest["permission"]>, Message
 
 /**
  * A page's `alert`/`confirm`/`prompt` (I3), the server's HTTP sign-in (B3), a link to another app (B5) or a device
- * permission (B7), as one shared sheet on both apps instead of WebKit's or WebView's own dialogs. The engine holds the
+ * permission (B7), as one shared sheet on both apps instead of WebKit's or Chromium's own dialogs. The engine holds the
  * page paused until this answers, so dismissing the sheet cancels the dialog, as a dismissed browser dialog would.
  */
 export function PageRequestPanel({ request, onAnswer }: PageRequestPanelProps): JSX.Element {

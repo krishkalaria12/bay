@@ -1,4 +1,4 @@
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 
 #include <algorithm>
 #include <atomic>
@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -47,7 +48,7 @@
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "mojo/public/cpp/system/string_data_source.h"
-#include "bay/core/mojom/nncore.mojom.h"
+#include "bay/filter/mojom/scriptlets.mojom.h"
 #include "base/json/json_writer.h"
 #include "net/base/data_url.h"
 #include "net/base/ip_address.h"
@@ -153,6 +154,16 @@ const char* TypeOf(const network::ResourceRequest& request) {
     default:
       return "other";
   }
+}
+
+// A request that goes without its cookies whatever its credentials mode. Only CEF's net_cookie_flags.patch (desktop)
+// has the load flag for that; Android's engine is plain Chromium, where the credentials mode alone decides.
+bool DoesNotSendCookies(const network::ResourceRequest& request) {
+#if BUILDFLAG(IS_ANDROID)
+  return false;
+#else
+  return request.load_flags & net::LOAD_DO_NOT_SEND_COOKIES;
+#endif
 }
 
 struct Decision {
@@ -754,7 +765,7 @@ class FilteringLoader : public network::mojom::URLLoader,
     }
     const bool reads_cookie = std::string_view(wanted).find("\"cookie\"") != std::string::npos;
     free(wanted);
-    if (!reads_cookie || !frame_ || (request_.load_flags & net::LOAD_DO_NOT_SEND_COOKIES) ||
+    if (!reads_cookie || !frame_ || DoesNotSendCookies(request_) ||
         !network::cors::CalculateCredentialsFlag(
             request_.credentials_mode, force_omit_same_origin_credentials_
                                            ? network::mojom::FetchResponseType::kCors

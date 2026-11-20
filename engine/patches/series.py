@@ -10,6 +10,8 @@
                                                  remake a patch: edit there, diff against --until the line above)
   series.py files                                every path the series touches, by step
 
+Every command takes --platform mac|win|linux|android to use only the steps that platform takes (see `series`).
+
 The base is the tree as CEF's own patches, ungoogled-chromium and domain substitution leave it, before any line of
 `series`: ~/chromium-build/series-base (NN_SERIES_BASE), one file per touched path, relative to chromium/src (CEF's
 files under cef/). `check` exits 0 when every step applies strictly (git apply: no fuzz) and the result equals the
@@ -34,8 +36,9 @@ BASE = os.environ.get("NN_SERIES_BASE", os.path.expanduser("~/chromium-build/ser
 
 
 class Step:
-    def __init__(self, kind, name, line):
+    def __init__(self, kind, name, line, platforms="all"):
         self.kind, self.name, self.line = kind, name, line
+        self.platforms = platforms
 
     def __repr__(self):
         return f"{self.kind} {self.name}"
@@ -99,17 +102,35 @@ def layer_paths(layer):
     return dedupe([(d, True) for d in dirs] + out)
 
 
-def read_series():
+DESKTOP = ("mac", "win", "linux")
+PLATFORMS = (*DESKTOP, "android")
+
+
+def selects(platforms, target):
+    """Whether a step for `platforms` (a series column) goes into `target`'s tree. `all` means every desktop."""
+    if platforms == "all":
+        return target in DESKTOP
+    return target in platforms.split(",")
+
+
+def read_series(target=None):
+    """The steps in order: every one, or only those `target` takes."""
+    if target is not None and target not in PLATFORMS:
+        sys.exit(f"unknown series platform: {target}")
     steps = []
     for n, raw in enumerate(open(os.path.join(HERE, "series")), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
-        kind, _, name = line.partition(" ")
-        name = name.strip()
-        if kind not in ("cef", "chromium", "layer") or not name:
-            sys.exit(f"series:{n}: expected `cef|chromium|layer <name>`: {raw.rstrip()}")
-        step = Step(kind, name, n)
+        fields = line.split()
+        if len(fields) != 3:
+            sys.exit(f"series:{n}: expected `cef|chromium|layer <platforms> <name>`: {raw.rstrip()}")
+        kind, platforms, name = fields
+        selected = platforms.split(",")
+        valid_platforms = platforms == "all" or (set(selected) <= set(PLATFORMS) and len(selected) == len(set(selected)))
+        if kind not in ("cef", "chromium", "layer") or not valid_platforms:
+            sys.exit(f"series:{n}: invalid kind or platform: {raw.rstrip()}")
+        step = Step(kind, name, n, platforms)
         if kind != "layer" and not os.path.isfile(step.patch):
             sys.exit(f"series:{n}: no such patch {name}")
         if kind == "layer" and not os.path.isfile(os.path.join(REPO, name, "apply.sh")):
@@ -119,7 +140,9 @@ def read_series():
     unlisted = sorted(set(f for f in os.listdir(HERE) if f.endswith(".patch")) - set(names))
     if unlisted:
         sys.exit("patches missing from series: " + ", ".join(unlisted))
-    return steps
+    if target is None:
+        return steps
+    return [step for step in steps if selects(step.platforms, target)]
 
 
 def run(cmd, cwd, env=None, check=False):
@@ -202,14 +225,14 @@ def base_from_git(path, out):
 
 
 def cmd_files(args):
-    for step in read_series():
+    for step in read_series(args.platform):
         print(f"{step}:")
         for path, is_dir in step.paths():
             print(f"  {path}{'/' if is_dir else ''}")
 
 
 def cmd_apply(args):
-    for step in read_series():
+    for step in read_series(args.platform):
         if args.phase and phase_of(step) != args.phase:
             continue
         if step.kind != "layer" and is_applied(step, SRC):
@@ -222,7 +245,7 @@ def cmd_apply(args):
 
 
 def cmd_capture_base(args):
-    steps = [s for s in read_series() if not args.phase or phase_of(s) == args.phase]
+    steps = [s for s in read_series(args.platform) if not args.phase or phase_of(s) == args.phase]
     created = set().union(*(s.created() for s in steps))
     count = 0
     for path, is_dir in touched(steps):
@@ -259,7 +282,7 @@ def materialize(steps, out, until=None, report=None):
 
 
 def cmd_materialize(args):
-    steps = read_series()
+    steps = read_series(args.platform)
     if args.until not in [s.name for s in steps]:
         sys.exit(f"{args.until} isn't in series")
     os.makedirs(args.dir, exist_ok=True)
@@ -270,7 +293,7 @@ def cmd_materialize(args):
 def cmd_check(args):
     if not os.path.isdir(BASE):
         sys.exit(f"no base at {BASE}: run `series.py capture-base` on a tree before its series is applied")
-    steps = read_series()
+    steps = read_series(args.platform)
     scratch = args.keep or tempfile.mkdtemp(prefix="nn-series-")
     os.makedirs(scratch, exist_ok=True)
     try:
@@ -311,19 +334,22 @@ def tree_differs(cmp):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    platform = argparse.ArgumentParser(add_help=False)
+    platform.add_argument("--platform", choices=PLATFORMS,
+                          help="only the steps this platform takes (default: every step)")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("apply")
+    p = sub.add_parser("apply", parents=[platform])
     p.add_argument("--phase", choices=["cef", "chromium"])
-    p = sub.add_parser("check")
+    p = sub.add_parser("check", parents=[platform])
     p.add_argument("--keep", metavar="DIR", help="scratch directory to keep")
     p.add_argument("-v", "--verbose", action="store_true")
-    p = sub.add_parser("capture-base")
+    p = sub.add_parser("capture-base", parents=[platform])
     p.add_argument("--phase", choices=["cef", "chromium"])
     p.add_argument("--force", action="store_true", help="replace files already captured")
-    p = sub.add_parser("materialize")
+    p = sub.add_parser("materialize", parents=[platform])
     p.add_argument("--until", required=True)
     p.add_argument("dir")
-    sub.add_parser("files")
+    sub.add_parser("files", parents=[platform])
     args = parser.parse_args()
     handler = {"apply": cmd_apply, "check": cmd_check, "capture-base": cmd_capture_base,
                "materialize": cmd_materialize, "files": cmd_files}[args.command]

@@ -233,16 +233,28 @@ enum BayTracking {
   }
 }
 
-/// Private tabs share one non-persistent data store. Nothing else holds it, so it goes away, with its cookies and
-/// storage, once the last private page view closes; the next private tab starts a fresh session.
+/// Private tabs share one non-persistent data store. The app holds it while any private tab exists
+/// (`setPrivateSessionActive`), mounted or not, since only a few page views stay live; once the last private tab
+/// closes and its views go, the store goes with its cookies and storage, and the next private tab starts fresh.
 enum BayPrivateBrowsing {
   private static weak var current: WKWebsiteDataStore?
+  private static var retained: WKWebsiteDataStore?
+  private static var active = false
 
   static func dataStore() -> WKWebsiteDataStore {
     if let current { return current }
     let store = WKWebsiteDataStore.nonPersistent()
     current = store
+    if active { retained = store }
     return store
+  }
+
+  /// False means no private tab is left: the session is over, so the next private tab gets a new store even if a
+  /// closing page still holds this one for a moment.
+  static func setActive(_ value: Bool) {
+    active = value
+    retained = value ? current : nil
+    if !value { current = nil }
   }
 }
 

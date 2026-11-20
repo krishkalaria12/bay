@@ -14,9 +14,9 @@ if (${skipAmp} && (root.hasAttribute("amp") || root.hasAttribute("⚡"))) {
 }
 const size = ${textSize};
 const state = (window[Symbol.for("bay.tweaks")] ??= {});
-// CSS zoom scales text and images and reflows the page, on both engines. Android's WebView ignores text-size-adjust.
+// CSS zoom scales text and images and reflows the page, the same on both engines.
 // It goes on <body>: Reader and the element picker attach to <html> and keep their own sizes.
-// ponytail: a page using 100vw widths can overflow sideways when zoomed; native page zoom (WebSettings.textZoom,
+// ponytail: a page using 100vw widths can overflow sideways when zoomed; native page zoom (Chromium's zoom level,
 // WKWebView.pageZoom) is the upgrade if that shows up.
 if (document.body && (size !== 100 || state.size)) {
   document.body.style.setProperty("zoom", size === 100 ? "" : String(size / 100));

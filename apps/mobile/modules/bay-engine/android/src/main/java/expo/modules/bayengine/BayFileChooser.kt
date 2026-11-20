@@ -3,32 +3,28 @@ package expo.modules.bayengine
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.webkit.ValueCallback
 import expo.modules.kotlin.events.OnActivityResultPayload
 
 /**
- * File upload (A1): the system's file picker for `<input type="file">`.
- * WebKit opens it natively on iOS; on Android the WebView only calls
- * `WebChromeClient.onShowFileChooser`, so Bay launches the picker itself and
- * delivers the chosen files back to that callback. Only one chooser can be
- * pending at a time (a second request cancels the first, as Chrome does).
- * Results travel back through the module's `OnActivityResult` (the view has
- * no activity-result handler of its own).
+ * File upload (A1): the system's file picker for `<input type="file">`. WebKit opens it natively on iOS; on Android
+ * the engine asks the page view (BayTabClient.onFileChooser), which launches the picker and hands the chosen files
+ * back to the page. Only one chooser can be pending at a time (a second request cancels the first, as Chrome does).
+ * Results travel back through the module's `OnActivityResult` (the view has no activity-result handler of its own).
  */
 object BayFileChooser {
   const val REQUEST_CODE = 7919
 
   /** The pending upload's result sink, or null when no picker is open. Main thread only. */
-  var callback: ValueCallback<Array<Uri>>? = null
+  var callback: ((Array<Uri>?) -> Unit)? = null
     private set
 
-  fun setPending(pending: ValueCallback<Array<Uri>>?) {
+  fun setPending(pending: ((Array<Uri>?) -> Unit)?) {
     callback = pending
   }
 
   /** Cancels the pending upload, delivering null so the page treats it as a cancelled picker. */
   fun cancelPending() {
-    callback?.onReceiveValue(null)
+    callback?.invoke(null)
     callback = null
   }
 
@@ -39,7 +35,7 @@ object BayFileChooser {
     callback = null
     if (pending == null) return true
     val uris = if (payload.resultCode == Activity.RESULT_OK) urisFrom(payload.data) else null
-    pending.onReceiveValue(uris)
+    pending(uris)
     return true
   }
 
