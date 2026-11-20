@@ -608,6 +608,71 @@ mod tests {
     }
 
     #[test]
+    fn a_moved_pin_goes_into_its_folder_and_beside_the_pin_it_was_dropped_on() {
+        let dir = temp_dir("pins");
+        let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);
+        for (id, url) in [
+            ("a", "https://a.example/"),
+            ("b", "https://b.example/"),
+            ("c", "https://c.example/"),
+        ] {
+            store.dispatch(Action::NewTab {
+                tab: tab(id, url),
+                background: false,
+            });
+            store.dispatch(Action::PinSite {
+                tab_id: id.into(),
+                pin_id: format!("pin-{id}"),
+                kind: PinKind::Row,
+                folder_id: None,
+            });
+        }
+        store.dispatch(Action::NewFolder {
+            folder: BrowserFolder {
+                id: "read".into(),
+                space_id: PERSONAL_SPACE_ID.into(),
+                name: "Reading".into(),
+            },
+        });
+        let pins = || store.pinned_sites(PERSONAL_SPACE_ID.into());
+        let order = || pins().iter().map(|pin| pin.id.clone()).collect::<Vec<_>>();
+        store.dispatch(Action::MovePin {
+            id: "pin-c".into(),
+            kind: PinKind::Row,
+            folder_id: None,
+            beside: Some("pin-a".into()),
+            after: false,
+        });
+        assert_eq!(order(), ["pin-c", "pin-a", "pin-b"]);
+        store.dispatch(Action::MovePin {
+            id: "pin-c".into(),
+            kind: PinKind::Row,
+            folder_id: None,
+            beside: Some("pin-b".into()),
+            after: true,
+        });
+        assert_eq!(order(), ["pin-a", "pin-b", "pin-c"]);
+        store.dispatch(Action::MovePin {
+            id: "pin-b".into(),
+            kind: PinKind::Row,
+            folder_id: Some("read".into()),
+            beside: None,
+            after: false,
+        });
+        assert_eq!(order(), ["pin-a", "pin-b", "pin-c"]);
+        assert_eq!(pins()[1].folder_id.as_deref(), Some("read"));
+        // A folder that isn't there leaves it loose; an Essential has no folder.
+        store.dispatch(Action::MovePin {
+            id: "pin-b".into(),
+            kind: PinKind::Essential,
+            folder_id: Some("read".into()),
+            beside: None,
+            after: false,
+        });
+        assert_eq!(pins()[1].folder_id, None);
+    }
+
+    #[test]
     fn a_saved_page_says_where_it_is_and_new_ones_start_in_the_last_folder() {
         let dir = temp_dir("save");
         let store = BrowserStore::open(dir.to_string_lossy().into(), "first".into(), 5);

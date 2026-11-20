@@ -572,10 +572,16 @@ pub enum Action {
         #[serde(default)]
         folder_id: Option<String>,
     },
+    /// A pin made an Essential or a pinned row, into a folder or out of one, and put beside the pin `beside` when given
+    /// (a row dragged onto another): after it when `after`, else before it.
     MovePin {
         id: String,
         kind: PinKind,
         folder_id: Option<String>,
+        #[serde(default)]
+        beside: Option<String>,
+        #[serde(default)]
+        after: bool,
     },
     SyncSpacePins {
         space_id: String,
@@ -1385,12 +1391,20 @@ pub fn reduce(data: &BrowserData, action: &Action) -> Option<BrowserData> {
             id,
             kind,
             folder_id,
+            beside,
+            after,
         } => {
             let folder_id = valid_pin_folder(data, *kind, folder_id.as_deref());
-            for site in next.pinned_sites.iter_mut().filter(|site| &site.id == id) {
-                site.kind = *kind;
-                site.folder_id = folder_id.clone();
-            }
+            let at = next.pinned_sites.iter().position(|site| &site.id == id)?;
+            let mut site = next.pinned_sites.remove(at);
+            site.kind = *kind;
+            site.folder_id = folder_id;
+            let place = beside
+                .as_ref()
+                .filter(|beside| *beside != id)
+                .and_then(|beside| next.pinned_sites.iter().position(|site| &site.id == beside))
+                .map_or(at, |place| place + usize::from(*after));
+            next.pinned_sites.insert(place, site);
         }
 
         Action::RemovePin { id } => next.pinned_sites.retain(|site| &site.id != id),
