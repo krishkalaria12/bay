@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../effect/windowPorts.ts";
 // The notifications (lib/notificationService.ts): what a site may show, and what a closed page gets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -46,7 +47,10 @@ const fakeEngine = () => {
 
 const withService = async (use) => {
   const engine = fakeEngine();
-  const runtime = ManagedRuntime.make(NotificationService.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, Diagnostics.layer))));
+
+  const runtime = ManagedRuntime.make(
+    NotificationService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(engine.layer, Diagnostics.layer))),
+  );
 
   try {
     await use({ lab: engine.lab, runtime });

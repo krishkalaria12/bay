@@ -100,13 +100,13 @@ emit "$tmp/full.png"  512 "$set_dir/icon_256x256_2x.png"
 emit "$tmp/full.png"  512 "$set_dir/icon_512x512_1x.png"
 emit "$tmp/full.png"  1024 "$set_dir/icon_512x512_2x.png"
 
-echo "web: favicons, touch icon, manifest icon and the site's header image"
+echo "web: favicons, touch icon, manifest icon and the site's logo (SVG, so it stays sharp)"
 cp "$assets/app-icon-small.svg" "$web/public/favicon.svg"
-emit "$tmp/small.png" 32 "$tmp/favicon-32.png"
-magick "$tmp/favicon-32.png" "$web/public/favicon.ico"
+for size in 16 32 48; do emit "$tmp/small.png" "$size" "$tmp/favicon-$size.png"; done
+magick "$tmp/favicon-16.png" "$tmp/favicon-32.png" "$tmp/favicon-48.png" "$web/public/favicon.ico"
 opaque "$tmp/bleed.png" 180 "$web/public/apple-touch-icon.png"
 emit "$tmp/full.png" 512 "$web/public/icon-512.png"
-cp "$assets/app-icon.png" "$web/src/assets/app-icon.png"
+cp "$assets/app-icon.svg" "$web/src/assets/app-icon.svg"
 
 echo "videos: the icon in the release videos' intros"
 cp "$assets/app-icon.png" "$root/apps/videos/public/app-icon.png"

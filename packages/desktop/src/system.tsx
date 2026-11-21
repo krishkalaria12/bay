@@ -1,5 +1,7 @@
-import { requireNativeModule, requireNativeViewManager } from "expo-modules-core";
-import { View, type ViewProps } from "react-native";
+import { isMac, View } from "@bay/platform";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "./nativeViews";
+import { requireNativeModule, nativeSnapshot } from "@bay/platform/native";
 
 export type MenuShortcut = {
   id: string;
@@ -21,7 +23,7 @@ const System = requireNativeModule<{
   setAsDefaultBrowser(): Promise<boolean>;
   launchAtLoginStatus(): Promise<LaunchAtLoginStatus>;
   setLaunchAtLogin(enabled: boolean): Promise<void>;
-  fileExists(path: string): boolean;
+  fileExists(path: string): Promise<boolean>;
   // Optional: a build from before it has none.
   downloadsFolder?(): string | null;
   openFile(path: string): Promise<boolean>;
@@ -44,17 +46,18 @@ const System = requireNativeModule<{
 export type RecordedShortcut = { key: string; modifiers: ShortcutModifier[]; keyCode: number };
 
 /** A global shortcut's registration: "taken" when another app holds the key, or macOS refused it. */
-export type HotKeyStatus = "ok" | "off" | "taken";
+export type HotKeyStatus = "ok" | "off" | "taken" | "unavailable";
 
 export const isDefaultBrowser = () => System.isDefaultBrowser();
 export const setAsDefaultBrowser = () => System.setAsDefaultBrowser();
 export const launchAtLoginStatus = () => System.launchAtLoginStatus();
 export const setLaunchAtLogin = (enabled: boolean) => System.setLaunchAtLogin(enabled);
 
-export const fileExists = (path: string) => System.fileExists(path);
+// macOS still exposes a synchronous Expo function; the web host performs async IO.
+export const fileExists = async (path: string): Promise<boolean> => System.fileExists(path);
 
 /** ~/Downloads, as macOS names it. */
-export const downloadsFolder = (): string | null => System.downloadsFolder?.() ?? null;
+export const downloadsFolder = (): string | null => nativeSnapshot("BaySystem", "downloadsFolder", [], () => System.downloadsFolder?.() ?? null);
 export const openFile = (path: string) => System.openFile(path);
 export const revealFile = (path: string) => System.revealFile(path);
 
@@ -66,9 +69,30 @@ export const moveToTrash = (path: string) => System.moveToTrash(path);
 export const renameFile = (path: string, name: string): Promise<string | null> => System.renameFile?.(path, name) ?? Promise.resolve(null);
 export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size);
 export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
-export const hapticTick = () => System.hapticTick();
+
+// Only a Mac trackpad has one to play; the other hosts don't implement it.
+export const hapticTick = () => {
+  if (isMac) System.hapticTick();
+};
+
 export const menuShortcuts = () => System.menuShortcuts();
-export const recordShortcut = () => System.recordShortcut();
+
+/** The next key press as a shortcut, or null when cancelled. As on macOS a click cancels; the web host only sees keys,
+ *  so its document watches for clicks, and for focus leaving it for a page or another window. */
+export const recordShortcut = async (): Promise<RecordedShortcut | null> => {
+  if (isMac) return System.recordShortcut();
+  const cancel = () => void System.cancelRecording();
+  window.addEventListener("pointerdown", cancel, true);
+  window.addEventListener("blur", cancel);
+
+  try {
+    return await System.recordShortcut();
+  } finally {
+    window.removeEventListener("pointerdown", cancel, true);
+    window.removeEventListener("blur", cancel);
+  }
+};
+
 export const cancelShortcutRecording = () => System.cancelRecording();
 
 /** Little Bay's menu bar button (Settings › Links), opening one from any app. */

@@ -21,9 +21,10 @@ import * as Scope from "effect/Scope";
 import * as v from "valibot";
 import type { Operation } from "../effect/errors";
 import { Diagnostics } from "../effect/ports/diagnostics";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
-import { engineProfile, isIncognitoSpace } from "../store/model";
+import { engineProfileFor, isIncognitoSpace } from "../store/model";
 import type { HistoryEntry } from "../store/types";
 import { CHROME_HISTORY_KEEPS_MS, HISTORY_CHUNK, LEGACY_HISTORY_FILE, LEGACY_HISTORY_KEPT_MS, LEGACY_HISTORY_TOLERANCE_MS } from "./constants";
 
@@ -68,8 +69,6 @@ export class HistoryEngine extends Context.Service<
 
 // MARK: The view
 
-const store = () => useBrowser.getState();
-
 // The pages the app's History, command bar and sync show: Chrome also keeps extension pages (a hidden helper's
 // chrome-extension:// page among them), which the app never listed.
 export const shownInHistory = (url: string) => /^(https?|file):/i.test(url);
@@ -87,15 +86,15 @@ const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
   ...new Set(
     Object.keys(s.spaces)
       .filter((id) => !isIncognitoSpace(id))
-      .map(engineProfile),
+      .map((id) => engineProfileFor(id, s.spaces)),
   ),
 ];
 
 const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
-  Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfile(id) === engine);
+  Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfileFor(id, s.spaces) === engine);
 
-function viewOf(engine: string): HistoryEntry[] {
-  const s = store();
+function viewOf(browser: BrowserStore, engine: string): HistoryEntry[] {
+  const s = browser.getState();
 
   for (const id of profilesUsing(s, engine)) if (s.history[id]) return s.history[id]!;
 
@@ -108,8 +107,8 @@ function viewOf(engine: string): HistoryEntry[] {
  *
  * `ready`: sync may use a view only once history.json is in Chrome; before, its visits would read as deleted.
  */
-function setView(engine: string, list: HistoryEntry[], floor: number | undefined, ready: boolean) {
-  useBrowser.setState((s) => {
+function setView(browser: BrowserStore, engine: string, list: HistoryEntry[], floor: number | undefined, ready: boolean) {
+  browser.setState((s) => {
     const ids = profilesUsing(s, engine);
     const was = ids.map((id) => s.historyFloor[id] ?? -Infinity).reduce((a, b) => Math.max(a, b), -Infinity);
     const full = list.length >= MAX_HISTORY ? list[list.length - 1]!.lastVisit : -Infinity;
@@ -117,9 +116,18 @@ function setView(engine: string, list: HistoryEntry[], floor: number | undefined
 
     if (ids.every((id) => s.history[id] === list && (s.historyFloor[id] ?? -Infinity) === next && (!ready || s.historyReady[id]))) return {};
 
+    // An absent floor means the complete history is visible. Keep the unbounded
+    // value out of state so coordinator snapshots remain JSON serializable.
+    const historyFloor = { ...s.historyFloor };
+
+    for (const id of ids) {
+      if (next === -Infinity) delete historyFloor[id];
+      else historyFloor[id] = next;
+    }
+
     return {
       history: { ...s.history, ...Object.fromEntries(ids.map((id) => [id, list])) },
-      historyFloor: { ...s.historyFloor, ...Object.fromEntries(ids.map((id) => [id, next])) },
+      historyFloor,
       ...(ready ? { historyReady: { ...s.historyReady, ...Object.fromEntries(ids.map((id) => [id, true as const])) } } : undefined),
     };
   });
@@ -210,6 +218,10 @@ export class History extends Context.Service<
   static readonly layer = Layer.effect(
     History,
     Effect.gen(function* () {
+      const browser = (yield* AuthorityStore).store;
+      const store = () => browser.getState();
+      const view = (profile: string) => viewOf(browser, profile);
+      const show = (profile: string, list: HistoryEntry[], floor: number | undefined, ready: boolean) => setView(browser, profile, list, floor, ready);
       const engine = yield* HistoryEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
@@ -227,6 +239,9 @@ export class History extends Context.Service<
       // watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
       // the startup JS), all of them ignored, and the views are read again after it anyway.
       let moving = false;
+
+      // Moves when the service stops: a read that was already waiting for Chrome does not write its answer.
+      let generation = 0;
 
       // Sync may use a view only once history.json is in Chrome: before, its visits would read as deleted.
       let legacyMoved = false;
@@ -263,6 +278,8 @@ export class History extends Context.Service<
 
       const readProfile = (profile: string, state: Read): Effect.Effect<void, HistoryError> =>
         Effect.gen(function* () {
+          const run = generation;
+
           do {
             state.again = false;
             state.queued = [];
@@ -270,6 +287,9 @@ export class History extends Context.Service<
             yield* engine.watch(profile);
 
             const entries = yield* engine.query(profile, MAX_HISTORY, MAX_VISIT_TIMES);
+
+            // The service stopped while Chrome was answering: the answer is not this store's to show.
+            if (run !== generation) return;
             // Chrome had more URLs than the view reads: the older ones may be missing (shown or not).
             const floor = entries.length >= MAX_HISTORY ? Math.min(...entries.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
 
@@ -282,7 +302,7 @@ export class History extends Context.Service<
 
             if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
 
-            setView(profile, list, floor, legacyMoved);
+            show(profile, list, floor, legacyMoved);
             loaded.add(profile);
           } while (state.again);
         });
@@ -368,7 +388,7 @@ export class History extends Context.Service<
 
           for (const [spaceId, list] of Object.entries(file.history ?? {})) {
             if (!s.spaces[spaceId] || isIncognitoSpace(spaceId) || !Array.isArray(list)) continue;
-            const profile = engineProfile(spaceId);
+            const profile = engineProfileFor(spaceId, s.spaces);
 
             // Profiles sharing data saved the same list.
             if (!perEngine.has(profile)) perEngine.set(profile, list);
@@ -442,7 +462,7 @@ export class History extends Context.Service<
           return;
         }
 
-        setView(profile, applyHistoryChange(viewOf(profile), change), undefined, legacyMoved);
+        show(profile, applyHistoryChange(view(profile), change), undefined, legacyMoved);
       };
 
       const onSpaces = (s: BrowserState, prev: BrowserState) => {
@@ -454,9 +474,9 @@ export class History extends Context.Service<
         // A profile sharing another's data shows its list at once.
         for (const id of Object.keys(s.spaces)) {
           if (prev.spaces[id] || isIncognitoSpace(id) || s.history[id]) continue;
-          const list = viewOf(engineProfile(id));
+          const list = view(engineProfileFor(id, s.spaces));
 
-          if (list.length) setView(engineProfile(id), list, undefined, legacyMoved);
+          if (list.length) show(engineProfileFor(id, s.spaces), list, undefined, legacyMoved);
         }
       };
 
@@ -473,6 +493,7 @@ export class History extends Context.Service<
       };
 
       const stopWatchingNow = () => {
+        generation++;
         stopWatching?.();
         stopWatching = undefined;
         forget();
@@ -482,12 +503,15 @@ export class History extends Context.Service<
         if (stopWatching) return Effect.void;
 
         const events = onHistoryChanged(changed);
-        const stopSubscription = useBrowser.subscribe(onSpaces);
+        const stopSubscription = browser.subscribe(onSpaces);
 
         stopWatching = () => {
           events.remove();
           stopSubscription();
         };
+
+        // A stop while the old file moves in ends this start: a later start reads the views again.
+        const run = generation;
 
         return Effect.gen(function* () {
           // The app's scope owns the listener and the subscription.
@@ -499,6 +523,8 @@ export class History extends Context.Service<
 
           const result = yield* migrate();
 
+          if (run !== generation) return;
+
           legacyMoved = result !== "kept";
 
           if (moving) {
@@ -507,7 +533,7 @@ export class History extends Context.Service<
           } else if (result === "moved") {
             yield* reload();
           } else if (legacyMoved) {
-            for (const profile of loaded) setView(profile, viewOf(profile), undefined, legacyMoved);
+            for (const profile of loaded) show(profile, view(profile), undefined, legacyMoved);
           }
         });
       });

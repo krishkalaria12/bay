@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { MouseArea, Symbol } from "@bay/desktop";
 import { useEffect } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { openModeFor, openUrl } from "../bookmarks/actions";
 import { openInternalPage } from "../pages/pageUrls";
@@ -32,7 +33,7 @@ function OpenHistoryMenu({
   const spaceId = useQuietBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
   const favicons = useHistoryFavicons(spaceId, menu.items);
 
-  const open = (item: HistoryItem, e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
+  const open = (item: HistoryItem, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
     const mode = openModeFor(e);
 
     if (mode === "current" || mode === "split" || !item.url) {
@@ -93,7 +94,7 @@ function Row({
 }: {
   item: HistoryItem;
   favicon: string | null;
-  onOpen: (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => void;
+  onOpen: (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => void;
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();

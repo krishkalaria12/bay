@@ -1,9 +1,11 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as settingsCommands from "../../runtime/settingsActions";
 import * as v from "valibot";
 import { isJsonObject, type JsonInput } from "../../lib/json";
 import { copyText } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { changedIds } from "../../store/recordDiff";
 import { activeTabId } from "../../store/model";
 import { showToast } from "../split/splitActions";
@@ -20,7 +22,7 @@ export function setDeveloperMode(url: string, on: boolean) {
   if (!site) return;
   const s = useBrowser.getState();
   const sites = (s.settings.developerSites ?? []).filter((x) => x !== site);
-  s.updateSettings({ developerSites: on ? [...sites, site] : sites });
+  reportBrowserCommand(settingsCommands.updateSettings({ developerSites: on ? [...sites, site] : sites }));
   declined.add(site);
   useDeveloperUi.setState((u) => ({ offers: withoutSite(u.offers, site) }));
 }

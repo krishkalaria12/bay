@@ -1,11 +1,16 @@
+import * as v from "valibot";
 import * as shell from "@bay/desktop";
 import { readDocument, writeDocument } from "@bay/desktop";
+import { requireOptionalNativeModule } from "@bay/platform/native";
+import { getNativeHostInfo } from "@bay/platform/nativeBridge";
+import { Platform } from "react-native";
 import { omniboxDrivers } from "../components/commandBar/devDriver";
 import { pagesDrivers } from "../components/pages/devDrivers";
 import { usePages } from "../components/window/pageState";
 import { openSettings } from "../components/settings/windows";
 import { useSidebarUi } from "../components/sidebar/state";
 import { useBrowser } from "../store/browserStore";
+import { browserRead } from "../store/read";
 import * as actions from "./actions";
 import { runCommand } from "./appCommands";
 import * as favicons from "./favicons";
@@ -18,7 +23,35 @@ type DevEvalBody = { result: JsonValue | null } | { error: string };
 
 type DevEvalError = JsonInput | Error;
 
+// The desktop host's documents: one coordinator holds the store, and each window its own views.
+type WebHost = { role: "coordinator" | "window"; windowId?: string };
+
+function webHost(): WebHost | null {
+  if (Platform.OS !== "web") return null;
+  const { runtimeRole, windowId } = getNativeHostInfo().constants.BayShell ?? {};
+
+  return { role: runtimeRole === "window" ? "window" : "coordinator", ...(v.is(v.string(), windowId) ? { windowId } : undefined) };
+}
+
+// What scripts call on macOS: the same modules, over the bridge.
+function installWebModules() {
+  // SAFETY: the checks above established this shape.
+  const global = globalThis as { expo?: { modules?: object } };
+  const expo = (global.expo ??= {});
+  const existing = expo.modules ?? {};
+  expo.modules = new Proxy(existing, {
+    get: (target, name, _receiver) =>
+      (v.is(v.string(), name) ? requireOptionalNativeModule(name) : null) ??
+      // SAFETY: the property is the key the target was asked for.
+      target[name as keyof typeof target],
+  });
+}
+
 export function startDevHarness() {
+  const host = webHost();
+
+  if (host) installWebModules();
+  const consoleLog = host ? `dev-console-${host.windowId ?? host.role}.log` : "dev-console.log";
   probeStore("pages", usePages);
   probeStore("sidebarUi", useSidebarUi);
   probeStore("favicons", favicons.useFavicons);
@@ -31,19 +64,24 @@ export function startDevHarness() {
 
       try {
         const line = `${new Date().toISOString()} ${level} ${args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" ")}\n`;
-        writeDocument("dev-console.log", (readDocument("dev-console.log") ?? "").slice(-200_000) + line);
+        writeDocument(consoleLog, (readDocument(consoleLog) ?? "").slice(-200_000) + line);
       } catch {}
     };
   }
 
   const nn = {
-    store: useBrowser,
+    host,
+    // A window document reads the coordinator's projection: its own useBrowser is never written.
+    store: host?.role === "window" ? browserRead : useBrowser,
     sidebarUi: useSidebarUi,
     get sidebarKeyboard(): typeof import("../components/sidebar/keyboard") & { model: typeof import("../components/sidebar/keyboardModel") } {
       return { ...require("../components/sidebar/keyboard"), model: require("../components/sidebar/keyboardModel") };
     },
     actions,
     runCommand,
+    get keyBindings(): typeof import("./keyBindings") {
+      return require("./keyBindings");
+    },
     get externalLinks(): typeof import("../components/littleBay/actions") {
       return require("../components/littleBay/actions");
     },
@@ -178,6 +216,9 @@ export function startDevHarness() {
 
   // SAFETY: nn is the dev harness's own surface, read only by dev scripts.
   (globalThis as { nn?: typeof nn }).nn = nn;
+
+  // The launcher evaluates over DevTools: a host's document snapshot doesn't see files it didn't write.
+  if (host) return;
   const scriptId = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];
   let lastId = scriptId(readDocument("dev-eval.js")) ?? "";
   setInterval(

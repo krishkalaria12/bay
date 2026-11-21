@@ -15,7 +15,9 @@ import {
 } from "../../lib/boosts";
 import { hex, SPACE_COLORS, spaceThemeKey, themeFor } from "../../lib/theme";
 import { onWebviewAttached, webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { hasServiceClient } from "../../runtime/serviceClient";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { newId } from "../../store/model";
 import { DEFAULT_SPACE } from "../../store/spaces";
 
@@ -36,12 +38,23 @@ export type BoostsState = {
 
 export const useBoosts = create<BoostsState>()(() => ({ loaded: false, error: null, on: true, boosts: {}, scripts: {}, scriptsAcknowledged: false }));
 
+let loaded = false;
 let started = false;
 
-export function startBoosts() {
-  if (started) return;
-  started = true;
+/** Sync loads the persisted Boosts without starting the page-style observers or their timers. */
+export function ensureBoostsLoaded() {
+  if (hasServiceClient() || loaded) return;
+  loaded = true;
   load();
+}
+
+/** The Boosts are the app's own: a window that only reads the app's state has none of its own to keep. */
+export const boostsAvailable = () => !hasServiceClient();
+
+export function startBoosts() {
+  if (!boostsAvailable() || started) return;
+  started = true;
+  ensureBoostsLoaded();
   useBoosts.subscribe((s, prev) => {
     if (!s.loaded || s.error) return;
 
@@ -140,7 +153,7 @@ export function spacePalette(s: BrowserState, spaceId: string): BoostPalette {
     foregroundTertiary: hex(theme.textTertiary),
     accent: hex(theme.powerUpColor ?? theme.accent),
     hover: hex(theme.tabHover),
-    colors,
+    colors: [...colors],
   };
 }
 
@@ -175,6 +188,7 @@ export const boostsForHost = (s: BoostsState, host: string) =>
 
 /** A new Boost for a site, on; null when Boosts can't be saved. */
 export function createBoost(host: string, name?: string): Boost | null {
+  if (!boostsAvailable()) return null;
   startBoosts();
   const s = useBoosts.getState();
 
@@ -188,6 +202,7 @@ export function createBoost(host: string, name?: string): Boost | null {
 
 /** Adds a Boost made elsewhere (an import), with its script off. */
 export function addBoost(boost: Boost, script = "") {
+  if (!boostsAvailable()) return;
   const s = useBoosts.getState();
 
   if (s.error) return;
@@ -201,13 +216,14 @@ export function updateBoost(id: string, patch: Partial<Omit<Boost, "id" | "host"
   const s = useBoosts.getState();
   const before = s.boosts[id];
 
-  if (!before || s.error) return;
+  if (!boostsAvailable() || !before || s.error) return;
   const next = normalizeBoost({ ...before, ...(patch instanceof Function ? patch(before) : patch), id, host: before.host, updatedAt: Date.now() });
 
   if (next) useBoosts.setState({ boosts: { ...s.boosts, [id]: next } });
 }
 
 export function deleteBoost(id: string) {
+  if (!boostsAvailable()) return;
   const s = useBoosts.getState();
 
   if (!s.boosts[id] || s.error) return;
@@ -219,6 +235,7 @@ export function deleteBoost(id: string) {
 }
 
 export function setBoostScript(id: string, patch: Partial<BoostScript>) {
+  if (!boostsAvailable()) return;
   const s = useBoosts.getState();
 
   if (!s.boosts[id] || s.error) return;
@@ -228,7 +245,9 @@ export function setBoostScript(id: string, patch: Partial<BoostScript>) {
   if (next) useBoosts.setState({ scripts: { ...s.scripts, [id]: next } });
 }
 
-export const setBoostsOn = (on: boolean) => useBoosts.setState({ on });
+export const setBoostsOn = (on: boolean) => {
+  if (boostsAvailable()) useBoosts.setState({ on });
+};
 
 export function addSelector(id: string, list: "zaps" | "focus", selector: string) {
   updateBoost(id, (b) => (b[list].includes(selector) ? {} : { [list]: [...b[list], selector] }));
@@ -240,6 +259,7 @@ export function removeSelector(id: string, list: "zaps" | "focus", selector: str
 
 /** Boosts synced from another Mac (sync/boosts.ts): replaces those it names, removes those it deleted. */
 export function applySyncedBoosts(upserts: Boost[], removed: string[]) {
+  if (!boostsAvailable()) return;
   const s = useBoosts.getState();
 
   if (s.error) return;

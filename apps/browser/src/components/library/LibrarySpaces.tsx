@@ -1,10 +1,14 @@
 import { ContextMenuArea, Symbol } from "@bay/desktop";
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { createSpace, switchSpace } from "../../lib/actions";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { activate } from "../../runtime/tabActions";
+import { switchSpace as switchSpaceCommand } from "../../runtime/windowActions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { childFolderIds } from "../../store/folders";
 import { spaceTabIds } from "../../store/model";
 import type { Tab } from "../../store/types";
@@ -95,8 +99,7 @@ function SpaceColumn({
   const tokens = useSidebarTokens();
 
   const showTab = (tab: Tab) => {
-    switchSpace(windowId, spaceId);
-    useBrowser.getState().activate(tab.id, windowId);
+    reportBrowserCommand(switchSpaceCommand(windowId, spaceId).then(() => activate(tab.id, windowId)));
   };
 
   const tabRow = (tab: Tab) => (

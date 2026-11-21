@@ -1,0 +1,14 @@
+diff --git a/content/public/common/content_features.cc b/content/public/common/content_features.cc
+--- a/content/public/common/content_features.cc
++++ b/content/public/common/content_features.cc
+@@ -1314,7 +1314,9 @@
+ BASE_FEATURE(kWebPayments, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ // Enables code caching for scripts used on WebUI pages.
+-BASE_FEATURE(kWebUICodeCache, base::FEATURE_DISABLED_BY_DEFAULT);
++// Bay: on, so chrome://bay's documents (its windows and coordinator) reuse
++// V8's compiled code for the app's bundle instead of compiling it each time.
++BASE_FEATURE(kWebUICodeCache, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ // Enables build-time generated resource-bundled code caches for WebUI pages.
+ // See crbug.com/375509504 for details.

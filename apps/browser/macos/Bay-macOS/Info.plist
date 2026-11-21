@@ -82,7 +82,7 @@
 	<key>NNFeedbackURL</key>
 	<string>https://github.com/krishkalaria12/bay/issues/new?body=%s</string>
 	<key>NNReleaseNotesURL</key>
-	<string>https://bay.krishkalaria.in/release-notes/</string>
+	<string>https://baybrowser.in/release-notes/</string>
 	<key>NNVideoTourURL</key>
 	<string></string>
 	<key>NSAppTransportSecurity</key>
@@ -127,7 +127,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://bay.krishkalaria.in/appcast.xml</string>
+	<string>https://baybrowser.in/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>NlcAKNGYmgQ9Nffs7CyuzHP9NIMpn0DpWlZmMXvQQZw=</string>
 	<key>SUScheduledCheckInterval</key>

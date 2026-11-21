@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://bay.krishkalaria.in">Website</a> ·
+  <a href="https://baybrowser.in">Website</a> ·
   <a href="https://github.com/krishkalaria12/bay/releases">Releases</a> ·
   <a href="#reporting-issues">Report an issue</a> ·
   <a href="#contributing">Contribute</a>
@@ -248,9 +248,9 @@ the runner leaves the global `xcode-select` setting unchanged.
 Signed releases (DMG, Sparkle zip and appcast): `scripts/release.sh <version>`, which reads its
 notes from `release-notes/<version>.md` and needs a Developer ID certificate, notarytool credentials
 (`scripts/.notary.env` or the `bay` keychain profile) and the Sparkle key in the login keychain
-(account `bay`). The app checks `bay.krishkalaria.in/appcast.xml` for updates and links to
-`bay.krishkalaria.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
-channel (`bay.krishkalaria.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
+(account `bay`). The app checks `baybrowser.in/appcast.xml` for updates and links to
+`baybrowser.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
+channel (`baybrowser.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
 [docs/releasing.md](docs/releasing.md).
 
 ### Environment variables
@@ -297,6 +297,16 @@ scripts/make-icon.sh
 It renders each SVG through headless Chrome at 1024 and downsamples with Lanczos, so it needs
 Chrome and ImageMagick. The geometry in the SVGs is computed, not drawn by hand: the squircle is
 `|x/a|⁵ + |y/a|⁵ = 1`, and the cable hangers sit on the same cubic béziers the cable is drawn from.
+
+## Windows port
+
+Bay targets desktop macOS and Windows 11 x64. The Windows port is in progress: on
+Windows, Bay's React UI runs on react-native-web as a Chrome WebUI page, with tabs
+embedded through SurfaceEmbed, on the same NNCore engine as macOS. See the
+[port plan](docs/windows-port-plan.html) and the
+[implementation status and Windows commands](docs/windows-implementation-status.md).
+Mobile application targets are disabled. Native macOS code remains in packages'
+existing `ios` source directories.
 
 ## License
 

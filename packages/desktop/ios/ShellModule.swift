@@ -393,7 +393,7 @@ public class ShellModule: Module {
           try contents.write(to: url, atomically: true, encoding: .utf8)
           promise.resolve(true)
         } catch {
-          promise.resolve(false)
+          promise.reject("ERR_SAVE_TEXT_FILE", error.localizedDescription)
         }
       }
     }.runOnQueue(.main)

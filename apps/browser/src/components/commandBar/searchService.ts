@@ -13,6 +13,8 @@ import {
   type SearchEngine,
   type SuggestFetcher,
 } from "@bay/core";
+import * as chromium from "@bay/chromium";
+import { isMac } from "@bay/platform";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
@@ -23,6 +25,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import type { Operation } from "../../effect/errors";
+import { createSuggestionFetch } from "./suggestFetch";
 
 // MARK: The network
 
@@ -70,9 +73,15 @@ export class SearchNetwork extends Context.Service<
   {
     /** Reads the payload at `url`. The caller's signal stops the request when the work is cancelled. */
     readonly fetch: (url: string, signal: AbortSignal, request?: SearchRequest) => Effect.Effect<SearchPayload, SearchFailure>;
+    /**
+     * Asks the engine for an engine's suggestions, for the profile that registered it and the window that asks. Off
+     * the Mac a page's fetch is held to CORS, so suggestions go through the engine; the Mac's fetch has no such limit.
+     */
+    readonly suggest?: (profile: string, url: string, client: string) => Promise<{ body: string }>;
   }
 >()("bay/SearchNetwork") {
   static readonly layer = Layer.succeed(SearchNetwork)({
+    suggest: isMac ? undefined : (profile, url, client) => chromium.engineCall("nn_search_suggestions", profile, { url, client }),
     fetch: (url, signal, request) =>
       Effect.tryPromise({
         try: (effectSignal) => {
@@ -113,6 +122,13 @@ export type SuggestRequest = {
   readonly query: string;
   /** Whether the engine may be asked at all. */
   readonly policy: SearchPolicy;
+  /**
+   * The engine profile the engine's suggestions are asked in: "" for a built-in engine, which carries no profile state,
+   * and null for an extension's engine whose profile is gone. Only the engine's own route reads it.
+   */
+  readonly profile?: string | null;
+  /** The window that asks. */
+  readonly client?: string;
   /** Where the answer goes, when it is still the one the field is waiting for. */
   readonly onResult: (suggestions: string[]) => void;
 };
@@ -161,6 +177,8 @@ type Session = {
   suggestionsFiber: Fiber.Fiber<void> | undefined;
   /** The fiber waiting for the currency answer. */
   currencyFiber: Fiber.Fiber<void> | undefined;
+  /** The profile and window of the current suggestion request, for the engine's own route. */
+  readonly route: { profile: string | null; client: string };
 };
 
 export class SearchService extends Context.Service<
@@ -211,13 +229,25 @@ export class SearchService extends Context.Service<
 
         if (existing) return existing;
 
+        const native = network.suggest;
+        const route: Session["route"] = { profile: "", client: "" };
+
+        // Off the Mac the engine answers: the request goes in the profile that registered the engine, never another.
+        const suggestFetch = createSuggestionFetch(
+          fetchLike,
+          native &&
+            ((url) =>
+              route.profile === null ? Promise.reject(new Error("The search extension profile is unavailable")) : native(route.profile, url, route.client)),
+        );
+
         const created: Session = {
-          fetcher: createSuggestFetcher({ fetch: fetchLike }),
+          fetcher: createSuggestFetcher({ fetch: suggestFetch }),
           rates: createCurrencyConverter({ fetch: fetchLike }),
           suggestions: 0,
           currency: 0,
           suggestionsFiber: undefined,
           currencyFiber: undefined,
+          route,
         };
 
         sessions.set(id, created);
@@ -310,6 +340,9 @@ export class SearchService extends Context.Service<
           // The request that is current: an older answer never replaces it.
           state.suggestions++;
           const mine = state.suggestions;
+
+          state.route.profile = request.profile === undefined ? "" : request.profile;
+          state.route.client = request.client ?? "";
 
           // The previous request stops: its answer is not the one the field is waiting for.
           const previous = state.suggestionsFiber;

@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../../effect/ports/store.ts";
 // The app's own scripts (components/cli/automationService.ts): the folder the user keeps them in, and the engine
 // profiles they are loaded into.
 import assert from "node:assert/strict";
@@ -110,7 +111,13 @@ function fixture({
   );
 
   const { AutomationEngine, AutomationService, CliEngine } = module.exports;
-  const runtime = ManagedRuntime.make(AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer))));
+
+  const runtime = ManagedRuntime.make(
+    AutomationService.layer.pipe(
+      Layer.provide(AuthorityStore.layer(mocks["../../store/browserStore"].useBrowser)),
+      Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer)),
+    ),
+  );
 
   const run = (program, signal) => runtime.runPromise(program, { signal });
 
@@ -148,6 +155,9 @@ function fixture({
       current = value;
       notice();
     },
+    updateFolder: (value) => {
+      current = value;
+    },
     settled: async () => {
       for (let attempt = 0; attempt < 20; attempt++) await new Promise((resolve) => setImmediate(resolve));
     },
@@ -170,6 +180,41 @@ test("loads once per native profile and reports each public space", async () => 
   await f.settled();
   assert.equal(f.calls.filter((x) => x[0] === "install").length, 4);
   assert.equal(f.statuses.at(-1).generation, 2);
+  await f.dispose();
+});
+
+// The service reads a folder that is still being published again after a short wait (SCRIPTS_RETRY_MS).
+const afterRetry = () => new Promise((resolve) => setTimeout(resolve, 250));
+
+test("retries a locked or half-published generation without another watch event", async () => {
+  for (const state of ["busy", "pending"]) {
+    const f = fixture({ folder: { state } });
+
+    await f.start();
+    await f.schedule();
+    await f.settled();
+    assert.equal(f.statuses.length, 0);
+    f.updateFolder({ state: "ready", generation: 2, path: "/data/Scripts/extension", token: "two" });
+    await afterRetry();
+    await f.settled();
+    assert.equal(f.statuses[0].generation, 2);
+    assert.equal(f.calls.filter((x) => x[0] === "install").length, 2);
+    await f.dispose();
+  }
+});
+
+test("stops retrying publication when terminal control is switched off", async () => {
+  const f = fixture({ folder: { state: "busy" } });
+
+  await f.start();
+  await f.schedule();
+  await f.settled();
+  f.state.settings.cliControl = false;
+  f.updateFolder({ state: "ready", generation: 2, path: "/data/Scripts/extension", token: "two" });
+  await afterRetry();
+  await f.settled();
+  assert.equal(f.statuses.length, 0);
+  assert.equal(f.calls.filter((x) => x[0] === "install").length, 0);
   await f.dispose();
 });
 
@@ -300,6 +345,18 @@ test("cancelling an install caller keeps the shared installer and progress liste
     assert.equal(f.useCli.getState().installing, false);
   } finally {
     release();
+    await f.dispose();
+  }
+});
+
+test("the installer's own version is what the app shows once it finishes", async () => {
+  const f = fixture({ installer: async () => ({ ok: true, appVersion: "1.0", installedVersion: "2.3.4", binPath: "C:\\Bay\\bay.exe", lines: [] }) });
+
+  try {
+    await f.install();
+    assert.equal(f.useCli.getState().installedVersion, "2.3.4");
+    assert.equal(f.useCli.getState().binPath, "C:\\Bay\\bay.exe");
+  } finally {
     await f.dispose();
   }
 });

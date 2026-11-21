@@ -3,8 +3,8 @@ import { beforeEach, test } from "node:test";
 import { useBrowser } from "../../store/browserStore.ts";
 import { SYNCED_SETTINGS } from "../../sync/adapters.ts";
 import { activeTabId } from "../../store/model.ts";
-import { clearChromeTabId, patchPage, setBrowserId, usePages } from "../window/pageState.ts";
-import { shownCliTab, startCliControl, useCli } from "./driverControl.ts";
+import { clearChromeTabId, setBrowserId, usePages } from "../window/pageState.ts";
+import { shownCliTab, startCliActiveTab, startCliControl, useCli } from "./driverControl.ts";
 import * as stub from "../../test-native-stub.mjs";
 
 const S = () => useBrowser.getState();
@@ -43,9 +43,9 @@ test("an unready page, New Tab surface, sleeping page, or WebKit page has no ter
   setBrowserId(id, 4);
   assert.equal(shownCliTab(S()), null);
   setBrowserId(id, 4, 81);
-  patchPage(id, { newTabShown: { url: "https://example.com", title: "Example", favicon: null } });
+  S().updateTab(id, { newTabHistory: { url: "https://example.com", title: "Example", favicon: null } });
   assert.equal(shownCliTab(S()), null);
-  patchPage(id, { newTabShown: null });
+  S().updateTab(id, { newTabHistory: undefined });
   clearChromeTabId(id);
   assert.equal(shownCliTab(S()), null);
   setBrowserId(id, 4, 81);
@@ -74,12 +74,32 @@ test("closing a tab clears its Chrome identity", () => {
   assert.equal(shownCliTab(S()), null);
 });
 
+test("a window document reports its tab only while it has focus, from the coordinator's status", () => {
+  const { window } = page();
+  const other = S().createWindow({ url: "https://example.org" });
+  const focusedHere = () => S().setFocusedWindow(window);
+  const focusedElsewhere = () => S().setFocusedWindow(other);
+  focusedElsewhere();
+  useCli.setState({ server: { state: "off" } });
+  startCliActiveTab(window);
+  const calls = stub.cliActiveCalls.length;
+  useCli.setState({ server: { state: "on" } });
+  assert.equal(stub.cliActiveCalls.length, calls);
+  focusedHere();
+  assert.equal(stub.cliActiveCalls.length, calls + 1);
+  assert.equal(stub.cliActiveCalls.at(-1), shownCliTab(S()));
+  focusedElsewhere();
+  focusedHere();
+  assert.equal(stub.cliActiveCalls.length, calls + 2, "focus coming back says so again");
+  useCli.setState({ server: { state: "off" } });
+});
+
 test("newer control requests win and policy revocation switches the setting off", async () => {
   page();
   const pending = [];
   stub.cliControlAnswers.call = (on) =>
     on === undefined ? Promise.resolve({ state: "off", generation: 0 }) : new Promise((resolve) => pending.push({ on, resolve }));
-  startCliControl();
+  await startCliControl();
   S().updateSettings({ cliControl: true });
   S().updateSettings({ cliControl: false });
   await until(() => pending.length >= 2);

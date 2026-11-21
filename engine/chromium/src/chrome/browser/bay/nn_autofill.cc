@@ -18,6 +18,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bay/nn_reauth.h"
 #include "chrome/browser/bay/nn_sensitive_args.h"
@@ -31,6 +32,7 @@
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/credit_card_network_identifiers.h"
+#include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -664,8 +666,13 @@ NN_ENGINE_CALL(nn_autofill_card_number) {
             // payments page asks when its mandatory reauth is on).
             bay::Reauth(
                 profile, device_reauth::DeviceAuthSource::kAutofill,
+#if BUILDFLAG(IS_LINUX)
+                // No prompt on Linux (nn_reauth.h), and no string for one.
+                std::u16string(),
+#else
                 l10n_util::GetStringUTF16(
                     IDS_PAYMENTS_AUTOFILL_EDIT_CARD_MANDATORY_REAUTH_PROMPT),
+#endif
                 base::TimeDelta(),
                 base::BindOnce(
                     [](std::string id, base::WeakPtr<PersonalDataManager> pdm,

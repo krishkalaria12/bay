@@ -1,0 +1,134 @@
+--- a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
++++ b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+@@ -122,6 +122,8 @@
+ 
+ int ManagePasswordsUIController::save_fallback_timeout_in_seconds_ = 90;
+ 
++bool (*g_bay_webui_password_bubble)(content::WebContents*) = nullptr;
++
+ namespace {
+ 
+ using Logger = autofill::SavePasswordProgressLogger;
+@@ -1539,6 +1541,9 @@
+ }
+ 
+ void ManagePasswordsUIController::ShowBubble() {
++  if (g_bay_webui_password_bubble &&
++      g_bay_webui_password_bubble(web_contents()))
++    return;
+ #if BUILDFLAG(ENABLE_CEF)
+   // The CEF client may show its own password UI instead.
+   if (cef::HandlePasswordBubble(web_contents())) {
+--- a/chrome/browser/ui/autofill/address_bubbles_controller.cc
++++ b/chrome/browser/ui/autofill/address_bubbles_controller.cc
+@@ -48,6 +48,12 @@
+ 
+ namespace autofill {
+ 
++AutofillBubbleBase* (*g_bay_webui_save_address_bubble)(
++    content::WebContents*, std::unique_ptr<SaveAddressBubbleController>&) = nullptr;
++AutofillBubbleBase* (*g_bay_webui_update_address_bubble)(
++    content::WebContents*, std::unique_ptr<UpdateAddressBubbleController>&) = nullptr;
++
++
+ namespace {
+ 
+ // Bay: FindBrowserWindowWithWebContents finds a BrowserView only; a Browser
+@@ -67,13 +73,17 @@
+     content::WebContents* web_contents,
+     bool shown_by_user_gesture,
+     base::WeakPtr<AddressBubbleControllerDelegate> delegate) {
++  auto controller = std::make_unique<SaveAddressBubbleController>(
++      delegate, web_contents, profile, save_address_bubble_type);
++
++  if (g_bay_webui_save_address_bubble) {
++    if (auto* bubble = g_bay_webui_save_address_bubble(web_contents, controller))
++      return bubble;
++  }
+   auto browser_window = FindBubbleWindow(web_contents);
+   if (!browser_window) {
+     return nullptr;
+   }
+-  auto controller = std::make_unique<SaveAddressBubbleController>(
+-      delegate, web_contents, profile, save_address_bubble_type);
+-
+   return browser_window->GetAutofillBubbleHandler()
+       ->ShowSaveAddressProfileBubble(web_contents, std::move(controller),
+                                      shown_by_user_gesture);
+@@ -85,12 +95,16 @@
+     content::WebContents* web_contents,
+     bool shown_by_user_gesture,
+     base::WeakPtr<AddressBubbleControllerDelegate> delegate) {
++  auto update_controller = std::make_unique<UpdateAddressBubbleController>(
++      delegate, web_contents, profile, original_profile);
++  if (g_bay_webui_update_address_bubble) {
++    if (auto* bubble = g_bay_webui_update_address_bubble(web_contents, update_controller))
++      return bubble;
++  }
+   auto browser_window = FindBubbleWindow(web_contents);
+   if (!browser_window) {
+     return nullptr;
+   }
+-  auto update_controller = std::make_unique<UpdateAddressBubbleController>(
+-      delegate, web_contents, profile, original_profile);
+   return browser_window->GetAutofillBubbleHandler()
+       ->ShowUpdateAddressProfileBubble(
+           web_contents, std::move(update_controller), shown_by_user_gesture);
+@@ -357,6 +371,12 @@
+     return;
+   }
+ 
++  // Bay's WebUI window has no native sign-in promo bubble handler.
++  auto* window = FindBubbleWindow(web_contents());
++  if (!window || !window->GetAutofillBubbleHandler()) {
++    return;
++  }
++
+   DoNotShowNextQueuedBubbleGuard guard = DoNotShowNextQueuedBubble();
+ 
+   // Close the current save bubble.
+--- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
++++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+@@ -60,6 +60,9 @@
+ 
+ namespace autofill {
+ 
++AutofillBubbleBase* (*g_bay_webui_save_card_bubble)(
++    content::WebContents*, SaveCardBubbleController*) = nullptr;
++
+ namespace {
+ 
+ // SaveCardPromptMetricType will be either LegacySaveCardPromptResult or
+@@ -834,16 +837,23 @@
+     return;
+   }
+ 
+-  AutofillBubbleHandler* autofill_bubble_handler = GetAutofillBubbleHandler();
+-  if (!autofill_bubble_handler) {
+-    return;
+-  }
+-  if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete) {
+-    SetBubbleView(*autofill_bubble_handler->ShowSaveCardConfirmationBubble(
+-        web_contents(), this));
++  auto* bay_bubble = g_bay_webui_save_card_bubble
++                         ? g_bay_webui_save_card_bubble(web_contents(), this)
++                         : nullptr;
++  if (bay_bubble) {
++    SetBubbleView(*bay_bubble);
+   } else {
+-    SetBubbleView(*autofill_bubble_handler->ShowSaveCreditCardBubble(
+-        web_contents(), this, is_triggered_by_user_gesture_));
++    AutofillBubbleHandler* autofill_bubble_handler = GetAutofillBubbleHandler();
++    if (!autofill_bubble_handler) {
++      return;
++    }
++    if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete) {
++      SetBubbleView(*autofill_bubble_handler->ShowSaveCardConfirmationBubble(
++          web_contents(), this));
++    } else {
++      SetBubbleView(*autofill_bubble_handler->ShowSaveCreditCardBubble(
++          web_contents(), this, is_triggered_by_user_gesture_));
++    }
+   }
+   CHECK(bubble_view());
+ 

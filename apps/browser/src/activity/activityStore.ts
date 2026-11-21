@@ -1,7 +1,8 @@
-import { readDocument } from "@bay/desktop";
+import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../store/browserStore";
-import { sidebarUndoWindow } from "../store/sidebarUndo";
+import { sendService } from "../runtime/serviceClient";
+import { useBrowser, type BrowserStore } from "../store/browserStore";
+import { registerSidebarUndo, sidebarUndoWindow } from "../store/sidebarUndo";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
 import type { SavedDocument } from "../lib/savedDocument";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
@@ -33,7 +34,7 @@ export type MeetingGroup = {
   endedAt: number | null;
 };
 
-type LiveState = {
+export type LiveState = {
   folders: Record<string, LiveFolder>;
   folderOrder: string[];
   items: Record<string, LiveItem[]>;
@@ -88,9 +89,7 @@ function load(): Partial<LiveState> {
   }
 }
 
-const saved = load();
-
-export const useLive = create<LiveState>()(() => ({
+const initialState = (saved: Partial<LiveState> = {}): LiveState => ({
   folders: saved.folders ?? {},
   folderOrder: saved.folderOrder ?? [],
   items: saved.items ?? {},
@@ -106,10 +105,127 @@ export const useLive = create<LiveState>()(() => ({
   calendar: { ...DEFAULT_CALENDAR, ...saved.calendar },
   meetingGroups: saved.meetingGroups ?? {},
   dismissedAlerts: saved.dismissedAlerts ?? [],
-}));
+});
+
+// Importing window UI creates an in-memory view, without reading shared files
+// or installing another document writer. The application owner starts IO.
+export const useLive = create<LiveState>()(() => initialState());
 
 export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
+
+/**
+ * The store the live folders belong to.
+ *
+ * The live state is the app's, not the coordinator's: a window reads it and the coordinator owns it. This says which
+ * store writes it, so the coordinator's authority store is the one that is saved.
+ */
+let browserOwner: BrowserStore = useBrowser;
+
+/** Binds the live folders to a store, and gives back the unbind. */
+export function bindLiveStoreBrowser(browser: BrowserStore): () => void {
+  const previous = browserOwner;
+  browserOwner = browser;
+
+  return () => {
+    if (browserOwner === browser) browserOwner = previous;
+  };
+}
+
+/**
+ * The live folders' own saving.
+ *
+ * The folders are the app's, not the coordinator's: a window reads them and the coordinator owns them. This is the
+ * owner of their document, so a change is written with the session's own and the quit saves them too.
+ */
+type LivePersistence = { stop(): void; flush(final: boolean): Promise<void>; resume(): void };
+
+let persistence: LivePersistence | undefined;
+
+/** Writes the live folders' document now. */
+export function flushLivePersistence({ final = false } = {}): Promise<void> {
+  return persistence?.flush(final) ?? Promise.resolve();
+}
+
+/** A quit was cancelled: the saving goes on, starting with what changed meanwhile. */
+export function resumeLivePersistence() {
+  persistence?.resume();
+}
+
+/** Owns the live folders' saving, and gives back its stop. */
+export function startLivePersistence(): () => void {
+  if (persistence) return persistence.stop;
+  useLive.setState(initialState(load()), true);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let frozen = false;
+  let finalFlush: Promise<void> | null = null;
+
+  const json = () => {
+    const state = live();
+
+    return JSON.stringify(Object.fromEntries(PERSISTED.map((key) => [key, state[key]])));
+  };
+
+  const write = () => {
+    timer = undefined;
+
+    try {
+      writeDocument(LIVE_DOC, json());
+    } catch (error) {
+      console.warn("Couldn't save live folders", error);
+    }
+  };
+
+  const save = (): Promise<void> => {
+    try {
+      return Promise.resolve(saveDocument(LIVE_DOC, json()));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+
+  const unsubscribe = useLive.subscribe((s, prev) => {
+    if (frozen || PERSISTED.every((key) => s[key] === prev[key])) return;
+    clearTimeout(timer);
+    timer = setTimeout(write, 800);
+  });
+
+  const stop = () => {
+    if (persistence?.stop !== stop) return;
+    clearTimeout(timer);
+    unsubscribe();
+    persistence = undefined;
+  };
+
+  persistence = {
+    stop,
+    flush(final) {
+      clearTimeout(timer);
+      timer = undefined;
+
+      if (frozen) return finalFlush ?? Promise.resolve();
+
+      if (!final) return save();
+      // Capture and acknowledge every final document, including a pending
+      // background write. Closing-window mutations must not replace it.
+      frozen = true;
+      finalFlush = save();
+
+      return finalFlush;
+    },
+    resume() {
+      frozen = false;
+      finalFlush = null;
+      clearTimeout(timer);
+      // Cancellation preserves changes made while closing, without loading
+      // disk state over the current in-memory folders and account settings.
+      write();
+    },
+  };
+
+  return stop;
+}
 
 /**
  * The live folders' document, as the app's saving keeps it (lib/persistenceService.ts): a change is written with the
@@ -127,6 +243,21 @@ export const liveFoldersDocument: SavedDocument = {
       if (!PERSISTED.every((k) => s[k] === prev[k])) changed();
     }),
 };
+
+type LiveFolderUndo = { id: string; before: Partial<LiveFolder>; after: Partial<LiveFolder> };
+
+// Restores only the fields a later edit has not changed again.
+registerSidebarUndo("liveFolder", (value) => {
+  // SAFETY: the checks above established this shape.
+  const { id, before, after } = value as LiveFolderUndo;
+  const current = useLive.getState().folders[id];
+
+  if (!current) return;
+  const restore: Partial<LiveFolder> = {};
+
+  for (const key of ["name", "icon"] as const) if (key in before && (current[key] ?? null) === after[key]) Object.assign(restore, { [key]: before[key] });
+  setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
+});
 
 let counter = 0;
 const newId = () => `lf-${Date.now().toString(36)}-${(++counter).toString(36)}`;
@@ -161,21 +292,29 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
 }
 
 export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>, originWindowId?: string) {
+  if (sendService("liveUpdate", [id, patch])) return;
   const before = useLive.getState().folders[id];
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
   const fields = (["name", "icon"] as const).filter((key) => before && patch[key] !== undefined && before[key] !== patch[key]);
-  const windowId = originWindowId ?? sidebarUndoWindow() ?? useBrowser.getState().ui.focusedWindowId;
+  const windowId = originWindowId ?? sidebarUndoWindow() ?? browserOwner.getState().ui.focusedWindowId;
 
-  if (before && windowId && fields.length)
-    useBrowser.getState().pushSidebarUndo(windowId, () => {
-      const current = useLive.getState().folders[id];
+  if (before && windowId && fields.length) {
+    const pick = (folder: Partial<LiveFolder>) => Object.fromEntries(fields.map((key) => [key, folder[key] ?? null]));
+    const data: LiveFolderUndo = { id, before: pick(before), after: pick(patch) };
+    browserOwner.getState().pushSidebarUndo(windowId, { kind: "liveFolder", data });
+  }
+}
 
-      if (!current) return;
-      const restore: Partial<LiveFolder> = {};
+/** Marks an item unread in a folder. */
+export function markUnread(folderId: string, itemId: string) {
+  if (sendService("liveUnread", [folderId, itemId])) return;
+  setLive((s) => ({ unread: { ...s.unread, [folderId]: [...new Set([...(s.unread[folderId] ?? []), itemId])] } }));
+}
 
-      for (const key of fields) if (current[key] === patch[key]) Object.assign(restore, { [key]: before[key] });
-      setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
-    });
+/** Sets one of the live view's own flags: a stack's expansion, or the show-all switch. */
+export function setLiveView(field: "expandedStacks" | "showAll", key: string, value: boolean) {
+  if (sendService("liveView", [field, key, value])) return;
+  setLive((s) => ({ [field]: { ...s[field], [key]: value } }));
 }
 
 const without = <T>(record: Record<string, T>, key: string) => {
@@ -185,6 +324,7 @@ const without = <T>(record: Record<string, T>, key: string) => {
 };
 
 export function removeFolder(id: string) {
+  if (sendService("liveRemove", [id])) return;
   setLive((s) => ({
     folders: without(s.folders, id),
     folderOrder: s.folderOrder.filter((f) => f !== id),
@@ -198,6 +338,7 @@ export function removeFolder(id: string) {
 }
 
 export function moveFolder(id: string, delta: -1 | 1) {
+  if (sendService("liveMove", [id, delta])) return;
   setLive((s) => {
     const order = [...s.folderOrder];
     const i = order.indexOf(id);
@@ -261,6 +402,7 @@ export function setStatus(folderId: string, status: Partial<FolderStatus>) {
 }
 
 export function markRead(folderId: string, itemIds?: string[]) {
+  if (sendService("liveRead", [folderId, itemIds ?? null])) return;
   setLive((s) => {
     const unread = s.unread[folderId] ?? [];
     const next = itemIds ? unread.filter((id) => !itemIds.includes(id)) : [];
@@ -280,10 +422,18 @@ export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
   });
 }
 
-export const updateConfig = (patch: Partial<LiveConfig>) => setLive((s) => ({ config: { ...s.config, ...patch } }));
-export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
+export const updateConfig = (patch: Partial<LiveConfig>) => {
+  if (sendService("liveConfig", [patch])) return;
+  setLive((s) => ({ config: { ...s.config, ...patch } }));
+};
+
+export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => {
+  if (sendService("calendarSettings", [patch])) return;
+  setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
+};
 
 export function dismissAlert(occurrence: string) {
+  if (sendService("alertDismiss", [occurrence])) return;
   setLive((s) => (s.dismissedAlerts.includes(occurrence) ? {} : { dismissedAlerts: [...s.dismissedAlerts, occurrence].slice(-200) }));
 }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { platformWords } from "./platformWords.ts";
 import { test } from "node:test";
 import { localFileAnswers } from "../test-native-stub.mjs";
 import { useBrowser } from "../store/browserStore.ts";
@@ -30,7 +31,7 @@ test("PDF/image/HTML native browser opens create one file tab and reuse it", asy
     await openLocalFile(windowId, id);
     assert.equal(Object.keys(S().tabs).length, count + 1);
     const tab = Object.values(S().tabs).find((t) => t.url.endsWith(filename));
-    assert.equal(tab.title, "Report");
+    assert.equal(tab.customTitle, "Report");
   }
 });
 
@@ -49,8 +50,8 @@ test("missing grants, external formats and invalid native URLs do not create bro
     assert.equal(Object.keys(S().tabs).length, count);
   }
 
-  assert.equal(localFileStatusText({ status: "missing" }), "Missing on this Mac");
-  assert.equal(localFileStatusText({ status: "inaccessible" }), "Access required on this Mac");
+  assert.equal(localFileStatusText({ status: "missing" }), `Missing on ${platformWords.thisComputer}`);
+  assert.equal(localFileStatusText({ status: "inaccessible" }), `Access required on ${platformWords.thisComputer}`);
 });
 
 test("nested file opens forward only a root grant plus relative path", async () => {
@@ -63,18 +64,24 @@ test("nested file opens forward only a root grant plus relative path", async () 
   };
 
   await openLocalFile(windowId, id, "Work/Photo.png");
-  assert.equal(Object.values(S().tabs).find((t) => t.url.endsWith("Photo.png")).title, "Photo.png");
+  assert.equal(Object.values(S().tabs).find((t) => t.url.endsWith("Photo.png")).customTitle, "Photo.png");
 });
 
 test("late native resolution does not open a file after its pin was removed", async () => {
   const { windowId, id } = setup();
   let finish;
+  const entered = Promise.withResolvers();
+
   localFileAnswers.open = () =>
     new Promise((resolve) => {
       finish = resolve;
+      entered.resolve();
     });
   const count = Object.keys(S().tabs).length;
   const pending = openLocalFile(windowId, id);
+
+  // The Effect runtime acquires its layers before entering the native request.
+  await entered.promise;
   S().removeLocalFile(id);
   finish({ status: "available", browserReadable: true, url: "file:///Users/owner/A.pdf" });
   assert.equal((await pending).status, "inaccessible");

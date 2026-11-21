@@ -9,7 +9,7 @@
 
 #include "base/functional/bind.h"
 #include "chrome/browser/bay/pip/nn_pip_controls.h"
-#include "chrome/browser/bay/pip/nn_pip_mac.h"
+#include "chrome/browser/bay/pip/nn_pip_platform.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_widget_fade_animator.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"

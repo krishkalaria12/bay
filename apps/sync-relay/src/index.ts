@@ -3,7 +3,7 @@
 import "./env";
 import { Chain } from "./chain";
 import { Pairing } from "./pairing";
-import { fail, json, TAG } from "./util";
+import { fail, json, preflight, readableAnywhere, TAG } from "./util";
 
 export { Chain, Pairing };
 
@@ -12,20 +12,24 @@ export const PROTOCOL = 1;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const path = new URL(request.url).pathname;
-
-    if (path === "/v1/health" && request.method === "GET") return json({ ok: true, v: PROTOCOL });
-
-    if (path === "/v1/pair" || path.startsWith("/v1/pair/")) return env.PAIRING.get(env.PAIRING.idFromName("pairing")).fetch(request);
-
-    const chain = /^\/v1\/chains\/([^/]+)(?:\/.*)?$/.exec(path)?.[1];
-
-    if (chain !== undefined) {
-      if (!TAG.test(chain)) return fail(400, "bad", "chain");
-
-      return env.CHAIN.get(env.CHAIN.idFromName(chain)).fetch(request);
-    }
-
-    return fail(404, "not-found");
+    return request.method === "OPTIONS" ? preflight() : readableAnywhere(await route(request, env));
   },
 } satisfies ExportedHandler<Env>;
+
+async function route(request: Request, env: Env): Promise<Response> {
+  const path = new URL(request.url).pathname;
+
+  if (path === "/v1/health" && request.method === "GET") return json({ ok: true, v: PROTOCOL });
+
+  if (path === "/v1/pair" || path.startsWith("/v1/pair/")) return env.PAIRING.get(env.PAIRING.idFromName("pairing")).fetch(request);
+
+  const chain = /^\/v1\/chains\/([^/]+)(?:\/.*)?$/.exec(path)?.[1];
+
+  if (chain !== undefined) {
+    if (!TAG.test(chain)) return fail(400, "bad", "chain");
+
+    return env.CHAIN.get(env.CHAIN.idFromName(chain)).fetch(request);
+  }
+
+  return fail(404, "not-found");
+}

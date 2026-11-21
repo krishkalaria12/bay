@@ -8,7 +8,7 @@ Bay has two channels, both built, signed, notarized and published by `.github/wo
 
 ## Channels
 
-One feed, `appcast.xml` on the latest stable GitHub release (`SUFeedURL`, `bay.krishkalaria.in/appcast.xml`, redirects
+One feed, `appcast.xml` on the latest stable GitHub release (`SUFeedURL`, `baybrowser.in/appcast.xml`, redirects
 there). A stable item has no channel; a nightly's carries `<sparkle:channel>nightly</sparkle:channel>`
 (`generate_appcast --channel nightly`). Sparkle skips an item on a channel the app doesn't allow and allows none by
 default, so every copy on Stable, and every build shipped before channels existed, only sees stable items. A copy on
@@ -29,8 +29,8 @@ Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updat
   prerelease (so latest, `/download` and the feed's home stay on stable) and re-uploads the merged feed onto the latest
   stable release. `publish.sh` merges the new item onto the feed as published at that moment, keeping the newest 3
   per channel, and deletes nightly releases beyond the newest 5 (never one the feed still lists).
-- **Downloads.** Stable: `bay.krishkalaria.in/download` (`Bay.dmg` on the latest release). Nightly:
-  `bay.krishkalaria.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
+- **Downloads.** Stable: `baybrowser.in/download` (`Bay.dmg` on the latest release). Nightly:
+  `baybrowser.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
   each nightly replaces.
 - **Notes.** A stable's are `release-notes/<version>.md` (the site, the GitHub release and the update dialog). A
   nightly's are the `feat`, `fix` and `perf` commit subjects since the previous release
@@ -104,3 +104,96 @@ packs it unstripped (the symbols' copy; `release.sh` strips the app's), uploads 
 `engine-<engine tree:12>` (never latest) and appends `<tree> engine-<tree:12> <sha256>` to
 `packages/chromium/prebuilt-engines.tsv`: commit and push that line. Until then, releases of a commit whose `engine/`
 changed fail in **plan**, saying so; `engine/` must be committed and pushed first.
+
+## Linux
+
+Linux ships beside a Mac release, with the same version: its packages go on the release `v<version>`, so publish that
+first. One run of `.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage,
+then its **publish** job runs `scripts/linux/publish.sh`:
+
+```bash
+gh workflow run linux-build.yml --ref feat/linux -f version=<version> -f publish=true
+```
+
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or a
+secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would upload
+without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
+
+What a release publishes:
+
+| Where | What |
+|---|---|
+| Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
+| Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
+| AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
+| Snap Store `bay` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
+
+Flathub and nixpkgs build from the release's tarball, and their bots open a pull request for each new release once the
+first is in: Flathub's checks GitHub's releases every few hours and merges its own (`flathub.json`), and nixpkgs'
+(r-ryantm) runs the package's update script. The run's `bay-linux-packages` holds the files for the first pull
+requests: `flatpak/` and `nixpkgs/package.nix`.
+
+The site serves both repositories at `baybrowser.in/linux/` (`apps/web/public/_redirects`): indexes and keys
+redirect to `linux-repo`, and each package to its release, so `apt`, `dnf` and `zypper` download from GitHub. The
+repositories list only the newest release. The redirects deploy with the site from `main`, so they have to be there
+before the first Linux release. Users set it up with `docs/linux-install.md`.
+
+### One-time setup
+
+1. **Signing key.** Every installed copy trusts this key from then on, so keep it backed up with the other signing files
+   and never replace it lightly. RSA keeps older rpm and zypper happy; no passphrase, since the secret is the protection.
+
+   ```bash
+   gpg --batch --passphrase '' --quick-gen-key 'Bay Linux packages' rsa4096 sign 0
+   key=$(gpg --list-secret-keys --with-colons 'Bay Linux packages' | awk -F: '$1 == "fpr" { print $10; exit }')
+   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-signing-key.asc
+   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-signing-key.asc
+   ```
+
+2. **AUR.** Make an account at aur.archlinux.org, then give it a key of its own:
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C bay-aur -f ~/.ssh/aur
+   # aur.archlinux.org › My Account › SSH Public Key: paste ~/.ssh/aur.pub
+   gh secret set AUR_SSH_PRIVATE_KEY <~/.ssh/aur
+   ```
+
+   The first publish creates `bay-bin`. `publish.sh` checks the AUR's published host key.
+
+3. **Site.** Get the `/linux/` lines of `apps/web/public/_redirects` onto `main` and deployed.
+
+After the first release:
+
+4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.krishkalaria.bay.metainfo.xml`
+   (`<screenshots>`, with images at stable `https://baybrowser.in/...` URLs): Flathub's linter refuses an app
+   without them, and the site's are the Mac app's. Then fork `flathub/flathub`, branch from `new-pr`, add the files from `bay-linux-packages/flatpak/` and open a
+   pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
+   merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at
+   flathub.org and verify the domain `krishkalaria.in`, which the app ID names.
+5. **Snap Store.** Register the name and ask for the sandbox, which Chromium-based snaps need and the store grants by
+   hand (a post in forum.snapcraft.io's "store-requests" asking for `browser-support` with `allow-sandbox` for `bay`):
+
+   ```bash
+   snapcraft register bay
+   snapcraft export-login --snaps=bay --channels=stable --acls package_access,package_push,package_release - \
+     | gh secret set SNAPCRAFT_STORE_CREDENTIALS
+   ```
+
+   The next release uploads it; the first one can be uploaded by hand with `snapcraft upload --release=stable`.
+6. **nixpkgs.** Add yourself to `maintainers/maintainer-list.nix` and `bay-linux-packages/nixpkgs/package.nix` as
+   `pkgs/by-name/ba/bay/package.nix` (filling in `maintainers`), check it with `nix-build -A bay`, and open the pull
+   request.
+
+The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.
+
+## Reading a Linux or Windows crash report
+
+Crash reports from the desktop host name each frame by module and offset: a minidump has no symbols. Linux builds keep
+frame pointers, so a report has its stack; Windows x64 builds don't, so one has the crashing frame alone. Both ship
+Crashpad (`chrome_crashpad_handler` on Linux, `chrome_elf.dll` on Windows), and `engine.py` keeps each release's symbols
+in its `-symbols` archive. With the archive that matches the report's version:
+
+```bash
+llvm-symbolizer --obj=symbols/.debug/bay.debug 0x<offset>      # Linux
+llvm-symbolizer --obj=chrome.dll.pdb 0x<offset>                # Windows
+```
