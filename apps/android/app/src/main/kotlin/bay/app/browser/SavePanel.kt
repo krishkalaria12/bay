@@ -333,9 +333,12 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
     val color = space?.let { spaceColor(it.color) } ?: Theme.colors.muted
     val wash by androidx.compose.animation.animateColorAsState(color, label = "drawer-wash")
     val searching = !query.isNullOrBlank()
+    val archive = browser.drawerArchive
     // Read from the store, so they follow its revision: a move, rename or removal redraws them.
     @Suppress("UNUSED_VARIABLE") val revision = app.revision
-    val rows = if (searching) {
+    val rows = if (archive) {
+        emptyList()
+    } else if (searching) {
         app.store.bookmarkListing(app.activeSpaceId, BOOKMARKS_TOP, query.orEmpty()).rows.mapNotNull { found ->
             (found.node as? bay.core.BookmarkNode.Url)?.let { bay.core.BookmarkTreeRow(it.id, false, it.title, it.url, 0u, 0u, false) }
         }
@@ -413,6 +416,10 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                     .statusBarsPadding().navigationBarsPadding(),
             ) {
                 Column(Modifier.fillMaxSize().padding(top = Space.sm), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                    DrawerToggle(strings, archive) {
+                        browser.drawerArchive = it
+                        query = null
+                    }
                     Box(Modifier.padding(horizontal = Space.lg)) {
                         SpaceChips(app.spaces, app.activeSpaceId, strings, onChoose = {
                             query = null
@@ -422,7 +429,7 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                     query?.let { text ->
                         Row(Modifier.padding(horizontal = Space.lg), horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.weight(1f)) {
-                                Field(text, { query = it }, strings.t("bookmarks.search"), "drawer-search", leading = {
+                                Field(text, { query = it }, strings.t(if (archive) "archive.search" else "bookmarks.search"), "drawer-search", leading = {
                                     BayIconView(BayIcon.SEARCH, size = IconSize.row, color = Theme.colors.muted)
                                 }, focus = true)
                             }
@@ -438,7 +445,8 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                         Modifier.weight(1f).nestedScroll(pull).verticalScroll(rememberScrollState())
                             .padding(horizontal = Space.sm).padding(bottom = 80.dp),
                     ) {
-                        if (rows.isEmpty() && space != null && !searching) {
+                        if (archive) ArchiveList(browser, strings, query.orEmpty())
+                        if (!archive && rows.isEmpty() && space != null && !searching) {
                             Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
                                 BayText(strings.t("drawer.empty", mapOf("space" to spaceName(space, strings))), variant = TextVariant.CALLOUT, color = Theme.colors.muted)
                                 bay.design.PillButton(strings.t("drawer.saveHere"), Modifier.testTag("drawer-empty-save")) {
@@ -475,7 +483,7 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                         }
                     }
                 }
-                Box(
+                if (!archive) Box(
                     Modifier.align(Alignment.BottomEnd).padding(Space.lg).size(52.dp).testTag("drawer-add")
                         .clearAndSetSemantics { contentDescription = strings.t("drawer.saveHere"); role = Role.Button }
                         .pressFeedback {
@@ -497,6 +505,39 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                     }
                     null -> {}
                 }
+            }
+        }
+    }
+}
+
+/** Bookmarks or the archive, side by side at the drawer's top. */
+@Composable
+private fun DrawerToggle(strings: Strings, archive: Boolean, onChoose: (Boolean) -> Unit) {
+    val view = LocalView.current
+    val colors = Theme.colors
+    Row(
+        Modifier.padding(horizontal = Space.lg).fillMaxWidth().height(40.dp).background(colors.fill, CircleShape).padding(3.dp)
+            .testTag("drawer-toggle"),
+    ) {
+        listOf(false to strings.t("drawer.title"), true to strings.t("archive.title")).forEach { (isArchive, label) ->
+            val picked = isArchive == archive
+            val fill by androidx.compose.animation.animateColorAsState(if (picked) colors.background else Color.Transparent, label = "drawer-toggle")
+            Box(
+                Modifier.weight(1f).fillMaxHeight().background(fill, CircleShape)
+                    .testTag(if (isArchive) "drawer-archive" else "drawer-bookmarks")
+                    .clearAndSetSemantics {
+                        contentDescription = label
+                        role = Role.Tab
+                        selected = picked
+                    }
+                    .pressFeedback {
+                        if (picked) return@pressFeedback
+                        Haptics.tick(view)
+                        onChoose(isArchive)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                BayText(label, variant = TextVariant.SUBHEAD, weight = FontWeight.SemiBold, color = if (picked) colors.foreground else colors.muted, maxLines = 1)
             }
         }
     }

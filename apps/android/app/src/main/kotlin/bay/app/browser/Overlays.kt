@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -200,47 +201,48 @@ fun TipCard(title: String, body: String, gotIt: String, onDone: () -> Unit) {
  * below the status bar, with the quick open spring, and the page takes over when it lands.
  */
 @Composable
-fun TabZoom(zoom: Zoom, onDone: () -> Unit) {
-    // The card's picture, at the card's size: already in memory from the switcher.
-    val bitmap = rememberFileImage(zoom.tab.snapshot, zoom.frame.width.toInt())
-    if (zoom.tab.snapshot == null) {
-        LaunchedEffect(zoom) { onDone() }
-        return
-    }
-    if (bitmap == null) {
-        // Still decoding, or the file is gone: a picture that hasn't come in a moment isn't waited for.
-        LaunchedEffect(zoom) {
-            kotlinx.coroutines.delay(300)
-            onDone()
-        }
-        return
-    }
+fun TabZoom(browser: BrowserModel, zoom: Zoom, onDone: () -> Unit) {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(zoom) {
         progress.animateTo(1f, Motion.open.spec())
         onDone()
     }
+    TabMorph(browser, zoom.tab, zoom.frame, progress.value)
+}
+
+/**
+ * A tab between its card and its page: `grown` 0 is the card's place (`card`, in the window), 1 the whole screen below
+ * the status bar. It's the tab's picture, else its page's colour with its icon (a new tab: the wallpaper). Without a
+ * card to go to (scrolled away), it shrinks to the middle, fading.
+ */
+@Composable
+fun TabMorph(browser: BrowserModel, tab: BrowserTab, card: Rect?, grown: Float) {
+    val app = browser.app
+    val picture = rememberFileImage(tab.snapshot, BrowserModel.TAB_PICTURE_WIDTH)
+    val rgb = browser.pageColors[tab.id]
+    val back = rgb?.takeIf { it.size >= 3 }?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
     BoxWithConstraints(Modifier.fillMaxSize().clearAndSetSemantics {}) {
         val density = LocalDensity.current
         val top = WindowInsets.statusBars.getTop(density).toFloat()
         val full = Rect(0f, top, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
-        val t = progress.value
-        val rect = Rect(
-            lerp(zoom.frame.left, full.left, t),
-            lerp(zoom.frame.top, full.top, t),
-            lerp(zoom.frame.right, full.right, t),
-            lerp(zoom.frame.bottom, full.bottom, t),
-        )
+        val start = card ?: Rect(full.center.x - full.width / 4, full.center.y - full.height / 4, full.center.x + full.width / 4, full.center.y + full.height / 4)
+        val t = grown
+        val rect = Rect(lerp(start.left, full.left, t), lerp(start.top, full.top, t), lerp(start.right, full.right, t), lerp(start.bottom, full.bottom, t))
         with(density) {
-            Image(
-                bitmap,
-                null,
+            Box(
                 Modifier.offset { IntOffset(rect.left.toInt(), rect.top.toInt()) }
                     .size(rect.width.toDp(), rect.height.toDp())
-                    .clip(RoundedCornerShape(Radius.tile * (1 - t))),
-                alignment = Alignment.TopCenter,
-                contentScale = ContentScale.Crop,
-            )
+                    .graphicsLayer { alpha = if (card == null) t else 1f }
+                    .clip(RoundedCornerShape(Radius.tile * (1 - t)))
+                    .background(back),
+            ) {
+                when {
+                    // Across the width, top at the top, as the page lies: cut off below, never zoomed to fill.
+                    picture != null -> Image(picture, null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = ContentScale.FillWidth)
+                    tab.url.isEmpty() -> Wallpaper(app.preferences.wallpaper)
+                    else -> Box(Modifier.align(Alignment.Center)) { SiteIcon(app, tab.url, size = 48.dp) }
+                }
+            }
         }
     }
 }

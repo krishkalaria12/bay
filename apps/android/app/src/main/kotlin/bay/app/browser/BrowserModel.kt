@@ -11,6 +11,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
 import android.util.Base64
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,6 +81,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -96,7 +98,7 @@ sealed interface OpenTarget {
 enum class Overlay { NONE, SEARCH, TABS }
 
 /** The sheet open over the browser. */
-enum class Panel { PAGE, SPACE_EDIT, ARCHIVE, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
+enum class Panel { PAGE, SPACE_EDIT, HISTORY, SAVE, DOWNLOADS, SITE_SETTINGS, LINK, PIN, REQUEST, READER, INSPECT, IMPORT }
 
 /** What the element picker does with a tap on the page: hide the element, or describe it. */
 enum class PickMode { HIDE, INSPECT }
@@ -193,10 +195,18 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         private set
     var drawerFolder: String? = null
         private set
+    /** The drawer shows the space's archived tabs instead of its bookmarks. */
+    var drawerArchive by mutableStateOf(false)
 
-    /** The bar is scrolled away while the page scrolls down. */
-    var barHidden by mutableStateOf(false)
+    /**
+     * How far the bar has slid away with the page showing: 0 in full, 1 gone. The engine moves it as Chrome moves its
+     * bottom toolbar, in step with the page as it scrolls (BayEngineView.barHeight).
+     */
+    var barGone by mutableFloatStateOf(0f)
         private set
+
+    /** How much of a page's bottom the bar covers, in pixels, as the screen lays it out. */
+    private var barCover = 0
 
     /** The bar brought back for a moment on a site set to Always fullscreen, by a tap on the bottom edge. */
     var peeking by mutableStateOf(false)
@@ -208,12 +218,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         get() = hasPage && overlay == Overlay.NONE && panel == null && find == null && !drawerOpen && !peeking &&
             app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
 
-    /** The bar is out of the way: scrolled off, or the site is fullscreen. */
-    val barAway: Boolean get() = overlay == Overlay.NONE && (barHidden || fullscreen)
+    /** The screen's layout of the bar: each page leaves that much room for it at its bottom while it shows. */
+    fun barCoverChanged(pixels: Int) {
+        if (barCover == pixels) return
+        barCover = pixels
+        for ((id, view) in views) configure(view, pageUrl(id))
+    }
 
     fun peekBar() {
         peeking = true
-        barHidden = false
+        barGone = 0f
         peekJob?.cancel()
         peekJob = scope.launch {
             delay(4_000)
@@ -442,7 +456,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         app.dispatch(Action.ActivateTab(id, AppModel.now()))
         overlay = Overlay.NONE
-        barHidden = false
+        barGone = 0f
+        views[id]?.showBar()
         refreshMounted()
     }
 
@@ -499,14 +514,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (announce) showTopNote(TopNote(System.nanoTime(), spaceName(space, strings), space))
     }
 
-    /** Slides the bookmarks drawer out over the page, with `folder` open in it. */
     /** Closes Settings when something opens over the page instead (the drawer); Settings sets it. */
     var leaveSettings: () -> Unit = {}
 
-    fun openDrawer(folder: String? = null) {
+    /** Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive. */
+    fun openDrawer(folder: String? = null, archive: Boolean = false) {
         if (covered) leaveSettings()
         panel = null
         drawerFolder = folder
+        drawerArchive = archive
         drawerOpen = true
     }
 
@@ -532,32 +548,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     // The bar
 
-    /** Moves to the tab before (-1) or after (1) the one showing, in the switcher's order. */
-    fun swipeTabs(step: Int) {
-        val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-        val next = app.tabs.getOrNull(index + step) ?: return
+    /** Sliding the bar sideways between tabs. */
+    val tabSwipe = TabSwipe(this)
+
+    /** A swipe along the bar carried the page off to the tab beside it. */
+    fun swipedTo(id: String) {
         app.dispatch(Action.TipSeen(TipId.BAR))
         capture(app.activeTabId)
-        activate(next.id)
-    }
-
-    /** How far the person has scrolled the page one way since it last turned: down positive, up negative. */
-    private var scrollRun = 0.0
-
-    /**
-     * The bar goes once the person has scrolled 48 down in one go and comes back after 24 up, or near the top. A wobble
-     * of the finger, or the page shifting itself as it loads (no delta), leaves it be.
-     */
-    private fun scrolled(tabId: String, offsetY: Double, deltaY: Double) {
-        if (tabId != app.activeTabId) return
-        if (offsetY < 24) {
-            scrollRun = 0.0
-            barHidden = false
-            return
-        }
-        if (deltaY == 0.0) return
-        scrollRun = if ((deltaY > 0) == (scrollRun > 0)) scrollRun + deltaY else deltaY
-        if (scrollRun > 48) barHidden = true else if (scrollRun < -24) barHidden = false
+        activate(id)
     }
 
     // Media
@@ -642,15 +640,23 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         updateMediaSession()
     }
 
-    /** A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from. */
+    /** A card picked in the switcher grows into its page (`TabZoom`). */
     fun pick(tab: BrowserTab, frame: androidx.compose.ui.geometry.Rect) {
-        if (tab.snapshot == null) activate(tab.id) else zoom = Zoom(tab, frame)
+        if (zoom != null || zoomLoading != null) return
+        zoomLoading = scope.launch {
+            // At the page's size, read before it grows, so it never starts as a plain tile.
+            preloadFileImage(tab.snapshot, TAB_PICTURE_WIDTH)
+            zoom = Zoom(tab, frame)
+            zoomLoading = null
+        }
     }
+    private var zoomLoading: Job? = null
 
     fun zoomFinished() {
         val current = zoom ?: return
         zoom = null
         activate(current.tab.id)
+        if (current.tab.url.isNotEmpty()) tabSwipe.cover(current.tab)
     }
 
     // Tips
@@ -730,18 +736,52 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return app.tabs.filter { it.url.isEmpty() || it.url !in pinned }
         }
 
+    /** Where each tab's card sits in the switcher, in the window: the page shrinks into it and grows out of it. */
+    val cardFrames = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>()
+
+    /** The page shrinking into its card as the switcher opens, until it lands (`openingDone`). */
+    var opening by mutableStateOf<BrowserTab?>(null)
+        private set
+    private var openingJob: Job? = null
+
+    /**
+     * Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+     * its card is the page as it is now.
+     */
     fun showTabs() {
-        if (hasPage) capture(app.activeTabId)
-        overlay = Overlay.TABS
+        val tab = activeTab
+        if (!hasPage || tab == null) {
+            overlay = Overlay.TABS
+            return
+        }
+        if (openingJob?.isActive == true) return
+        openingJob = scope.launch {
+            val fresh = captureAsync(tab.id)
+            kotlinx.coroutines.withTimeoutOrNull(OPEN_PICTURE_MS) { fresh?.await() }
+            val shown = app.tabs.firstOrNull { it.id == tab.id } ?: tab
+            preloadFileImage(shown.snapshot, TAB_PICTURE_WIDTH)
+            opening = shown
+            overlay = Overlay.TABS
+        }
+    }
+
+    fun openingDone() {
+        opening = null
     }
 
     /** Takes the tab's picture for the switcher now. Private tabs and failed pages keep none. */
     fun capture(tabId: String) {
-        val view = views[tabId] ?: return
-        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return
-        scope.launch {
-            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@launch
+        captureAsync(tabId)
+    }
+
+    /** The tab's picture as it comes in (its file's address), or null when it keeps none. */
+    private fun captureAsync(tabId: String): kotlinx.coroutines.Deferred<String?>? {
+        val view = views[tabId] ?: return null
+        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return null
+        return scope.async {
+            val uri = runCatching { view.snapshot() }.getOrNull() ?: return@async null
             app.dispatch(Action.UpdateTab(tabId, TabUpdate(null, null, null, null, uri)))
+            uri
         }
     }
 
@@ -1009,7 +1049,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                     }
                 }
             }
-            is EngineEvent.Scroll -> scrolled(tabId, event.offsetY, event.deltaY)
+            is EngineEvent.BarMoved -> if (tabId == app.activeTabId) barGone = event.hidden
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
                 link = event
@@ -1384,12 +1424,15 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** A changed preference or site setting reaches the open pages at once. */
     fun preferencesChanged() {
         for ((id, view) in views) {
-            val url = navigation[id]?.url ?: app.tabs.firstOrNull { it.id == id }?.url.orEmpty()
+            val url = pageUrl(id)
             configure(view, url)
             applyTweaks(id, url)
         }
         applyBlockingPauses()
     }
+
+    /** The address a tab's page shows: where it navigated, else the tab's saved one. */
+    private fun pageUrl(tabId: String): String = navigation[tabId]?.url ?: app.tabs.firstOrNull { it.id == tabId }?.url.orEmpty()
 
     /** The page view's settings for the page it shows: its site's desktop mode and swipe, and Bay's own choices. */
     private fun configure(view: BayEngineView, url: String) {
@@ -1400,6 +1443,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         view.swipeMode = (setting?.swipe ?: preferences.swipeToNavigate).name.lowercase()
         view.pullToRefreshEnabled = preferences.pullToRefresh
         view.appLinks = preferences.appLinks.name.lowercase()
+        // A fullscreen site has no bar over it.
+        view.barHeight = if (setting?.fullscreen == true) 0 else barCover
     }
 
     /** Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows. */
@@ -1555,6 +1600,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     companion object {
         /** At most this many pages stay loaded; the rest reload from their saved state when shown again. */
         const val MAX_LIVE = 4
+
+        /** How long opening the switcher waits for a fresh picture of the page before shrinking the last one. */
+        const val OPEN_PICTURE_MS = 400L
+
+        /** Tab pictures are this wide (BaySnapshotWriter.MAX_WIDTH): decoded as they are, wherever they're drawn. */
+        const val TAB_PICTURE_WIDTH = 640
 
         /** A settled download's toast stays this long. */
         private const val DOWNLOAD_TOAST_MS = 6_000L

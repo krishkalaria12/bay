@@ -4,6 +4,7 @@ import BayEngine
 import Combine
 import Foundation
 import LocalAuthentication
+import SwiftUI
 import UIKit
 
 /// What a search opens: a page, an open tab, or a tab back from the archive.
@@ -49,7 +50,7 @@ final class BrowserModel: ObservableObject {
 
   /// The sheet open over the browser.
   enum Panel: Equatable {
-    case page, spaceEdit, archive, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
+    case page, spaceEdit, history, save, downloads, siteSettings, link, pin, request, reader, inspect, `import`
   }
 
   /// Ad and tracker blocking on the page showing: on, paused for its site, off for this visit only, or off in Settings.
@@ -92,6 +93,8 @@ final class BrowserModel: ObservableObject {
   /// The bookmarks drawer is out, opened on `drawerFolder` when it has one.
   @Published private(set) var drawerOpen = false
   private(set) var drawerFolder: String?
+  /// The drawer shows the space's archived tabs instead of its bookmarks.
+  @Published var drawerArchive = false
   private var topNoteTimer: Task<Void, Never>?
   /// The bar is scrolled away while the page scrolls down.
   @Published private(set) var barHidden = false
@@ -351,10 +354,11 @@ final class BrowserModel: ObservableObject {
     topNote = nil
   }
 
-  /// Slides the bookmarks drawer out over the page, with `folder` open in it.
-  func openDrawer(folder: String? = nil) {
+  /// Slides the bookmarks drawer out over the page, with `folder` open in it, or on the space's archive.
+  func openDrawer(folder: String? = nil, archive: Bool = false) {
     panel = nil
     drawerFolder = folder
+    drawerArchive = archive
     drawerOpen = true
   }
 
@@ -393,12 +397,99 @@ final class BrowserModel: ObservableObject {
 
   // MARK: The bar
 
-  /// Moves to the tab before (-1) or after (1) the one showing, in the switcher's order.
-  func swipeTabs(_ step: Int) {
-    guard let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }), app.tabs.indices.contains(index + step) else { return }
-    app.dispatch(.tipSeen(id: .bar))
-    capture(app.activeTabId)
-    activate(app.tabs[index + step].id)
+  // MARK: Sliding between tabs
+
+  /// Sliding the bar sideways, as Arc Search does: the page follows the finger and the tab beside it comes in as its
+  /// picture; let go far or fast enough and it carries on to that tab, else it springs back. The picture stays over the
+  /// page it became for a moment, while a page that wasn't loaded draws.
+  @Published private(set) var swipeOffset: CGFloat = 0
+  /// The tab coming in beside the page, while there is one that way.
+  @Published private(set) var swipeIncoming: BrowserTab?
+  /// The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`).
+  @Published private(set) var swipeCover: BrowserTab?
+  @Published private(set) var swipeCoverShown = false
+  private var swipeSettling: DispatchWorkItem?
+
+  /// The tab the other side of the page, in the switcher's order: left of it for a drag right, and so on.
+  private func neighbour(towards: CGFloat) -> BrowserTab? {
+    guard towards != 0, let index = app.tabs.firstIndex(where: { $0.id == app.activeTabId }) else { return nil }
+    let next = index + (towards < 0 ? 1 : -1)
+    return app.tabs.indices.contains(next) ? app.tabs[next] : nil
+  }
+
+  /// The finger has moved `distance` along the bar since the drag began.
+  func swipeMoved(_ distance: CGFloat) {
+    swipeSettling?.cancel()
+    if swipeCover != nil {
+      coverTask?.cancel()
+      swipeCover = nil
+      swipeCoverShown = false
+    }
+    let next = neighbour(towards: distance)
+    if next?.id != swipeIncoming?.id { swipeIncoming = next }
+    // Past the first or last tab the page gives a little, and comes back.
+    swipeOffset = next == nil ? distance * 0.18 : distance
+  }
+
+  /// The finger left after `distance`, heading for `predicted`: on to the tab coming in, or back.
+  func swipeEnded(_ distance: CGFloat, predicted: CGFloat, width: CGFloat) {
+    let target = neighbour(towards: distance)
+    let flicked = abs(predicted - distance) > 120 && (predicted - distance).sign == distance.sign
+    guard let target, abs(distance) > width * 0.28 || flicked else {
+      withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { swipeOffset = 0 }
+      settle(after: 0.32) { [weak self] in self?.swipeIncoming = nil }
+      return
+    }
+    Haptics.press()
+    withAnimation(.spring(response: 0.26, dampingFraction: 1)) { swipeOffset = distance < 0 ? -width : width }
+    settle(after: 0.24) { [weak self] in
+      guard let self else { return }
+      self.cover(target)
+      self.swipeIncoming = nil
+      self.swipeOffset = 0
+      self.app.dispatch(.tipSeen(id: .bar))
+      self.capture(self.app.activeTabId)
+      self.activate(target.id)
+    }
+  }
+
+  /// Holds `tab`'s picture over its page until the page has drawn (most of the way loaded), so a tab coming back from
+  /// its saved state never shows white. A page already drawn gets none.
+  func cover(_ tab: BrowserTab) {
+    coverTask?.cancel()
+    // WebKit keeps every loaded page drawn: one that's there already needs no picture, which would only ghost over it.
+    guard !drawn(tab.id) else {
+      swipeCover = nil
+      swipeCoverShown = false
+      return
+    }
+    swipeCover = tab
+    swipeCoverShown = true
+    coverTask = Task { [weak self] in
+      let start = Date()
+      try? await Task.sleep(nanoseconds: 140_000_000)
+      while !Task.isCancelled, let self, self.app.activeTabId == tab.id, !self.drawn(tab.id), Date().timeIntervalSince(start) < 4 {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      guard !Task.isCancelled, let self else { return }
+      withAnimation(.easeOut(duration: 0.18)) { self.swipeCoverShown = false }
+      try? await Task.sleep(nanoseconds: 180_000_000)
+      if !Task.isCancelled { self.swipeCover = nil }
+    }
+  }
+
+  private var coverTask: Task<Void, Never>?
+
+  /// The page has something on screen: it finished loading, or is most of the way there.
+  private func drawn(_ id: String) -> Bool {
+    guard let state = navigation[id], !state.url.isEmpty else { return false }
+    return !state.isLoading || state.progress >= 0.5
+  }
+
+  private func settle(after seconds: Double, _ work: @escaping @MainActor () -> Void) {
+    let item = DispatchWorkItem { MainActor.assumeIsolated { work() } }
+    swipeSettling = item
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: item)
   }
 
   /// The page showing is on a site that keeps the bar and status bar hidden, and the bar isn't back for a moment. Find
@@ -532,10 +623,12 @@ final class BrowserModel: ObservableObject {
     if report.playing { pauseMediaLeft() }
   }
 
-  /// A card picked in the switcher grows into its page; a tab without a picture has nothing to grow from.
+  /// A card picked in the switcher grows into its page (`TabMorph`).
   func pick(_ tab: BrowserTab, frame: CGRect) {
-    guard tab.snapshot != nil, !UIAccessibility.isReduceMotionEnabled else {
+    guard zoom == nil else { return }
+    guard !UIAccessibility.isReduceMotionEnabled else {
       activate(tab.id)
+      if !tab.url.isEmpty { cover(tab) }
       return
     }
     zoom = (tab, frame)
@@ -545,6 +638,7 @@ final class BrowserModel: ObservableObject {
     guard let zoom else { return }
     self.zoom = nil
     activate(zoom.tab.id)
+    if !zoom.tab.url.isEmpty { cover(zoom.tab) }
   }
 
   // MARK: Tips
@@ -635,17 +729,58 @@ final class BrowserModel: ObservableObject {
     return app.tabs.filter { $0.url.isEmpty || !pinned.contains($0.url) }
   }
 
+  /// Where each tab's card sits in the switcher, on screen: the page shrinks into it and grows out of it.
+  var cardFrames: [String: CGRect] = [:]
+  /// The page shrinking into its card as the switcher opens, until it lands (`openingDone`).
+  @Published private(set) var opening: BrowserTab?
+  private var openingTask: Task<Void, Never>?
+
+  /// Opens the switcher. From a page, a fresh picture is taken first, if it comes quickly, so the page that shrinks into
+  /// its card is the page as it is now.
   func showTabs() {
-    if hasPage { capture(app.activeTabId) }
-    overlay = .tabs
+    guard hasPage, let tab = activeTab, !UIAccessibility.isReduceMotionEnabled else {
+      if hasPage { capture(app.activeTabId) }
+      overlay = .tabs
+      return
+    }
+    guard openingTask == nil else { return }
+    openingTask = Task { [weak self] in
+      guard let self else { return }
+      await self.captureNow(tab.id, waiting: Self.openPictureWait)
+      self.opening = self.app.tabs.first { $0.id == tab.id } ?? tab
+      self.overlay = .tabs
+      self.openingTask = nil
+    }
+  }
+
+  func openingDone() {
+    opening = nil
+  }
+
+  /// How long opening the switcher waits for a fresh picture of the page before shrinking the last one.
+  private static let openPictureWait: UInt64 = 400_000_000
+
+  /// Takes the tab's picture, waiting at most `waiting` nanoseconds for it; one that comes later still lands.
+  private func captureNow(_ tabId: String, waiting: UInt64) async {
+    guard let task = captureTask(tabId) else { return }
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { await task.value }
+      group.addTask { try? await Task.sleep(nanoseconds: waiting) }
+      await group.next()
+      group.cancelAll()
+    }
   }
 
   /// Takes the tab's picture for the switcher now. Private tabs and failed pages keep none.
   func capture(_ tabId: String) {
+    _ = captureTask(tabId)
+  }
+
+  private func captureTask(_ tabId: String) -> Task<Void, Never>? {
     guard let view = views[tabId], !failed.contains(tabId),
           app.tabs.first(where: { $0.id == tabId })?.private == false
-    else { return }
-    Task { [weak self] in
+    else { return nil }
+    return Task { [weak self] in
       guard let uri = try? await view.snapshot() else { return }
       self?.app.dispatch(
         .updateTab(id: tabId, update: TabUpdate(url: nil, title: nil, favicon: nil, lastVisit: nil, snapshot: .some(uri))))

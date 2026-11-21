@@ -141,31 +141,84 @@ struct PrivateLockView: View {
 }
 
 /// A card in the switcher growing into its page: the tab's picture moves from the card's place to the whole screen,
-/// with the quick open spring, and the page takes over when it lands.
-struct TabZoom: View {
-  let snapshot: UIImage
-  let from: CGRect
+/// A tab between its card in the switcher and its page: growing out of the card when it's picked, shrinking into it as
+/// the switcher opens. It's the tab's picture, else its page's colour with its icon (a new tab: the wallpaper). Without a
+/// card to go to, it shrinks to the middle of the screen, fading.
+struct TabMorph: View {
+  let tab: BrowserTab
+  let color: [Double]?
+  let wallpaper: WallpaperId
+  /// The card's place on screen, read as the morph starts: the switcher lays its cards out on the same turn.
+  let card: () -> CGRect?
+  /// From the page into the card (the switcher opening), else from the card to the page.
+  let shrinking: Bool
   let onDone: () -> Void
-  @State private var grown = false
+  @State private var atCard: Bool
+  @State private var cardRect: CGRect?
+  private let picture: UIImage?
+
+  init(
+    tab: BrowserTab, color: [Double]?, wallpaper: WallpaperId, card: @escaping () -> CGRect?, shrinking: Bool,
+    onDone: @escaping () -> Void
+  ) {
+    self.tab = tab
+    self.color = color
+    self.wallpaper = wallpaper
+    self.card = card
+    self.shrinking = shrinking
+    self.onDone = onDone
+    _atCard = State(initialValue: !shrinking)
+    _cardRect = State(initialValue: shrinking ? nil : card())
+    picture = TabPicture.load(tab.snapshot)
+  }
+
+  private var spring: BaySpring { shrinking ? Motion.settle : Motion.open }
+
+  /// How long a shrink waits for the switcher to place the card it lands on.
+  private static let cardSettle: Double = 0.05
 
   var body: some View {
     GeometryReader { geometry in
       let screen = geometry.frame(in: .global)
-      let target = CGRect(x: 0, y: screen.minY + geometry.safeAreaInsets.top, width: screen.width, height: screen.height - geometry.safeAreaInsets.top)
-      let rect = grown ? target : from
-      Image(uiImage: snapshot)
-        .resizable()
-        .scaledToFill()
+      let page = CGRect(x: 0, y: screen.minY + geometry.safeAreaInsets.top, width: screen.width, height: screen.height - geometry.safeAreaInsets.top)
+      let rect = atCard ? (cardRect ?? page.insetBy(dx: page.width / 4, dy: page.height / 4)) : page
+      content(width: rect.width)
         .frame(width: rect.width, height: rect.height, alignment: .top)
-        .clipShape(RoundedRectangle(cornerRadius: grown ? 0 : Radius.tile, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: atCard ? Radius.tile : 0, style: .continuous))
+        .opacity(atCard && cardRect == nil ? 0 : 1)
         .position(x: rect.midX - screen.minX, y: rect.midY - screen.minY)
     }
     .ignoresSafeArea()
     .allowsHitTesting(false)
     .accessibilityHidden(true)
     .onAppear {
-      withAnimation(Motion.open.animation) { grown = true }
-      DispatchQueue.main.asyncAfter(deadline: .now() + Motion.open.response, execute: onDone)
+      // Shrinking, a moment later: the switcher has laid its cards out and scrolled to this one by then.
+      DispatchQueue.main.asyncAfter(deadline: .now() + (shrinking ? Self.cardSettle : 0)) {
+        if shrinking { cardRect = card() }
+        withAnimation(spring.animation) { atCard = shrinking }
+        // The grid can still be settling as the shrink starts: the card's latest place steers the rest of the way.
+        if shrinking {
+          DispatchQueue.main.asyncAfter(deadline: .now() + spring.response / 3) {
+            if let again = card(), again != cardRect { withAnimation(spring.animation) { cardRect = again } }
+          }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + spring.response, execute: onDone)
+      }
+    }
+  }
+
+  /// The picture across the whole width, its top at the top, as the page lies: cut off below, never zoomed to fill.
+  @ViewBuilder private func content(width: CGFloat) -> some View {
+    if let picture {
+      Image(uiImage: picture).resizable().aspectRatio(contentMode: .fit).frame(width: width)
+    } else if tab.url.isEmpty {
+      WallpaperView(id: wallpaper)
+    } else {
+      let back = color.flatMap { $0.count >= 3 ? Color(red: $0[0] / 255, green: $0[1] / 255, blue: $0[2] / 255) : nil } ?? BayColor.background
+      ZStack {
+        back
+        SiteIcon(url: tab.url, size: 48)
+      }
     }
   }
 }

@@ -19,6 +19,11 @@ struct BrowserScreen: View {
   /// The space whose page shows, and how far the page is still to slide in after a switch to another.
   @State private var shownSpace = ""
   @State private var pageSlide: CGFloat = 0
+  /// The switcher has come up: from a page it fades in behind the page shrinking into its card.
+  @State private var switcherRevealed = true
+
+  /// How small the switcher goes as a card grows back into its page.
+  private static let switcherFrom: CGFloat = 0.94
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
   /// It stays put while the bar scrolls away: a change lays the page out again, and mid-scroll that shook the page.
@@ -35,13 +40,30 @@ struct BrowserScreen: View {
         let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
         PagesHost(browser: browser, shown: shown, coveredBottom: coveredBottom)
           .ignoresSafeArea(edges: .bottom)
-          .offset(x: pageSlide)
+          .offset(x: pageSlide + browser.swipeOffset)
           .opacity(shown ? 1 : 0)
           .allowsHitTesting(shown)
+        if shown { swipePictures }
+      }
+      if let tab = browser.swipeCover, browser.overlay == .none {
+        TabPicture(tab: tab, color: browser.pageColors[tab.id]).opacity(browser.swipeCoverShown ? 1 : 0)
       }
       if browser.overlay == .tabs {
+        // In from a page, the page shrinks into its card as the switcher comes up behind it; back to a page, the card
+        // grows into it as the switcher falls away.
+        let shownSwitcher = switcherRevealed && browser.zoom == nil
         WallpaperView(id: app.preferences.wallpaper)
         TabSwitcher(browser: browser, onSettings: onSettings)
+          .opacity(shownSwitcher ? 1 : 0)
+          // Only falling away: coming up it keeps its size, so the cards are where the page reads them to land.
+          .scaleEffect(browser.zoom == nil ? 1 : Self.switcherFrom)
+          .animation(Motion.open.animation, value: browser.zoom == nil)
+          .onAppear(perform: revealSwitcher)
+        if let tab = browser.opening {
+          TabMorph(
+            tab: tab, color: browser.pageColors[tab.id], wallpaper: app.preferences.wallpaper, card: { [browser] in browser.cardFrames[tab.id] },
+            shrinking: true, onDone: browser.openingDone)
+        }
       } else if browser.hasPage {
         if let failure = browser.failure, failure.tabId == app.activeTabId {
           PageErrorView(message: failure.message, retry: browser.retry)
@@ -50,11 +72,10 @@ struct BrowserScreen: View {
       } else if browser.overlay == .none {
         startScreen.offset(x: pageSlide)
       }
-      // The zoom starts in this frame, so its picture is decoded now if it isn't in memory, once: later updates read it there.
-      if let zoom = browser.zoom, let path = zoom.tab.snapshot.flatMap(URL.init(string:))?.path,
-        let image = FileImages.now(path, pixels: Int(max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale))
-      {
-        TabZoom(snapshot: image, from: zoom.frame, onDone: browser.zoomFinished)
+      if let zoom = browser.zoom {
+        TabMorph(
+          tab: zoom.tab, color: browser.pageColors[zoom.tab.id], wallpaper: app.preferences.wallpaper, card: { zoom.frame }, shrinking: false,
+          onDone: browser.zoomFinished)
       }
       if browser.locked, browser.activeTab?.private == true, browser.overlay == .none {
         PrivateLockView(onUnlock: browser.unlock)
@@ -151,8 +172,6 @@ struct BrowserScreen: View {
           PageMenu(browser: browser, onSettings: onSettings)
         case .spaceEdit:
           if let space = browser.activeSpace { SpaceEditPanel(browser: browser, space: space) }
-        case .archive:
-          ArchivePanel(browser: browser)
         case .history:
           HistoryPanel(browser: browser)
         case .save:
@@ -196,6 +215,18 @@ struct BrowserScreen: View {
     .onChange(of: app.tabs.map(\.url)) { _ in browser.refreshMounted() }
   }
 
+  /// The switcher comes up behind the page shrinking into its card; opened any other way it's simply there.
+  private func revealSwitcher() {
+    guard browser.opening != nil else {
+      switcherRevealed = true
+      return
+    }
+    switcherRevealed = false
+    DispatchQueue.main.async {
+      withAnimation(Motion.settle.animation) { switcherRevealed = true }
+    }
+  }
+
   /// Another space from a page: its page slides in from the side the space sits on, the next one from the right.
   private func spaceSwitched(_ id: String) {
     defer { shownSpace = id }
@@ -208,6 +239,18 @@ struct BrowserScreen: View {
       withAnimation(Motion.settle.animation) { pageSlide = 0 }
     }
   }
+
+  /// A swipe along the bar: the tab coming in beside the moving page.
+  @ViewBuilder private var swipePictures: some View {
+    if let tab = browser.swipeIncoming {
+      let width = UIScreen.main.bounds.width + Self.swipeGap
+      TabPicture(tab: tab, color: browser.pageColors[tab.id])
+        .offset(x: browser.swipeOffset + (browser.swipeOffset < 0 ? width : -width))
+    }
+  }
+
+  /// The gap between the page and the tab coming in beside it.
+  private static let swipeGap: CGFloat = 12
 
   /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
   private var searchOverDarkPage: Bool {
@@ -263,5 +306,55 @@ struct BrowserScreen: View {
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
+  }
+}
+
+/// A tab's picture where its page would be, or its title on a plain page when it has none yet.
+struct TabPicture: View {
+  let tab: BrowserTab
+  let color: [Double]?
+  /// Read as the picture first shows, so it never comes in blank.
+  @State private var image: UIImage?
+
+  init(tab: BrowserTab, color: [Double]?) {
+    self.tab = tab
+    self.color = color
+    _image = State(initialValue: Self.load(tab.snapshot))
+  }
+
+  var body: some View {
+    let back = color.flatMap { $0.count >= 3 ? Color(red: $0[0] / 255, green: $0[1] / 255, blue: $0[2] / 255) : nil } ?? BayColor.background
+    ZStack(alignment: .top) {
+      back
+      if let image {
+        // Across the width, top at the top, as the page lies: zoomed to fill, it didn't line up with the page.
+        GeometryReader { geometry in
+          Image(uiImage: image).resizable().aspectRatio(contentMode: .fit).frame(width: geometry.size.width)
+        }
+        .clipped()
+      } else {
+        VStack(spacing: Space.md) {
+          SiteIcon(url: tab.url, size: 48)
+          BayText(pageTitle(title: tab.title, url: tab.url), variant: .headline).multilineTextAlignment(.center).lineLimit(2)
+          BayText(displayUrl(url: tab.url), variant: .footnote, tone: .muted).lineLimit(1)
+        }
+        .padding(Space.xl)
+        .frame(maxHeight: .infinity)
+      }
+    }
+    .ignoresSafeArea(edges: .bottom)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+
+  /// Pictures are small JPEGs the engine writes; the last few stay decoded, so a drag shows one at once.
+  private static let cache = NSCache<NSString, UIImage>()
+
+  static func load(_ snapshot: String?) -> UIImage? {
+    guard let snapshot, let path = URL(string: snapshot)?.path else { return nil }
+    if let cached = cache.object(forKey: path as NSString) { return cached }
+    guard let image = UIImage(contentsOfFile: path) else { return nil }
+    cache.setObject(image, forKey: path as NSString)
+    return image
   }
 }

@@ -51,6 +51,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -62,6 +64,13 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -228,8 +237,21 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
             // Half a point narrower than an exact fit, so rounding never wraps the last card onto a row of its own.
             val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS - 0.5.dp
             val essentialWidth = (inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS - 0.5.dp
+            // Opens on the tab showing: scrolled, as it comes up, just far enough for that tab's card to sit clear of the
+            // bar, so the page has its card to shrink into.
+            val scroll = rememberScrollState()
+            // Places from an earlier opening are stale: the cards report theirs again as they're laid out.
+            DisposableEffect(Unit) { onDispose { browser.cardFrames.clear() } }
+            var viewport by remember { mutableStateOf(Rect.Zero) }
+            val clearOfBar = with(LocalDensity.current) { (52.dp + Space.xxl).toPx() } + WindowInsets.navigationBars.getBottom(LocalDensity.current)
+            LaunchedEffect(Unit) {
+                val card = snapshotFlow { browser.cardFrames[app.activeTabId]?.takeIf { viewport.height > 0f } }.filterNotNull().first()
+                val past = card.bottom - (viewport.bottom - clearOfBar)
+                if (past > 0f) scroll.scrollTo(scroll.value + past.toInt())
+            }
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = Space.sm, bottom = 52.dp + Space.xxl),
+                Modifier.fillMaxSize().onGloballyPositioned { viewport = it.boundsInRoot() }
+                    .verticalScroll(scroll).padding(horizontal = Space.gutter).padding(top = Space.sm, bottom = 52.dp + Space.xxl),
                 verticalArrangement = Arrangement.spacedBy(Space.lg),
             ) {
                 if (space != null) {
@@ -352,7 +374,9 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                 translationY = carried?.y ?: lift.value
                 scaleX = shrink
                 scaleY = shrink
-                alpha = 1f - minOf(1f, -lift.value / 600f)
+                // While the page shrinks into this card, or grows out of it, the page is the card.
+                val morphing = browser.opening?.id == tab.id || browser.zoom?.tab?.id == tab.id
+                alpha = if (morphing) 0f else 1f - minOf(1f, -lift.value / 600f)
             }
             .pointerInput(tab.id) {
                 detectVerticalDragGestures(
@@ -386,6 +410,8 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                     }
                     .onGloballyPositioned {
                         frame = it.boundsInRoot()
+                        // Unclipped: a card scrolled out of sight still has its place, which boundsInRoot cuts to nothing.
+                        browser.cardFrames[tab.id] = Rect(it.positionInRoot(), it.size.toSize())
                         if (carried == null) origin = it.positionInWindow()
                     }
                     // A tap opens the tab. Held and let go where it was, the card's sheet opens (pinning it, its space);

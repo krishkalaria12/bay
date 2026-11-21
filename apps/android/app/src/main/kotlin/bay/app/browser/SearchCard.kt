@@ -1,6 +1,7 @@
 package bay.app.browser
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -120,6 +121,8 @@ private object SearchSheet {
     val bottomInset = 8.dp
     val cornerRadius = 38.dp
     val height = topInset + fieldHeight + rowsTopGap + rowHeight * VISIBLE_ROWS + bottomInset
+    /** With nothing to list: the field alone. */
+    val bareHeight = topInset + fieldHeight + bottomInset + 4.dp
 }
 
 /** How long typing has to pause before the engine is asked for suggestions. */
@@ -188,7 +191,10 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         rows = app.store.scopedSuggestions(chosen, query, siteResults, now)
         completion = ""
     } else {
-        val result = app.store.suggestions(query, remote, initialText.ifEmpty { null }, now)
+        // Until the prefilled address is changed, the rows are the space's recent pages, as on an empty field: the
+        // address alone matches little more than its own page.
+        val asked = if (initialText.isNotEmpty() && query == initialText) "" else query
+        val result = app.store.suggestions(asked, remote, initialText.ifEmpty { null }, now)
         rows = result.items.filter { it is Suggestion.Page || it is Suggestion.Search || it is Suggestion.Calc || it is Suggestion.Scope }
         completion = if (suppressed) "" else result.completion
     }
@@ -323,6 +329,10 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
         }
     }
 
+    // Nothing to list under the field (a new person, before typing): the sheet is just the field, on the keyboard.
+    val showsShortcuts = chosen == null && query.isEmpty() && shortcuts.isNotEmpty()
+    val bare = rows.isEmpty() && !showsShortcuts && !privately && (query.isEmpty() || query == initialText)
+
     Box(Modifier.fillMaxSize().testTag("search-card")) {
         // The page stays where it is, blurred behind (BrowserScreen) and dimmed here.
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
@@ -339,7 +349,8 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
                 .background(if (privately) Color(0xFF171717) else Theme.colors.background, RoundedCornerShape(topStart = SearchSheet.cornerRadius, topEnd = SearchSheet.cornerRadius))
                 .navigationBarsPadding()
                 .imePadding()
-                .height(SearchSheet.height)
+                .animateContentSize(Motion.settle.spec())
+                .height(if (bare) SearchSheet.bareHeight else SearchSheet.height)
                 .testTag(if (privately) "search-card-private" else "search-sheet"),
         ) {
             Row(
@@ -425,7 +436,7 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
                 if (privately) {
                     BayText(strings.t("search.privateNotice"), Modifier.padding(start = Space.lg, top = 2.dp).testTag("private-notice"), variant = TextVariant.FOOTNOTE, color = secondary)
                 }
-                if (chosen == null && query.isEmpty() && shortcuts.isNotEmpty()) {
+                if (showsShortcuts) {
                     Shortcuts(app, strings, shortcuts, privately, { enter(it) }) { open(OpenTarget.Url(it.home)) }
                 }
                 rows.forEachIndexed { index, row ->

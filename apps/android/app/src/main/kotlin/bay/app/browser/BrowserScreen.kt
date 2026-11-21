@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,6 +62,9 @@ import bay.design.overWallpaper
 
 private val BAR_HEIGHT = 52.dp
 
+/** How small the switcher starts as it comes up behind the shrinking page, and goes as the page grows back. */
+private const val SWITCHER_FROM = 0.94f
+
 /** Bay's one screen: the page showing (or the start page), the floating bar, and what opens over them. */
 @Composable
 fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit = {}) {
@@ -78,11 +82,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
         val bottom: @Composable BoxScope.() -> Unit = {
-            // Scrolled away while the page scrolls down; the toast and the player go with it.
-            val away by animateFloatAsState(if (browser.barAway) 1f else 0f, tween(200), label = "bar")
+            // Off a fullscreen site; and, over a page, slid away in step with it as it scrolls down (BrowserModel.barGone).
+            // The toast and the player go with it.
+            val onPage = browser.overlay == Overlay.NONE
+            val away by animateFloatAsState(if (onPage && browser.fullscreen) 1f else 0f, tween(200), label = "bar")
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs)
-                    .graphicsLayer { translationY = away * 140.dp.toPx() },
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .graphicsLayer { translationY = maxOf(away, if (onPage) browser.barGone else 0f) * size.height }
+                    .navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
                 verticalArrangement = Arrangement.spacedBy(Space.md),
             ) {
                 browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
@@ -119,13 +126,16 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
             val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
             // The page runs under the floating bar to the screen's foot and is never resized as the bar comes and goes:
-            // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. What a
-            // site pins to its bottom sits under the bar while it shows; the engine has no inset to lift it (plan gaps).
+            // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. The
+            // engine takes the bar as the page's bottom toolbar instead, lifting what a site pins to its bottom above it.
+            val density = LocalDensity.current
+            val barCover = WindowInsets.navigationBars.getBottom(density) + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
+            LaunchedEffect(barCover) { browser.barCoverChanged(barCover) }
             if (shown) {
                 // Behind the page until it draws its first frame: the colour at its top, else the engine's blank white.
                 val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
                 val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
-                Box(Modifier.fillMaxSize().background(behind).clearAndSetSemantics {})
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(behind).clearAndSetSemantics {})
             }
             // A fullscreen site takes the status bar's place too.
             val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
@@ -134,6 +144,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             val spaceIndex = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
             var lastSpace by remember { androidx.compose.runtime.mutableIntStateOf(spaceIndex) }
             val pageWidth = with(LocalDensity.current) { androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx() }
+            browser.tabSwipe.width = pageWidth
             LaunchedEffect(spaceIndex) {
                 val from = lastSpace
                 lastSpace = spaceIndex
@@ -144,11 +155,15 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             PagesHost(
                 browser, shown && !behind,
                 Modifier.fillMaxSize().then(top).graphicsLayer {
-                    translationX = slide.value
+                    translationX = slide.value + browser.tabSwipe.offset.value
                     alpha = 1f - (kotlin.math.abs(slide.value) / pageWidth).coerceIn(0f, 0.6f)
                 },
                 visible = shown,
             )
+            if (shown) {
+                TabSwipeLayer(browser)
+                TabCoverLayer(browser)
+            }
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
             if (browser.fullscreen) {
                 Box(
@@ -170,8 +185,27 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
         }
         if (browser.overlay == Overlay.TABS) {
+            // In from a page, the page shrinks into its card as the switcher comes up behind it; back to a page, the
+            // card grows into it as the switcher falls away (TabZoom).
+            val opening = browser.opening
+            val reveal = remember { androidx.compose.animation.core.Animatable(if (opening != null) 0f else 1f) }
+            LaunchedEffect(opening) {
+                if (opening == null) return@LaunchedEffect
+                reveal.snapTo(0f)
+                reveal.animateTo(1f, bay.design.Motion.settle.spec())
+                browser.openingDone()
+            }
+            val leave by animateFloatAsState(if (browser.zoom != null) 1f else 0f, bay.design.Motion.open.spec(), label = "switcher-leave")
             Wallpaper(app.preferences.wallpaper)
-            TabSwitcher(browser, strings, onSettings)
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    val shown = reveal.value * (1 - leave)
+                    alpha = shown
+                    scaleX = SWITCHER_FROM + (1 - SWITCHER_FROM) * shown
+                    scaleY = scaleX
+                },
+            ) { TabSwitcher(browser, strings, onSettings) }
+            opening?.let { TabMorph(browser, it, browser.cardFrames[it.id], 1f - reveal.value) }
         } else if (browser.hasPage) {
             val failure = browser.failure
             if (failure != null && failure.tabId == app.activeTabId) {
@@ -188,7 +222,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         if (browser.locked && browser.activeTab?.private == true && browser.overlay == Overlay.NONE) {
             PrivateLock(strings) { activity?.let(browser::unlock) }
         }
-        browser.zoom?.let { zoom -> TabZoom(zoom, browser::zoomFinished) }
+        browser.zoom?.let { zoom -> TabZoom(browser, zoom, browser::zoomFinished) }
         if (browser.overlay != Overlay.SEARCH) {
             if (!pickerOnTop) bottom()
         } else {

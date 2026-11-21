@@ -13,6 +13,13 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -41,9 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -243,42 +248,45 @@ private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: 
 fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier, onChecks: () -> Unit = {}) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
-    var swipe by remember { mutableFloatStateOf(0f) }
-    // Dragging the bar sideways goes to the tab before (right) or after (left), as Arc Search's bar does.
+    // Dragging the bar sideways slides the page to the tab before (right) or after (left) under the finger, as Arc
+    // Search's bar does (TabSwipe); dragging it up opens the tab switcher.
     val swipeable = browser.hasPage && browser.overlay == Overlay.NONE
-    var up by remember { mutableFloatStateOf(0f) }
+    val swipe = browser.tabSwipe
     val dragged = if (!swipeable) modifier else modifier.pointerInput(app.activeTabId, app.tabs.size) {
+        val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+        var up = 0f
+        var sideways = 0f
+        // Which way the drag went once it moved far enough to tell: sideways slides tabs, up opens the switcher.
+        var axis = 0
+        val slop = viewConfiguration.touchSlop
         detectDragGestures(
-            onDragStart = { up = 0f },
+            onDragStart = {
+                up = 0f
+                sideways = 0f
+                axis = 0
+                tracker.resetTracking()
+            },
             onDragEnd = {
-                val distance = swipe
-                swipe = 0f
-                // Up opens the tab switcher; sideways goes to the next tab.
-                if (up > 110.dp.toPx() && up > kotlin.math.abs(distance)) {
+                if (axis == 2 && up > 110.dp.toPx()) {
                     Haptics.press(view)
                     app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BAR))
                     browser.showTabs()
-                } else if (kotlin.math.abs(distance) > 24.dp.toPx()) {
-                    Haptics.press(view)
-                    browser.swipeTabs(if (distance < 0) 1 else -1)
+                } else if (axis == 1) {
+                    swipe.release(tracker.calculateVelocity().x)
                 }
-                up = 0f
             },
-            onDragCancel = {
-                swipe = 0f
-                up = 0f
-            },
-            onDrag = { _, amount ->
+            onDragCancel = { if (axis == 1) swipe.cancel() },
+            onDrag = { change, amount ->
+                tracker.addPosition(change.uptimeMillis, change.position)
                 up -= amount.y
-                if (up > kotlin.math.abs(swipe) * 2) return@detectDragGestures
-                val index = app.tabs.indexOfFirst { it.id == app.activeTabId }
-                val open = app.tabs.getOrNull(index + if (swipe + amount.x < 0) 1 else -1) != null
-                swipe += amount.x * if (open) 0.4f else 0.12f
+                sideways += amount.x
+                if (axis == 0 && (kotlin.math.abs(sideways) > slop || up > slop)) axis = if (up > kotlin.math.abs(sideways)) 2 else 1
+                if (axis == 1) swipe.drag(amount.x)
             },
         )
     }
     val slide = remember { SpaceSlide() }
-    CompositionLocalProvider(LocalCapsuleShift provides swipe) { BarRow(browser, strings, onSettings, dragged, onChecks, slide) }
+    BarRow(browser, strings, onSettings, dragged, onChecks, slide)
 }
 
 /** Holding Tabs: whether the row of spaces is up, what's under the finger, and where things are. */
@@ -363,16 +371,13 @@ private fun SpaceSlide.targetAt(point: Offset, count: Int, cell: Float, inset: F
     }
 }
 
-/** How far the capsule follows a sideways drag on the bar. */
-private val LocalCapsuleShift = androidx.compose.runtime.compositionLocalOf { 0f }
-
 @Composable
 private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit, slide: SpaceSlide) {
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
         if (browser.overlay == Overlay.TABS) {
-            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            BarButton("bar-archive", strings.t("bar.archive"), { browser.openDrawer(archive = true) }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             SpacesCapsule(browser, strings)
             BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
         } else if (browser.hasPage) {
@@ -387,7 +392,8 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
                 if (browser.tip == bay.core.TipId.BLOCKING) Box(Modifier.size(60.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
             }
         } else {
-            BarButton("bar-archive", strings.t("bar.archive"), { browser.panel = Panel.ARCHIVE }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
+            TabsButton(browser, strings, slide)
             Capsule(browser, strings)
             BarButton("bar-settings", strings.t("bar.settings"), onSettings, onLongClick = onChecks) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
         }
@@ -496,8 +502,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
     val insecure = url.startsWith("http:")
     val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
-    val shift = LocalCapsuleShift.current
-    Box(Modifier.graphicsLayer { translationX = shift; alpha = 1f - minOf(kotlin.math.abs(shift) / 110.dp.toPx(), 0.6f) }) {
+    Box {
         // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
         // says so with a mark beside it.
         BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = 128.dp) {
@@ -507,7 +512,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
             }
         }
         // Drawn over the pill and sized by it, so loading never widens the pill.
-        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, Modifier.matchParentSize())
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, browser.app.activeTabId, Modifier.matchParentSize())
     }
 }
 
@@ -607,18 +612,59 @@ fun TabCount(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** The thin line along the capsule's edge: it fills as the page loads and fades once the page is there. */
+/**
+ * The thin line along the capsule's edge: it fills as the page loads, runs to the end and fades once the page is there.
+ * Chromium's progress starts over on each redirect and frame, and a load can stop and start again within a moment, so
+ * within one load the line only moves forward, and a stop only finishes it once it has lasted. A tab switch starts a
+ * line of its own.
+ */
 @Composable
-fun LoadProgress(state: NavigationState, modifier: Modifier = Modifier) {
-    val filled by animateFloatAsState(maxOf(state.progress.toFloat(), 0.04f), tween(240), label = "progress")
-    val shown by animateFloatAsState(if (state.isLoading) 1f else 0f, tween(if (state.isLoading) 120 else 220), label = "shown")
-    if (shown == 0f) return
-    Box(modifier.alpha(shown).testTag("page-progress").clearAndSetSemantics {}) {
+fun LoadProgress(state: NavigationState, tabId: String, modifier: Modifier = Modifier) {
+    val fill = remember(tabId) { Animatable(if (state.isLoading) maxOf(state.progress.toFloat(), LOAD_START) else 0f) }
+    val shown = remember(tabId) { Animatable(if (state.isLoading) 1f else 0f) }
+    val loading = state.isLoading
+    LaunchedEffect(tabId, loading) {
+        if (loading) {
+            // A new load after the last one finished starts the line again; one that resumes keeps its place.
+            if (shown.value == 0f || fill.value >= 1f) fill.snapTo(0f)
+            shown.animateTo(1f, tween(120))
+        } else if (shown.value > 0f) {
+            delay(LOAD_SETTLE_MS)
+            fill.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+            shown.animateTo(0f, tween(220))
+            fill.snapTo(0f)
+        }
+    }
+    val progress = state.progress.toFloat()
+    LaunchedEffect(tabId, loading, progress) {
+        if (!loading) return@LaunchedEffect
+        val target = maxOf(progress, LOAD_START, fill.value)
+        // Eases towards what's loaded, then creeps on while the page is still busy, never quite reaching the end.
+        fill.animateTo(target, tween(320, easing = LinearOutSlowInEasing))
+        while (true) {
+            delay(400)
+            fill.animateTo(fill.value + (LOAD_CREEP_LIMIT - fill.value).coerceAtLeast(0f) * 0.08f, tween(380, easing = LinearEasing))
+        }
+    }
+    if (shown.value == 0f) return
+    Box(modifier.graphicsLayer { alpha = shown.value }.testTag("page-progress").clearAndSetSemantics {}) {
         Box(Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 2.dp).fillMaxWidth().height(2.dp)) {
-            Box(Modifier.fillMaxWidth(filled).height(2.dp).background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+            Box(Modifier.fillMaxHeight().fillMaxWidth().graphicsLayer {
+                scaleX = fill.value.coerceIn(0f, 1f)
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+            }.background(Theme.colors.accent, RoundedCornerShape(1.dp)))
         }
     }
 }
+
+/** Where the line starts, so a load shows at once. */
+private const val LOAD_START = 0.08f
+
+/** How far the line creeps on its own while the page says nothing new. */
+private const val LOAD_CREEP_LIMIT = 0.92f
+
+/** How long a stopped load waits before finishing the line, for the load that often follows at once (a redirect). */
+private const val LOAD_SETTLE_MS = 160L
 
 /** A page that failed to load, in plain words, and a way to try again. */
 @Composable

@@ -24,6 +24,14 @@ private val decoded = object : LruCache<String, ImageBitmap>(32 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
 }
 
+/** Reads the picture at `uri` into memory ahead of drawing it, so it shows on its first frame. */
+suspend fun preloadFileImage(uri: String?, width: Int) {
+    if (uri == null) return
+    val key = "$uri@$width"
+    if (decoded.get(key) != null) return
+    withContext(Dispatchers.IO) { decode(uri, width) }?.let { decoded.put(key, it) }
+}
+
 /** The picture at `uri` (a file address), at least `width` pixels wide where it is that wide; null until it's read. */
 @Composable
 fun rememberFileImage(uri: String?, width: Int): ImageBitmap? = rememberFileImageResult(uri, width).image
