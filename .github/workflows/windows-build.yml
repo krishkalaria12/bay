@@ -280,7 +280,7 @@ jobs:
       - name: Install packaging tools
         run: choco install innosetup --no-progress -y
       - name: Package
-        run: '& scripts/windows/package.ps1 -Version $env:VERSION -Channel $env:CHANNEL -Unsigned'
+        run: "& scripts/windows/package.ps1 -Version $env:VERSION -Channel $env:CHANNEL -Unsigned"
       - uses: actions/upload-artifact@v4
         with:
           name: bay-windows-installer
