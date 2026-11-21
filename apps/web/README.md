@@ -1,6 +1,6 @@
 # Bay website
 
-The landing page at https://bay.krishkalaria.in: Astro, React islands and Tailwind CSS 4.
+The landing page at https://baybrowser.in: Astro, React islands and Tailwind CSS 4.
 
 It is its own pnpm workspace (excluded from the repo root's, which hoists for React Native), so install
 and run it from this folder:
@@ -15,7 +15,7 @@ pnpm preview:cf   # the built site on Cloudflare's runtime, http://localhost:878
 pnpm run deploy   # build and deploy to Cloudflare (run `pnpm exec wrangler login` once first)
 ```
 
-It deploys as a Cloudflare Worker on the custom domain bay.krishkalaria.in. Astro still builds static
+It deploys as a Cloudflare Worker on the custom domain baybrowser.in. Astro still builds static
 assets into `dist/`. Only `/easel/*` and `/api/easels/*` run `worker/index.ts` first; other requests use
 the existing asset handling, redirects and 404 page. The Worker also falls back to the `ASSETS` binding.
 `public/_headers` caches Astro's fingerprinted `/_astro/*` files for a year.
@@ -122,7 +122,7 @@ Sources must be absolute HTTP(S) URLs without embedded credentials, whitespace o
 Every object accepts only its documented fields. The UTF-8 JSON body limit is 16 MiB including base64;
 the Worker counts streamed bytes even without a truthful `Content-Length`. Publication returns 200
 only after R2 confirms persistence. The native client derives the URL as
-`https://bay.krishkalaria.in/easel/<id>/`; the server does not return credentials or a public object URL.
+`https://baybrowser.in/easel/<id>/`; the server does not return credentials or a public object URL.
 
 `GET` and `HEAD /easel/<id>/` return the shared snapshot, or 404 for a missing/revoked share.
 `DELETE /api/easels/<id>` with the same bearer key atomically replaces the content with a permanent

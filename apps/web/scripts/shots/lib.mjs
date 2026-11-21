@@ -15,7 +15,7 @@ export const buildApp = process.env.BAY_SHOTS_APP ?? join(repo, "apps/browser/bu
 
 // Favicons by site, so that a tab that hasn't loaded still shows its real icon.
 export const site = {
-  bay: ["https://bay.krishkalaria.in/", "Bay: a beautiful, fast browser for Mac", "https://bay.krishkalaria.in/favicon.ico"],
+  bay: ["https://baybrowser.in/", "Bay: a beautiful, fast browser for Mac", "https://baybrowser.in/favicon.ico"],
   github: ["https://github.com/krishkalaria12/bay", "krishkalaria12/bay", "https://github.githubassets.com/favicons/favicon.png"],
   figma: ["https://www.figma.com/", "Figma", "https://static.figma.com/app/icon/1/favicon.png"],
   linear: ["https://linear.app/", "Linear", "https://linear.app/favicon.ico"],

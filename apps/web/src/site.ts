@@ -2,7 +2,7 @@
 export const site = {
   name: "Bay",
   // The production origin; astro.config.mjs `site`, public/robots.txt and public/llms.txt repeat it.
-  url: "https://bay.krishkalaria.in",
+  url: "https://baybrowser.in",
   // Under 60 characters: what Bay is, then what it brings.
   title: "Bay: a beautiful, fast browser for Mac",
   // Around 155 characters, the answer first.

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://bay.krishkalaria.in">Website</a> ·
+  <a href="https://baybrowser.in">Website</a> ·
   <a href="https://github.com/krishkalaria12/bay/releases">Releases</a> ·
   <a href="#reporting-issues">Report an issue</a> ·
   <a href="#contributing">Contribute</a>
@@ -247,9 +247,9 @@ the runner leaves the global `xcode-select` setting unchanged.
 Signed releases (DMG, Sparkle zip and appcast): `scripts/release.sh <version>`, which reads its
 notes from `release-notes/<version>.md` and needs a Developer ID certificate, notarytool credentials
 (`scripts/.notary.env` or the `bay` keychain profile) and the Sparkle key in the login keychain
-(account `bay`). The app checks `bay.krishkalaria.in/appcast.xml` for updates and links to
-`bay.krishkalaria.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
-channel (`bay.krishkalaria.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
+(account `bay`). The app checks `baybrowser.in/appcast.xml` for updates and links to
+`baybrowser.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
+channel (`baybrowser.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
 [docs/releasing.md](docs/releasing.md).
 
 ### Environment variables
