@@ -262,7 +262,7 @@ Import-Certificate -FilePath Bay-sideload.cer -CertStoreLocation Cert:\LocalMach
    ```
 
    Until then the package is `BayBrowser.Bay` by `CN=BayBrowser`, for sideloading only.
-3. **First submission.** Pricing: free. Properties: category Productivity; it needs a privacy policy URL, since Bay uses
+3. **First submission.** Pricing: free. Properties: category Productivity, and the privacy policy URL `https://baybrowser.in/privacy/`, which Bay needs since it uses
    the internet. Age ratings: the questionnaire (unrestricted web access). Packages: the `.msix`. Store listing: the
    description and at least one screenshot of Bay on Windows. Submission options: explain `runFullTrust`, e.g. "Bay is
    a Chromium-based desktop web browser; its multi-process, sandboxed engine runs as a full-trust desktop app."

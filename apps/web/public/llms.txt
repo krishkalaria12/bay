@@ -8,6 +8,7 @@ Bay is an independent browser. It is not made by, or affiliated with, The Browse
 
 - [Bay](https://baybrowser.in/): what Bay is, what it does, and answers to common questions.
 - [How to switch from Arc to Bay](https://baybrowser.in/switch-from-arc/): importing spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, and where each Arc feature is in Bay.
+- [Privacy](https://baybrowser.in/privacy/): what Bay keeps on your computer and what it sends: update checks, opt-in crash reports and usage stats, and pages you share.
 
 ## What Bay does
 
