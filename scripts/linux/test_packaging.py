@@ -1,9 +1,12 @@
 """Linux packaging against fixture engine archives: no engine build or Linux desktop needed."""
+import base64
 import gzip
+import hashlib
 import importlib.util
 import json
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -285,6 +288,22 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(line, lines)
         self.assertEqual(lines[-2:], ["", "pkgname = bay-bin"])
 
+    def test_flathub_and_nixpkgs_files_name_this_release(self):
+        output = self.root / "stores"
+        self.release("tar,flatpak,nixpkgs", output)
+        tarball = output / "bay-1.3.0-linux-x64.tar.xz"
+        manifest = (output / "flatpak/in.krishkalaria.bay.yaml").read_text()
+        self.assertIn("url: https://github.com/krishkalaria12/bay/releases/download/v1.3.0/bay-1.3.0-linux-x64.tar.xz\n", manifest)
+        self.assertIn(f'sha256: "{engine.sha256(tarball)}"', manifest)
+        self.assertNotIn("@", manifest.replace("@v", ""))
+        for name in ("bay.sh", "cobalt.ini", "flathub.json"):
+            self.assertTrue((output / "flatpak" / name).is_file(), name)
+        package = (output / "nixpkgs/package.nix").read_text()
+        self.assertIn('version = "1.3.0";', package)
+        digest = base64.b64encode(hashlib.sha256(tarball.read_bytes()).digest()).decode()
+        self.assertIn(f'hash = "sha256-{digest}";', package)
+        self.assertNotIn("SHA256SUMS", [path.name for path in (output / "flatpak").iterdir()])
+
     @unittest.skipUnless(shutil.which("dpkg-deb"), "needs dpkg-deb")
     def test_deb_installs_a_setuid_sandbox_and_its_scripts(self):
         output = self.root / "deb"
@@ -325,6 +344,21 @@ class ReleaseTests(unittest.TestCase):
         for name in ("bay-1.3.0-linux-x64.tar.xz", "SHA256SUMS"):
             subprocess.run(["gpg", "--verify", output / f"{name}.asc", output / name], check=True, capture_output=True,
                            env={**os.environ, **env})
+
+
+class NixLibraryTests(unittest.TestCase):
+    def test_the_nixpkgs_package_links_the_build_shells_libraries(self):
+        """package.nix (nixpkgs' argument names) and libraries.nix (the build shell's) must list the same libraries."""
+        nix = HERE.parents[1] / "packaging/linux/nix"
+        shell = (nix / "libraries.nix").read_text()
+        names = set(re.findall(r"^  ([a-z][\w.-]*)$", shell, re.M))
+        names |= set(re.findall(r'^  \(x11 "(\w+)"', shell, re.M))
+        names |= {"libgbm"} if "pkgs.libgbm or mesa" in shell else set()
+        package = (nix / "package.nix").read_text()
+        block = package[package.index("  libraries = [\n"):package.index("  ]\n", package.index("  libraries = [\n"))]
+        self.assertEqual(set(re.findall(r"^    ([a-z][\w.-]*)$", block, re.M)), names)
+        self.assertIn("libsForQt5.qtbase", shell)
+        self.assertIn("libsForQt5.qtbase", package)
 
 
 PUBLISH_TOOLS = ("gpg", "rpmsign", "rpmkeys", "rpmbuild", "dpkg-deb", "apt-ftparchive", "createrepo_c")

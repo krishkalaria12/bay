@@ -27,6 +27,9 @@ can't find. `--verify DIR` rechecks a staged app.
 | `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `bay.krishkalaria.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
 | `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
+| `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.krishkalaria.bay` repository's files for this release: the manifest (`flatpak/in.krishkalaria.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
+| `nixpkgs/package.nix` (add `nixpkgs`) | nixpkgs | `nix/package.nix` with the version and the tarball's hash, for `pkgs/by-name/ba/bay` |
+| `bay_<version>_amd64.snap` (add `snap`) | Snap Store | from `snap/snapcraft.yaml.in`; needs `snapcraft`, and `SNAPCRAFT`/`BAY_SNAPCRAFT_ARGS` to pack on the host as CI does |
 | `SHA256SUMS` | | every artifact |
 
 Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures.
@@ -54,7 +57,8 @@ tarball, use `nix/default.nix` as described in `docs/linux-building.md`.
 ## What's installed
 
 - `/opt/bay/chrome-sandbox` is setuid root in the .deb, .rpm and AUR package, the fallback for kernels without
-  unprivileged user namespaces. Nothing turns the sandbox off.
+  unprivileged user namespaces. Nothing turns the sandbox off. The Flatpak has no setuid sandbox: zypak runs Chromium's
+  through Flatpak's own. Neither has the snap: its `browser-support` plug with `allow-sandbox` gives it user namespaces.
 - `/etc/apparmor.d/bay` (`apparmor/bay`) lets `/opt/bay/bay` create user namespaces where AppArmor restricts them (Ubuntu
   23.10 and later) and confines nothing else. The AppImage can't install it, and its mount point changes each launch, so
   `AppRun` prints a profile for AppImage mounts and the commands to install it.

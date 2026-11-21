@@ -4,7 +4,9 @@
 #
 #   scripts/linux/release.sh --app dist/linux-app --version 1.4.0 [--output dist/linux-release] [--formats tar,deb,...]
 #
-# Formats default to tar,deb,rpm,appimage,aur; add nix for a NixOS closure. Both aur and nix need tar.
+# Formats default to tar,deb,rpm,appimage,aur; add nix for a NixOS closure. flatpak writes the Flathub repository's files
+# and nixpkgs the nixpkgs package for this release; snap packs the Snap Store's .snap. aur, nix, flatpak, nixpkgs and
+# snap need tar.
 # Set BAY_GPG_KEY to sign every artifact and
 # SHA256SUMS with detached ASCII signatures. scripts/linux/publish.sh publishes them.
 set -euo pipefail
@@ -38,6 +40,11 @@ srcinfo() (
 need() { command -v "$1" >/dev/null || { echo "$2 needs $1 on PATH" >&2; exit 1; }; }
 want aur && ! want tar && { echo "the aur format needs tar" >&2; exit 2; }
 want nix && ! want tar && { echo "the nix format needs tar" >&2; exit 2; }
+for format in flatpak nixpkgs snap; do
+  want $format && ! want tar && { echo "the $format format needs tar" >&2; exit 2; }
+done
+snapcraft=${SNAPCRAFT:-snapcraft}
+want snap && need "${snapcraft%% *}" snap
 want deb && need dpkg-deb deb
 want rpm && need rpmbuild rpm
 want appimage && need appimagetool appimage && need zsyncmake appimage
@@ -141,6 +148,37 @@ if want aur; then
   mkdir -p "$output/aur"
   sed -e "s/@VERSION@/$version/" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" "$packaging/aur/PKGBUILD.in" >"$output/aur/PKGBUILD"
   srcinfo "$output/aur/PKGBUILD" >"$output/aur/.SRCINFO"
+fi
+
+if want flatpak; then
+  # The tarball's release URL and checksum, with the files the manifest names: flathub/in.krishkalaria.bay's contents.
+  mkdir -p "$output/flatpak"
+  sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" \
+    "$packaging/flatpak/in.krishkalaria.bay.yaml.in" >"$output/flatpak/in.krishkalaria.bay.yaml"
+  cp "$packaging/flatpak/bay.sh" "$packaging/flatpak/cobalt.ini" "$packaging/flatpak/flathub.json" "$output/flatpak/"
+fi
+
+if want nixpkgs; then
+  # pkgs/by-name/ba/bay/package.nix, with the release tarball's SRI hash.
+  mkdir -p "$output/nixpkgs"
+  hash=$(python3 -c 'import base64, hashlib, sys; print("sha256-" + base64.b64encode(hashlib.sha256(open(sys.argv[1], "rb").read()).digest()).decode())' "$tarball")
+  sed -e "s/@VERSION@/$version/" -e "s|@HASH@|$hash|" "$packaging/nix/package.nix" >"$output/nixpkgs/package.nix"
+fi
+
+if want snap; then
+  # snapcraft packs a project folder: snap/snapcraft.yaml, its launcher and icon, and the tarball the part unpacks.
+  project="$work/snap"
+  mkdir -p "$project/snap/gui" "$project/snap/local"
+  sed "s/@VERSION@/$version/g" "$packaging/snap/snapcraft.yaml.in" >"$project/snap/snapcraft.yaml"
+  install -m 0755 "$packaging/snap/local/bay" "$project/snap/local/bay"
+  cp "$root/usr/share/icons/hicolor/256x256/apps/bay.png" "$project/snap/gui/bay.png"
+  cp "$tarball" "$project/"
+  snap="$output/bay_${version}_amd64.snap"
+  # CI packs on the runner itself (SNAPCRAFT="sudo snapcraft", BAY_SNAPCRAFT_ARGS=--destructive-mode), which needs
+  # Ubuntu 24.04 to match core24; elsewhere snapcraft packs in its own container.
+  # shellcheck disable=SC2086
+  (cd "$project" && $snapcraft pack ${BAY_SNAPCRAFT_ARGS:-} --output "$snap")
+  artifacts+=("$snap")
 fi
 
 if want nix; then
