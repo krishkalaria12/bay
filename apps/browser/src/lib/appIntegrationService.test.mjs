@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../effect/windowPorts.ts";
 // The app's ties to the Mac (lib/appIntegrationService.ts): Handoff and AppleScript, against a fake Mac and the
 // test clock.
 import assert from "node:assert/strict";
@@ -44,7 +45,10 @@ const withIntegration = async (use) => {
   });
 
   const runtime = ManagedRuntime.make(
-    Layer.mergeAll(AppIntegrationService.layer.pipe(Layer.provide(Layer.mergeAll(engine, fakeDiagnostics().layer))), TestClock.layer()),
+    Layer.mergeAll(
+      AppIntegrationService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(engine, fakeDiagnostics().layer))),
+      TestClock.layer(),
+    ),
   );
 
   S().hydrate({});

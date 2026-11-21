@@ -1,12 +1,16 @@
 import type { Download } from "@bay/chromium";
-import { ContextMenuArea, fileExists, MouseArea, openFile, Symbol, WindowDragRegion } from "@bay/desktop";
+import { ContextMenuArea, MouseArea, openFile, Symbol, WindowDragRegion } from "@bay/desktop";
 import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "@bay/platform";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { clearDownloads } from "../../runtime/windowUiActions";
+import { useFileExists } from "../useFileExists";
 import { downloadsIn } from "../../store/windowUi";
 import { downloadMenu, downloadStatus, FileIcon } from "../downloads/DownloadRow";
 import { showToast } from "../split/splitActions";
@@ -16,26 +20,24 @@ import { IconButton, useHover } from "../ui/primitives";
 import { PROFILE_INDICATOR_X } from "../spaces/constants";
 import { SearchField, useFormColors } from "../settings/controls";
 import { ADDRESS_LIGHTS_Y } from "../sidebar/constants";
-import { useSidebarTokens, useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarTokens } from "../sidebar/tokens";
 import { newEasel, openLibraryPage } from "./actions";
 import { importMediaFiles, LibrarySectionBody } from "./LibraryPage";
 import { SECTIONS, type Section } from "./sections";
-import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
+import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar } from "./sidebarState";
 import { startLibrary, useLibrary } from "./state";
 
 // Arc's Library in the sidebar: a rail of its sections down the left, and the chosen one's list beside it, with the
 // page still showing. Back goes to the tabs; the other button opens it as a page instead.
 
-export function LibrarySidebar({ windowId }: { windowId: string }) {
+export function LibrarySidebar({ windowId, section, width }: { windowId: string; section: Section; width: number }) {
   const colors = useFormColors();
-  const width = useSidebarWidth(windowId);
   const right = useSidebarOnRight();
   // The window buttons sit at the sidebar's top left: over the rail on the left, over the list on the right (where
   // they show only with the address bar in the sidebar). The field starts after them.
   const addressInSidebar = useAddressBarInSidebar();
   const lightsHere = !right || addressInSidebar;
   const fieldInset = !lightsHere ? 0 : right ? PROFILE_INDICATOR_X - layout.sidebarInset : PROFILE_INDICATOR_X - RAIL;
-  const section = useLibrarySidebar((l) => l[windowId]) ?? "media";
   const [query, setQuery] = useState("");
   const [listWidth, setListWidth] = useState(width - RAIL);
   const error = useLibrary((s) => s.error);
@@ -156,7 +158,7 @@ function SectionAction({ windowId, section, disabled }: { windowId: string; sect
         box={28}
         tooltip="Clear All"
         disabled={!clearable}
-        onPress={() => useBrowser.getState().clearDownloads(windowId)}
+        onPress={() => reportBrowserCommand(clearDownloads(windowId))}
       />
     );
 
@@ -211,7 +213,8 @@ function fileKind(name: string): string {
 function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  const exists = d.state !== "finished" || fileExists(d.path);
+  const filePresent = useFileExists(d.path, d.state === "finished");
+  const exists = d.state !== "finished" || filePresent === true;
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.tabUrl || d.referrer || d.url);

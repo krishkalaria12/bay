@@ -1,0 +1,68 @@
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.cc b/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.cc
+index 4b30b30..da3d7d2 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.cc
+@@ -114,6 +114,10 @@ BrowserWindowInterface* TestRenderViewContextMenu::GetBrowser() const {
+ void TestRenderViewContextMenu::Show() {
+ }
+ 
++bool TestRenderViewContextMenu::IsRunning() {
++  return false;
++}
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ const policy::DlpRulesManager* TestRenderViewContextMenu::GetDlpRulesManager()
+     const {
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h b/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h
+index 54fd270..518b879 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h
+@@ -118,6 +118,7 @@ class TestRenderViewContextMenu : public RenderViewContextMenu {
+ 
+   // RenderViewContextMenu:
+   void Show() override;
++  bool IsRunning() override;
+   GURL GetIndigoReplacementImageURL() const override;
+ #if BUILDFLAG(IS_CHROMEOS)
+   const policy::DlpRulesManager* GetDlpRulesManager() const override;
+diff --git a/chrome/test/base/testing_browser_process.h b/chrome/test/base/testing_browser_process.h
+index e8fe0af..efbcce0 100644
+--- a/chrome/test/base/testing_browser_process.h
++++ b/chrome/test/base/testing_browser_process.h
+@@ -205,7 +205,7 @@ class TestingBrowserProcess
+   void set_usb_system_tray_icon_for_test(
+       std::unique_ptr<UsbSystemTrayIcon> icon) override;
+   speech::SpeechRecognitionSmallExpertModelInstaller*
+-  speech_recognition_small_expert_model_installer() override;
++  speech_recognition_small_expert_model_installer();
+ #endif
+   os_crypt_async::OSCryptAsync* os_crypt_async() override;
+   void set_additional_os_crypt_async_provider_for_test(
+diff --git a/content/public/test/mock_navigation_throttle_registry.cc b/content/public/test/mock_navigation_throttle_registry.cc
+index ee0d0ca..29db2a5 100644
+--- a/content/public/test/mock_navigation_throttle_registry.cc
++++ b/content/public/test/mock_navigation_throttle_registry.cc
+@@ -25,7 +25,8 @@ NavigationHandle& MockNavigationThrottleRegistry::GetNavigationHandle() {
+ }
+ 
+ void MockNavigationThrottleRegistry::AddThrottle(
+-    std::unique_ptr<NavigationThrottle> throttle) {
++    std::unique_ptr<NavigationThrottle> throttle,
++    bool first) {
+   CHECK(throttle);
+   switch (registration_mode_) {
+     case RegistrationMode::kAutoRegistrationForTesting:
+diff --git a/content/public/test/mock_navigation_throttle_registry.h b/content/public/test/mock_navigation_throttle_registry.h
+index 23bff81..7f94cde 100644
+--- a/content/public/test/mock_navigation_throttle_registry.h
++++ b/content/public/test/mock_navigation_throttle_registry.h
+@@ -49,7 +49,8 @@ class MockNavigationThrottleRegistry : public NavigationThrottleRegistry {
+ 
+   // Implements NavigationThrottleRegistry:
+   NavigationHandle& GetNavigationHandle() override;
+-  void AddThrottle(std::unique_ptr<NavigationThrottle> throttle) override;
++  void AddThrottle(std::unique_ptr<NavigationThrottle> throttle,
++                   bool first = false) override;
+ 
+   // Following methods are not supported in this mock, and returns false always.
+   bool HasThrottle(const std::string& name) override;

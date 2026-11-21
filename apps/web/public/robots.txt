@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://bay.krishkalaria.in/sitemap-index.xml
+Sitemap: https://baybrowser.in/sitemap-index.xml

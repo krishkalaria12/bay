@@ -8,8 +8,11 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p .",
-    "test": "bash ../../scripts/swift-test.sh --scratch-path \"${TMPDIR:-/tmp}/bay-import-swiftpm\"",
+    "test": "node ../../scripts/test-native.mjs import",
     "fixtures": "python3 fixtures/generate.py"
+  },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   },
   "peerDependencies": {
     "expo": "*",

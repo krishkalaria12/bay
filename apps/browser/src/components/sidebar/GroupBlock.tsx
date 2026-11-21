@@ -1,11 +1,11 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
 import { usePageSpaceId, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { groupLabel } from "../../store/tabTidying";
 import { MeetingTimeLabel, useMeetingCountdown } from "../activity/MeetingCountdown";
@@ -24,6 +24,8 @@ import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
 import { GROUP_COLORS, useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closeGroup, updateGroup } from "../../runtime/organizeActions";
 
 export const GroupBlock = memo(function GroupBlock({ groupId, section }: { groupId: string; section: "list" | "pinnedGroups" }) {
   const metrics = useSidebarMetrics();
@@ -61,8 +63,8 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
         <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />
       </View>
       {/* A collapsed group's members aren't mounted (a big group would otherwise cost as much as if it were open); they
-          mount for the animation. Selected members stay mounted: a multi-tab drag gathers its rows from the mounted
-          ones (sidebar/dnd.tsx). The active tab stays out while the group is collapsed, as in Arc and Dia. */}
+            mount for the animation. Selected members stay mounted: a multi-tab drag gathers its rows from the mounted
+            ones (sidebar/dnd.tsx). The active tab stays out while the group is collapsed, as in Arc and Dia. */}
       <View style={{ paddingLeft: GROUP_INDENT }}>
         <Fold
           fold={fold}
@@ -133,7 +135,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
           onPress={() => {
             dismissHover();
 
-            if (!renaming) useBrowser.getState().updateGroup(groupId, { collapsed: !collapsed });
+            if (!renaming) reportBrowserCommand(updateGroup(groupId, { collapsed: !collapsed }));
           }}
         >
           {({ pressed }) => (
@@ -187,7 +189,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                     weight="semibold"
                     box={22}
                     radius={6}
-                    onPress={() => useBrowser.getState().closeGroup(groupId)}
+                    onPress={() => reportBrowserCommand(closeGroup(groupId))}
                     tooltip="Close Group"
                   />
                 }

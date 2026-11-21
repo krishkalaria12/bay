@@ -1,5 +1,6 @@
 const path = require("node:path");
-const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
+const { mergeConfig } = require("@react-native/metro-config");
+const { getDefaultConfig } = process.env.BAY_WEB === "1" ? require("expo/metro-config") : require("@react-native/metro-config");
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
@@ -11,6 +12,8 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
     resolveRequest(context, moduleName, platform) {
       if (platform === "macos" && (moduleName === "react-native" || moduleName.startsWith("react-native/"))) {
         moduleName = moduleName.replace(/^react-native/, "react-native-macos");
+      } else if (platform === "web" && moduleName === "react-native") {
+        moduleName = "react-native-web";
       }
 
       // The render benchmark (scripts/perf/js-bench.mjs bundle --profiling) bundles React's profiling renderer:
@@ -29,5 +32,12 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
 // window anyway: measured on the Release bench (3 alternating launches), evaluating the bundle took 8 ms longer and the
 // first window came 27 ms sooner; opening a tab took 14% less, closing one 16% less, and the bytecode is 250 KB smaller.
 config.transformer.getTransformOptions = async () => ({ transform: { experimentalImportSupport: false, inlineRequires: false } });
+
+// Traces of the Chrome-hosted desktop name the functions that ran (scripts/perf/trace.mjs), and its React
+// commits the components that rendered (src/web/reactProfiling.ts): keep names through minification. The web bundle
+// grows 5.6% (5.78 to 6.10 MB, measured 2026-11-16).
+if (process.env.BAY_WEB === "1") {
+  config.transformer.minifierConfig = { ...config.transformer.minifierConfig, keep_fnames: true, keep_classnames: true };
+}
 
 module.exports = config;

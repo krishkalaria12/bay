@@ -1,10 +1,14 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as settingsCommands from "../../runtime/settingsActions";
+import { View } from "@bay/platform";
 import { WebView } from "@bay/chromium";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { openFromPage, pageSpaceId } from "../window/openFromPage";
 import { useResizeDrag } from "../sidebar/useResizeDrag";
@@ -42,7 +46,7 @@ export function ExtensionSidePanel() {
     direction: -1,
     saved: () => useBrowser.getState().settings.extensionSidePanelWidth ?? 360,
     onLive: setDragWidth,
-    onCommit: (w) => useBrowser.getState().updateSettings({ extensionSidePanelWidth: w }),
+    onCommit: (w) => reportBrowserCommand(settingsCommands.updateSettings({ extensionSidePanelWidth: w })),
   });
 
   const room = width + layout.cardInset - 1;
@@ -57,7 +61,7 @@ export function ExtensionSidePanel() {
         <PanelCard key={`${shown.extensionId}|${shown.pageProfile}|${shown.url}`} windowId={windowId} panel={shown} />
         <View
           {...resize}
-          onDoubleClick={() => useBrowser.getState().updateSettings({ extensionSidePanelWidth: 360 })}
+          onDoubleClick={() => reportBrowserCommand(settingsCommands.updateSettings({ extensionSidePanelWidth: 360 }))}
           style={{ position: "absolute", top: 0, bottom: 0, left: -3, width: 7, cursor: "col-resize" }}
         />
       </Animated.View>
@@ -75,7 +79,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
   return (
     <View style={{ flex: 1, borderRadius: layout.cardRadius, overflow: "hidden", backgroundColor: theme.card }}>
       <View style={{ height: SIDE_PANEL_HEADER, flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 5, gap: 8 }}>
-        {icon ? <Image source={{ uri: icon }} style={{ width: 16, height: 16 }} /> : null}
+        {icon ? <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 16, height: 16 }} /> : null}
         <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "500", color: theme.textPrimary }}>
           {title}
         </Text>

@@ -1,3 +1,5 @@
+import { ScrollView } from "@bay/platform";
+import { View } from "@bay/platform";
 import {
   clearSiteData,
   getContentBlocker,
@@ -24,9 +26,10 @@ import {
 } from "@bay/chromium";
 import { confirm } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
+import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { Favicon } from "../../ui/primitives";
@@ -34,6 +37,7 @@ import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } fro
 import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
+import { platformWords } from "../../../lib/platformWords";
 
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
   { id: "ads", toggle: SETTINGS.blockAds.title, settingId: SETTINGS.blockAds.id, section: "Ad blockers" },
@@ -98,7 +102,7 @@ export function PrivacyPane() {
 
   return (
     <View>
-      <SectionHeader title="Content blocking" description="Built on EasyList and EasyPrivacy. Blocking happens on this Mac." />
+      <SectionHeader title="Content blocking" description={`Built on EasyList and EasyPrivacy. Blocking happens on ${platformWords.thisComputer}.`} />
       <Group>
         {CATEGORIES.flatMap((c) =>
           c.toggle
@@ -210,7 +214,7 @@ function FilterListsSheet() {
 // MARK: Zoom levels
 
 function ZoomLevels() {
-  const spaceId = useBrowser((s) => s.settings.defaultSpaceId);
+  const spaceId = useBrowserRead((s) => s.settings.defaultSpaceId);
   const profiles = useSpaces();
   const [selected, setSelected] = useState(spaceId);
   const [levels, setLevels] = useState<Record<string, number>>({});
@@ -276,7 +280,7 @@ const VALUE_OPTIONS: { value: SiteSettingValue; title: string }[] = [
 
 function SitePermissions() {
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const [origins, setOrigins] = useState<string[] | null>(null);
 
   const refresh = () =>
@@ -316,7 +320,7 @@ function SitePermissions() {
 
 function AppLinks() {
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const [allowed, setAllowed] = useState<ExternalAppAllowance[] | null>(null);
 
   const refresh = () =>
@@ -343,7 +347,7 @@ function AppLinks() {
           allowed.map((a) => (
             <Row
               key={`${a.origin}|${a.scheme}`}
-              icon={a.icon ? <Image source={{ uri: a.icon }} style={{ width: 20, height: 20 }} /> : <Favicon url={a.origin} />}
+              icon={a.icon ? <Image cachePolicy="memory" source={{ uri: a.icon }} style={{ width: 20, height: 20 }} /> : <Favicon url={a.origin} />}
               title={a.origin.replace(/^https?:\/\//, "")}
               description={`Opens ${a.scheme}: links in ${a.app ?? "an app that's no longer installed"}`}
             >
