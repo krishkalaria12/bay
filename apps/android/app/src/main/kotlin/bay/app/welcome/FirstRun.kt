@@ -895,15 +895,30 @@ private fun DriftRow(parts: Run, first: Int, period: Int, reverse: Boolean, top:
     }
 }
 
-/** A site's own icon, shipped with Bay: a fresh install has been nowhere yet, so there's no saved one. */
+/**
+ * The sites' own icons, shipped with Bay: a fresh install has been nowhere yet, so there's no saved one. Named here
+ * rather than looked up by name, which release's resource shrinking can't see, so it left them out.
+ */
+private val siteImages = mapOf(
+    "airbnb.com" to R.drawable.welcome_site_airbnb_com,
+    "are.na" to R.drawable.welcome_site_are_na,
+    "figma.com" to R.drawable.welcome_site_figma_com,
+    "flytap.com" to R.drawable.welcome_site_flytap_com,
+    "github.com" to R.drawable.welcome_site_github_com,
+    "news.ycombinator.com" to R.drawable.welcome_site_news_ycombinator_com,
+    "notion.so" to R.drawable.welcome_site_notion_so,
+    "nytimes.com" to R.drawable.welcome_site_nytimes_com,
+    "theverge.com" to R.drawable.welcome_site_theverge_com,
+    "timeout.com" to R.drawable.welcome_site_timeout_com,
+    "wikipedia.org" to R.drawable.welcome_site_wikipedia_org,
+    "youtube.com" to R.drawable.welcome_site_youtube_com,
+)
+
+/** A site's own icon from [siteImages], or the space it would fill. */
 @Composable
 private fun SiteImage(host: String, size: Dp) {
-    val context = LocalContext.current
-    val id = remember(host) {
-        @Suppress("DiscouragedApi")
-        context.resources.getIdentifier("welcome_site_" + host.replace('.', '_'), "drawable", context.packageName)
-    }
-    if (id != 0) {
+    val id = siteImages[host]
+    if (id != null) {
         Image(painterResource(id), null, Modifier.size(size).clip(RoundedCornerShape(size * 0.22f)))
     } else {
         Box(Modifier.size(size))
