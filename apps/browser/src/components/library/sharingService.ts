@@ -29,7 +29,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Http, HttpError } from "../../effect/ports/http";
 
-const ORIGIN = "https://bay.krishkalaria.in";
+const ORIGIN = "https://baybrowser.in";
 const FILE = "easel-shares.json";
 const LOCK = "bay-easel-sharing";
 const RECORDS_ERROR = "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages.";

@@ -71,7 +71,7 @@ const publish = (runtime, easelId) =>
 
 test("a published Easel keeps its key, its record and its link", async () => {
   await withSharing(async ({ lab, http, runtime }) => {
-    http.answer("https://bay.krishkalaria.in/api/easels/" + "a".repeat(32), { status: 200, ok: true, body: "{}" });
+    http.answer("https://baybrowser.in/api/easels/" + "a".repeat(32), { status: 200, ok: true, body: "{}" });
 
     const link = await publish(runtime, "easel-1");
 
@@ -84,7 +84,7 @@ test("a published Easel keeps its key, its record and its link", async () => {
 
 test("an Easel that is already being shared is refused", async () => {
   await withSharing(async ({ http, runtime }) => {
-    http.answer("https://bay.krishkalaria.in/api/easels/" + "a".repeat(32), { status: 200, ok: true, body: "{}" });
+    http.answer("https://baybrowser.in/api/easels/" + "a".repeat(32), { status: 200, ok: true, body: "{}" });
 
     const first = publish(runtime, "easel-1");
 
@@ -95,7 +95,7 @@ test("an Easel that is already being shared is refused", async () => {
 
 test("a website that refuses says what it refused", async () => {
   await withSharing(async ({ http, runtime }) => {
-    http.answer("https://bay.krishkalaria.in/api/easels/" + "a".repeat(32), { status: 409, ok: false, body: "" });
+    http.answer("https://baybrowser.in/api/easels/" + "a".repeat(32), { status: 409, ok: false, body: "" });
 
     await assert.rejects(publish(runtime, "easel-1"), (error) => /newer snapshot/.test(error.message));
   });

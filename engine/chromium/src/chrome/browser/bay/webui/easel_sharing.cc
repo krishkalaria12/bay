@@ -244,7 +244,7 @@ void EaselSharing::RequestShare(const base::ListValue& args,
   }
   auto request = std::make_unique<network::ResourceRequest>();
   // This is deliberately not a general cross-origin fetch API.
-  request->url = GURL("https://bay.krishkalaria.in/api/easels/" + id);
+  request->url = GURL("https://baybrowser.in/api/easels/" + id);
   request->method = method;
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   request->redirect_mode = network::mojom::RedirectMode::kError;

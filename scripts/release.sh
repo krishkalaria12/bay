@@ -76,7 +76,7 @@ nncore="$root/packages/chromium"
 repo="krishkalaria12/bay"
 bundle_id="in.krishkalaria.bay"
 team="GP328GJT66"
-notes_page="https://bay.krishkalaria.in/release-notes/"
+notes_page="https://baybrowser.in/release-notes/"
 notary_profile="${NOTARY_PROFILE:-bay}"
 # App Store Connect API key for notarytool, when scripts/.notary.env (untracked) sets NOTARY_KEY (path to
 # AuthKey_<id>.p8), NOTARY_KEY_ID and NOTARY_ISSUER. Preferred over the keychain profile: notarytool keeps that
