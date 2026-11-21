@@ -1,0 +1,45 @@
+--- a/components/surface_embed/browser/surface_embed_host.cc
++++ b/components/surface_embed/browser/surface_embed_host.cc
+@@ -196,8 +196,16 @@
+   }
+ 
+   if (!focused) {
+-    // TODO(crbug.com/508638062): the <embed> element in the parent frame lost
+-    // focus. Should we remove the page focus from the embedded page?
++    // Bay: another element of the parent document took focus (a field the
++    // embedder focused from script, say), so the keys go there now rather than
++    // to the embedded page. The parent renderer's focus moves within one frame
++    // and tells the browser nothing else. A window losing focus (kPage) leaves
++    // the page focused for when it returns.
++    if (focus_type != blink::mojom::FocusType::kPage) {
++      if (content::SurfaceEmbedConnector* connector = GetConnector()) {
++        connector->ClearFocusOnInnerWebContents();
++      }
++    }
+     return;
+   }
+ 
+--- a/content/browser/surface_embed/surface_embed_connector_impl.h
++++ b/content/browser/surface_embed/surface_embed_connector_impl.h
+@@ -162,7 +162,7 @@
+   // WebContents.
+   FrameTree* GetFocusFrameTreeIfContainsFocus();
+   void SetFocusedFrameTree(FrameTree* frame_tree_to_focus);
+-  void ClearFocusOnInnerWebContents();
++  void ClearFocusOnInnerWebContents() override;
+ 
+   // Returns true if any WebContents in the parent chain has a pointer lock
+   // widget.
+--- a/content/public/browser/surface_embed_connector.h
++++ b/content/public/browser/surface_embed_connector.h
+@@ -134,6 +134,10 @@
+   // surface-embedded child WebContents' tree is stitched into, or
+   // ui::AXTreeIDUnknown() if the trees are not currently stitched.
+   virtual ui::AXTreeID GetParentAXTreeID() const = 0;
++
++  // Bay: hands the keyboard to the root WebContents when it is in the child
++  // WebContents, or in one embedded in it. Nothing changes otherwise.
++  virtual void ClearFocusOnInnerWebContents() = 0;
+ };
+ 
+ }  // namespace content

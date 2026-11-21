@@ -1,8 +1,13 @@
+import { reportBrowserCommand } from "../../../runtime/commands";
+import * as tabCommands from "../../../runtime/tabActions";
+import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/chromium";
 import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
@@ -26,7 +31,7 @@ const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
 export function ExtensionsPane() {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const profile = engineProfile(spaceId);
   const list = useExtensionList(profile);
   const [detail, setDetail] = useState<string | null>(null);
@@ -52,7 +57,7 @@ export function ExtensionsPane() {
     <View>
       <SectionHeader
         title="Extensions"
-        description="Add features to Bay with extensions from the Chrome Web Store. Each profile has its own."
+        description="Add features to Bay with extensions from the Chrome Web Store. Each space has its own."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
@@ -62,7 +67,7 @@ export function ExtensionsPane() {
           {list.map((ext) => (
             <Row
               key={ext.id}
-              icon={<Image source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
+              icon={<Image cachePolicy="memory" source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
               title={
                 <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textPrimary }}>
                   {ext.name}
@@ -90,7 +95,7 @@ export function ExtensionsPane() {
             onPress={() => {
               const windowId = resolveWindowId(useBrowser.getState());
 
-              if (windowId) useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+              if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
             }}
           />
         </Row>
@@ -124,7 +129,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
   const openTab = (url: string) => {
     const windowId = resolveWindowId(useBrowser.getState());
 
-    if (windowId) useBrowser.getState().newTab(windowId, { url });
+    if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   };
 
   return (
@@ -133,7 +138,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
         <Button title="All Extensions" icon="chevron.left" kind="plain" onPress={onBack} />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 }}>
-        <Image source={{ uri: ext.icon }} style={{ width: 48, height: 48 }} />
+        <Image cachePolicy="memory" source={{ uri: ext.icon }} style={{ width: 48, height: 48 }} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary }}>{ext.name}</Text>
           <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>

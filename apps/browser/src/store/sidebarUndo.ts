@@ -1,7 +1,9 @@
+import { checked } from "../lib/checked";
+import type { JsonValue } from "../lib/json";
 import type { StateCreator } from "zustand";
 import * as v from "valibot";
 import type { BrowserState } from "./browserStore";
-import { IDLE_LIVE, isIncognitoSpace, pinnedPage, tabListKey, tabToShow } from "./model";
+import { IDLE_LIVE, isIncognitoSpace, newId, pinnedPage, tabListKey, tabToShow } from "./model";
 import { prunePinnedFolders } from "./folders";
 import { sanitizeSplits } from "./splits";
 import { activated } from "./tabs";
@@ -27,23 +29,36 @@ const isRecordLike = (value: FieldValue): value is FieldRecord => value !== null
 type Change = { key: RecordKey; id: string; before: FieldValue; after: FieldValue };
 
 export type SidebarEdit = {
+  id?: string;
   changes: Change[];
   closedIds: string[];
   cleanedIds: string[];
   groupIds: string[];
   active?: { windowId: string; spaceId: string; before: string | undefined; after: string | undefined }[];
-  undo?: () => void;
+  undo?: boolean;
+  /** For an `undo` entry: JSON data a registered handler reverses, so the entry survives recovery. */
+  action?: SidebarUndoAction;
   folderOrder?: { before: string[]; after: string[] };
 };
+
+export type SidebarUndoAction = { kind: string; data: unknown };
 
 export type SidebarUndoSlice = {
   sidebarUndo: Record<string, SidebarEdit[]>;
   undoSidebarEdit(windowId: string): boolean;
-  pushSidebarUndo(windowId: string, undo: () => void): void;
+  pushSidebarUndo(windowId: string, action: SidebarUndoAction): void;
 };
 
 const RECORDS: RecordKey[] = ["tabs", "tabLists", "groups", "pinnedFolders", "spaces", "splits", "localFiles"];
 const MAX_EDITS = 50;
+
+// Edits outside BrowserState (Live folders) register how to reverse their JSON actions.
+const handlers = new Map<string, (data: JsonValue) => void>();
+
+export function registerSidebarUndo(kind: string, handler: (data: JsonValue) => void) {
+  handlers.set(kind, handler);
+}
+
 let suspended = 0;
 let originWindow: string | undefined;
 export const sidebarUndoWindow = () => originWindow;
@@ -162,11 +177,22 @@ function reverseOrder(current: string[], before: string[], after: string[], belo
 
 export const createSidebarUndoSlice: StateCreator<BrowserState, [], [], SidebarUndoSlice> = (set, get) => ({
   sidebarUndo: {},
-  pushSidebarUndo(windowId, undo) {
+  pushSidebarUndo(windowId, action) {
     const s = get();
 
     if (suspended || !s.windows[windowId]) return;
-    const edit: SidebarEdit = { changes: [], closedIds: [], cleanedIds: [], groupIds: [], undo };
+
+    const edit: SidebarEdit = {
+      id: newId("undo"),
+      changes: [],
+      closedIds: [],
+      cleanedIds: [],
+      groupIds: [],
+      undo: true,
+      // SAFETY: the checks above established this shape.
+      action: JSON.parse(JSON.stringify(action)) as SidebarUndoAction,
+    };
+
     set({ sidebarUndo: { ...s.sidebarUndo, [windowId]: [...(s.sidebarUndo[windowId] ?? []), edit].slice(-MAX_EDITS) } });
   },
   undoSidebarEdit(windowId) {
@@ -178,7 +204,9 @@ export const createSidebarUndoSlice: StateCreator<BrowserState, [], [], SidebarU
     const patch: Partial<BrowserState> = { sidebarUndo: { ...s.sidebarUndo, [windowId]: stack!.slice(0, -1) } };
 
     if (edit.undo) {
-      withoutSidebarUndo(edit.undo);
+      const handler = edit.action && handlers.get(edit.action.kind);
+
+      if (handler) withoutSidebarUndo(() => handler(checked<JsonValue>(edit.action!.data)));
       set({ sidebarUndo: patch.sidebarUndo! });
 
       return true;
@@ -463,6 +491,7 @@ export function withSidebarUndoActions(state: BrowserState, get: () => BrowserSt
       }
 
       const edit: SidebarEdit = {
+        id: newId("undo"),
         changes,
         folderOrder,
         active,

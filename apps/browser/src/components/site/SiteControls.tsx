@@ -1,3 +1,6 @@
+import * as settingsCommands from "../../runtime/settingsActions";
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import * as v from "valibot";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -19,10 +22,11 @@ import {
 import { cleanUrl, displayHost, markdownLink } from "@bay/core";
 import { confirm, copyText, sharePage, showMenu, Symbol, translation, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
 import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { protectedVideoSite, tabEngine } from "../../store/engines";
@@ -40,9 +44,13 @@ import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
 import { defaultTarget, languageName, toggleTranslation, useTranslateState } from "./translateState";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleBookmark } from "../../runtime/bookmarkActions";
+import { browserRead } from "../../store/read";
+import { setMuted } from "../../runtime/organizeActions";
 import { boostHost } from "../../lib/boosts";
 import { openBoostEditor } from "../boosts/editor";
-import { boostsForHost, setBoostsOn, updateBoost, useBoosts } from "../boosts/state";
+import { boostsAvailable, boostsForHost, setBoostsOn, updateBoost, useBoosts } from "../boosts/state";
 
 const PERMISSIONS: { type: SiteSettingType; title: string; icon: string; choices: SiteSettingValue[] }[] = [
   { type: "popups", title: "Pop-ups and Redirects", icon: "macwindow.on.rectangle", choices: ["allow", "block"] },
@@ -147,7 +155,7 @@ export function SiteControls({
     setSettings(await readSettings(profile, origin));
 
     if (type === "sound") {
-      useBrowser.getState().updateTab(tabId, { muted: value === "block" });
+      await setMuted([tabId], value === "block");
       void webviews.get(tabId)?.setMuted(value === "block");
     }
   };
@@ -299,8 +307,8 @@ export function SiteControls({
                 icon={bookmarked ? "star.fill" : "star"}
                 title={bookmarked ? "Remove Bookmark" : "Bookmark Page"}
                 onPress={() => {
-                  const s = useBrowser.getState();
-                  s.toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab);
+                  const s = browserRead.getState();
+                  reportBrowserCommand(toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab));
                 }}
               />
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />
@@ -463,7 +471,7 @@ export function SiteControls({
             <PopoverRow
               icon="text.alignleft"
               title="Show Full URL"
-              accessory={<Toggle value={showFullUrl} onChange={(v) => useBrowser.getState().updateSettings({ showFullUrl: v })} />}
+              accessory={<Toggle value={showFullUrl} onChange={(v) => reportBrowserCommand(settingsCommands.updateSettings({ showFullUrl: v }))} />}
             />
           </>
         ) : null}
@@ -536,7 +544,7 @@ function BoostRows({ tabId, url }: { tabId: string; url: string }) {
   const boosts = useBoosts(useShallow((s) => (host ? boostsForHost(s, host) : NO_BOOSTS)));
   const on = useBoosts((s) => s.on);
 
-  if (!host) return null;
+  if (!host || !boostsAvailable()) return null;
 
   return (
     <>
@@ -635,7 +643,7 @@ function ExtensionTile({
     <View ref={ref} style={{ width }}>
       <ActionTile title={state?.title || ext.actionTitle || ext.name} width={width} onPress={open}>
         {icon ? (
-          <Image source={{ uri: icon }} style={{ width: 22, height: 22, opacity: state && !state.enabled ? 0.45 : 1 }} />
+          <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 22, height: 22, opacity: state && !state.enabled ? 0.45 : 1 }} />
         ) : (
           <Symbol name="puzzlepiece.extension" size={18} color={theme.textPrimary} style={{ width: 24, height: 24 }} />
         )}

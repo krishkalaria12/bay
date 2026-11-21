@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useWindowId } from "../../store/hooks";
 import { startSidebarEffects } from "./sidebarEffects";
 import { MediaSessionsOverlay } from "../media/SessionList";
@@ -24,7 +25,7 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
       <IconPicker windowId={windowId} sidebarWidth={sidebarWidth} windowWidth={windowWidth} windowHeight={height} />
       <NewMenu windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
       <SearchTabs windowId={windowId} windowWidth={windowWidth} />
-      <TabSwitcher windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
+      <TabSwitcher windowId={windowId} />
       <MediaSessionsOverlay windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
     </View>
   );

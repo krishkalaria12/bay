@@ -1,4 +1,4 @@
-import { addHistoryVisits, type PageEngine } from "@bay/chromium";
+import { addHistoryVisits, hasWebKit, type PageEngine } from "@bay/chromium";
 import * as Effect from "effect/Effect";
 import { PageWorkService } from "../components/site/pageWorkService";
 import { pageOf, patchPage } from "../components/window/pageState";
@@ -26,6 +26,8 @@ const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "")
 
 /** A tab keeps the engine its first view chose. */
 export function persistEngine(tabId: string, engine: PageEngine) {
+  // Without WebKit every page is Chromium's; there is nothing to keep.
+  if (!hasWebKit()) return;
   const t = store().tabs[tabId];
 
   if (t && !t.engine) store().updateTab(tabId, { engine });

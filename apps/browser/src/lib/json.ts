@@ -1,11 +1,7 @@
 import * as v from "valibot";
+import { isJsonObject, type JsonObject, type JsonValue } from "@bay/core";
 
-/** A value read back from JSON: the only shapes `JSON.parse` can produce. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
-
-export interface JsonObject {
-  [key: string]: JsonValue;
-}
+export { isJsonObject, type JsonObject, type JsonValue };
 
 /** A field read from an object that may not have it: the shapes `JSON.parse` can produce, plus absence. */
 export type JsonInput = JsonValue | undefined;
@@ -33,8 +29,4 @@ export function parseJson(text: string): JsonValue | null {
   const parsed = v.safeParse(JsonValueSchema, value);
 
   return parsed.success ? parsed.output : null;
-}
-
-export function isJsonObject(value: JsonInput): value is JsonObject {
-  return v.is(v.object({}), value) && !Array.isArray(value);
 }

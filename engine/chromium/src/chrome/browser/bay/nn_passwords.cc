@@ -548,7 +548,7 @@ NN_ENGINE_CALL(nn_passwords_allow) {
 NN_ENGINE_CALL(nn_passwords_export) {
   NN_PASSWORDS_OPEN();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   bay::WithList(
@@ -568,7 +568,7 @@ NN_ENGINE_CALL(nn_passwords_export) {
                             base::DictValue().Set("status", "reauthFailed"));
                       }
                       session.state->Export(session.delegate.get(),
-                                            base::FilePath(path),
+                                            base::FilePath::FromUTF8Unsafe(path),
                                             std::move(session.busy),
                                             std::move(reply));
                     },

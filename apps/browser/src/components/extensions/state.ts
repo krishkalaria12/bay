@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import {
   chooseExtensionFolder,
   configureExtension,
@@ -17,15 +19,17 @@ import {
 } from "@bay/chromium";
 import { confirm, showMenu } from "@bay/desktop";
 import * as Effect from "effect/Effect";
-import { runDesktop } from "../../effect/runtime";
+import { runWindow } from "../../effect/windowRuntime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId, engineProfile } from "../../store/model";
 import { openSettings } from "../settings/windows";
 import { ExtensionsService } from "./service";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
 import { browserIdOf, extensionProfile, pageProfile, shownIn, useExtensions, windowExtensions, type Anchor } from "./store";
+import { platformWords } from "../../lib/platformWords";
 
 export * from "./sidePanels";
 
@@ -94,7 +98,7 @@ export function addFromWebStore(windowId: string, urlOrId: string, profile = ext
   const s = useBrowser.getState();
   const target = s.windows[windowId] ? windowId : s.ui.focusOrder.find((w) => s.windows[w] && extensionProfile(s, w) === profile && !s.windows[w]!.incognito);
 
-  if (target) s.newTab(target, { url });
+  if (target) reportBrowserCommand(tabCommands.newTab(target, { url }));
   else openWindow({ spaceId: s.spaceOrder.find((p) => engineProfile(p) === profile), url });
 }
 
@@ -146,7 +150,7 @@ export async function confirmInstall() {
     useExtensions.setState({ install: null });
     await resolveExtensionInstallPrompt(request.prompt.requestId, true);
 
-    void runDesktop(
+    void runWindow(
       Effect.gen(function* () {
         const extensions = yield* ExtensionsService;
 
@@ -182,7 +186,7 @@ export function cancelInstall() {
 export async function removeExtension(profile: string, ext: InstalledExtension, windowId?: string) {
   const { confirmed } = await confirm({
     title: `Remove “${ext.name}”?`,
-    message: ext.fromWebStore ? "Its data and settings will be removed too." : "The extension's folder stays on your Mac.",
+    message: ext.fromWebStore ? "Its data and settings will be removed too." : `The extension's folder stays on ${platformWords.yourComputer}.`,
     confirmTitle: "Remove",
     destructive: true,
     windowId,
@@ -235,12 +239,14 @@ function patchExtension(profile: string, id: string, patch: Partial<InstalledExt
 }
 
 export function openOptions(windowId: string, ext: InstalledExtension) {
-  if (ext.optionsUrl) useBrowser.getState().newTab(windowId, { url: ext.optionsUrl });
+  if (ext.optionsUrl) reportBrowserCommand(tabCommands.newTab(windowId, { url: ext.optionsUrl }));
 }
 
 export const openManageExtensions = () => openSettings("extensions");
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
-export const openWebStore = (windowId: string) => useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+
+export const openWebStore = (windowId: string) =>
+  reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
 
 // MARK: Action popups
 

@@ -44,7 +44,7 @@ class Reply {
 
  private:
   nn_engine_reply_t reply_;
-  void* context_;
+  raw_ptr<void> context_;
 };
 
 // One call's inputs. Replies with an error at construction when the profile
@@ -70,7 +70,7 @@ class Call {
   Reply TakeReply() { return std::move(reply_); }
 
  private:
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
   base::DictValue args_;
   Reply reply_;
 };

@@ -1,64 +1,17 @@
-import { onPermission, onPermissionDismissed, resolvePermission, type PermissionKind, type PermissionRequest, type PermissionResult } from "@bay/chromium";
+import { resolvePermission, type PermissionKind, type PermissionRequest, type PermissionResult } from "@bay/chromium";
 import { ensureNotificationPermission } from "../../lib/webNotifications";
-import { useBrowser } from "../../store/browserStore";
-import { patchPage, pageOf, tabForBrowser, usePages } from "../window/pageState";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { patchPage, pageOf } from "../window/pageState";
 import { startDeviceChoosers } from "./DeviceChooser";
+import { clearQueuedPermissions, queuedPermissions, showNextPermission, startPermissionRequests } from "./permissionRequests";
 
-const queues = new Map<string, PermissionRequest[]>();
-const orphans: PermissionRequest[] = [];
 let started = false;
 
 export function startPermissionPrompts() {
   if (started) return;
   started = true;
   startDeviceChoosers();
-  onPermission((request) => {
-    const tabId = tabForBrowser(request.browserId);
-
-    if (!tabId) {
-      orphans.push(request);
-
-      return;
-    }
-
-    enqueue(tabId, request);
-  });
-  onPermissionDismissed(({ id }) => drop(id));
-  // Attach queued requests once their tab browser ids arrive.
-  usePages.subscribe((s, prev) => {
-    if (s.browsers === prev.browsers || !orphans.length) return;
-
-    for (const request of orphans.splice(0)) {
-      const tabId = tabForBrowser(request.browserId);
-
-      if (tabId) enqueue(tabId, request);
-    }
-  });
-}
-
-function enqueue(tabId: string, request: PermissionRequest) {
-  if (!pageOf(tabId).permission) patchPage(tabId, { permission: request });
-  else queues.set(tabId, [...(queues.get(tabId) ?? []), request]);
-}
-
-function next(tabId: string) {
-  const queue = queues.get(tabId) ?? [];
-  patchPage(tabId, { permission: queue.shift() ?? null });
-
-  if (queue.length) queues.set(tabId, queue);
-  else queues.delete(tabId);
-}
-
-function drop(id: string) {
-  for (const [tabId, page] of Object.entries(usePages.getState().pages)) {
-    if (page.permission?.id === id) next(tabId);
-  }
-
-  for (const [tabId, queue] of queues)
-    queues.set(
-      tabId,
-      queue.filter((r) => r.id !== id),
-    );
+  startPermissionRequests();
 }
 
 // The answer to the prompt the user saw (`requestId`): a second click, or one that lands after the prompt
@@ -74,12 +27,12 @@ export function answerPermission(tabId: string, requestId: string, result: Permi
     void ensureNotificationPermission(useBrowser.getState().tabs[tabId]?.windowId);
   }
 
-  next(tabId);
+  showNextPermission(tabId);
 }
 
 export function dismissPermissions(tabId: string) {
-  for (const r of queues.get(tabId) ?? []) void resolvePermission(r.id, "dismiss");
-  queues.delete(tabId);
+  for (const r of queuedPermissions(tabId)) void resolvePermission(r.id, "dismiss");
+  clearQueuedPermissions(tabId);
   const current = pageOf(tabId).permission;
 
   if (current) {

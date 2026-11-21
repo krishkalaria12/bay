@@ -1,3 +1,4 @@
+import { ReadBrowser } from "../effect/windowPorts.ts";
 // The pages' lifetime (lib/pageLifecycleService.ts): the Mac's events, the sweep on the shared grid and the waits
 // before the recent tabs reopen, against a fake Mac, a scheduler the test fires by hand, and the test clock.
 import assert from "node:assert/strict";
@@ -35,7 +36,13 @@ const withLifecycle = async (use) => {
   });
 
   const runtime = ManagedRuntime.make(
-    Layer.mergeAll(PageLifecycleService.layer.pipe(Layer.provide(Layer.mergeAll(engine, scheduler.layer, fakeDiagnostics().layer))), TestClock.layer()),
+    Layer.mergeAll(
+      PageLifecycleService.layer.pipe(
+        Layer.provide(ReadBrowser.layer(useBrowser)),
+        Layer.provide(Layer.mergeAll(engine, scheduler.layer, fakeDiagnostics().layer)),
+      ),
+      TestClock.layer(),
+    ),
   );
 
   const start = () =>

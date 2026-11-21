@@ -67,3 +67,26 @@
    extension_path_ = resolved_absolute_path;
    // Set priority explicitly to avoid unwanted task priority inheritance.
    content::GetUIThreadTaskRunner({base::TaskPriority::USER_BLOCKING})
+
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -836,6 +836,10 @@
+ using web_app::ChromeContentBrowserClientIsolatedWebAppsPart;
+ #endif
+
++namespace bay {
++void AddScriptsPagesThrottle(content::NavigationThrottleRegistry& registry);
++}
++
+ namespace {
+
+ const char kAIManagerUserDataKey[] = "ai_manager";
+@@ -5527,5 +5531,8 @@
+
+ void ChromeContentBrowserClient::CreateThrottlesForNavigation(
+     content::NavigationThrottleRegistry& registry) {
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
++  bay::AddScriptsPagesThrottle(registry);
++#endif
+   CreateAndAddChromeThrottlesForNavigation(registry);
+ }

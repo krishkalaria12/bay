@@ -20,7 +20,12 @@ const MAX_ITEMS = 1_000;
 const MAX_DEPTH = 12;
 const MAX_TITLE_LENGTH = 1_024;
 const MAX_URL_LENGTH = 8_192;
-const WEBSITE_ORIGIN = "https://bay.krishkalaria.in";
+const WEBSITE_ORIGIN = "https://baybrowser.in";
+
+// The site's old host: links shared before the move still open.
+const WEBSITE_ORIGINS = [WEBSITE_ORIGIN, "https://bay.krishkalaria.in"];
+const LONGEST_ORIGIN = Math.max(...WEBSITE_ORIGINS.map((origin) => origin.length));
+
 const URI_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
 
 function invalid(message: string): never {
@@ -348,13 +353,17 @@ export function sharedCollectionAppUrl(token: string): string {
 // Extract only canonical fragment syntax; callers must decode to validate data.
 // Scheme and hostname are case-insensitive; paths and token bytes are exact.
 export function sharedCollectionToken(url: string | null | undefined): string | null {
-  if (!v.is(v.string(), url) || url.length > WEBSITE_ORIGIN.length + 8 + MAX_TOKEN_LENGTH) return null;
+  if (!v.is(v.string(), url) || url.length > LONGEST_ORIGIN + 8 + MAX_TOKEN_LENGTH) return null;
   const hash = url.indexOf("#");
 
   if (hash === -1) return null;
   const base = url.slice(0, hash);
-  const path = base.slice(WEBSITE_ORIGIN.length);
-  const website = base.slice(0, WEBSITE_ORIGIN.length).toLowerCase() === WEBSITE_ORIGIN && (path === "/share" || path === "/share/");
+
+  const website = WEBSITE_ORIGINS.some((origin) => {
+    const path = base.slice(origin.length);
+
+    return base.slice(0, origin.length).toLowerCase() === origin && (path === "/share" || path === "/share/");
+  });
 
   if (!website && base.toLowerCase() !== "bay://share/") return null;
   const token = url.slice(hash + 1);

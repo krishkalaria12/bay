@@ -16,12 +16,17 @@ import * as Effect from "effect/Effect";
 import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } from "../components/onboarding/index";
 import { trackAppVersion } from "../components/newTab/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
+import { activateIndex, closeTab as requestCloseTab, navigate, newTab } from "../runtime/tabActions";
+import { closeWindow as requestCloseWindow } from "../runtime/windowActions";
+import { runWindow } from "../effect/windowRuntime";
 import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
 import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
+import { platformWords } from "./platformWords";
 import { AppIntegrationService } from "./appIntegrationService";
 import { runDesktop } from "../effect/runtime";
 import { captureException } from "../telemetry/errors";
@@ -29,9 +34,14 @@ import { captureException } from "../telemetry/errors";
 /**
  * Starts the app's ties to the Mac: its menu commands, its notifications' answers, Handoff and AppleScript. The
  * registrations are the integration service's (appIntegrationService.ts); this hands it the app's own answers.
+ *
+ * A window in the shared runtime leaves the application's own lifecycle to the coordinator: it is the coordinator
+ * that asks for onboarding, and it asks in the window it names.
  */
-export function startAppIntegration() {
-  void runDesktop(
+export function startAppIntegration({ sharedWindow = false } = {}) {
+  const run = sharedWindow ? runWindow : runDesktop;
+
+  void run(
     Effect.gen(function* () {
       const integration = yield* AppIntegrationService;
 
@@ -43,8 +53,20 @@ export function startAppIntegration() {
     captureException(error, "console");
     console.error("The app's integration could not start", error);
   });
+
+  if (!sharedWindow) startApplicationLifecycle();
+}
+
+/**
+ * The application's own lifecycle: a first run's onboarding, and the release notes after an update.
+ *
+ * The coordinator asks for it with the step to start at and what the person picked, so a window never decides on
+ * its own whether the app is new.
+ */
+export function startApplicationLifecycle(options: Parameters<typeof maybeStartOnboarding>[0] = {}) {
   const updated = trackAppVersion();
-  maybeStartOnboarding();
+
+  maybeStartOnboarding(options);
 
   if (updated) openReleaseNotesAfterUpdate();
 }
@@ -59,7 +81,8 @@ function notificationResponse(response: NotificationResponse) {
   else if (windowId && s.windows[windowId]) focus(windowId);
 }
 
-function runAppCommand({ command, windowId }: CommandEvent) {
+/** The app's own answers to the menu's commands. A window's key shortcuts run the same commands. */
+export function runAppCommand({ command, windowId }: CommandEvent) {
   switch (command) {
     case "sendFeedback":
       return void sendFeedback(windowId);
@@ -104,9 +127,9 @@ export async function diagnostics(): Promise<string> {
   return [
     `${app.appName} ${app.appVersion} (${app.appBuild}) — ${app.configuration}`,
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
-    `macOS ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
+    `${platformWords.osName} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
-    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.spaceOrder.length}`,
+    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, spaces: ${s.spaceOrder.length}`,
     !updates?.available
       ? "Updates: not built in"
       : !updates.configured
@@ -182,7 +205,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | 
 
   switch (request.command) {
     case "newWindow": {
-      const windowId = openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
+      const windowId = await openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
 
       return { windowId };
     }
@@ -191,7 +214,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | 
       const windowId = resolveWindowId(s, request.windowId);
 
       if (!windowId) {
-        const created = openWindow({ url: request.url });
+        const created = await openWindow({ url: request.url });
 
         return { windowId: created, tabId: activeTabId(useBrowser.getState(), created) };
       }
@@ -207,7 +230,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | 
         index = at < view.length ? list.indexOf(view[at]!) : list.length;
       }
 
-      const tabId = s.newTab(windowId, { url: request.url, index });
+      const tabId = await newTab(windowId, { url: request.url, index });
 
       return { windowId, tabId };
     }
@@ -215,22 +238,22 @@ async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | 
     case "setURL":
       tabOf(request.tabId);
 
-      return s.navigate(request.tabId, request.url);
+      return void (await navigate(request.tabId, request.url));
     case "closeTab":
       tabOf(request.tabId);
 
-      return s.closeTab(request.tabId);
+      return void (await requestCloseTab(request.tabId));
     case "closeWindow":
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
 
-      return s.closeWindow(request.windowId);
+      return void (await requestCloseWindow(request.windowId));
     case "reload": {
       const tab = tabOf(request.tabId);
       const web = webviews.get(request.tabId);
 
       if (web) return void (await web.reload());
 
-      if (tab.url) s.navigate(tab.id, tab.url);
+      if (tab.url) await navigate(tab.id, tab.url);
 
       return;
     }
@@ -246,19 +269,21 @@ async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | 
     case "focusTab":
       tabOf(request.tabId);
 
-      return switchToTab(request.tabId);
+      await switchToTab(request.tabId);
+
+      return;
     case "setActiveTabIndex": {
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
 
       if (request.index < 1 || request.index > viewTabIds(s, request.windowId).length) throw new Error("There's no tab at that index.");
 
-      return s.activateIndex(request.windowId, request.index - 1);
+      return void (await activateIndex(request.windowId, request.index - 1));
     }
 
     case "focusProfile": {
       const windowId = resolveWindowId(s, null);
 
-      if (!s.spaces[request.profileId]) throw new Error("That profile no longer exists.");
+      if (!s.spaces[request.profileId]) throw new Error("That space no longer exists.");
 
       if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
 

@@ -1,0 +1,53 @@
+--- a/chrome/browser/extensions/extension_install_prompt.h
++++ b/chrome/browser/extensions/extension_install_prompt.h
+@@ -60,6 +60,15 @@
+   // The implementations of this function are platform-specific.
+   static ShowDialogCallback GetDefaultShowDialogCallback();
+ 
++  // Bay's web desktop host shows its own install prompt: the handler returns
++  // true when it took `done_callback` and will run it with the answer.
++  using BayPromptHandler =
++      bool (*)(Profile* profile,
++               content::WebContents* parent,
++               const extensions::InstallPromptData& prompt,
++               DoneCallback* done_callback);
++  static void SetBayPromptHandler(BayPromptHandler handler);
++
+   // Returns the appropriate prompt type for the given `extension`.
+   // TODO(devlin): This method is yucky - callers probably only care about one
+   // prompt type. We just need to comb through and figure out what it is.
+--- a/chrome/browser/extensions/extension_install_prompt.cc
++++ b/chrome/browser/extensions/extension_install_prompt.cc
+@@ -61,11 +61,18 @@
+       .GetBitmap();
+ }
+ 
++ExtensionInstallPrompt::BayPromptHandler g_bay_prompt_handler = nullptr;
++
+ }  // namespace
+ 
+ InstallPromptData::PromptType
+     ExtensionInstallPrompt::g_last_prompt_type_for_tests =
+         InstallPromptData::UNSET_PROMPT_TYPE;
++
++// static
++void ExtensionInstallPrompt::SetBayPromptHandler(BayPromptHandler handler) {
++  g_bay_prompt_handler = handler;
++}
+ 
+ ExtensionInstallPrompt::DoneCallbackPayload::DoneCallbackPayload(Result result)
+     : DoneCallbackPayload(result, std::string()) {}
+@@ -301,6 +308,13 @@
+           &done_callback_)) {
+     return;
+   }
++#else
++  // Bay's web desktop host may show its own install prompt.
++  if (g_bay_prompt_handler &&
++      g_bay_prompt_handler(profile_, show_params_->GetParentWebContents(),
++                           *prompt_, &done_callback_)) {
++    return;
++  }
+ #endif
+ 
+   if (show_dialog_callback_.is_null())

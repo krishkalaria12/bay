@@ -1,6 +1,6 @@
 # Releases (docs/releasing.md › CI):
 #   - every night, a nightly of main when the app changed since the last release (Sparkle's nightly channel, a GitHub
-#     prerelease, bay.krishkalaria.in/nightly);
+#     prerelease, baybrowser.in/nightly);
 #   - a stable release only when it's asked for: Actions › Release › Run workflow › channel stable, or
 #     gh workflow run release.yml -f channel=stable -f version=<version>, after committing the version bump and notes.
 # The engine is prebuilt (scripts/publish-engine.sh): a normal runner can't build Chromium.

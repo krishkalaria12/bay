@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { markHoverProps } from "../../lib/hoverShift";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 import { HOVER_HIDE_DELAY_MS, HOVER_SHOW_DELAY_MS } from "./constants";
@@ -72,3 +72,54 @@ export function useRowHover(windowId: string, target: Target | null) {
 
   return { hovered, hoverProps };
 }
+
+/** A row's hover, in a store of its own: the row's handlers set it, and only what reads it (useHovered) renders again.
+ *  A row whose hover lived in its own state rendered all its wrappers (menus, press handling) at every hover. */
+export type HoverFlag = { get(): boolean; subscribe(listener: () => void): () => void };
+
+function hoverFlag() {
+  let value = false;
+  const listeners = new Set<() => void>();
+
+  return {
+    get: () => value,
+    set(next: boolean) {
+      if (next === value) return;
+      value = next;
+
+      // oxlint-disable-next-line unicorn/no-useless-spread -- a listener can unsubscribe while this runs
+      for (const listener of [...listeners]) listener();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+/** useRowHover, with the hover in a HoverFlag rather than the caller's state. */
+export function useRowHoverFlag(windowId: string, target: Target | null) {
+  const [flag] = useState(hoverFlag);
+
+  const hoverProps = markHoverProps({
+    onMouseEnter: () => {
+      flag.set(true);
+
+      if (target) hoverEnter(windowId, target);
+    },
+    onMouseLeave: () => {
+      flag.set(false);
+
+      if (target) hoverLeave();
+    },
+  });
+
+  const hover: HoverFlag = flag;
+
+  return { hover, hoverProps };
+}
+
+export const useHovered = (flag: HoverFlag): boolean => useSyncExternalStore(flag.subscribe, flag.get, flag.get);

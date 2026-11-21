@@ -45,9 +45,10 @@ const jsonLd = { "@context": "https://schema.org", "@graph": [...graph, ...schem
     <!-- The handwriting is above the fold on every page: fetch it with the HTML, not after the CSS. -->
     <link rel="preload" href={handFont} as="font" type="font/woff2" crossorigin />
 
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- ?v= names the icon: browsers keep a favicon for weeks, so a new one needs a new address. -->
+    <link rel="icon" href="/favicon.ico?v=dusk" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg?v=dusk" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=dusk" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="alternate" type="text/plain" href="/llms.txt" title="Bay, for language models" />

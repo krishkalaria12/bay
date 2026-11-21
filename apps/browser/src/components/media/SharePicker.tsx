@@ -1,9 +1,11 @@
 import type { DisplayMediaRequest, DisplayMediaSource } from "@bay/chromium";
 import { runningAppIcon, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { Popover, PromptButton } from "../toolbar/buttons";
 import { usePages } from "../window/pageState";
@@ -370,7 +372,7 @@ function WindowRow({
           }}
         >
           {icon ? (
-            <Image source={{ uri: icon }} style={{ width: 20, height: 20 }} />
+            <Image cachePolicy="memory" source={{ uri: icon }} style={{ width: 20, height: 20 }} />
           ) : (
             <Symbol name="macwindow" size={14} color={theme.textSecondary} style={{ width: 20, height: 20 }} />
           )}

@@ -1,4 +1,5 @@
 import { dlopen, FFIType } from "bun:ffi";
+import { sleepSync } from "bun";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
@@ -7,6 +8,7 @@ import {
   closeSync,
   constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -78,33 +80,259 @@ export const ENTRY_KEYS = new Set(["matches", "exclude_matches", "include_globs"
 export const RUN_AT = new Set(["document_start", "document_end", "document_idle"]);
 export const WORLDS = new Set(["MAIN", "ISOLATED"]);
 
-const libSystem = dlopen("/usr/lib/libSystem.B.dylib", {
-  renameatx_np: {
-    args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.cstring, FFIType.u32],
-    returns: FFIType.i32,
-  },
-  flock: {
-    args: [FFIType.i32, FFIType.i32],
-    returns: FFIType.i32,
-  },
-});
+// Loaded only when a scripts command needs it. Ordinary CLI commands never
+// try to load a library from another operating system.
+function openPosix() {
+  return dlopen(process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6", {
+    flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
+  });
+}
+
+let posix: ReturnType<typeof openPosix> | undefined;
+const posixLibrary = () => (posix ??= openPosix());
+
+function openExchange() {
+  if (process.platform === "darwin") {
+    const library = dlopen("/usr/lib/libSystem.B.dylib", {
+      renameatx_np: {
+        args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.cstring, FFIType.u32],
+        returns: FFIType.i32,
+      },
+    });
+
+    return (first: Buffer, second: Buffer) => library.symbols.renameatx_np(AT_FDCWD, first, AT_FDCWD, second, RENAME_SWAP);
+  }
+
+  const library = dlopen("libc.so.6", {
+    renameat2: {
+      args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.cstring, FFIType.u32],
+      returns: FFIType.i32,
+    },
+  });
+
+  return (first: Buffer, second: Buffer) => library.symbols.renameat2(-100, first, -100, second, 2); // AT_FDCWD, RENAME_EXCHANGE
+}
+
+let exchange: ReturnType<typeof openExchange> | undefined;
+
+function openWindows() {
+  return dlopen("kernel32.dll", {
+    CreateFileW: {
+      args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u64],
+      returns: FFIType.u64,
+    },
+    GetFileInformationByHandle: { args: [FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
+    LockFileEx: {
+      args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+    UnlockFileEx: { args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+    CloseHandle: { args: [FFIType.u64], returns: FFIType.i32 },
+    GetLastError: { args: [], returns: FFIType.u32 },
+  });
+}
+
+let windows: ReturnType<typeof openWindows> | undefined;
 
 export class StoreError extends Error {
   override name = "StoreError";
 }
 
+// apply() must not delete staged files when an OS move could not be undone.
+class SwapRecoveryError extends StoreError {}
+
 function randomHex(bytes = 6): string {
   return randomBytes(bytes).toString("hex");
 }
 
+// The caller holds the store's lock. Windows has no directory exchange; keep
+// readers behind that lock until all three same-volume moves have finished.
 export function swap(first: string, second: string): void {
-  const firstBuf = Buffer.from(`${first}\0`);
-  const secondBuf = Buffer.from(`${second}\0`);
-  const ret = libSystem.symbols.renameatx_np(AT_FDCWD, firstBuf, AT_FDCWD, secondBuf, RENAME_SWAP);
+  if (process.platform === "win32") {
+    if (dirname(first) !== dirname(second)) throw new StoreError("directory exchanges must stay in one folder");
+    const temporary = join(dirname(second), `.swap-${randomHex()}`);
+    const journal = `${temporary}.json`;
+    writeFileSync(journal, JSON.stringify({ first: basename(first), second: basename(second) }), { flag: "wx", mode: 0o600 });
+    renameSync(second, temporary);
+
+    try {
+      renameSync(first, second);
+    } catch (error) {
+      try {
+        renameSync(temporary, second);
+        removeTree(journal);
+      } catch (restoreError) {
+        throw new SwapRecoveryError(`can't restore ${second}; its previous contents remain in ${temporary}: ${String(restoreError)}`);
+      }
+
+      throw error;
+    }
+
+    try {
+      renameSync(temporary, first);
+    } catch (error) {
+      // Restore both names before letting apply() remove its staged copy.
+      // If restoration also fails, preserve every surviving directory.
+      try {
+        renameSync(second, first);
+        renameSync(temporary, second);
+        removeTree(journal);
+      } catch (restoreError) {
+        throw new SwapRecoveryError(`can't restore exchanged folders; preserve ${first}, ${second} and ${temporary}: ${String(restoreError)}`);
+      }
+
+      throw error;
+    }
+
+    removeTree(journal);
+
+    return;
+  }
+
+  const ret = (exchange ??= openExchange())(Buffer.from(`${first}\0`), Buffer.from(`${second}\0`));
 
   if (ret !== 0) {
     throw new StoreError(`can't swap ${first} and ${second}`);
   }
+}
+
+// Recover a process that stopped between Windows' directory moves. The old
+// copy goes back if publication never happened; otherwise finish the exchange.
+// Only names from a bounded plain journal in this folder can be recovered.
+function recoverSwaps(directory: string): void {
+  if (!existsSync(directory)) return;
+
+  for (const name of readdirSync(directory)) {
+    if (!/^\.swap-[a-f0-9]{12}\.json$/.test(name)) continue;
+    const journal = join(directory, name);
+    const stat = lstatSync(journal);
+
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 4096) {
+      throw new StoreError(`can't recover ${journal}: not a plain journal`);
+    }
+
+    const record: unknown = JSON.parse(readFileSync(journal, "utf8"));
+
+    const safeName = (value: unknown): value is string =>
+      v.is(v.string(), value) && value.length > 0 && value !== "." && value !== ".." && !/[\\/\0:]/.test(value);
+
+    if (!v.is(v.object({}), record)) throw new StoreError(`can't recover ${journal}: invalid folder names`);
+
+    // SAFETY: the check above established that the record is an object with named fields.
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The record's fields are read by name, and each is checked where it is used.
+    const fields = record as Record<string, unknown>;
+
+    if (!("first" in fields) || !("second" in fields) || !safeName(fields.first) || !safeName(fields.second)) {
+      throw new StoreError(`can't recover ${journal}: invalid folder names`);
+    }
+
+    const temporaryName = name.slice(0, -5);
+
+    if (fields.first === fields.second || fields.first === temporaryName || fields.second === temporaryName) {
+      throw new StoreError(`can't recover ${journal}: overlapping folder names`);
+    }
+
+    const first = join(directory, fields.first);
+    const second = join(directory, fields.second);
+    const temporary = join(directory, temporaryName);
+
+    const present = (path: string): boolean => {
+      if (!existsSync(path)) return false;
+      const info = lstatSync(path);
+
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new StoreError(`can't recover ${journal}: ${path} isn't a plain folder`);
+
+      return true;
+    };
+
+    const hasFirst = present(first);
+    const hasSecond = present(second);
+    const hasTemporary = present(temporary);
+
+    if (hasTemporary && hasFirst && !hasSecond) renameSync(temporary, second);
+    else if (hasTemporary && !hasFirst && hasSecond) renameSync(temporary, first);
+    else if (hasTemporary || !hasSecond) throw new StoreError(`can't recover ${journal}; its folders were preserved`);
+    unlinkSync(journal);
+  }
+}
+
+/**
+ * Takes the lock file's lock without waiting: the way to give it back when it was free, nothing when it was not.
+ *
+ * The lock file must be a plain file. A symbolic link would let another folder take the lock's place, and a hard
+ * link would let a second name lock the same file, so both are refused.
+ */
+function acquireLock(path: string): (() => void) | null {
+  if (process.platform === "win32") {
+    const { symbols } = (windows ??= openWindows());
+    // Share reads and writes, but not deletion: every reader locks the same
+    // file object. Never follow a reparse point, including a junction.
+    const handle = symbols.CreateFileW(Buffer.from(`${path}\0`, "utf16le"), 0xc0000000, 3, null, 4, 0x00200000, 0n);
+
+    if (handle === 0xffffffffffffffffn) throw new StoreError(`can't open ${path} (Windows error ${symbols.GetLastError()})`);
+    const info = new Uint32Array(13);
+    const overlapped = new BigUint64Array(4); // 64-bit OVERLAPPED, offset zero.
+    let locked = false;
+
+    try {
+      if (!symbols.GetFileInformationByHandle(handle, info) || (info[0]! & 0x410) !== 0 || info[10] !== 1) {
+        throw new StoreError(`${path} must be a plain file without links`);
+      }
+
+      // LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY: the lock is taken or the handle is busy.
+      if (!symbols.LockFileEx(handle, 3, 0, 1, 0, overlapped)) {
+        const error = symbols.GetLastError();
+
+        if (error !== 33) throw new StoreError(`can't lock ${path} (Windows error ${error})`);
+
+        return null;
+      }
+
+      locked = true;
+    } finally {
+      if (!locked) symbols.CloseHandle(handle);
+    }
+
+    return () => {
+      symbols.UnlockFileEx(handle, 0, 1, 0, overlapped);
+      symbols.CloseHandle(handle);
+    };
+  }
+
+  const { symbols } = posixLibrary();
+  let fd: number;
+
+  try {
+    fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  } catch (error) {
+    // SAFETY: the only errors reaching here come from node:fs calls, which carry an ErrnoException code.
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new StoreError(`${path} is a symbolic link`);
+
+    throw error;
+  }
+
+  let locked = false;
+
+  try {
+    const info = fstatSync(fd);
+
+    if (!info.isFile() || info.nlink !== 1) throw new StoreError(`${path} must be a plain file without links`);
+
+    // LOCK_EX | LOCK_NB
+    if (symbols.flock(fd, 2 | 4) !== 0) return null;
+
+    locked = true;
+  } finally {
+    if (!locked) closeSync(fd);
+  }
+
+  return () => {
+    try {
+      symbols.flock(fd, 8); // LOCK_UN
+    } finally {
+      closeSync(fd);
+    }
+  };
 }
 
 export function readFileSafe(path: string): Buffer | null {
@@ -162,7 +390,7 @@ export function removeTree(path: string): void {
 export class Store {
   readonly path: string;
   readonly scriptsDir: string;
-  private lockFd: number | null = null;
+  private releaseLock: (() => void) | null = null;
 
   constructor(readonly dataRoot: string) {
     this.path = join(dataRoot, "Scripts");
@@ -179,30 +407,58 @@ export class Store {
       return false;
     }
 
-    if (create) {
-      mkdirSync(this.path, { recursive: true, mode: 0o700 });
-      mkdirSync(this.scriptsDir, { recursive: true, mode: 0o755 });
+    for (const directory of [this.path, this.scriptsDir]) {
+      if (existsSync(directory)) {
+        const info = lstatSync(directory);
+
+        if (info.isSymbolicLink() || !info.isDirectory()) throw new StoreError(`${directory} must be a plain folder`);
+      } else if (create) {
+        mkdirSync(directory, { recursive: true, mode: directory === this.path ? 0o700 : 0o755 });
+      }
     }
 
     return true;
   }
 
-  /** Takes the store's lock if it is free, and says whether it did. The waiting is lockStore's. */
+  /**
+   * Takes the store's lock if it is free, and says whether it did. The waiting is lock()'s and lockStore's.
+   *
+   * Holding the lock also finishes an exchange that a crashed run left half-done, so every holder of the lock sees
+   * the same folders.
+   */
   tryLock(): boolean {
-    if (this.lockFd !== null) return true;
+    if (this.releaseLock) return true;
 
-    const fd = openSync(join(this.path, ".lock"), constants.O_RDWR | constants.O_CREAT, 0o600);
+    const release = acquireLock(this.lockPath);
 
-    if (libSystem.symbols.flock(fd, 2 | 4) === 0) {
-      // LOCK_EX | LOCK_NB
-      this.lockFd = fd;
+    if (!release) return false;
 
-      return true;
+    this.releaseLock = release;
+
+    try {
+      recoverSwaps(this.path);
+      recoverSwaps(this.scriptsDir);
+    } catch (error) {
+      this.unlock();
+      throw error;
     }
 
-    closeSync(fd);
+    return true;
+  }
 
-    return false;
+  /**
+   * Takes the store's lock, waiting for it until it is free.
+   *
+   * The caller holds the lock until it unlocks. Windows has no directory exchange, so the lock is the only way to
+   * keep two processes out of the same store.
+   */
+  lock(): void {
+    if (this.releaseLock) throw new StoreError("this scripts store is already locked");
+
+    while (!this.tryLock()) {
+      // The lock is held elsewhere: wait a little and try again.
+      sleepSync(LOCK_POLL);
+    }
   }
 
   /** Where the lock is. */
@@ -211,14 +467,9 @@ export class Store {
   }
 
   unlock(): void {
-    if (this.lockFd !== null) {
-      try {
-        libSystem.symbols.flock(this.lockFd, 8); // LOCK_UN
-        closeSync(this.lockFd);
-      } catch {}
-
-      this.lockFd = null;
-    }
+    const release = this.releaseLock;
+    this.releaseLock = null;
+    release?.();
   }
 
   close(): void {
@@ -512,10 +763,14 @@ export class Store {
         this.commitRecord(stagedRecord, String(record.id ?? ""), options.add === undefined);
       }
     } catch (error) {
+      if (error instanceof SwapRecoveryError) throw error;
+
       if (published) {
         try {
           this.restoreExtension(stagedExtension, oldExtension);
-        } catch {}
+        } catch (restoreError) {
+          throw new StoreError(`couldn't restore the previous extension; staged folders were preserved: ${String(restoreError)}`);
+        }
       }
 
       if (stagedRecord) removeTree(join(this.scriptsDir, stagedRecord));

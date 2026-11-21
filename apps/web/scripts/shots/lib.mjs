@@ -10,11 +10,12 @@ import { launch, session, sleep } from "../../../../scripts/lib/instance.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../../../..");
 
-export const buildApp = join(repo, "apps/browser/build-dev/Build/Products/Release/Bay.app");
+// BAY_SHOTS_APP points at another Release build (another checkout's, say).
+export const buildApp = process.env.BAY_SHOTS_APP ?? join(repo, "apps/browser/build-dev/Build/Products/Release/Bay.app");
 
 // Favicons by site, so that a tab that hasn't loaded still shows its real icon.
 export const site = {
-  bay: ["https://bay.krishkalaria.in/", "Bay: a beautiful, fast browser for Mac", "https://bay.krishkalaria.in/favicon.ico"],
+  bay: ["https://baybrowser.in/", "Bay: a beautiful, fast browser for Mac", "https://baybrowser.in/favicon.ico"],
   github: ["https://github.com/krishkalaria12/bay", "krishkalaria12/bay", "https://github.githubassets.com/favicons/favicon.png"],
   figma: ["https://www.figma.com/", "Figma", "https://static.figma.com/app/icon/1/favicon.png"],
   linear: ["https://linear.app/", "Linear", "https://linear.app/favicon.ico"],
@@ -33,7 +34,12 @@ export const site = {
   nytimes: ["https://www.nytimes.com/", "The New York Times", "https://www.nytimes.com/favicon.ico"],
   arena: ["https://www.are.na/", "Are.na", "https://www.are.na/favicon.ico"],
   reddit: ["https://www.reddit.com/", "Reddit", "https://www.reddit.com/favicon.ico"],
+  recipes: ["https://www.allrecipes.com/", "Allrecipes", "https://www.allrecipes.com/favicon.ico"],
 };
+
+/** A Wikipedia article as a tab: `wiki("Lisbon", { id: "a" })`. */
+export const wiki = (slug, extra = {}) =>
+  tab("wikipedia", { title: `${slug.replaceAll("_", " ")} - Wikipedia`, url: `https://en.wikipedia.org/wiki/${slug}`, ...extra });
 
 let nextTab = 0;
 
@@ -44,7 +50,7 @@ export function tab(key, extra = {}) {
   return { id: `t${++nextTab}`, url, favicon, pinnedUrl: extra.pinned || extra.pinnedRow ? url : null, ...extra, title: extra.title ?? title };
 }
 
-export async function open(scene, data) {
+export async function open(scene, data, env = {}) {
   return launch(buildApp, {
     data,
     fresh: true,
@@ -52,7 +58,7 @@ export async function open(scene, data) {
     onboarded: true,
     js: "none",
     // Visible, unlike a test instance; `open -g` still keeps it from taking focus.
-    env: { BAY_BACKGROUND: null },
+    env: { BAY_BACKGROUND: null, ...env },
     files: { "telemetry.json": { version: 1, sharing: false, decidedAt: 1, askDoneAt: 1 } },
     session: session({ ...scene, settings: { launchTab: "lastTab", ...scene.settings } }),
   });
