@@ -27,7 +27,7 @@ can't find. `--verify DIR` rechecks a staged app.
 | `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `baybrowser.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
 | `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
-| `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.krishkalaria.bay` repository's files for this release: the manifest (`flatpak/in.krishkalaria.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
+| `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.baybrowser.bay` repository's files for this release: the manifest (`flatpak/in.baybrowser.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
 | `nixpkgs/package.nix` (add `nixpkgs`) | nixpkgs | `nix/package.nix` with the version and the tarball's hash, for `pkgs/by-name/ba/bay` |
 | `bay_<version>_amd64.snap` (add `snap`) | Snap Store | from `snap/snapcraft.yaml.in`; needs `snapcraft`, and `SNAPCRAFT`/`BAY_SNAPCRAFT_ARGS` to pack on the host as CI does |
 | `SHA256SUMS` | | every artifact |
@@ -63,7 +63,7 @@ tarball, use `nix/default.nix` as described in `docs/linux-building.md`.
   23.10 and later) and confines nothing else. The AppImage can't install it, and its mount point changes each launch, so
   `AppRun` prints a profile for AppImage mounts and the commands to install it.
 - `bay.desktop` registers the web MIME types and the New Window and New Private Window actions. Its `StartupWMClass`
-  and the AppStream ID `in.krishkalaria.bay` match the engine's branding.
+  and the AppStream ID `in.baybrowser.bay` match the engine's branding.
 - Icons come from the Mac app's icon set, the small cut at 16 and 32 px, plus `app-icon.svg` as the scalable icon.
 - `/etc/bay/native-messaging-hosts` and `/etc/bay/policies/{managed,recommended}` are the engine's system paths.
 

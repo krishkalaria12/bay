@@ -1,0 +1,188 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { ids, site, type JsonLd } from "../site";
+
+const url = `${site.url}/privacy/`;
+
+const title = "Privacy";
+
+const description =
+  "What Bay keeps on your computer, what it sends and when: update checks, crash reports only if you turn them on, and pages only when you share them.";
+
+const updated = "2026-11-21";
+
+// The app's own list (apps/browser/src/telemetry/copy.ts, WHATS_SENT) says the same in Settings › Privacy & Security.
+const shared = [
+  "A random install ID made on your computer, and a new one each time sharing is turned back on",
+  "Bay’s version, the engine’s version, your operating system’s version and the processor type",
+  "Crashes and errors: their type, the function names involved, and the message with web addresses, file paths, names and quoted text taken out",
+  "Counts: launches, updates, tabs and windows open, and which features you use, such as Split View, spaces, the command bar or a Settings section",
+  "Speed and memory: time to the first window, space switching, command bar speed, and memory use once an hour",
+] as const;
+
+const never = [
+  "Web addresses, site names or page titles",
+  "Anything you type or search for",
+  "Your history, bookmarks, passwords or what’s in your tabs",
+  "The names of your spaces, extensions or files",
+] as const;
+
+const sections = [
+  {
+    id: "on-device",
+    heading: "What stays on your computer",
+    body: [
+      "Your tabs, spaces, history, bookmarks, passwords, cookies and settings are kept on your computer. Bay has no accounts, so there is nothing of yours on our servers to sign in to.",
+      "Sync is end-to-end encrypted. It goes through a folder you choose, such as one in iCloud Drive, and only your own devices hold the key to read it.",
+      "Bay is built on Chromium with Google’s background services taken out (it builds on ungoogled-chromium), so the engine doesn’t report to Google on its own.",
+    ],
+  },
+  {
+    id: "updates",
+    heading: "Update checks",
+    body: [
+      "A copy of Bay that updates itself asks baybrowser.in whether there’s a newer version. We count those checks by version and day, and whether a check is a copy’s first. Nothing else comes with them. A copy from an app store, such as the Microsoft Store, is updated by that store instead.",
+    ],
+  },
+  {
+    id: "sharing",
+    heading: "Pages you share",
+    body: [
+      "When you share an Easel, Bay publishes its title, picture and links as a page on baybrowser.in, where anyone with its address can see it. It’s stored with our hosting provider, Cloudflare, until you stop sharing it, which deletes it.",
+    ],
+  },
+  {
+    id: "search",
+    heading: "Search suggestions",
+    body: [
+      "With search suggestions on, what you type in the command bar goes to the search engine you chose, which answers with suggestions, as in other browsers. Turn them off in Settings › Search.",
+    ],
+  },
+  {
+    id: "sites",
+    heading: "Websites and extensions",
+    body: [
+      "The sites you visit and the extensions you install see what they would in any Chromium browser, under their own privacy policies. Extensions are installed and updated from the Chrome Web Store.",
+    ],
+  },
+  {
+    id: "website",
+    heading: "This website",
+    body: [
+      "baybrowser.in counts page views and download clicks with PostHog, using a random ID kept in your browser so a visit and a download can be counted together. It sets no advertising cookies. The site is hosted by Cloudflare.",
+    ],
+  },
+  {
+    id: "stores",
+    heading: "App stores",
+    body: [
+      "If you get Bay from an app store, such as the Microsoft Store, the store downloads and updates it under its own privacy policy.",
+    ],
+  },
+  {
+    id: "changes",
+    heading: "Changes to this page",
+    body: [
+      "We’ll update this page when what Bay sends changes, and change the date at the top. Bay’s source code is public, so you can check what it does.",
+    ],
+  },
+] as const;
+
+const schema: JsonLd[] = [
+  {
+    "@type": "WebPage",
+    "@id": `${url}#page`,
+    name: `${title} | Bay`,
+    description,
+    url,
+    dateModified: updated,
+    inLanguage: "en",
+    isPartOf: { "@id": ids.site },
+    about: { "@id": ids.app },
+    publisher: { "@id": ids.org },
+  },
+  {
+    "@type": "BreadcrumbList",
+    "@id": `${url}#breadcrumbs`,
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Bay", item: `${site.url}/` },
+      { "@type": "ListItem", position: 2, name: title, item: url },
+    ],
+  },
+];
+---
+
+<Layout title={`${title} | Bay`} description={description} schema={schema}>
+  <Header />
+
+  <main class="mx-auto max-w-3xl px-5 pt-10 pb-24 sm:pt-16">
+    <nav aria-label="Breadcrumb" class="text-[13px] text-muted">
+      <ol class="flex gap-2">
+        <li><a href="/" class="hover:text-ink">Bay</a></li>
+        <li aria-hidden="true">›</li>
+        <li aria-current="page" class="text-ink">Privacy</li>
+      </ol>
+    </nav>
+
+    <article>
+      <header class="mt-6">
+        <h1 class="text-[40px] leading-[1.04] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+          Your browsing stays <span class="marker">yours</span>.
+        </h1>
+        <p class="mt-6 text-[18px] leading-relaxed text-pretty text-muted">
+          Bay keeps what you do on your computer. It sends a little to baybrowser.in so it can update and so we can fix
+          what breaks, and only what this page lists. We don’t sell data, show ads or share it with advertisers.
+        </p>
+        <p class="mt-4 text-[13px] text-faint">Updated <time datetime={updated}>21 November 2026</time></p>
+      </header>
+
+      <section class="mt-14" aria-labelledby="crash-reports">
+        <h2 id="crash-reports" class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">Crash reports and usage stats</h2>
+        <p class="mt-3 text-[16px] leading-relaxed text-muted">
+          Off unless you turn them on, when Bay first opens or in Settings › Privacy & Security. They go to our own
+          collector at baybrowser.in, with no third parties. Turning sharing off stops it at once and deletes anything
+          still waiting to be sent.
+        </p>
+        <div class="mt-6 grid gap-3 sm:grid-cols-2">
+          <div class="card p-5">
+            <h3 class="text-[17px] font-semibold">What’s sent</h3>
+            <ul class="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+              {shared.map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+          <div class="card p-5">
+            <h3 class="text-[17px] font-semibold">Never</h3>
+            <ul class="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+              {never.map((item) => <li>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {
+        sections.map((section) => (
+          <section class="mt-14" aria-labelledby={section.id}>
+            <h2 id={section.id} class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">
+              {section.heading}
+            </h2>
+            {section.body.map((paragraph) => (
+              <p class="mt-3 text-[16px] leading-relaxed text-muted">{paragraph}</p>
+            ))}
+          </section>
+        ))
+      }
+
+      <section class="mt-14" aria-labelledby="contact">
+        <h2 id="contact" class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">Questions</h2>
+        <p class="mt-3 text-[16px] leading-relaxed text-muted">
+          Ask about this page, or about data Bay has sent, by opening an issue on
+          <a href={`${site.github}/issues`} class="underline underline-offset-4 hover:text-ink">Bay’s GitHub</a>.
+        </p>
+      </section>
+    </article>
+  </main>
+
+  <Footer />
+</Layout>

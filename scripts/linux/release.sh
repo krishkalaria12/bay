@@ -72,7 +72,7 @@ notes="$repo/release-notes/$version.md"
 date=$( { [[ -f "$notes" ]] && sed -n 's/^date: *\([0-9-]*\)$/\1/p' "$notes"; } || true)
 date=${date:-$(date -u +%Y-%m-%d)}
 sed "s|</component>|  <releases>\n    <release version=\"$version\" date=\"$date\" />\n  </releases>\n</component>|" \
-  "$packaging/in.krishkalaria.bay.metainfo.xml" >"$root/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml"
+  "$packaging/in.baybrowser.bay.metainfo.xml" >"$root/usr/share/metainfo/in.baybrowser.bay.metainfo.xml"
 # The Mac app's icon set: the small cut at 16 and 32, the full mark above (README › The icon).
 icons="$repo/apps/browser/macos/Bay-macOS/Assets.xcassets/AppIcon.appiconset"
 for pair in 16:icon_16x16_1x 32:icon_32x32_1x 64:icon_32x32_2x 128:icon_128x128_1x 256:icon_256x256_1x 512:icon_512x512_1x; do
@@ -151,10 +151,10 @@ if want aur; then
 fi
 
 if want flatpak; then
-  # The tarball's release URL and checksum, with the files the manifest names: flathub/in.krishkalaria.bay's contents.
+  # The tarball's release URL and checksum, with the files the manifest names: flathub/in.baybrowser.bay's contents.
   mkdir -p "$output/flatpak"
   sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" \
-    "$packaging/flatpak/in.krishkalaria.bay.yaml.in" >"$output/flatpak/in.krishkalaria.bay.yaml"
+    "$packaging/flatpak/in.baybrowser.bay.yaml.in" >"$output/flatpak/in.baybrowser.bay.yaml"
   cp "$packaging/flatpak/bay.sh" "$packaging/flatpak/cobalt.ini" "$packaging/flatpak/flathub.json" "$output/flatpak/"
 fi
 

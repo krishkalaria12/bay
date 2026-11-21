@@ -39,7 +39,7 @@ fi
 /opt/bay
 /usr/bin/bay
 /usr/share/applications/bay.desktop
-/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml
+/usr/share/metainfo/in.baybrowser.bay.metainfo.xml
 /usr/share/icons/hicolor/*/apps/bay.*
 %config(noreplace) /etc/apparmor.d/bay
 %dir /etc/bay

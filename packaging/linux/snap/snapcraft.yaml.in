@@ -29,7 +29,7 @@ apps:
   bay:
     command: bin/bay
     desktop: usr/share/applications/bay.desktop
-    common-id: in.krishkalaria.bay
+    common-id: in.baybrowser.bay
     extensions: [gnome]
     environment:
       # The profile outlives a revision instead of being copied into each one.
