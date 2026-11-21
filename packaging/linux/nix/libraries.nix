@@ -1,5 +1,6 @@
-# The libraries Bay's engine links or loads at run time (GTK, Qt and GPU stacks are loaded on demand), shared by the
-# package in default.nix and the build shell, whose ldd check in build-app.py needs the same set.
+# The libraries Bay's engine links or loads at run time (GTK, Qt and GPU stacks are loaded on demand), for the build
+# shell, whose ldd check in build-app.py needs them. package.nix lists the same set as nixpkgs arguments
+# (test_packaging.py checks they match).
 pkgs:
 let
   # nixpkgs is moving X11 libraries out of the xorg set and libgbm out of mesa; accept either location.
