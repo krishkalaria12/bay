@@ -5,7 +5,11 @@
 #      Mac release has already published;
 #   2. rebuilds the signed APT and RPM repositories and the AppImage update file on the prerelease linux-repo. The
 #      packages stay on v<version>: apps/web/public/_redirects serves both at https://bay.krishkalaria.in/linux/;
-#   3. pushes bay-bin to the AUR.
+#   3. pushes bay-bin to the AUR;
+#   4. uploads the snap to the Snap Store's stable channel, when SNAPCRAFT_STORE_CREDENTIALS is set and there's a snap.
+#
+# Flathub and nixpkgs update through pull requests: after the first, by hand, their bots open one for each release
+# (release.sh's flatpak and nixpkgs folders hold the files).
 #
 #   scripts/linux/publish.sh --packages dist/linux-release --version X.Y.Z [--dry-run]
 #
@@ -176,5 +180,12 @@ if git diff --cached --quiet; then
 else
   git -c user.name="Krish Kalaria" -c user.email="krishkalaria12@users.noreply.github.com" commit -q -m "bay-bin $version"
   git push -q origin HEAD:master
+fi
+cd "$packages"
+snap="bay_${version}_amd64.snap"
+if [[ -n "${SNAPCRAFT_STORE_CREDENTIALS:-}" && -f "$snap" ]]; then
+  snapcraft upload --release=stable "$snap"
+elif [[ -f "$snap" ]]; then
+  echo "SNAPCRAFT_STORE_CREDENTIALS isn't set: the snap wasn't uploaded"
 fi
 echo "Published Bay $version for Linux"

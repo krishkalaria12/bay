@@ -258,7 +258,7 @@ jobs:
       - name: Package
         run: |
           scripts/linux/release.sh --app dist/linux-app --version "$VERSION" \
-            --output dist/linux-release --formats tar,deb,rpm,appimage,aur,nix
+            --output dist/linux-release --formats tar,deb,rpm,appimage,aur,nix,flatpak,nixpkgs
       - name: Check the AppImage opens a window
         # Required for a release.
         continue-on-error: ${{ needs.plan.outputs.publish != 'true' }}
@@ -267,6 +267,14 @@ jobs:
           # profile, which an AppImage can't install (packaging/linux/AppRun).
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           xvfb-run -a scripts/linux/smoke.sh dist/linux-release/Bay-*-x86_64.AppImage 60
+      - name: Pack the snap
+        # New, and the Snap Store isn't set up yet, so a failure doesn't stop the other packages.
+        continue-on-error: true
+        run: |
+          sudo snap install snapcraft --classic
+          SNAPCRAFT="sudo snapcraft" BAY_SNAPCRAFT_ARGS=--destructive-mode scripts/linux/release.sh --app dist/linux-app \
+            --version "$VERSION" --output dist/linux-snap --formats tar,snap
+          cp "dist/linux-snap/bay_${VERSION}_amd64.snap" dist/linux-release/
       # Each package is its own unzipped download (archive: false takes one file, named after it). Everything,
       # with the checksums, zsync, PKGBUILD and NixOS README, stays in one zip for publishing.
       - uses: actions/upload-artifact@v7
@@ -294,6 +302,11 @@ jobs:
           path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-nixos-x64.nar.zst
           archive: false
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/linux-release/bay_${{ needs.plan.outputs.version }}_amd64.snap
+          archive: false
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: bay-linux-packages
@@ -323,12 +336,15 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q apt-utils createrepo-c rpm gnupg
+          sudo snap install snapcraft --classic
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
           LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          # Optional: without it, the snap isn't uploaded.
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
           keys=$(mktemp -d)
           trap 'rm -rf "$keys"' EXIT
