@@ -3,13 +3,13 @@
 #
 #   scripts/release/publish.sh <version> [--dry-run]
 #
-# Both channels share one feed, appcast.xml on the latest stable release (SUFeedURL, bay.krishkalaria.in/appcast.xml,
+# Both channels share one feed, appcast.xml on the latest stable release (SUFeedURL, baybrowser.in/appcast.xml,
 # redirects there). The release's item goes onto the feed as published right now, so a nightly that shipped while
 # this was building isn't dropped, keeping the newest 3 items per channel.
 #   stable   v<version>, latest, with Bay-<version>.dmg, Bay.dmg (the site's /download), the zip and the merged feed.
 #   nightly  v<version>, a prerelease (so latest, the feed's home and /download stay on stable), with the DMG and zip;
 #            the merged feed replaces the latest stable release's; Bay-Nightly.dmg on the prerelease "nightly"
-#            (bay.krishkalaria.in/nightly) becomes this one; nightlies beyond the newest 5 are deleted with their tags.
+#            (baybrowser.in/nightly) becomes this one; nightlies beyond the newest 5 are deleted with their tags.
 # The tag is v<version> at the commit provenance.txt names: an existing tag must point there, a missing one is
 # created there. --dry-run checks and prints everything and publishes nothing.
 set -euo pipefail
@@ -148,7 +148,7 @@ else
     --notes-file "$notes" "$dmg" "$zip" "$cli" "$cli.sha256"
   # The feed's home stays the latest stable release.
   run gh release upload "$stable_tag" -R "$repo" --clobber "$merged"
-  nightly_notes="The newest nightly, always as Bay-Nightly.dmg (https://bay.krishkalaria.in/nightly). Now $version: https://github.com/$repo/releases/tag/v$version. Nightlies update themselves to the next one; Settings › General › Update channel switches a copy between Stable and Nightly."
+  nightly_notes="The newest nightly, always as Bay-Nightly.dmg (https://baybrowser.in/nightly). Now $version: https://github.com/$repo/releases/tag/v$version. Nightlies update themselves to the next one; Settings › General › Update channel switches a copy between Stable and Nightly."
   if [ "$dry" = 1 ] || ! gh release view nightly -R "$repo" >/dev/null 2>&1; then
     run gh release create nightly -R "$repo" --prerelease --latest=false --target "$provenance_commit" --title "Bay Nightly" --notes "$nightly_notes"
   fi
@@ -168,7 +168,7 @@ fi
 [ "$dry" = 1 ] && { echo "dry run: nothing published"; exit 0; }
 echo "==> Check"
 status=0
-for url in "https://github.com/$repo/releases/latest/download/appcast.xml" "https://bay.krishkalaria.in/appcast.xml"; do
+for url in "https://github.com/$repo/releases/latest/download/appcast.xml" "https://baybrowser.in/appcast.xml"; do
   for _ in $(seq 1 18); do
     xml="$(curl -fsSL --max-time 20 "$url" 2>/dev/null || true)"
     grep -q "<sparkle:shortVersionString>$version<" <<<"$xml" && break

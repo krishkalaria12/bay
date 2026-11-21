@@ -1,9 +1,13 @@
+import { updateSettings } from "../../../runtime/settingsActions";
+import { reportBrowserCommand } from "../../../runtime/commands";
 import { lookup } from "@bay/core";
-import { menuShortcuts, Symbol, type MenuShortcut } from "@bay/desktop";
-import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Symbol, type MenuShortcut } from "@bay/desktop";
+import { useEffect, useRef, useState } from "react";
+import { formatShortcut as formatStroke, isMac, menuKeyName, menuShortcutStroke, platformOS, Pressable, shortcutLabel, View } from "@bay/platform";
+import { menuShortcuts } from "../../../lib/keyBindings";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { IconButton, useHover } from "../../ui/primitives";
 import { matchesQuery } from "../../pages/PageLayout";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, useFormColors } from "../controls";
@@ -12,7 +16,7 @@ import { withWorkflows } from "../settingsCommands";
 // The recorder this pane is: closing it stops its own recording, and no other pane's.
 const RECORDER = "shortcuts";
 
-type Combo = { key: string; modifiers: string[] };
+type Combo = { key: string; modifiers: readonly string[] };
 
 type Filter = "all" | "customized" | "conflicts";
 
@@ -41,12 +45,18 @@ const KEY_NAMES = {
 export function formatShortcut({ key, modifiers }: Combo): string {
   if (!key) return "";
 
+  // Off the Mac a shortcut reads as the platform writes it: Ctrl+Shift+T, not ⌃⇧T.
+  if (!isMac) {
+    // SAFETY: a menu shortcut's modifiers are the menu's own names, which menuShortcutStroke takes.
+    return formatStroke(menuShortcutStroke(menuKeyName(key), modifiers as Parameters<typeof menuShortcutStroke>[1]), platformOS);
+  }
+
   const mods = MOD_ORDER.flatMap((m) => (modifiers.includes(m) ? [lookup(MOD_GLYPH, m) ?? ""] : [])).join("");
 
   const code = key.charCodeAt(0);
   const name = lookup(KEY_NAMES, key) ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
 
-  return mods + name;
+  return shortcutLabel(mods + name);
 }
 
 export const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c.key.toLowerCase()}` : "");
@@ -58,6 +68,7 @@ export function ShortcutsPane() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [recording, setRecording] = useState<string | null>(null);
+  const latestRecording = useRef(0);
 
   useEffect(() => {
     void menuShortcuts().then(setItems);
@@ -83,17 +94,20 @@ export function ShortcutsPane() {
   const conflictsOf = (item: MenuShortcut) => (conflicts.get(comboId(effective(item))) ?? []).filter((x) => x.id !== item.id);
 
   const setShortcut = (id: string, combo: Combo | null) => {
-    const next = { ...useBrowser.getState().settings.shortcuts };
+    const next = Object.fromEntries(Object.entries(useBrowser.getState().settings.shortcuts).map(([id, keys]) => [id, [...keys]]));
 
     if (combo) next[id] = [combo.key, ...combo.modifiers];
     else delete next[id];
-    useBrowser.getState().updateSettings({ shortcuts: next });
+    reportBrowserCommand(updateSettings({ shortcuts: next }));
   };
 
   const record = async (item: MenuShortcut) => {
+    const run = ++latestRecording.current;
     setRecording(item.id);
     const combo = await withWorkflows((w) => w.record(RECORDER));
-    setRecording(null);
+
+    // A later recording replaced this one, and its field stays lit.
+    if (run === latestRecording.current) setRecording(null);
 
     if (!combo) return;
     const isDefault = combo.key === item.defaultKey && comboId(combo) === comboId({ key: item.defaultKey, modifiers: item.defaultModifiers });
@@ -130,7 +144,7 @@ export function ShortcutsPane() {
           onChange={setFilter}
           minWidth={170}
         />
-        <Button title="Reset All Shortcuts" disabled={!customizedCount} onPress={() => useBrowser.getState().updateSettings({ shortcuts: {} })} />
+        <Button title="Reset All Shortcuts" disabled={!customizedCount} onPress={() => reportBrowserCommand(updateSettings({ shortcuts: {} }))} />
       </View>
       {items !== null && shown.length === 0 && (
         <Text style={{ marginTop: 30, textAlign: "center", fontSize: 13, color: theme.textTertiary }}>No matching actions</Text>

@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import type { JsonInput, JsonValue } from "../lib/json";
 
-// OTLP/HTTP JSON log records for bay.krishkalaria.in/otel/v1/logs.
+// OTLP/HTTP JSON log records for baybrowser.in/otel/v1/logs.
 // Events keep their PostHog names so old and new data query the same.
 
 export type OtlpValue = { stringValue: string } | { intValue: string } | { doubleValue: number } | { boolValue: boolean };

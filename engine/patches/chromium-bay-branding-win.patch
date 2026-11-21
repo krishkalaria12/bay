@@ -1,0 +1,176 @@
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -21,7 +21,7 @@
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Chromium";
++inline constexpr wchar_t kProductPathName[] = L"Bay";
+ 
+ // The brand-specific safe browsing client name.
+ inline constexpr char kSafeBrowsingName[] = "chromium";
+@@ -54,23 +54,23 @@
+         .logo_suffix = L"",  // No logo suffix for the primary install mode.
+         .app_guid =
+             L"",  // Empty app_guid since no integration with Google Update.
+-        .base_app_name = L"Chromium",              // A distinct base_app_name.
+-        .base_app_id = L"Chromium",                // A distinct base_app_id.
+-        .browser_prog_id_prefix = L"ChromiumHTM",  // Browser ProgID prefix.
++        .base_app_name = L"Bay",              // A distinct base_app_name.
++        .base_app_id = L"Bay.Browser",                // A distinct base_app_id.
++        .browser_prog_id_prefix = L"Bay.HTML",  // Browser ProgID prefix.
+         .browser_prog_id_description =
+-            L"Chromium HTML Document",  // Browser ProgID description.
+-        .direct_launch_url_scheme = "chromium",
+-        .pdf_prog_id_prefix = L"ChromiumPDF",  // PDF ProgID prefix.
++            L"Bay HTML Document",  // Browser ProgID description.
++        .direct_launch_url_scheme = "bay",
++        .pdf_prog_id_prefix = L"Bay.PDF",  // PDF ProgID prefix.
+         .pdf_prog_id_description =
+-            L"Chromium PDF Document",  // PDF ProgID description.
++            L"Bay PDF Document",  // PDF ProgID description.
+         .active_setup_guid =
+-            L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}",  // Active Setup
++            L"{C345791D-67B8-4C97-AB2B-D6DDE1F93B72}",  // Active Setup
+                                                         // GUID.
+-        .toast_activator_clsid = {0x635EFA6F,
+-                                  0x08D6,
+-                                  0x4EC9,
+-                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,
+-                                   0x59}},  // Toast Activator CLSID.
++        .toast_activator_clsid = {0x0ea5371b,
++                                  0x277f,
++                                  0x5d11,
++                                  {0x90, 0xfb, 0xf3, 0x04, 0x7f, 0x2b, 0x4c,
++                                   0x73}},  // Toast Activator CLSID.
+         .elevator_clsid = {0xD133B120,
+                            0x6DB4,
+                            0x4D6B,
+diff --git a/chrome/common/chrome_constants.cc b/chrome/common/chrome_constants.cc
+--- a/chrome/common/chrome_constants.cc
++++ b/chrome/common/chrome_constants.cc
+@@ -32,9 +32,9 @@
+ 
+ #if BUILDFLAG(IS_WIN)
+ const base::FilePath::CharType kBrowserProcessExecutableName[] =
+-    FPL("chrome.exe");
++    FPL("Bay.exe");
+ const base::FilePath::CharType kHelperProcessExecutableName[] =
+-    FPL("chrome.exe");
++    FPL("Bay.exe");
+ #elif BUILDFLAG(IS_MAC)
+ const base::FilePath::CharType kBrowserProcessExecutableName[] =
+     FPL(PRODUCT_FULLNAME_STRING);
+@@ -54,9 +54,9 @@
+ 
+ #if BUILDFLAG(IS_WIN)
+ const base::FilePath::CharType kBrowserProcessExecutablePath[] =
+-    FPL("chrome.exe");
++    FPL("Bay.exe");
+ const base::FilePath::CharType kHelperProcessExecutablePath[] =
+-    FPL("chrome.exe");
++    FPL("Bay.exe");
+ #elif BUILDFLAG(IS_MAC)
+ const base::FilePath::CharType kBrowserProcessExecutablePath[] =
+     FPL(PRODUCT_FULLNAME_STRING ".app/Contents/MacOS/" PRODUCT_FULLNAME_STRING);
+diff --git a/chrome/installer/util/util_constants.h b/chrome/installer/util/util_constants.h
+--- a/chrome/installer/util/util_constants.h
++++ b/chrome/installer/util/util_constants.h
+@@ -348,9 +348,9 @@
+ // Active Setup.
+ inline constexpr wchar_t kActiveSetupExe[] = L"chrmstp.exe";
+ inline constexpr wchar_t kChromeDll[] = L"chrome.dll";
+-inline constexpr wchar_t kChromeExe[] = L"chrome.exe";
+-inline constexpr wchar_t kChromeNewExe[] = L"new_chrome.exe";
+-inline constexpr wchar_t kChromeOldExe[] = L"old_chrome.exe";
++inline constexpr wchar_t kChromeExe[] = L"Bay.exe";
++inline constexpr wchar_t kChromeNewExe[] = L"new_Bay.exe";
++inline constexpr wchar_t kChromeOldExe[] = L"old_Bay.exe";
+ inline constexpr wchar_t kChromeProxyExe[] = L"chrome_proxy.exe";
+ inline constexpr wchar_t kChromeProxyNewExe[] = L"new_chrome_proxy.exe";
+ inline constexpr wchar_t kChromeProxyOldExe[] = L"old_chrome_proxy.exe";
+diff --git a/chrome/app/theme/bay/BRANDING b/chrome/app/theme/bay/BRANDING
+--- a/chrome/app/theme/bay/BRANDING
++++ b/chrome/app/theme/bay/BRANDING
+@@ -1,7 +1,7 @@
+-COMPANY_FULLNAME=The Chromium Authors
+-COMPANY_SHORTNAME=The Chromium Authors
+-PRODUCT_FULLNAME=Chromium
+-PRODUCT_SHORTNAME=Chromium
+-PRODUCT_INSTALLER_FULLNAME=Chromium Installer
+-PRODUCT_INSTALLER_SHORTNAME=Chromium Installer
++COMPANY_FULLNAME=Bay
++COMPANY_SHORTNAME=Bay
++PRODUCT_FULLNAME=Bay
++PRODUCT_SHORTNAME=Bay
++PRODUCT_INSTALLER_FULLNAME=Bay Installer
++PRODUCT_INSTALLER_SHORTNAME=Bay Installer
+ COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
+diff --git a/chrome/app/chrome_exe.ver b/chrome/app/chrome_exe.ver
+--- a/chrome/app/chrome_exe.ver
++++ b/chrome/app/chrome_exe.ver
+@@ -1,2 +1,2 @@
+ INTERNAL_NAME=chrome_exe
+-ORIGINAL_FILENAME=chrome.exe
++ORIGINAL_FILENAME=Bay.exe
+diff --git a/chrome/installer/util/shell_util.cc b/chrome/installer/util/shell_util.cc
+--- a/chrome/installer/util/shell_util.cc
++++ b/chrome/installer/util/shell_util.cc
+@@ -139,6 +139,12 @@
+       base::StrCat({install_static::GetPDFProgIdPrefix(), suffix}), suffix);
+ }
+ 
++// Bay uses one per-user installer registration. HKCU already isolates users;
++// SID suffixes would diverge from its Inno Setup ProgIDs and pinned shortcuts.
++bool UsesBayRegistrationIdentity() {
++  return std::wstring_view(install_static::GetBaseAppId()) == L"Bay.Browser";
++}
++
+ // Returns the browser's application name. This application name will be
+ // suffixed as is appropriate for the current install. This is the name that is
+ // registered with Default Programs on Windows and that should thus be used to
+@@ -783,6 +789,10 @@
+ // Returns true unless one of the underlying calls fails.
+ bool GetInstallationSpecificSuffix(const base::FilePath& chrome_exe,
+                                    std::wstring* suffix) {
++  if (UsesBayRegistrationIdentity()) {
++    suffix->clear();
++    return true;
++  }
+   if (!InstallUtil::IsPerUserInstall() ||
+       QuickIsChromeRegistered(chrome_exe, std::wstring(),
+                               CONFIRM_SHELL_REGISTRATION)) {
+@@ -1765,6 +1775,8 @@
+ 
+ std::wstring ShellUtil::GetCurrentInstallationSuffix(
+     const base::FilePath& chrome_exe) {
++  if (UsesBayRegistrationIdentity())
++    return std::wstring();
+   // This method is somewhat the opposite of GetInstallationSpecificSuffix().
+   // In this case we are not trying to determine the current suffix for the
+   // upcoming installation (i.e. not trying to stick to a currently bad
+@@ -1795,6 +1807,8 @@
+ 
+ std::wstring ShellUtil::GetBrowserModelId(bool is_per_user_install) {
+   std::wstring app_id(install_static::GetBaseAppId());
++  if (UsesBayRegistrationIdentity())
++    return app_id;
+   std::wstring suffix;
+ 
+   // TODO(robertshield): Temporary hack to make the kRegisterChromeBrowserSuffix
+diff --git a/chrome/browser/shell_integration_win.cc b/chrome/browser/shell_integration_win.cc
+--- a/chrome/browser/shell_integration_win.cc
++++ b/chrome/browser/shell_integration_win.cc
+@@ -693,6 +693,11 @@
+ }
+ 
+ std::wstring GetAppUserModelIdForBrowser(const base::FilePath& profile_path) {
++  // Bay owns profile windows inside one desktop application. Its primary data
++  // directory differs from Chrome's User Data layout, so Chrome's profile
++  // suffix would also separate its default window from the installer shortcut.
++  if (std::wstring_view(install_static::GetBaseAppId()) == L"Bay.Browser")
++    return ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall());
+   return GetAppUserModelIdImpl(
+       std::wstring(),
+       ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall()),

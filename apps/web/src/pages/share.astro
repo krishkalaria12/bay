@@ -1,7 +1,6 @@
 ---
 import "../styles/global.css";
-import { Image } from "astro:assets";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg?url";
 import { downloadLink, site } from "../site";
 ---
 
@@ -19,13 +18,13 @@ import { downloadLink, site } from "../site";
     <meta name="theme-color" content="#edeef1" />
     <meta name="color-scheme" content="light" />
     <meta name="description" content="A collection of links shared from Bay. Preview them here or add them to your browser." />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.svg?v=dusk" type="image/svg+xml" />
     <title>Shared collection | Bay</title>
   </head>
   <body class="min-h-dvh">
     <header class="mx-auto flex h-20 max-w-3xl items-center justify-between gap-4 px-5">
       <a href="/" class="flex items-center gap-2 text-[21px] font-bold tracking-tight" aria-label="Bay home">
-        <Image src={appIcon} alt="" width={30} height={30} loading="eager" />
+        <img src={appIcon} alt="" width="30" height="30" />
         Bay
       </a>
       <a href={site.downloadUrl} {...downloadLink} class="btn-ghost text-sm" rel="noreferrer">Download Bay for Mac</a>

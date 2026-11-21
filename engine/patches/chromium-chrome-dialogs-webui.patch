@@ -1,0 +1,67 @@
+--- a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
++++ b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+@@ -51,6 +51,13 @@
+ 
+ using bubble_anchor_util::AnchorConfiguration;
+ 
++// Bay's web desktop host shows a page's chooser in its own UI: true when it took
++// `controller` and gave `close_closure`.
++bool (*g_bay_device_chooser)(
++    content::RenderFrameHost* owner,
++    std::unique_ptr<permissions::ChooserController>* controller,
++    base::OnceClosure* close_closure) = nullptr;
++
+ namespace {
+ 
+ AnchorConfiguration GetChooserAnchorConfiguration(
+@@ -286,6 +293,12 @@
+   if (cef::HandleDeviceChooser(owner, &controller, &cef_close_closure)) {
+     return cef_close_closure;
+   }
++#else
++  base::OnceClosure bay_close_closure;
++  if (g_bay_device_chooser &&
++      g_bay_device_chooser(owner, &controller, &bay_close_closure)) {
++    return bay_close_closure;
++  }
+ #endif
+   auto* contents = content::WebContents::FromRenderFrameHost(owner);
+ 
+--- a/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
++++ b/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
+@@ -32,6 +32,12 @@
+ #include "cef/libcef/browser/chrome/chrome_ui_hooks.h"
+ #endif
+ 
++// Bay's web desktop host shows the Cast dialog in its own UI, driven by the
++// MediaRouterUI, for the tabs it wants it for.
++bool (*g_bay_wants_cast_dialog)(content::WebContents* initiator) = nullptr;
++bool (*g_bay_cast_dialog)(content::WebContents* initiator,
++                          media_router::MediaRouterUI* ui) = nullptr;
++
+ using content::WebContents;
+ 
+ namespace media_router {
+@@ -60,6 +66,11 @@
+     return MediaRouterDialogController::ShowMediaRouterDialogForPresentation(
+         std::move(context));
+   }
++#else
++  if (g_bay_wants_cast_dialog && g_bay_wants_cast_dialog(initiator())) {
++    return MediaRouterDialogController::ShowMediaRouterDialogForPresentation(
++        std::move(context));
++  }
+ #endif
+ #if BUILDFLAG(IS_CHROMEOS)
+   ShowGlobalMediaControlsDialog(std::move(context));
+@@ -84,6 +95,10 @@
+   if (cef::HandleCastDialog(initiator(), ui_.get())) {
+     return;
+   }
++#else
++  if (g_bay_cast_dialog && g_bay_cast_dialog(initiator(), ui_.get())) {
++    return;
++  }
+ #endif
+   BrowserWindowInterface* browser =
+       GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(initiator());

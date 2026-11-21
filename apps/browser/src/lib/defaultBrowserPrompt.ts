@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { defaultBrowserCheckInDoneAt, defaultBrowserTrialStartedAt, recordDefaultBrowserCheckInDone } from "../components/onboarding/state";
-import { useBrowser } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { sendFeedback } from "./appMenuIntegration";
 import { CHECK_IN_AFTER_MS } from "./constants";
 

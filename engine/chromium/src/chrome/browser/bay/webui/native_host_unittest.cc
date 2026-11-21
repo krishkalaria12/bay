@@ -1,0 +1,2706 @@
+// Copyright 2026 Bay. Apache-2.0.
+#include "chrome/browser/bay/webui/native_host.h"
+
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <sys/stat.h>
+
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/observer_list.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
+#include "base/test/scoped_path_override.h"
+#include "base/test/task_environment.h"
+#include "base/test/test_future.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/cast_dialogs.h"
+#include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/device_choosers.h"
+#include "chrome/browser/bay/webui/external_app_prompts.h"
+#include "chrome/browser/bay/webui/icon_fetch.h"
+#include "chrome/browser/bay/webui/page_menu.h"
+#include "chrome/browser/bay/webui/permission_prompts.h"
+#include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/install_prompts.h"
+#include "chrome/browser/bay/webui/profile_data.h"
+#include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
+#include "chrome/browser/bay/webui/window_registry.h"
+#include "chrome/browser/lifetime/browser_close_manager.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/platform_util_internal.h"
+#include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "components/prefs/pref_service.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "chrome/browser/ui/media_router/ui_media_sink.h"
+#include "components/permissions/chooser_controller.h"
+#include "content/public/browser/web_contents.h"
+#include "extensions/browser/install_prompt_data.h"
+#include "extensions/common/extension_builder.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "net/base/filename_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/clipboard/test/test_clipboard.h"
+#include "ui/base/test/mock_base_window.h"
+#include "ui/linux/fake_linux_ui.h"
+#include "ui/menus/simple_menu_model.h"
+#include "ui/linux/window_button_order_observer.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_dialog_factory.h"
+#include "ui/shell_dialogs/select_file_policy.h"
+#include "ui/shell_dialogs/selected_file_info.h"
+#include "ui/views/window/window_button_order_provider.h"
+#include "url/gurl.h"
+
+namespace bay {
+namespace {
+
+class NativeHostTest : public ChromeRenderViewHostTestHarness {
+ public:
+  explicit NativeHostTest(
+      base::test::TaskEnvironment::TimeSource time_source =
+          base::test::TaskEnvironment::TimeSource::SYSTEM_TIME)
+      : ChromeRenderViewHostTestHarness(
+            base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED,
+            time_source) {}
+
+ protected:
+  void SetUp() override {
+    ChromeRenderViewHostTestHarness::SetUp();
+    platform_util::internal::DisableShellOperationsForTesting();
+    // Documents live under a temporary user data folder.
+    user_data_ =
+        std::make_unique<base::ScopedPathOverride>(chrome::DIR_USER_DATA);
+    downloads_ = std::make_unique<base::ScopedPathOverride>(
+        chrome::DIR_DEFAULT_DOWNLOADS,
+        base::PathService::CheckedGet(chrome::DIR_USER_DATA)
+            .Append("downloads café"),
+        true, false);
+    auto* host =
+        new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
+                       remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+  }
+  void TearDown() override {
+    if (host_)
+      host_->ResetAndDeleteThis();
+    remote_.reset();
+    task_environment()->RunUntilIdle();
+    ChromeRenderViewHostTestHarness::TearDown();
+  }
+  std::string Invoke(const std::string& module,
+                     const std::string& method,
+                     const std::string& args) {
+    base::test::TestFuture<const std::string&> result;
+    host_->Invoke(module, method, args, result.GetCallback());
+    return result.Get();
+  }
+  void ExpectError(const std::string& response, const char* code) {
+    auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* error = parsed->FindStringByDottedPath("error.code");
+    ASSERT_TRUE(error);
+    EXPECT_EQ(*error, code);
+  }
+
+  // A fresh coordinator, once its saved documents are read.
+  void ReplaceHost() {
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host =
+        new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
+                       remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+    task_environment()->RunUntilIdle();
+  }
+  base::DictValue HostInfo() {
+    // Host info waits for the document read, which QUEUED holds until here.
+    task_environment()->RunUntilIdle();
+    base::test::TestFuture<const std::string&> result;
+    host_->GetHostInfo(result.GetCallback());
+    auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+    return info ? std::move(*info) : base::DictValue();
+  }
+  base::FilePath Documents() const {
+    return base::PathService::CheckedGet(chrome::DIR_USER_DATA)
+        .AppendASCII("BayDocuments");
+  }
+
+  std::unique_ptr<base::ScopedPathOverride> user_data_;
+  std::unique_ptr<base::ScopedPathOverride> downloads_;
+  mojo::Remote<mojom::NativeHost> remote_;
+  base::WeakPtr<NativeHost> host_;
+};
+
+void ExpectLayoutAndCaptionMethods(const base::DictValue& info) {
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayShell.windowButtonLayout", "BayShell.minimizeWindow",
+        "BayShell.toggleMaximizeWindow", "BayShell.windowState"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  EXPECT_FALSE(methods->contains("BayShell.setWindowCaption"));
+  const auto* layout =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(layout);
+  EXPECT_EQ(layout->size(), 2u);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(NativeHostTest, PlacementCapabilityAndUnknownWindowKeepCoordinatorRole) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "coordinator");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
+  for (const char* options : {R"({"size":[0,600]})", R"({"maximized":1})",
+                              R"({"frame":[0,0,800,600],"size":[800]})"}) {
+    ExpectError(Invoke("BayShell", "openWindow",
+                       "[\"placement-test\"," + std::string(options) + "]"),
+                "window_error");
+  }
+}
+
+// A link another app opened, or a startup URL, is told apart from a page a
+// page opened and from pages the broker already holds.
+TEST_F(NativeHostTest, LaunchPagesSkipPageOpenedAndBrokerPages) {
+  auto launched = CreateTestWebContents();
+  auto opened = CreateTestWebContents();
+  AppRuntime::MarkOpenedByPage(opened.get());
+  AppRuntime::MarkOpenedByPage(nullptr);
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(launched.get()));
+  EXPECT_TRUE(AppRuntime::IsOpenedByPage(opened.get()));
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(nullptr));
+
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  const auto offer = TabBroker::Get().Offer(launched.get(), /*park=*/false);
+  ASSERT_TRUE(offer.error.empty());
+  EXPECT_TRUE(TabBroker::Get().Tracks(launched.get()));
+  TabBroker::Get().ReleaseOffer(offer.adopt_id);
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  // Without a started runtime nothing is offered.
+  WindowRegistry::Get().AdoptLaunchPages();
+}
+
+class HostLayoutLinuxUi : public ui::FakeLinuxUi {
+ public:
+  void AddWindowButtonOrderObserver(ui::WindowButtonOrderObserver* o) override {
+    observers.AddObserver(o);
+  }
+  void RemoveWindowButtonOrderObserver(
+      ui::WindowButtonOrderObserver* o) override {
+    observers.RemoveObserver(o);
+  }
+  void Notify() {
+    for (auto& observer : observers)
+      observer.OnWindowButtonOrderingChange();
+  }
+  base::ObserverList<ui::WindowButtonOrderObserver>::Unchecked observers;
+};
+class LayoutHostTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    auto* order = views::WindowButtonOrderProvider::GetInstance();
+    left_ = order->leading_buttons();
+    right_ = order->trailing_buttons();
+    old_ui_ = ui::LinuxUi::SetInstance(&linux_ui_);
+    ReplaceHost();
+    SetLayout(false);
+    task_environment()->RunUntilIdle();
+  }
+  void TearDown() override {
+    NativeHostTest::TearDown();
+    EXPECT_TRUE(linux_ui_.observers.empty());
+    ui::LinuxUi::SetInstance(old_ui_);
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left_, right_);
+  }
+  void SetLayout(bool left) {
+    using Button = views::FrameButton;
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left ? std::vector<Button>{Button::kClose} : std::vector<Button>{},
+        left ? std::vector<Button>{Button::kMinimize, Button::kMaximize}
+             : std::vector<Button>{Button::kMinimize, Button::kMaximize,
+                                   Button::kClose});
+    linux_ui_.Notify();
+  }
+  HostLayoutLinuxUi linux_ui_;
+  raw_ptr<ui::LinuxUi> old_ui_ = nullptr;
+  std::vector<views::FrameButton> left_, right_;
+};
+class LayoutClient : public mojom::NativeHostClient {
+ public:
+  void Connect(NativeHost& host) {
+    receiver.reset();
+    host.SetClient(receiver.BindNewPipeAndPassRemote());
+  }
+  void OnNativeEvent(const std::string& module,
+                     const std::string& event,
+                     const std::string& json) override {
+    if (module != "BayShell" || event != "onAppEvent")
+      return;
+    auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(payload);
+    const auto* type = payload->FindString("type");
+    if (!type || *type != "windowButtonLayout")
+      return;
+    EXPECT_EQ(payload->size(), 2u);
+    const auto* layout = payload->FindDict("layout");
+    ASSERT_TRUE(layout);
+    events.push_back(layout->Clone());
+  }
+  void OnHostInfoChanged(const std::string& json) override {
+    auto info = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(info);
+    const auto* layout =
+        info->FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+    ASSERT_TRUE(layout);
+    snapshots.push_back(layout->Clone());
+  }
+  mojo::Receiver<mojom::NativeHostClient> receiver{this};
+  std::vector<base::DictValue> events, snapshots;
+};
+
+TEST_F(NativeHostTest, LayoutQueryDoesNotWaitForDocumentPreparation) {
+  base::test::TestFuture<const std::string&> info;
+  host_->GetHostInfo(info.GetCallback());
+  EXPECT_FALSE(info.IsReady());
+  const auto result = base::JSONReader::ReadDict(
+      Invoke("BayShell", "windowButtonLayout", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto* layout = result->FindDict("value");
+  ASSERT_TRUE(layout);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(LayoutHostTest, CoordinatorAdvertisesAndQueriesCurrentLayout) {
+  SetLayout(true);
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  EXPECT_EQ(*snapshot->FindList("left"), base::ListValue().Append("close"));
+  EXPECT_EQ(*snapshot->FindList("right"),
+            base::ListValue().Append("minimize").Append("maximize"));
+  for (const char* args : {"{}", "[1]", "[null]", "[[],{}]"})
+    ExpectError(Invoke("BayShell", "windowButtonLayout", args), "invalid_args");
+}
+TEST_F(LayoutHostTest, CaptionCommandsPreserveCommonArityAndUnknownIdErrors) {
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"}) {
+    ExpectError(Invoke("BayShell", method, "[]"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing",1])"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+  }
+}
+TEST_F(LayoutHostTest, LiveChangesPublishSnapshotAndCurrentEvent) {
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  const auto initial = client.events[0].Clone();
+  SetLayout(true);
+  SetLayout(false);
+  SetLayout(true);
+  EXPECT_EQ(client.events.size(), 1u);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 2u);
+  ASSERT_FALSE(client.snapshots.empty());
+  EXPECT_EQ(client.snapshots.back(), client.events.back());
+  EXPECT_NE(initial, client.events.back());
+  EXPECT_EQ(client.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+}
+TEST_F(LayoutHostTest, ReplaceDisconnectReconnectAndTeardownCancelStaleEvents) {
+  LayoutClient first;
+  first.Connect(*host_);
+  SetLayout(true);
+  LayoutClient second;
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(first.events.empty());
+  ASSERT_EQ(second.events.size(), 1u);
+  second.receiver.reset();
+  task_environment()->RunUntilIdle();
+  SetLayout(false);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 1u);
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(second.events.size(), 2u);
+  EXPECT_EQ(second.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+  SetLayout(true);
+  host_->ResetAndDeleteThis();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 2u);
+  EXPECT_TRUE(linux_ui_.observers.empty());
+}
+TEST_F(LayoutHostTest, FreshDocumentGetsCurrentLayoutAfterDisconnectedUpdate) {
+  SetLayout(true);
+  ReplaceHost();
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  EXPECT_EQ(client.events[0], *HostInfo().FindDictByDottedPath(
+                                  "snapshots.BayShell.windowButtonLayout"));
+}
+
+class AppearanceClient : public mojom::NativeHostClient {
+ public:
+  void Connect(NativeHost& host) {
+    receiver.reset();
+    host.SetClient(receiver.BindNewPipeAndPassRemote());
+  }
+  void OnNativeEvent(const std::string& module,
+                     const std::string& event,
+                     const std::string& json) override {
+    if (module != "BayShell" || event != "onAppEvent")
+      return;
+    auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(payload);
+    const auto* type = payload->FindString("type");
+    ASSERT_TRUE(type);
+    if (*type != "appearance")
+      return;
+    EXPECT_EQ(payload->size(), 2u);
+    const auto dark = payload->FindBool("dark");
+    ASSERT_TRUE(dark);
+    events.push_back(*dark);
+  }
+  void OnHostInfoChanged(const std::string&) override {}
+  mojo::Receiver<mojom::NativeHostClient> receiver{this};
+  std::vector<bool> events;
+};
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesAndQueriesSelectedAppearance) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.setAppearance"));
+  EXPECT_TRUE(methods->contains("BayShell.isDarkAppearance"));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["light"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":false})");
+}
+
+TEST_F(NativeHostTest, AppearanceValidatesArityAndModeBeforeMutation) {
+  // Appearance does not wait for the unrelated Linux document read.
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  for (const char* args : {"[]", "[null]", "[1]", "[true]", "[{}]", "[[]]",
+                           R"(["Dark"])", R"(["auto",1])"})
+    ExpectError(Invoke("BayShell", "setAppearance", args), "invalid_args");
+  ExpectError(Invoke("BayShell", "isDarkAppearance", "[null]"), "invalid_args");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+}
+
+TEST_F(NativeHostTest, AppearanceConnectReplaceDisconnectAndReconnect) {
+  Invoke("BayShell", "setAppearance", R"(["light"])");
+  AppearanceClient first;
+  first.Connect(*host_);
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  AppearanceClient second;
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(first.events.empty());
+  EXPECT_EQ(second.events, (std::vector<bool>{true}));
+  second.receiver.reset();
+  task_environment()->RunUntilIdle();
+  Invoke("BayShell", "setAppearance", R"(["light"])");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 1u);
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events, (std::vector<bool>{true, false}));
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  host_->ResetAndDeleteThis();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 2u);
+}
+
+TEST_F(NativeHostTest, FreshDocumentReceivesCurrentAppearance) {
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  ReplaceHost();
+  AppearanceClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{true}));
+}
+
+TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
+  auto info = HostInfo();
+  const auto* modules = info.FindList("modules");
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(modules);
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(modules->contains("BaySystem"));
+  EXPECT_TRUE(methods->contains("BayShell.prompt"));
+  EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
+  EXPECT_TRUE(methods->contains("BayShell.fontFamilies"));
+  EXPECT_FALSE(methods->contains("BayShell.saveTextFile"));
+  EXPECT_FALSE(methods->contains("BayShell.openTextFile"));
+  EXPECT_FALSE(methods->contains("BayShell.showMenu"));
+  EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
+  EXPECT_TRUE(methods->contains("BayCEF.secretStorage"));
+  for (const auto& method : *methods) {
+    const auto& name = method.GetString();
+    if (name.starts_with("BaySystem."))
+      EXPECT_TRUE(
+          name == "BaySystem.fileIcon" || name == "BaySystem.fileExists" ||
+          name == "BaySystem.downloadsFolder" || name == "BaySystem.openFile" ||
+          name == "BaySystem.revealFile" || name == "BaySystem.moveToTrash" ||
+          name == "BaySystem.copyFile" || name == "BaySystem.renameFile" ||
+          name == "BaySystem.isDefaultBrowser" ||
+          name == "BaySystem.setAsDefaultBrowser" ||
+          name == "BaySystem.launchAtLoginStatus" ||
+          name == "BaySystem.setLaunchAtLogin");
+  }
+  EXPECT_TRUE(methods->contains("BayShell.confirm"));
+  EXPECT_TRUE(methods->contains("BayShell.readDocument"));
+  EXPECT_TRUE(methods->contains("BayShell.saveDocument"));
+  EXPECT_TRUE(info.FindDictByDottedPath("snapshots.BaySystem.files"));
+  const auto* downloads =
+      info.FindByDottedPath("snapshots.BaySystem.downloadsFolder");
+  ASSERT_TRUE(downloads);
+  EXPECT_TRUE(downloads->is_string() || downloads->is_none());
+  EXPECT_EQ(Invoke("BaySystem", "downloadsFolder", "[]"),
+            base::WriteJson(base::DictValue().Set("value", downloads->Clone()))
+                .value());
+}
+
+TEST_F(NativeHostTest,
+       FileSnapshotWaitsForPreparationAndIsTheNativeUserDirectory) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  host_->GetHostInfo(first.GetCallback());
+  host_->GetHostInfo(second.GetCallback());
+  EXPECT_FALSE(first.IsReady());
+  EXPECT_FALSE(second.IsReady());
+  ExpectError(Invoke("BaySystem", "fileExists", "[null]"),
+              "initialization_failed");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(first.Get(), second.Get());
+  auto info = base::JSONReader::ReadDict(first.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(info);
+  const auto* path =
+      info->FindStringByDottedPath("snapshots.BaySystem.downloadsFolder");
+  ASSERT_TRUE(path);
+  EXPECT_EQ(
+      *path,
+      base::PathService::CheckedGet(chrome::DIR_DEFAULT_DOWNLOADS).value());
+  EXPECT_FALSE(base::PathExists(base::FilePath(*path)));
+}
+
+TEST_F(NativeHostTest,
+       FileContractsRejectArityBeforeReadinessAndTypesAfterReadiness) {
+  for (const char* method :
+       {"fileExists", "openFile", "revealFile", "moveToTrash", "copyFile"}) {
+    for (const char* args : {"{}", "[]", R"(["/tmp/a",1])"})
+      ExpectError(Invoke("BaySystem", method, args), "invalid_args");
+  }
+  for (const char* args : {"{}", "[]", R"(["/tmp/a"])", R"(["/tmp/a","b",1])"})
+    ExpectError(Invoke("BaySystem", "renameFile", args), "invalid_args");
+  HostInfo();
+  for (const char* method :
+       {"fileExists", "openFile", "revealFile", "moveToTrash", "copyFile"}) {
+    for (const char* args :
+         {"[null]", "[1]", R"(["relative"])", R"(["/tmp/a\u0000b"])"})
+      ExpectError(Invoke("BaySystem", method, args), "invalid_args");
+  }
+  for (const char* args : {R"([null,"b"])", R"(["relative","b"])",
+                           R"(["/tmp/a",1])", R"(["/tmp/a",null])"})
+    ExpectError(Invoke("BaySystem", "renameFile", args), "invalid_args");
+  ExpectError(Invoke("BaySystem", "downloadsFolder", "[1]"), "invalid_args");
+  ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[1]"), "invalid_args");
+}
+
+void ExpectKeychainMethods(const base::DictValue& info) {
+  const auto* modules = info.FindList("modules");
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(modules);
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(modules->contains("BayKeychain"));
+  for (const char* method :
+       {"BayKeychain.get", "BayKeychain.set", "BayKeychain.delete"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+}
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesAndDispatchesKeychain) {
+  ExpectKeychainMethods(HostInfo());
+  for (const char* method : {"get", "set", "delete"})
+    ExpectError(Invoke("BayKeychain", method, "[null]"), "invalid_args");
+  ExpectError(Invoke("BayKeychain", "unknown", "[]"), "unknown_method");
+}
+
+void ExpectDesktopSystemMethods(const base::DictValue& info) {
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BaySystem.isDefaultBrowser", "BaySystem.setAsDefaultBrowser",
+        "BaySystem.launchAtLoginStatus", "BaySystem.setLaunchAtLogin",
+        "BayApp.systemInfo", "BayApp.launchEnvironment",
+        "BayApp.openExternalURL", "BayApp.updaterState"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  for (const char* method :
+       {"BayApp.checkForUpdates", "BayApp.installPendingUpdate",
+        "BayApp.setAutomaticUpdateChecks",
+        "BayApp.setAutomaticUpdateDownloads"})
+    EXPECT_FALSE(methods->contains(method)) << method;
+}
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesDesktopSystemMethods) {
+  ExpectDesktopSystemMethods(HostInfo());
+}
+
+TEST_F(NativeHostTest, AppSnapshotsAreReadyBeforeHostInfoReturns) {
+  base::test::TestFuture<const std::string&> result;
+  host_->GetHostInfo(result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  ExpectError(Invoke("BayApp", "systemInfo", "[]"), "initialization_failed");
+  task_environment()->RunUntilIdle();
+  auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(info);
+  const auto* system =
+      info->FindDictByDottedPath("snapshots.BayApp.systemInfo");
+  ASSERT_TRUE(system);
+  const auto* name = system->FindString("appName");
+  ASSERT_TRUE(name);
+  EXPECT_EQ(*name, "Bay");
+  EXPECT_EQ(system->FindBool("updates"), false);
+  EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BayApp.environment"));
+  EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BayShell.documents"));
+  EXPECT_EQ(
+      Invoke("BayApp", "systemInfo", "[]"),
+      base::WriteJson(base::DictValue().Set("value", system->Clone())).value());
+  EXPECT_EQ(Invoke("BayApp", "launchEnvironment", R"(["NOT_A_BAY_SETTING"])"),
+            R"({"value":null})");
+  auto updater = base::JSONReader::ReadDict(
+      Invoke("BayApp", "updaterState", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(updater);
+  EXPECT_EQ(updater->FindBoolByDottedPath("value.available"), false);
+  const auto* manager = updater->FindStringByDottedPath("value.managedBy");
+  ASSERT_TRUE(manager);
+  EXPECT_EQ(*manager, "packageManager");
+}
+
+TEST_F(NativeHostTest,
+       DesktopSystemContractsRejectArgumentsWithoutExternalEffects) {
+  HostInfo();
+  for (const char* method :
+       {"isDefaultBrowser", "setAsDefaultBrowser", "launchAtLoginStatus"})
+    ExpectError(Invoke("BaySystem", method, "[1]"), "invalid_args");
+  for (const char* args : {"[]", "[null]", "[1]", R"(["true"])"})
+    ExpectError(Invoke("BaySystem", "setLaunchAtLogin", args), "invalid_args");
+  for (const char* method : {"systemInfo", "updaterState"})
+    ExpectError(Invoke("BayApp", method, "[1]"), "invalid_args");
+  ExpectError(Invoke("BayApp", "launchEnvironment", "[1]"), "invalid_args");
+  for (const char* args : {"[]", "[null]", R"(["file:///tmp/a"])",
+                           R"json(["javascript:alert(1)"])json",
+                           R"(["ftp://example.com"])", R"(["not a URL"])"})
+    ExpectError(Invoke("BayApp", "openExternalURL", args), "invalid_args");
+}
+
+TEST_F(NativeHostTest, ClosingHostBeforeAppSnapshotReplyDropsPendingHostInfo) {
+  int calls = 0;
+  host_->GetHostInfo(
+      base::BindLambdaForTesting([&calls](const std::string&) { ++calls; }));
+  host_->ResetAndDeleteThis();
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 0);
+}
+
+TEST_F(NativeHostTest,
+       CoordinatorFileOperationsStayIndependentOfDocumentReadErrors) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
+  ReplaceHost();
+  const auto file = Documents().Append("café ?*.txt");
+  ASSERT_TRUE(base::WriteFile(file, "safe"));
+  const auto args =
+      base::WriteJson(base::ListValue().Append(file.value())).value();
+  EXPECT_EQ(Invoke("BaySystem", "fileExists", args), R"({"value":true})");
+  EXPECT_EQ(Invoke("BaySystem", "openFile", args), R"({"value":true})");
+  EXPECT_EQ(Invoke("BaySystem", "revealFile", args), R"({"value":true})");
+  EXPECT_EQ(
+      Invoke("BaySystem", "openFile",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+  const auto missing =
+      base::WriteJson(
+          base::ListValue().Append(Documents().AppendASCII("missing").value()))
+          .value();
+  EXPECT_EQ(Invoke("BaySystem", "fileExists", missing), R"({"value":false})");
+  EXPECT_EQ(Invoke("BaySystem", "openFile", missing), R"({"value":false})");
+  EXPECT_EQ(Invoke("BaySystem", "revealFile", missing), R"({"value":false})");
+  // GIO receives only a nonexistent entry under the temporary test directory.
+  EXPECT_EQ(Invoke("BaySystem", "moveToTrash", missing), R"({"value":false})");
+  EXPECT_TRUE(base::PathExists(file));
+}
+
+TEST_F(NativeHostTest, HostInfoReplyCanDeleteOwnerAfterAllPreparation) {
+  int calls = 0;
+  host_->GetHostInfo(
+      base::BindLambdaForTesting([this, &calls](const std::string& json) {
+        ++calls;
+        EXPECT_TRUE(base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC));
+        host_->ResetAndDeleteThis();
+      }));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(host_);
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(NativeHostTest, FileWorkerReplyAfterHostTeardownIsSettledOnce) {
+  HostInfo();
+  int calls = 0;
+  host_->Invoke(
+      "BaySystem", "fileExists",
+      base::WriteJson(base::ListValue().Append(Documents().value())).value(),
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        ExpectError(response, "host_closed");
+      }));
+  EXPECT_EQ(calls, 0);
+  host_->ResetAndDeleteThis();
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(NativeHostTest, SavedDocumentsArriveInHostInfoAndPersist) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("session.json"), "{}"));
+  ReplaceHost();
+  auto info = HostInfo();
+  const auto* session =
+      info.FindStringByDottedPath("snapshots.BayShell.documents.session.json");
+  ASSERT_TRUE(session);
+  EXPECT_EQ(*session, "{}");
+  EXPECT_FALSE(
+      info.FindStringByDottedPath("constants.BayShell.initializationError"));
+
+  auto saved = base::JSONReader::ReadDict(
+      Invoke("BayShell", "saveDocument", R"(["notes.json","[1]"])"),
+      base::JSON_PARSE_RFC);
+  ASSERT_TRUE(saved);
+  EXPECT_FALSE(saved->Find("error"));
+  std::string contents;
+  ASSERT_TRUE(
+      base::ReadFileToString(Documents().AppendASCII("notes.json"), &contents));
+  EXPECT_EQ(contents, "[1]");
+  EXPECT_TRUE(HostInfo().FindStringByDottedPath(
+      "snapshots.BayShell.documents.notes.json"));
+}
+
+TEST_F(NativeHostTest, AnUnreadableDocumentBecomesTheInitializationError) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
+  ReplaceHost();
+  const auto info = HostInfo();
+  const auto* error =
+      info.FindStringByDottedPath("constants.BayShell.initializationError");
+  ASSERT_TRUE(error);
+  EXPECT_NE(error->find("bad.json"), std::string::npos);
+  ExpectError(Invoke("BayShell", "saveDocument", R"(["bad.json","{}"])"),
+              "initialization_failed");
+}
+
+// The testing browser process encrypts with a test key, not the fixed v10
+// one. The engine facade would otherwise answer every BayCEF method.
+TEST_F(NativeHostTest, SecretStorageAnswersAheadOfTheEngineFacade) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  host_->Invoke("BayCEF", "secretStorage", "[]", first.GetCallback());
+  host_->Invoke("BayCEF", "secretStorage", "[]", second.GetCallback());
+  for (auto* result : {&first, &second}) {
+    auto parsed =
+        base::JSONReader::ReadDict(result->Get(), base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* value = parsed->FindString("value");
+    ASSERT_TRUE(value);
+    EXPECT_EQ(*value, "keyring");
+  }
+  ExpectError(Invoke("BayCEF", "secretStorage", "[1]"), "invalid_args");
+}
+
+TEST_F(NativeHostTest, SecretStorageSettlesWhenTheHostCloses) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayCEF", "secretStorage", "[]", result.GetCallback());
+  ASSERT_FALSE(result.IsReady());
+  host_->ResetAndDeleteThis();
+  ASSERT_TRUE(result.IsReady());
+  ExpectError(result.Get(), "host_closed");
+  // The encryptor's late answer finds no owner.
+  task_environment()->RunUntilIdle();
+}
+
+TEST_F(NativeHostTest, CoordinatorPromptRequiresAnExplicitLiveWindow) {
+  ExpectError(Invoke("BayShell", "prompt", R"([{"title":"Input"}])"),
+              "window_required");
+  ExpectError(Invoke("BayShell", "prompt",
+                     R"([{"title":"Input","windowId":"missing"}])"),
+              "window_required");
+}
+
+TEST_F(NativeHostTest, CoordinatorConfirmRequiresAnExplicitLiveWindow) {
+  ExpectError(Invoke("BayShell", "confirm", R"([{"title":"Quit?"}])"),
+              "window_required");
+  ExpectError(Invoke("BayShell", "confirm",
+                     R"([{"title":"Quit?","windowId":"missing"}])"),
+              "window_required");
+}
+
+TEST_F(NativeHostTest, CoordinatorCannotShowAContextMenu) {
+  ExpectError(
+      Invoke("BayShell", "showMenu", R"([[{"id":"copy","title":"Copy"}]])"),
+      "window_required");
+}
+
+TEST_F(NativeHostTest, CoordinatorCannotPickFiles) {
+  ExpectError(Invoke("BayShell", "pickFiles", "[]"), "window_required");
+  ExpectError(Invoke("BayShell", "pickFiles", R"([{"windowId":"other"}])"),
+              "invalid_args");
+}
+
+TEST_F(NativeHostTest, ValidatesArgumentsBeforeStartingShellWork) {
+  ExpectError(Invoke("BayShell", "pickFiles", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "pickFiles", "{}"), "invalid_args");
+  ExpectError(Invoke("BayShell", "prompt", "[]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "prompt", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", "[]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", R"([[{"title":"No id"}]])"),
+              "invalid_args");
+  ExpectError(Invoke("BayShell", "confirm", "[]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "confirm", "[{}]"), "invalid_args");
+  ExpectError(
+      Invoke("BayShell", "confirm", R"([{"title":"Quit?","destructive":1}])"),
+      "invalid_args");
+  ExpectError(Invoke("BaySystem", "fileIcon", R"(["../file.txt",16])"),
+              "invalid_args");
+  ExpectError(Invoke("BaySystem", "notAMethod", "[]"), "unknown_method");
+}
+
+TEST_F(NativeHostTest, UnhandledShellDispatchLeavesTheCallbackUntouched) {
+  ShellUI shell;
+  bool called = false;
+  ShellUI::Response callback = base::BindOnce(
+      [](bool* called, const std::string&) { *called = true; }, &called);
+  EXPECT_FALSE(shell.Dispatch(HostContext::ForCoordinator(*profile()),
+                              "BayShell", "copyText", {}, callback));
+  EXPECT_FALSE(called);
+  ASSERT_TRUE(callback);
+  std::move(callback).Run("unused");
+  EXPECT_TRUE(called);
+}
+
+TEST_F(NativeHostTest,
+       HostDestructionSettlesIconsOnceBeforeLateLoadCompletion) {
+  std::vector<std::string> responses;
+  for (const char* args : {R"(["missing.txt",16])", R"(["missing.pdf",32])"}) {
+    host_->Invoke(
+        "BaySystem", "fileIcon", args,
+        base::BindOnce(
+            [](std::vector<std::string>* responses,
+               const std::string& response) { responses->push_back(response); },
+            &responses));
+  }
+  // QUEUED keeps IconLoader's MIME tasks pending until we drain them below.
+  EXPECT_TRUE(responses.empty());
+  host_->ResetAndDeleteThis();
+  EXPECT_FALSE(host_);
+  ASSERT_EQ(responses.size(), 2u);
+  for (const auto& response : responses) {
+    auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* value = parsed->Find("value");
+    ASSERT_TRUE(value);
+    EXPECT_TRUE(value->is_none());
+  }
+  // The real self-deleting loaders still reply after their owner is gone.
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(responses.size(), 2u);
+}
+
+// Use Chromium's native factory override, without creating a real desktop
+// dialog. The harness root window supplies only the modal parent handle.
+struct FileDialogLifetime {
+  bool destroyed = false;
+  bool detached = false;
+  bool returned_from_listener = false;
+};
+
+class FakeFileDialog : public ui::SelectFileDialog {
+ public:
+  using OnShow = base::RepeatingCallback<void(FakeFileDialog*)>;
+  FakeFileDialog(Listener* listener,
+                 std::unique_ptr<ui::SelectFilePolicy> policy,
+                 OnShow on_show)
+      : SelectFileDialog(listener, std::move(policy)),
+        on_show_(std::move(on_show)) {}
+  bool IsRunning(gfx::NativeWindow) const override { return !!listener_; }
+  void ListenerDestroyed() override {
+    ++detach_count;
+    lifetime->detached = true;
+    listener_ = nullptr;
+  }
+  void Select(const ui::SelectedFileInfo& file) {
+    if (listener_)
+      listener_->FileSelected(file, 0);
+  }
+  void SelectMultiple(const std::vector<ui::SelectedFileInfo>& files) {
+    if (listener_)
+      listener_->MultiFilesSelected(files);
+  }
+  void Cancel() {
+    if (listener_) {
+      listener_->FileSelectionCanceled();
+      // Match the native backends' accesses after listener notification.
+      lifetime->returned_from_listener = true;
+    }
+  }
+  int detach_count = 0;
+  gfx::NativeWindow parent = nullptr;
+  Type selection_type = SELECT_NONE;
+  std::optional<FileTypeInfo> types;
+  std::u16string dialog_title;
+  base::FilePath suggested_path;
+  base::FilePath::StringType suggested_extension;
+  int type_index = 0;
+  std::shared_ptr<FileDialogLifetime> lifetime =
+      std::make_shared<FileDialogLifetime>();
+
+ protected:
+  ~FakeFileDialog() override { lifetime->destroyed = true; }
+  void SelectFileImpl(Type type,
+                      const std::u16string& title,
+                      const base::FilePath& default_path,
+                      const FileTypeInfo* file_types,
+                      int file_type_index,
+                      const base::FilePath::StringType& default_extension,
+                      gfx::NativeWindow owning_window,
+                      const GURL* caller) override {
+    selection_type = type;
+    dialog_title = title;
+    if (file_types)
+      types.emplace(*file_types);
+    suggested_path = default_path;
+    suggested_extension = default_extension;
+    type_index = file_type_index;
+    if (title == u"Save File" || title == u"Open File") {
+      // Text files: their tests check the choices.
+    } else if (type == SELECT_OPEN_MULTI_FILE) {
+      EXPECT_EQ(title, u"Open files");
+      EXPECT_FALSE(file_types);
+      EXPECT_EQ(file_type_index, 0);
+    } else if (type == SELECT_OPEN_FILE) {
+      EXPECT_EQ(type, SELECT_OPEN_FILE);
+      EXPECT_EQ(title, u"Choose import file");
+      EXPECT_TRUE(file_types);
+      EXPECT_EQ(file_type_index, 1);
+    } else if (type == SELECT_FOLDER) {
+      EXPECT_EQ(title, u"Choose sync folder");
+      EXPECT_FALSE(file_types);
+      EXPECT_EQ(file_type_index, 0);
+    } else {
+      EXPECT_EQ(type, SELECT_SAVEAS_FILE);
+      EXPECT_EQ(title, u"Save Recovery Kit");
+      EXPECT_TRUE(file_types);
+      EXPECT_EQ(file_type_index, 1);
+    }
+    if (type == SELECT_OPEN_FILE || type == SELECT_OPEN_MULTI_FILE) {
+      EXPECT_TRUE(default_path.empty());
+      EXPECT_TRUE(default_extension.empty());
+    }
+    EXPECT_FALSE(caller);
+    parent = owning_window;
+    if (on_show_)
+      on_show_.Run(this);
+  }
+  bool HasMultipleFileTypeChoicesImpl() override { return false; }
+
+ private:
+  OnShow on_show_;
+};
+
+class FakeFileDialogFactory : public ui::SelectFileDialogFactory {
+ public:
+  ui::SelectFileDialog* Create(
+      ui::SelectFileDialog::Listener* listener,
+      std::unique_ptr<ui::SelectFilePolicy> policy) override {
+    if (unavailable)
+      return nullptr;
+    auto dialog = base::MakeRefCounted<FakeFileDialog>(
+        listener, std::move(policy), on_show);
+    dialogs.push_back(dialog);
+    if (on_create)
+      on_create.Run();
+    return dialog.get();
+  }
+  bool unavailable = false;
+  FakeFileDialog::OnShow on_show;
+  base::RepeatingClosure on_create;
+  std::vector<scoped_refptr<FakeFileDialog>> dialogs;
+};
+
+// The pinned mock predates this BrowserWindowInterface pure virtual method.
+class PickerWindow : public MockBrowserWindowInterface {
+ public:
+  bool IsNormalBrowser() const override { return true; }
+};
+
+class ClipboardHostTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    ui::TestClipboard::CreateForCurrentThread();
+  }
+  void TearDown() override {
+    NativeHostTest::TearDown();
+    ui::Clipboard::DestroyClipboardForCurrentThread();
+  }
+  std::u16string ReadText() {
+    base::test::TestFuture<std::u16string> result;
+    ui::Clipboard::GetForCurrentThread()->ReadText(
+        ui::ClipboardBuffer::kCopyPaste, std::nullopt, result.GetCallback());
+    return result.Get();
+  }
+};
+
+TEST_F(ClipboardHostTest, CoordinatorAdvertisesBothClipboardMethods) {
+  auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.copyText"));
+  EXPECT_TRUE(methods->contains("BayShell.copyImage"));
+  EXPECT_TRUE(methods->contains("BaySystem.openFile"));
+}
+
+TEST_F(ClipboardHostTest, CoordinatorCopiesBeforeSavedDocumentsAreReady) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayShell", "copyText", R"(["café 🌊"])", result.GetCallback());
+  ASSERT_TRUE(result.IsReady());
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+  EXPECT_EQ(ReadText(), u"café 🌊");
+}
+
+TEST_F(ClipboardHostTest, GlobalContractRejectsArityAndPayloadErrors) {
+  EXPECT_EQ(Invoke("BayShell", "copyText", R"(["keep"])"), R"({"value":null})");
+  for (const char* method : {"copyText", "copyImage"}) {
+    for (const char* args : {"[]", R"(["a","b"])", "[null]", "[1]", "[{}]"})
+      ExpectError(Invoke("BayShell", method, args), "invalid_args");
+  }
+  ExpectError(Invoke("BayShell", "copyImage", R"(["%%%"])"), "invalid_args");
+  EXPECT_EQ(Invoke("BayShell", "copyImage", R"(["bm90IGFuIGltYWdl"])"),
+            R"({"value":false})");
+  EXPECT_EQ(ReadText(), u"keep");
+}
+
+TEST_F(ClipboardHostTest, CoordinatorCopiesAnImage) {
+  // A complete opaque 1x1 PNG, with valid chunk checksums.
+  EXPECT_EQ(
+      Invoke(
+          "BayShell", "copyImage",
+          R"(["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg=="])"),
+      R"({"value":true})");
+  base::test::TestFuture<const std::vector<uint8_t>&> image;
+  ui::Clipboard::GetForCurrentThread()->ReadPng(
+      ui::ClipboardBuffer::kCopyPaste, std::nullopt, image.GetCallback());
+  EXPECT_FALSE(image.Get().empty());
+}
+
+TEST_F(ClipboardHostTest,
+       CopyResponseCanCloseTheHostWithoutPendingClipboardWork) {
+  int calls = 0;
+  host_->Invoke(
+      "BayShell", "copyText", R"(["copied"])",
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+        EXPECT_EQ(ReadText(), u"copied");
+        host_->ResetAndDeleteThis();
+      }));
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(ReadText(), u"copied");
+}
+
+class WindowClipboardHostTest : public ClipboardHostTest {
+ protected:
+  void SetUp() override {
+    ClipboardHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                                remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+  }
+  testing::NiceMock<PickerWindow> window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+};
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesLayoutAndCaptionMethods) {
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"})
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+}
+
+TEST_F(WindowClipboardHostTest,
+       PlacementCapabilityDoesNotChangeWindowAuthority) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "window");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
+}
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BaySystem.fileExists", "BaySystem.downloadsFolder",
+        "BaySystem.openFile", "BaySystem.revealFile", "BaySystem.moveToTrash",
+        "BaySystem.copyFile", "BaySystem.renameFile"})
+    EXPECT_TRUE(methods->contains(method));
+  EXPECT_EQ(
+      Invoke("BaySystem", "fileExists",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+  EXPECT_EQ(
+      Invoke("BaySystem", "openFile",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+}
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesKeychain) {
+  ExpectKeychainMethods(HostInfo());
+  for (const char* method : {"get", "set", "delete"})
+    ExpectError(Invoke("BayKeychain", method, "[null]"), "invalid_args");
+}
+
+TEST_F(WindowClipboardHostTest,
+       WindowAdvertisesAndQueriesDesktopSystemSnapshots) {
+  ExpectDesktopSystemMethods(HostInfo());
+  auto result = base::JSONReader::ReadDict(Invoke("BayApp", "systemInfo", "[]"),
+                                           base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto* name = result->FindStringByDottedPath("value.appName");
+  ASSERT_TRUE(name);
+  EXPECT_EQ(*name, "Bay");
+  EXPECT_EQ(Invoke("BayApp", "launchEnvironment", R"(["NOT_A_BAY_SETTING"])"),
+            R"({"value":null})");
+}
+
+TEST_F(WindowClipboardHostTest,
+       WindowAdvertisesAppearanceAndReceivesAppEvents) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.setAppearance"));
+  EXPECT_TRUE(methods->contains("BayShell.isDarkAppearance"));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["light"])"),
+            R"({"value":null})");
+  AppearanceClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{false}));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{false, true}));
+}
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesBothMethods) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.copyText"));
+  EXPECT_TRUE(methods->contains("BayShell.copyImage"));
+  EXPECT_EQ(Invoke("BayShell", "copyText", R"(["window text"])"),
+            R"({"value":null})");
+  EXPECT_EQ(ReadText(), u"window text");
+  EXPECT_EQ(Invoke("BayShell", "copyImage", R"([""])"), R"({"value":false})");
+}
+
+class FilePickerTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    ON_CALL(window_, GetWindow()).WillByDefault(testing::Return(&base_window_));
+    ON_CALL(base_window_, GetNativeWindow())
+        .WillByDefault(testing::Return(root_window()));
+    auto factory = std::make_unique<FakeFileDialogFactory>();
+    factory_ = factory.get();
+    ui::SelectFileDialog::SetFactory(std::move(factory));
+    shell_ = std::make_unique<ShellUI>();
+  }
+  void TearDown() override {
+    shell_.reset();
+    task_environment()->RunUntilIdle();
+    ui::SelectFileDialog::SetFactory(nullptr);
+    factory_ = nullptr;
+    NativeHostTest::TearDown();
+  }
+  void WindowHost() {
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                                remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+  }
+  void Pick(ShellUI::Response callback) {
+    EXPECT_TRUE(shell_->Dispatch(HostContext::ForWindow(window_), "BayShell",
+                                 "pickFiles", {}, callback));
+  }
+  void ExpectFiles(const std::string& response,
+                   const std::vector<base::FilePath>& expected) {
+    auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* files = parsed->FindList("value");
+    ASSERT_TRUE(files);
+    ASSERT_EQ(files->size(), expected.size());
+    for (size_t i = 0; i < files->size(); ++i) {
+      ASSERT_TRUE((*files)[i].is_string());
+      const GURL url((*files)[i].GetString());
+      EXPECT_TRUE(url.SchemeIsFile());
+      EXPECT_FALSE(url.has_query());
+      EXPECT_FALSE(url.has_ref());
+      base::FilePath roundtrip;
+      ASSERT_TRUE(net::FileURLToFilePath(url, &roundtrip));
+      EXPECT_EQ(roundtrip, expected[i]);
+    }
+  }
+
+  testing::NiceMock<PickerWindow> window_;
+  testing::NiceMock<ui::MockBaseWindow> base_window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+  raw_ptr<FakeFileDialogFactory> factory_ = nullptr;
+  std::unique_ptr<ShellUI> shell_;
+};
+
+TEST_F(FilePickerTest, SingleSelectionReturnsAnEscapedNativeFileUrl) {
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->parent, root_window());
+  const base::FilePath path("/tmp/a ?#% café.txt");
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/display/name"), path));
+  ExpectFiles(result.Get(), {path});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
+  host_->ResetAndDeleteThis();
+  remote_.reset();
+  auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                              remote_.BindNewPipeAndPassReceiver());
+  host_ = host->GetWeakPtr();
+  auto info = HostInfo();
+  const auto* role = info.FindString("role");
+  ASSERT_TRUE(role);
+  EXPECT_EQ(*role, "window");
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
+  EXPECT_TRUE(methods->contains("BayShell.saveTextFile"));
+  EXPECT_TRUE(methods->contains("BayShell.openTextFile"));
+  EXPECT_TRUE(methods->contains("BayShell.showMenu"));
+}
+
+TEST_F(NativeHostTest, ImportAndSyncAdvertisedAndDispatchedWithoutReadiness) {
+  const auto info = HostInfo();
+  const auto* modules = info.FindList("modules");
+  ASSERT_TRUE(modules);
+  EXPECT_TRUE(modules->contains("BayImport"));
+  EXPECT_TRUE(modules->contains("BaySync"));
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method : {"BayImport.listBrowsers", "BayImport.importData",
+                             "BayImport.chooseImportFile"})
+    EXPECT_TRUE(methods->contains(method));
+  for (const char* method :
+       {"BaySync.newDeviceId", "BaySync.readPasswords", "BaySync.createPhrase",
+        "BaySync.write", "BaySync.chooseFolder", "BaySync.saveRecoveryKit"})
+    EXPECT_TRUE(methods->contains(method));
+  EXPECT_TRUE(info.FindStringByDottedPath("snapshots.BaySync.deviceName"));
+  ReplaceHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayImport", "cancelImport", R"(["fixture-job"])",
+                result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+}
+
+TEST_F(NativeHostTest, SyncWorkerRunsWithoutPlatformReadiness) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySync", "newDeviceId", "[]", result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->RunUntilIdle();
+  auto parsed = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(parsed);
+  const auto* id = parsed->FindString("value");
+  ASSERT_TRUE(id);
+  EXPECT_EQ(id->size(), 26u);
+  ExpectError(Invoke("BaySync", "readPasswords", R"(["unloaded-profile"])"),
+              "profile_unavailable");
+}
+
+TEST_F(NativeHostTest, CoordinatorCannotOpenSyncPickers) {
+  ExpectError(Invoke("BaySync", "chooseFolder", "[null]"), "window_required");
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["pdf"])"),
+              "window_required");
+}
+
+TEST_F(FilePickerTest, WindowCannotMutateSyncOrReadProfilePasswords) {
+  WindowHost();
+  for (const char* method :
+       {"createPhrase", "unlock", "forget", "chainStatus", "createChain",
+        "deleteChain", "sealLocal", "openLocal", "readPasswords"}) {
+    base::test::TestFuture<const std::string&> result;
+    host_->Invoke("BaySync", method, R"(["fixture"])", result.GetCallback());
+    ASSERT_TRUE(result.IsReady()) << method;
+    ExpectError(result.Get(), "forbidden");
+  }
+  ExpectError(
+      Invoke("BaySync", "enterPhrase", R"(["account","phrase","folder"])"),
+      "forbidden");
+  for (const char* method : {"write", "read", "remove"})
+    ExpectError(Invoke("BaySync", method, R"(["folder","scope",[]])"),
+                "forbidden");
+  auto result = base::JSONReader::ReadDict(
+      Invoke("BaySync", "newDeviceId", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result->FindString("value"));
+}
+
+TEST_F(FilePickerTest, SyncFolderPickerUsesWindowOwnerAndNativePath) {
+  WindowHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySync", "chooseFolder", "[null]", result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_FALSE(result.IsReady());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->parent, root_window());
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_FOLDER);
+  ExpectError(Invoke("BaySync", "chooseFolder", "[null]"), "dialog_busy");
+  const base::FilePath path("/tmp/sync ?#% café");
+  dialog->Select(ui::SelectedFileInfo(path));
+  EXPECT_EQ(result.Get(),
+            base::WriteJson(base::DictValue().Set("value", path.value())));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+  base::test::TestFuture<const std::string&> retry;
+  host_->Invoke("BaySync", "chooseFolder", "[null]", retry.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 2u);
+  factory_->dialogs.back()->Cancel();
+  EXPECT_EQ(retry.Get(), R"({"value":null})");
+}
+
+TEST_F(FilePickerTest, RecoverySaveValidatesAndChecksKeysBeforeOpeningPicker) {
+  WindowHost();
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["invalid"])"),
+              "invalid_arguments");
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["pdf"])"), "locked");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, SyncPickerCancelsOnceWhenHostCloses) {
+  WindowHost();
+  int calls = 0;
+  host_->Invoke(
+      "BaySync", "chooseFolder", "[null]",
+      base::BindLambdaForTesting([&calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+      }));
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  host_->ResetAndDeleteThis();
+  EXPECT_EQ(calls, 1);
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late")));
+  dialog->Cancel();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, SyncPickerCanCloseItsHostDuringNativeShow) {
+  WindowHost();
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  host_->Invoke(
+      "BaySync", "chooseFolder", "[null]",
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+        host_->ResetAndDeleteThis();
+      }));
+  EXPECT_FALSE(host_);
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, ImportPickerUsesSingleSelectionAndCsvFilter) {
+  WindowHost();
+  const auto info = HostInfo();
+  ASSERT_TRUE(info.FindList("modules"));
+  EXPECT_TRUE(info.FindList("modules")->contains("BayImport"));
+  EXPECT_TRUE(info.FindList("modules")->contains("BaySync"));
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_OPEN_FILE);
+  ASSERT_TRUE(dialog->types);
+  EXPECT_EQ(dialog->types->extensions,
+            (std::vector<std::vector<std::string>>{{"csv"}}));
+  EXPECT_FALSE(dialog->types->include_all_files);
+  const base::FilePath path("/tmp/a ?#% café.csv");
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/display/name"), path));
+  auto reply = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(reply);
+  ASSERT_TRUE(reply->FindString("value"));
+  EXPECT_EQ(*reply->FindString("value"), path.value());
+}
+
+TEST_F(FilePickerTest, ImportBookmarkFilterAndCancellationSettleOnce) {
+  WindowHost();
+  std::vector<std::string> results;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["bookmarksHTML"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  results.push_back(result);
+                }));
+  auto dialog = factory_->dialogs.back();
+  ASSERT_TRUE(dialog->types);
+  EXPECT_EQ(dialog->types->extensions,
+            (std::vector<std::vector<std::string>>{{"html", "htm"}}));
+  dialog->Cancel();
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late.html")));
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, ImportPickerRejectsUnsupportedKindsBeforeShowing) {
+  WindowHost();
+  for (const char* args : {R"(["safariExport"])", R"(["unknown"])", "[null]"})
+    ExpectError(Invoke("BayImport", "chooseImportFile", args), "unsupported");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, ImportCoordinatorCannotBorrowWindow) {
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "window_required");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, ImportAndShellPickerShareBusySlotAndErrors) {
+  WindowHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayShell", "pickFiles", "[]", result.GetCallback());
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "dialog_busy");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  task_environment()->RunUntilIdle();
+  factory_->unavailable = true;
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "dialog_unavailable");
+}
+
+TEST_F(FilePickerTest, ImportOwnerTeardownCancelsOnceAndIgnoresLateResult) {
+  WindowHost();
+  std::vector<std::string> results;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  results.push_back(result);
+                }));
+  auto dialog = factory_->dialogs.back();
+  host_->ResetAndDeleteThis();
+  EXPECT_FALSE(host_);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":null})");
+  dialog->Cancel();
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late.csv")));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, ImportSynchronousCompletionCanDestroyHost) {
+  WindowHost();
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  ++calls;
+                  EXPECT_EQ(result, R"({"value":null})");
+                  host_->ResetAndDeleteThis();
+                }));
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, MultipleSelectionPreservesOrderAndReservedCharacters) {
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  const std::vector<base::FilePath> paths = {
+      base::FilePath("/tmp/z#?.txt"), base::FilePath("/tmp/a%20.txt"),
+      base::FilePath("/tmp/space ü.txt")};
+  auto selected = ui::FilePathListToSelectedFileInfoList(paths);
+  selected[1].local_path.clear();
+  factory_->dialogs.back()->SelectMultiple(selected);
+  ExpectFiles(result.Get(), paths);
+}
+
+TEST_F(FilePickerTest, CancelSettlesOnceAndIgnoresLateResults) {
+  std::vector<std::string> results;
+  Pick(base::BindOnce(
+      [](std::vector<std::string>* results, const std::string& value) {
+        results->push_back(value);
+      },
+      &results));
+  auto dialog = factory_->dialogs.back();
+  dialog->Cancel();
+  ASSERT_EQ(results.size(), 1u);
+  ExpectFiles(results[0], {});
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late")));
+  dialog->Cancel();
+  EXPECT_EQ(results.size(), 1u);
+  task_environment()->RunUntilIdle();
+  dialog->Cancel();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, RequiresTheContextWindowBeforeCheckingBusy) {
+  base::test::TestFuture<const std::string&> first;
+  Pick(first.GetCallback());
+  base::test::TestFuture<const std::string&> busy;
+  Pick(busy.GetCallback());
+  ExpectError(busy.Get(), "dialog_busy");
+  ON_CALL(base_window_, GetNativeWindow())
+      .WillByDefault(testing::Return(nullptr));
+  base::test::TestFuture<const std::string&> no_window;
+  Pick(no_window.GetCallback());
+  ExpectError(no_window.Get(), "window_required");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  ExpectFiles(first.Get(), {});
+}
+
+TEST_F(FilePickerTest, CoordinatorCannotBorrowAWindowEvenWhenPickerIsBusy) {
+  base::test::TestFuture<const std::string&> first;
+  Pick(first.GetCallback());
+  base::test::TestFuture<const std::string&> result;
+  auto callback = result.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "pickFiles", {}, callback));
+  ExpectError(result.Get(), "window_required");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+}
+
+class TextFileDialogTest : public FilePickerTest {
+ protected:
+  void SetUp() override {
+    FilePickerTest::SetUp();
+    ASSERT_TRUE(temp_.CreateUniqueTempDir());
+    profile()->GetPrefs()->SetFilePath(prefs::kDownloadDefaultDirectory,
+                                       temp_.GetPath());
+  }
+  void Call(const char* method, base::ListValue args, ShellUI::Response done) {
+    EXPECT_TRUE(shell_->Dispatch(HostContext::ForWindow(window_), "BayShell",
+                                 method, args, done));
+  }
+  std::string Save(const base::FilePath& path, const std::string& contents) {
+    base::test::TestFuture<const std::string&> result;
+    Call("saveTextFile",
+         base::ListValue().Append("Boost.json").Append(contents),
+         result.GetCallback());
+    factory_->dialogs.back()->Select(ui::SelectedFileInfo(path));
+    const std::string answer = result.Get();
+    task_environment()->RunUntilIdle();
+    return answer;
+  }
+  std::string Open(const base::FilePath& path) {
+    base::test::TestFuture<const std::string&> result;
+    Call("openTextFile", base::ListValue().Append(base::ListValue()),
+         result.GetCallback());
+    factory_->dialogs.back()->Select(ui::SelectedFileInfo(path));
+    const std::string answer = result.Get();
+    task_environment()->RunUntilIdle();
+    return answer;
+  }
+  base::FilePath In(const char* name) { return temp_.GetPath().Append(name); }
+  base::ScopedTempDir temp_;
+};
+
+TEST_F(TextFileDialogTest, SaveSuggestsTheNameInDownloads) {
+  base::test::TestFuture<const std::string&> result;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_SAVEAS_FILE);
+  EXPECT_EQ(dialog->parent, root_window());
+  EXPECT_EQ(dialog->suggested_path, In("Boost.json"));
+  EXPECT_EQ(dialog->suggested_extension, "json");
+  EXPECT_FALSE(dialog->types);
+  dialog->Cancel();
+  EXPECT_EQ(result.Get(), R"({"value":false})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+  EXPECT_FALSE(base::PathExists(In("Boost.json")));
+}
+TEST_F(TextFileDialogTest, SaveWritesTheChosenFileWithUsualPermissions) {
+  EXPECT_EQ(Save(In("chosen.json"), "{\"é\":1}"), R"({"value":true})");
+  std::string written;
+  ASSERT_TRUE(base::ReadFileToString(In("chosen.json"), &written));
+  EXPECT_EQ(written, "{\"é\":1}");
+  int mode = 0;
+  ASSERT_TRUE(base::GetPosixFilePermissions(In("chosen.json"), &mode));
+  EXPECT_EQ(mode, 0644);
+}
+TEST_F(TextFileDialogTest, SaveReplacesAFileAndKeepsItsPermissions) {
+  ASSERT_TRUE(base::WriteFile(In("kept.json"), "old contents"));
+  ASSERT_TRUE(base::SetPosixFilePermissions(In("kept.json"), 0640));
+  EXPECT_EQ(Save(In("kept.json"), "new"), R"({"value":true})");
+  std::string written;
+  ASSERT_TRUE(base::ReadFileToString(In("kept.json"), &written));
+  EXPECT_EQ(written, "new");
+  int mode = 0;
+  ASSERT_TRUE(base::GetPosixFilePermissions(In("kept.json"), &mode));
+  EXPECT_EQ(mode, 0640);
+}
+TEST_F(TextFileDialogTest, SaveThatCannotWriteIsAnError) {
+  ExpectError(Save(In("missing/chosen.json"), "text"), "write_failed");
+}
+TEST_F(TextFileDialogTest, TheNextSaveStartsWhereTheLastOneWent) {
+  const auto folder = In("Exports");
+  ASSERT_TRUE(base::CreateDirectory(folder));
+  EXPECT_EQ(Save(folder.AppendASCII("first.json"), "text"), R"({"value":true})");
+  base::test::TestFuture<const std::string&> result;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->suggested_path, folder.AppendASCII("Boost.json"));
+  dialog->Cancel();
+}
+TEST_F(TextFileDialogTest, OpenFiltersOnTheExtensionsAndReturnsTheText) {
+  ASSERT_TRUE(base::WriteFile(In("boost.json"), "{\"é\":1}"));
+  base::test::TestFuture<const std::string&> result;
+  Call("openTextFile",
+       base::ListValue().Append(base::ListValue().Append("json")),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_OPEN_FILE);
+  ASSERT_TRUE(dialog->types);
+  ASSERT_EQ(dialog->types->extensions.size(), 1u);
+  EXPECT_EQ(dialog->types->extensions[0],
+            std::vector<base::FilePath::StringType>{"json"});
+  EXPECT_FALSE(dialog->types->include_all_files);
+  EXPECT_EQ(dialog->type_index, 1);
+  dialog->Select(ui::SelectedFileInfo(In("boost.json")));
+  auto value = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(value);
+  EXPECT_EQ(*value->FindString("value"), "{\"é\":1}");
+}
+TEST_F(TextFileDialogTest, OpenWithoutExtensionsShowsEveryFile) {
+  base::test::TestFuture<const std::string&> result;
+  Call("openTextFile", base::ListValue().Append(base::ListValue()),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_FALSE(dialog->types);
+  EXPECT_EQ(dialog->type_index, 0);
+  dialog->Cancel();
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, OpenTakesUpToAMegabyteOfUtf8) {
+  ASSERT_TRUE(base::WriteFile(In("fits"), std::string(1000000, 'a')));
+  EXPECT_NE(Open(In("fits")), R"({"value":null})");
+  ASSERT_TRUE(base::WriteFile(In("large"), std::string(1000001, 'a')));
+  EXPECT_EQ(Open(In("large")), R"({"value":null})");
+  ASSERT_TRUE(base::WriteFile(In("binary"), std::string("\xff\xfe", 2)));
+  EXPECT_EQ(Open(In("binary")), R"({"value":null})");
+  EXPECT_EQ(Open(In("missing")), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, OpenRefusesWhatIsNotARegularFile) {
+  EXPECT_EQ(Open(temp_.GetPath()), R"({"value":null})");
+  ASSERT_EQ(mkfifo(In("fifo").value().c_str(), 0600), 0);
+  EXPECT_EQ(Open(In("fifo")), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, TheDiskWorkKeepsThePickerBusy) {
+  base::test::TestFuture<const std::string&> save;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       save.GetCallback());
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("chosen.json")));
+  base::test::TestFuture<const std::string&> second;
+  Call("openTextFile", base::ListValue().Append(base::ListValue()),
+       second.GetCallback());
+  ExpectError(second.Get(), "dialog_busy");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_EQ(save.Get(), R"({"value":true})");
+  // A dialog that reports twice doesn't write or answer twice.
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("second.json")));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(base::PathExists(In("second.json")));
+}
+TEST_F(TextFileDialogTest, ClosingAnswersOnceAndALateChoiceWritesNothing) {
+  std::vector<std::string> results;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       base::BindLambdaForTesting(
+           [&](const std::string& result) { results.push_back(result); }));
+  auto dialog = factory_->dialogs.back();
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":false})");
+  dialog->Select(ui::SelectedFileInfo(In("late.json")));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_FALSE(base::PathExists(In("late.json")));
+}
+TEST_F(TextFileDialogTest, ChoiceBeforeClosingStillReachesTheDisk) {
+  std::vector<std::string> results;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       base::BindLambdaForTesting(
+           [&](const std::string& result) { results.push_back(result); }));
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("chosen.json")));
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_TRUE(base::PathExists(In("chosen.json")));
+}
+TEST_F(FilePickerTest, FontFamiliesShareOneLoadAndSettleOnTeardown) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  auto first_callback = first.GetCallback();
+  auto second_callback = second.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {}, first_callback));
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {},
+                               second_callback));
+  EXPECT_EQ(first.Get(), second.Get());
+  auto families = base::JSONReader::ReadDict(first.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(families);
+  ASSERT_TRUE(families->FindList("value"));
+  for (const auto& family : *families->FindList("value"))
+    EXPECT_TRUE(family.is_string());
+
+  base::test::TestFuture<const std::string&> closing;
+  auto closing_callback = closing.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {},
+                               closing_callback));
+  shell_.reset();
+  EXPECT_EQ(closing.Get(), R"({"value":[]})");
+}
+
+class ShortcutRecordingTest : public FilePickerTest {
+ protected:
+  void SetUp() override {
+    FilePickerTest::SetUp();
+    WindowHost();
+  }
+  bool Press(int key_code, int modifiers = 0) {
+    input::NativeWebKeyboardEvent event(
+        blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
+    event.windows_key_code = key_code;
+    return host_->RecordShortcutKey(event);
+  }
+};
+
+TEST_F(ShortcutRecordingTest, TakesKeysOnlyWhileRecordingAndAnswersTheFirst) {
+  EXPECT_FALSE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey));
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", result.GetCallback());
+  // A modifier and a Super chord are taken, and recording goes on.
+  EXPECT_TRUE(Press(ui::VKEY_SHIFT, blink::WebInputEvent::kShiftKey));
+  EXPECT_TRUE(Press(ui::VKEY_T, blink::WebInputEvent::kMetaKey));
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_TRUE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey |
+                                    blink::WebInputEvent::kShiftKey));
+  EXPECT_EQ(
+      result.Get(),
+      R"({"value":{"key":"t","keyCode":84,"modifiers":["shift","command"]}})");
+  EXPECT_FALSE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey));
+}
+TEST_F(ShortcutRecordingTest, EscapeCancelCloseAndANewRecordingAnswerNull) {
+  base::test::TestFuture<const std::string&> escaped;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", escaped.GetCallback());
+  EXPECT_TRUE(Press(ui::VKEY_ESCAPE));
+  EXPECT_EQ(escaped.Get(), R"({"value":null})");
+
+  base::test::TestFuture<const std::string&> replaced;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", replaced.GetCallback());
+  base::test::TestFuture<const std::string&> cancelled;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", cancelled.GetCallback());
+  EXPECT_EQ(replaced.Get(), R"({"value":null})");
+  EXPECT_FALSE(cancelled.IsReady());
+  EXPECT_NE(Invoke("BaySystem", "cancelRecording", "[]").find("value"),
+            std::string::npos);
+  EXPECT_EQ(cancelled.Get(), R"({"value":null})");
+  EXPECT_FALSE(Press(ui::VKEY_T));
+
+  std::vector<std::string> closed;
+  host_->Invoke("BaySystem", "recordShortcut", "[]",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  closed.push_back(result);
+                }));
+  host_->ResetAndDeleteThis();
+  ASSERT_EQ(closed.size(), 1u);
+  EXPECT_EQ(closed[0], R"({"value":null})");
+}
+TEST_F(ShortcutRecordingTest, CoordinatorCannotRecordAndWindowsReleaseKeys) {
+  EXPECT_EQ(Invoke("BayShell", "setKeyShortcuts",
+                   R"([[{"command":"","arg":null,"keyCode":84,"ctrl":true}]])"),
+            R"({"value":null})");
+  ASSERT_EQ(host_->key_shortcuts().size(), 1u);
+  EXPECT_TRUE(host_->key_shortcuts()[0].command.empty());
+  host_->ResetAndDeleteThis();
+  remote_.reset();
+  auto* host = new NativeHost(*main_rfh(),
+                              HostContext::ForCoordinator(*profile()),
+                              remote_.BindNewPipeAndPassReceiver());
+  host_ = host->GetWeakPtr();
+  ExpectError(Invoke("BaySystem", "recordShortcut", "[]"), "window_required");
+}
+
+TEST_F(TextFileDialogTest, CoordinatorAndBadArgumentsOpenNoDialog) {
+  base::test::TestFuture<const std::string&> coordinator;
+  auto callback = coordinator.GetCallback();
+  auto args = base::ListValue().Append("Boost.json").Append("text");
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "saveTextFile", args, callback));
+  ExpectError(coordinator.Get(), "window_required");
+  base::test::TestFuture<const std::string&> name;
+  Call("saveTextFile", base::ListValue().Append("../a.json").Append("text"),
+       name.GetCallback());
+  ExpectError(name.Get(), "invalid_args");
+  base::test::TestFuture<const std::string&> extension;
+  Call("openTextFile", base::ListValue().Append(base::ListValue().Append("*")),
+       extension.GetCallback());
+  ExpectError(extension.Get(), "invalid_args");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, NullFactoryResultIsAnErrorAndReleasesBusySlot) {
+  factory_->unavailable = true;
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ExpectError(result.Get(), "dialog_unavailable");
+  task_environment()->RunUntilIdle();
+  factory_->unavailable = false;
+  base::test::TestFuture<const std::string&> retry;
+  Pick(retry.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  ExpectFiles(retry.Get(), {});
+}
+
+TEST_F(FilePickerTest, OwnerTeardownSettlesOnceBeforeALateCallback) {
+  std::vector<std::string> results;
+  Pick(base::BindOnce(
+      [](std::vector<std::string>* results, const std::string& value) {
+        results->push_back(value);
+      },
+      &results));
+  auto dialog = factory_->dialogs.back();
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&FakeFileDialog::Cancel, dialog));
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  ExpectFiles(results[0], {});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, SynchronousCompletionCanDestroyTheOwnerDuringShow) {
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  Pick(base::BindOnce(
+      [](std::unique_ptr<ShellUI>* shell, int* calls,
+         const std::string& value) {
+        ++*calls;
+        EXPECT_EQ(value, R"({"value":[]})");
+        shell->reset();
+      },
+      &shell_, &calls));
+  EXPECT_FALSE(shell_);
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, NestedOwnerTeardownDuringShowCancelsThePendingResponse) {
+  factory_->on_show = base::BindRepeating(
+      [](std::unique_ptr<ShellUI>* shell, FakeFileDialog*) { shell->reset(); },
+      &shell_);
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  EXPECT_FALSE(shell_);
+  ExpectFiles(result.Get(), {});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, OwnerTeardownDuringCreateDoesNotShowTheDialog) {
+  factory_->on_create = base::BindLambdaForTesting([this] { shell_.reset(); });
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ExpectFiles(result.Get(), {});
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_FALSE(factory_->dialogs.back()->parent);
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, DialogSurvivesOwnerDestructionAndNestedLoopInResponse) {
+  std::shared_ptr<FileDialogLifetime> lifetime;
+  Pick(base::BindLambdaForTesting([this, &lifetime](const std::string& value) {
+    ExpectFiles(value, {});
+    lifetime = factory_->dialogs.back()->lifetime;
+    factory_->dialogs.clear();
+    shell_.reset();
+    task_environment()->RunUntilIdle();
+    EXPECT_FALSE(lifetime->destroyed);
+    EXPECT_FALSE(lifetime->detached);
+  }));
+  auto* dialog = factory_->dialogs.back().get();
+  dialog->Cancel();
+  EXPECT_TRUE(lifetime->returned_from_listener);
+  EXPECT_FALSE(lifetime->destroyed);
+  EXPECT_FALSE(lifetime->detached);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(lifetime->destroyed);
+  EXPECT_TRUE(lifetime->detached);
+}
+
+TEST_F(FilePickerTest, StaysBusyUntilNativeCleanupAndCannotResetANewerPicker) {
+  base::test::TestFuture<const std::string&> reentrant;
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  Pick(base::BindLambdaForTesting([this, &reentrant](const std::string& value) {
+    EXPECT_EQ(value, R"({"value":[]})");
+    factory_->on_show.Reset();
+    Pick(reentrant.GetCallback());
+  }));
+  ExpectError(reentrant.Get(), "dialog_busy");
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  base::test::TestFuture<const std::string&> before_cleanup;
+  Pick(before_cleanup.GetCallback());
+  ExpectError(before_cleanup.Get(), "dialog_busy");
+  task_environment()->RunUntilIdle();
+  base::test::TestFuture<const std::string&> second;
+  Pick(second.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 2u);
+  auto old = factory_->dialogs.front();
+  auto current = factory_->dialogs.back();
+  old->Cancel();
+  task_environment()->RunUntilIdle();
+  base::test::TestFuture<const std::string&> busy;
+  Pick(busy.GetCallback());
+  ExpectError(busy.Get(), "dialog_busy");
+  EXPECT_FALSE(second.IsReady());
+  current->Select(ui::SelectedFileInfo(base::FilePath("/tmp/new")));
+  ExpectFiles(second.Get(), {base::FilePath("/tmp/new")});
+}
+
+}  // namespace
+
+// Friend of NativeHost so the tests use the same callbacks registered with
+// Chromium, without exposing shutdown controls to production callers.
+class NativeHostQuitTest : public NativeHostTest {
+ public:
+  NativeHostQuitTest()
+      : NativeHostTest(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
+ protected:
+  class Client : public mojom::NativeHostClient {
+   public:
+    void Connect(NativeHost& host) {
+      host.SetClient(receiver.BindNewPipeAndPassRemote());
+    }
+    void OnNativeEvent(const std::string& module,
+                       const std::string& event,
+                       const std::string& json) override {
+      if (module != "BayShell" || event != "onAppEvent")
+        return;
+      auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+      ASSERT_TRUE(payload);
+      const auto* type = payload->FindString("type");
+      if (type && (*type == "willQuit" || *type == "quitCancelled"))
+        events.push_back(*type);
+    }
+    void OnHostInfoChanged(const std::string&) override {}
+    mojo::Receiver<mojom::NativeHostClient> receiver{this};
+    std::vector<std::string> events;
+  } client_;
+
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    client_.Connect(*host_);
+    task_environment()->RunUntilIdle();
+    // This render-host harness has no ProfileManager or live coordinator
+    // renderer. Attach its document explicitly to exercise native ownership.
+    AppRuntime::StartForTesting(window_, base::DictValue());
+    AppRuntime::GetIfStarted()->SetCoordinatorHost(host_);
+  }
+  void TearDown() override {
+    NativeHost::CancelQuit();
+    AppRuntime::ShutdownIfStarted();
+    if (window_host_)
+      window_host_->ResetAndDeleteThis();
+    window_remote_.reset();
+    window_contents_.reset();
+    browser_shutdown::SetTryingToQuit(false);
+    NativeHostTest::TearDown();
+  }
+  void Prepare(base::OnceCallback<void(bool)> completion) {
+    NativeHost::PrepareForQuit(std::move(completion));
+  }
+  void Cancel() { NativeHost::CancelQuit(); }
+  bool CloseWindow() { return NativeHost::HandleWindowClose(&window_); }
+  void AddWindowHost() {
+    window_contents_ = CreateTestWebContents();
+    auto* host = new NativeHost(*window_contents_->GetPrimaryMainFrame(),
+                                HostContext::ForWindow(window_),
+                                window_remote_.BindNewPipeAndPassReceiver());
+    window_host_ = host->GetWeakPtr();
+    task_environment()->RunUntilIdle();
+  }
+  testing::NiceMock<PickerWindow> window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+  std::unique_ptr<content::WebContents> window_contents_;
+  mojo::Remote<mojom::NativeHost> window_remote_;
+  base::WeakPtr<NativeHost> window_host_;
+};
+
+TEST_F(NativeHostQuitTest, WaitsForRendererSaveAndCoalescesQuitRequests) {
+  base::test::TestFuture<bool> first, second;
+  Prepare(first.GetCallback());
+  Prepare(second.GetCallback());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_FALSE(first.IsReady());
+  EXPECT_FALSE(second.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(first.Get());
+  EXPECT_TRUE(second.Get());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest, CoordinatorOwnsQuitAndWindowCannotAcknowledge) {
+  AddWindowHost();
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  base::test::TestFuture<const std::string&> reply;
+  window_host_->Invoke("BayShell", "replyToTerminate", "[true]",
+                       reply.GetCallback());
+  ExpectError(reply.Get(), "stale_quit");
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(result.Get());
+  EXPECT_FALSE(CloseWindow());
+}
+
+TEST_F(NativeHostQuitTest, MissingCoordinatorRefusesToQuit) {
+  AppRuntime::ShutdownIfStarted();
+  ASSERT_FALSE(AppRuntime::GetIfStarted());
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  EXPECT_FALSE(result.Get());
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(client_.events.empty());
+}
+
+TEST_F(NativeHostQuitTest, SaveFailureCancelsChromeCloseAndAllowsRetry) {
+  // Exercise the installed preflight, including the broker's first-use
+  // fallback. It must not replace the renderer preparation callback.
+  TabBroker::Get();
+  auto manager = base::MakeRefCounted<BrowserCloseManager>();
+  manager->StartClosingBrowsers();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+  base::test::TestFuture<bool> retry;
+  Prepare(retry.GetCallback());
+  EXPECT_FALSE(retry.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(retry.Get());
+}
+
+TEST_F(NativeHostQuitTest, InvalidReplyDoesNotReleasePendingQuit) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[null]"), "invalid_args");
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  EXPECT_FALSE(result.Get());
+}
+
+TEST_F(NativeHostQuitTest, UnresponsiveRendererTimesOutWithoutClosing) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  task_environment()->FastForwardBy(base::Seconds(19));
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->FastForwardBy(base::Seconds(1));
+  EXPECT_FALSE(result.Get());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest, ReplacingQuitOwnerFailsOnceAndRejectsLateReply) {
+  int calls = 0;
+  Prepare(base::BindLambdaForTesting([&](bool proceed) {
+    ++calls;
+    EXPECT_FALSE(proceed);
+  }));
+  ReplaceHost();
+  EXPECT_EQ(calls, 1);
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+  task_environment()->FastForwardBy(base::Seconds(20));
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(NativeHostQuitTest, CancellingBeforeAckSettlesOnceAndResumesRenderer) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  Cancel();
+  EXPECT_FALSE(result.Get());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest, LastWindowClosePostsOneQuitAndHonorsSaveFailure) {
+  AddWindowHost();
+  // The mock window is not in GlobalBrowserCollection. Supply its browser
+  // keep-alive so AttemptExit reaches BrowserCloseManager instead of exiting.
+  ScopedKeepAlive browser_alive(KeepAliveOrigin::BROWSER,
+                                KeepAliveRestartOption::DISABLED);
+  EXPECT_TRUE(CloseWindow());
+  EXPECT_TRUE(CloseWindow());
+  EXPECT_TRUE(client_.events.empty());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+}
+
+// The download controls are BayCEF methods on the web host. With no Bay
+// profile loaded there is nothing to list, and a control for a download no
+// profile holds resolves, as on macOS.
+TEST_F(NativeHostTest, DownloadControlsAdvertisedAndResolveWithoutProfiles) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method : {"BayCEF.listDownloads", "BayCEF.pauseDownload",
+                             "BayCEF.resumeDownload", "BayCEF.cancelDownload"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  EXPECT_EQ(Invoke("BayCEF", "listDownloads", "[]"), R"({"value":[]})");
+  for (const char* method :
+       {"pauseDownload", "resumeDownload", "cancelDownload"}) {
+    EXPECT_EQ(Invoke("BayCEF", method, R"(["unknown-guid"])"),
+              R"({"value":null})")
+        << method;
+    ExpectError(Invoke("BayCEF", method, "[]"), "invalid_args");
+    ExpectError(Invoke("BayCEF", method, "[7]"), "invalid_args");
+    ExpectError(Invoke("BayCEF", method, R"([""])"), "invalid_args");
+  }
+}
+
+// A control goes to the profile whose event named the download, then tries
+// the next profile while the engine answers "no such download".
+TEST(DownloadControlsTest, CommandsGoToTheReportingProfile) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  auto& controls = DownloadControls::Get();
+  const auto adopted = controls.Adopt(
+      base::DictValue().Set("id", "guid-work").Set("state", "downloading"),
+      "work");
+  EXPECT_EQ(*adopted.FindString("profile"), "work");
+  EXPECT_EQ(*adopted.FindString("state"), "downloading");
+
+  std::vector<std::string> calls;
+  std::string reply = R"({"value":{"ok":true}})";
+  DownloadControls::EngineInvoker engine = base::BindLambdaForTesting(
+      [&](const std::string& name, const std::string& profile,
+          base::DictValue args, DownloadControls::Response response) {
+        calls.push_back(name + " " + profile + " " + *args.FindString("id"));
+        std::move(response).Run(reply);
+      });
+  base::test::TestFuture<const std::string&> paused;
+  controls.Command(engine, "pause", "guid-work", paused.GetCallback());
+  EXPECT_EQ(paused.Get(), R"({"value":null})");
+  EXPECT_EQ(calls,
+            (std::vector<std::string>{"nn_downloads_pause work guid-work"}));
+
+  // Gone from that profile, and no other is loaded: it still resolves.
+  calls.clear();
+  reply = R"({"error":{"code":"engine_error","message":"no such download"}})";
+  base::test::TestFuture<const std::string&> cancelled;
+  controls.Command(engine, "cancel", "guid-work", cancelled.GetCallback());
+  EXPECT_EQ(cancelled.Get(), R"({"value":null})");
+  EXPECT_EQ(calls,
+            (std::vector<std::string>{"nn_downloads_cancel work guid-work"}));
+
+  // The engine's refusal to resume is the download's state, not an error.
+  calls.clear();
+  reply = R"({"error":{"code":"engine_error","message":"can't resume"}})";
+  base::test::TestFuture<const std::string&> resumed;
+  controls.Command(engine, "resume", "guid-work", resumed.GetCallback());
+  EXPECT_EQ(resumed.Get(), R"({"value":null})");
+  EXPECT_EQ(calls.size(), 1u);
+
+  // Removed from Chrome's list: no profile is known for it any more.
+  controls.Forget("guid-work");
+  calls.clear();
+  base::test::TestFuture<const std::string&> forgotten;
+  controls.Command(engine, "pause", "guid-work", forgotten.GetCallback());
+  EXPECT_EQ(forgotten.Get(), R"({"value":null})");
+  EXPECT_TRUE(calls.empty());
+
+  base::test::TestFuture<const std::string&> invalid;
+  controls.Command(engine, "delete", "guid-work", invalid.GetCallback());
+  EXPECT_NE(invalid.Get().find("invalid_args"), std::string::npos);
+  EXPECT_TRUE(calls.empty());
+}
+
+// nn_downloads_list's reply becomes onDownload payloads that name the
+// profile, and remembers each download's profile for its controls.
+TEST(DownloadControlsTest, ListedDownloadsNameTheirProfile) {
+  auto& controls = DownloadControls::Get();
+  auto result = base::JSONReader::Read(
+      R"({"downloads":[{"id":"guid-a","state":"finished"},7,
+                       {"id":"guid-b","state":"downloading"}]})",
+      base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto downloads = controls.Downloads(*result, "");
+  ASSERT_EQ(downloads.size(), 2u);
+  EXPECT_EQ(*downloads[0].FindString("id"), "guid-a");
+  EXPECT_EQ(*downloads[0].FindString("profile"), "");
+  EXPECT_EQ(*downloads[1].FindString("id"), "guid-b");
+  EXPECT_TRUE(controls.Downloads(base::Value(), "").empty());
+  controls.Forget("guid-a");
+  controls.Forget("guid-b");
+}
+
+// A private window's profile goes with its window, and an id that can't be a
+// Bay profile is never deleted. Nothing holds a released profile.
+TEST_F(NativeHostTest, ProfileDataDeletionKeepsToBayProfiles) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayCEF.deleteProfileData"));
+  EXPECT_TRUE(methods->contains("BayCEF.releaseProfile"));
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["incognito:w1"])"),
+            R"({"value":{"remaining":[]}})");
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["../Default"])"),
+            R"({"value":{"remaining":["data"]}})");
+  EXPECT_EQ(Invoke("BayCEF", "releaseProfile", R"(["work"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "deleteProfileData", "[7]"), "invalid_args");
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["Default"])"),
+            R"({"value":{"remaining":["data"]}})");
+}
+
+// The Default profile stays loaded: each store is cleared through the engine
+// and listed again; a store that fails or keeps something is reported.
+TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
+  base::test::SingleThreadTaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  std::vector<std::string> calls;
+  std::map<std::string, int> lists;
+  ProfileData::EngineInvoker engine = base::BindLambdaForTesting(
+      [&](const std::string& name, const std::string& profile,
+          base::DictValue args, ProfileData::Response response) {
+        EXPECT_EQ(profile, "");
+        const int seen = lists[name]++;
+        std::string value = R"({"ok":true})";
+        if (name == "nn_passwords_list") {
+          value =
+              seen
+                  ? R"({"passwords":[]})"
+                  : R"({"passwords":[{"origin":"https://a.test","username":"me"}]})";
+        } else if (name == "nn_passwords_exceptions") {
+          value =
+              seen ? R"({"origins":[]})" : R"({"origins":["https://b.test"]})";
+        } else if (name == "nn_autofill_addresses") {
+          value = R"({"addresses":[]})";
+        } else if (name == "nn_autofill_cards") {
+          std::move(response).Run(
+              R"({"error":{"code":"engine_error","message":"locked"}})");
+          return;
+        } else if (name == "nn_extensions_list") {
+          value =
+              seen
+                  ? R"({"extensions":[{"id":"e1","enabled":false},{"id":"e2","enabled":true,"mayModify":false}]})"
+                  : R"({"extensions":[{"id":"e1","enabled":true,"mayModify":true},{"id":"e2","enabled":true,"mayModify":false}]})";
+        } else if (name == "nn_site_settings_origins") {
+          value = R"({"origins":[]})";
+        } else if (name == "nn_zoom_list") {
+          value =
+              seen >= 2 ? R"({"levels":{}})" : R"({"levels":{"c.test":1.5}})";
+        }
+        std::string detail = name;
+        if (const auto* id = args.FindString("id"))
+          detail += " " + *id;
+        if (const auto* origin = args.FindString("origin"))
+          detail += " " + *origin;
+        if (const auto* host = args.FindString("host"))
+          detail += " " + *host;
+        calls.push_back(detail);
+        std::move(response).Run(R"({"value":)" + value + "}");
+      });
+  base::test::TestFuture<const std::string&> result;
+  ProfileData::Delete(engine, "", result.GetCallback());
+  task_environment.FastForwardUntilNoTasksRemain();
+  EXPECT_EQ(result.Get(), R"({"value":{"remaining":["cards"]}})");
+  for (const char* call :
+       {"nn_passwords_remove https://a.test",
+        "nn_passwords_allow https://b.test", "nn_extensions_set_enabled e1",
+        "nn_zoom_set c.test"}) {
+    EXPECT_NE(std::find(calls.begin(), calls.end(), call), calls.end()) << call;
+  }
+  EXPECT_EQ(std::find(calls.begin(), calls.end(),
+                      std::string("nn_extensions_set_enabled e2")),
+            calls.end());
+  // Zoom is listed until its levels are gone.
+  EXPECT_EQ(lists["nn_zoom_list"], 3);
+}
+
+// Failed clearing must retain the deletion retry, including an engine error.
+TEST(ProfileDataTest, FailedBrowsingDataRemainsQueued) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  for (const std::string failure :
+       {R"({"value":{"ok":false}})", R"({"error":{"code":"failed"}})"}) {
+    ProfileData::EngineInvoker engine = base::BindLambdaForTesting(
+        [&](const std::string& name, const std::string&, base::DictValue args,
+            ProfileData::Response response) {
+          if (name == "nn_browsing_data_clear") {
+            std::move(response).Run(failure);
+            return;
+          }
+          base::DictValue result;
+          for (const char* key :
+               {"passwords", "origins", "addresses", "cards", "extensions"})
+            result.Set(key, base::ListValue());
+          result.Set("levels", base::DictValue());
+          std::move(response).Run(
+              base::WriteJson(base::DictValue().Set("value", std::move(result)))
+                  .value());
+        });
+    base::test::TestFuture<const std::string&> reply;
+    ProfileData::Delete(engine, "", reply.GetCallback());
+    EXPECT_EQ(
+        reply.Get(),
+        R"({"value":{"remaining":["history, cookies and cache","autocomplete entries"]}})");
+  }
+}
+
+// Chrome's install prompt reaches the app as macOS sends it, and the app's
+// answer for a prompt that's gone (answered, or its window closed) is ignored.
+TEST_F(NativeHostTest, ExtensionInstallPromptsAreDescribedAndAnswered) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayExtensions.resolveInstallPrompt"));
+
+  auto extension = extensions::ExtensionBuilder("Shiny").Build();
+  extensions::InstallPromptData prompt(
+      extensions::InstallPromptData::PERMISSIONS_PROMPT);
+  prompt.set_extension(extension.get());
+  const auto described =
+      InstallPrompts::Describe("install7", profile(), 42, prompt);
+  EXPECT_EQ(*described.FindString("requestId"), "install7");
+  EXPECT_EQ(*described.FindString("id"), extension->id());
+  EXPECT_EQ(*described.FindString("name"), "Shiny");
+  EXPECT_EQ(*described.FindString("type"), "permissions");
+  EXPECT_EQ(*described.FindString("icon"), "");
+  EXPECT_EQ(described.FindInt("browserId"), 42);
+  ASSERT_TRUE(described.FindList("permissions"));
+
+  EXPECT_EQ(
+      Invoke("BayExtensions", "resolveInstallPrompt", R"(["install999",true])"),
+      R"({"value":null})");
+  ExpectError(Invoke("BayExtensions", "resolveInstallPrompt",
+                     R"(["install999","yes"])"),
+              "invalid_args");
+  ExpectError(Invoke("BayExtensions", "resolveInstallPrompt", R"([7,true])"),
+              "invalid_args");
+}
+
+TEST_F(NativeHostTest, SmallerEngineCallsAreAdvertisedAndValidated) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayCEF.setAutoPictureInPicture", "BayCEF.setSearchEngineName",
+        "BayCEF.fetchFavicon", "BayCEF.removeLegacyFavicons",
+        "BayCEF.systemState", "BayCEF.resolvePermission",
+        "BayCEF.resolveExternalApp"}) {
+    EXPECT_TRUE(methods->contains(method)) << method;
+  }
+  EXPECT_EQ(Invoke("BayCEF", "removeLegacyFavicons", R"([""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "setAutoPictureInPicture", "[false]"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "setAutoPictureInPicture", R"(["on"])"),
+              "invalid_args");
+  ExpectError(Invoke("BayCEF", "setSearchEngineName", "[7]"), "invalid_args");
+  // An answer to a prompt that has gone is dropped.
+  EXPECT_EQ(Invoke("BayCEF", "resolvePermission", R"(["p999","accept",true])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "resolvePermission", R"(["p999","dismiss"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "resolvePermission", R"(["p1","accept","yes"])"),
+              "invalid_args");
+  EXPECT_EQ(Invoke("BayCEF", "resolveExternalApp", R"(["x999",true,false])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "resolveExternalApp", R"(["x1","open",false])"),
+              "invalid_args");
+  // Only http(s) and image data are ever fetched.
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon", R"(["file:///etc/passwd",""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon",
+                   R"(["data:text/html,<b>x</b>",""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon",
+                   R"(["https://a.test/i.png","incognito:gone"])"),
+            R"({"value":null})");
+}
+
+TEST_F(NativeHostTest, SystemStateReportsTheFieldsTabSleepingReads) {
+  const auto reply = base::JSONReader::ReadDict(
+      Invoke("BayCEF", "systemState", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(reply);
+  const auto* state = reply->FindDict("value");
+  ASSERT_TRUE(state);
+  EXPECT_TRUE(state->FindBool("onBattery"));
+  EXPECT_TRUE(state->FindBool("lowPowerMode"));
+  EXPECT_EQ(*state->FindString("memoryPressure"), "normal");
+  EXPECT_GT(state->FindDouble("physicalMemory").value_or(0), 0);
+  EXPECT_TRUE(state->contains("batteryLevel"));
+}
+
+TEST(ContextSearchTest, TitleNamesTheEngineAndEscapesTheMenu) {
+  ContextSearch::SetEngineName("Kagi");
+  EXPECT_EQ(ContextSearch::Title(u"  red\n\tpanda "),
+            u"Search Kagi for “red panda”");
+  EXPECT_EQ(ContextSearch::Title(u"salt & pepper"),
+            u"Search Kagi for “salt && pepper”");
+  const std::u16string long_title = ContextSearch::Title(
+      u"the quick brown fox jumps over the lazy dog and keeps on running");
+  EXPECT_NE(long_title.find(u"…”"), std::u16string::npos);
+  EXPECT_LT(long_title.size(), 80u);
+  ContextSearch::SetEngineName("");
+  EXPECT_EQ(ContextSearch::Title(u"a"), u"Search Google for “a”");
+  const auto modifiers =
+      ContextSearch::Modifiers(ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
+  EXPECT_EQ(modifiers.FindBool("metaKey"), true);
+  EXPECT_EQ(modifiers.FindBool("shiftKey"), false);
+  EXPECT_EQ(modifiers.FindBool("altKey"), true);
+}
+
+TEST(ExternalAppPromptsTest, DescribesAPromptAsMacOsWordsIt) {
+  const base::Value no_icon;
+  auto open = ExternalAppPrompts::Describe(
+      "x1", "zoommtg://join", "zoommtg", "https://zoom.us", "Zoom", no_icon,
+      true);
+  EXPECT_EQ(*open.FindString("title"), "Open “Zoom”?");
+  EXPECT_EQ(*open.FindString("message"),
+            "https://zoom.us wants to open this application.");
+  EXPECT_EQ(*open.FindString("remember"),
+            "Always allow https://zoom.us to open links of this type in Zoom");
+  auto plain = ExternalAppPrompts::Describe(
+      "x2", "zoommtg://join", "zoommtg", std::nullopt, "Zoom", no_icon, false);
+  EXPECT_EQ(*plain.FindString("message"),
+            "This page wants to open this application.");
+  EXPECT_TRUE(plain.Find("remember")->is_none());
+  auto missing = ExternalAppPrompts::Describe(
+      "x3", "foo:bar", "foo", std::nullopt, "", no_icon, false);
+  EXPECT_TRUE(missing.Find("app")->is_none());
+  EXPECT_EQ(*missing.FindString("title"),
+            "No application is set to open this link");
+}
+
+TEST(IconFetchTest, OnlyWhatChromeDecodesAsAFaviconPasses) {
+  EXPECT_FALSE(IsIconBody(""));
+  EXPECT_FALSE(IsIconBody("<!doctype html><html></html>"));
+  EXPECT_TRUE(IsSvgBody("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"));
+  EXPECT_TRUE(IsSvgBody("\n<?xml version=\"1.0\"?><!-- icon --><svg></svg>"));
+  EXPECT_FALSE(IsSvgBody("<!doctype html><html><body><svg></svg></html>"));
+  EXPECT_FALSE(IsSvgBody("not markup <svg>"));
+  EXPECT_FALSE(IsSvgBody(""));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x89PNG\r\n\x1a\n", 8)));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x01\x00\x01\x00", 6)));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x02\x00\x01\x00", 6)));
+}
+
+TEST(PermissionPromptsTest, KindsAreTheAppsNames) {
+  using permissions::RequestType;
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kCameraStream),
+               "camera");
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kGeolocation),
+               "location");
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kLoopbackNetwork),
+               "localNetwork");
+}
+
+// Items for UI Bay's windows don't have never show: on macOS, picking Create QR
+// Code in one crashed on the missing toolbar.
+TEST(PageMenuTest, RemovesViewlessItemsAndTheSeparatorsTheyLeave) {
+  ui::SimpleMenuModel menu(nullptr);
+  menu.AddItem(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE, u"Reading mode");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_COPY, u"Copy");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, u"Create QR Code");
+  menu.AddItem(IDC_SEND_TAB_TO_SELF, u"Send to your devices");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_VIEW_SOURCE, u"View source");
+  menu.AddItem(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE, u"Reading mode");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH, u"Lens");
+  PageMenu::RemoveViewlessItems(menu);
+  ASSERT_EQ(menu.GetItemCount(), 3u);
+  EXPECT_EQ(menu.GetCommandIdAt(0), IDC_CONTENT_CONTEXT_COPY);
+  EXPECT_EQ(menu.GetTypeAt(1), ui::MenuModel::TYPE_SEPARATOR);
+  EXPECT_EQ(menu.GetCommandIdAt(2), IDC_VIEW_SOURCE);
+}
+
+namespace {
+// A chooser with two devices that records what the page would hear.
+class FakeChooser : public permissions::ChooserController {
+ public:
+  explicit FakeChooser(std::vector<std::string>* heard)
+      : ChooserController(u"Pick a device"), heard_(heard) {}
+  std::u16string GetNoOptionsText() const override { return u"None"; }
+  std::u16string GetOkButtonLabel() const override { return u"Connect"; }
+  std::pair<std::u16string, std::u16string> GetThrobberLabelAndTooltip()
+      const override {
+    return {u"Scanning", u"Scanning"};
+  }
+  size_t NumOptions() const override { return 2; }
+  std::u16string GetOption(size_t index) const override {
+    return index ? u"Keyboard" : u"Mouse";
+  }
+  void Select(const std::vector<size_t>& indices) override {
+    heard_->push_back("selected " + base::NumberToString(indices[0]));
+  }
+  void Cancel() override { heard_->push_back("cancelled"); }
+  void Close() override { heard_->push_back("closed"); }
+  void OpenHelpCenterUrl() const override {}
+
+ private:
+  raw_ptr<std::vector<std::string>> heard_;
+};
+}  // namespace
+
+class DeviceChoosersTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    contents_ = CreateTestWebContents();
+    DeviceChoosers::Start(base::BindLambdaForTesting(
+        [this](content::WebContents*, const char* event,
+               base::DictValue state) {
+          EXPECT_STREQ(event, "onDeviceChooser");
+          states_.push_back(std::move(state));
+          return window_shows_tab_;
+        }));
+  }
+  int Adopt() {
+    const int id = DeviceChoosers::Adopt(std::make_unique<FakeChooser>(&heard_),
+                                         contents_.get());
+    task_environment()->RunUntilIdle();
+    return id;
+  }
+  std::unique_ptr<content::WebContents> contents_;
+  std::vector<base::DictValue> states_;
+  std::vector<std::string> heard_;
+  bool window_shows_tab_ = true;
+};
+
+TEST_F(DeviceChoosersTest, TheAppSeesTheDevicesAndItsAnswerReachesThePageOnce) {
+  const int id = Adopt();
+  ASSERT_EQ(states_.size(), 1u);
+  EXPECT_EQ(states_[0].FindInt("id"), id);
+  EXPECT_EQ(states_[0].FindBool("open"), true);
+  EXPECT_EQ(*states_[0].FindString("title"), "Pick a device");
+  EXPECT_EQ(*states_[0].FindString("okLabel"), "Connect");
+  EXPECT_EQ(*states_[0].FindString("scanningText"), "Scanning");
+  const auto* options = states_[0].FindList("options");
+  ASSERT_TRUE(options);
+  ASSERT_EQ(options->size(), 2u);
+  EXPECT_EQ(*(*options)[1].GetDict().FindString("name"), "Keyboard");
+  EXPECT_EQ((*options)[1].GetDict().FindInt("signal"), -1);
+
+  // Out of range is no choice for a chooser that needs one.
+  DeviceChoosers::Select(id, 9);
+  EXPECT_TRUE(heard_.empty());
+  DeviceChoosers::Select(id, 1);
+  EXPECT_EQ(heard_, std::vector<std::string>{"selected 1"});
+  EXPECT_EQ(states_.back().FindBool("open"), false);
+  EXPECT_TRUE(states_.back().FindList("options")->empty());
+  // A second answer finds nothing.
+  DeviceChoosers::Cancel(id);
+  task_environment()->RunUntilIdle();
+  DeviceChoosers::Select(id, 0);
+  EXPECT_EQ(heard_.size(), 1u);
+}
+
+TEST_F(DeviceChoosersTest, CancelAndChromeClosingEachFinishIt) {
+  const int cancelled = Adopt();
+  DeviceChoosers::Cancel(cancelled);
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+  const int closed = Adopt();
+  DeviceChoosers::CloseFromChrome(closed);
+  task_environment()->RunUntilIdle();
+  // The page's request already went: nothing more is said to it.
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+  EXPECT_EQ(states_.back().FindBool("open"), false);
+}
+
+// Nobody can answer a chooser no window shows, and the page must not wait on it.
+TEST_F(DeviceChoosersTest, AChooserNoWindowShowsIsCancelled) {
+  window_shows_tab_ = false;
+  Adopt();
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+}
+
+TEST_F(NativeHostTest, DeviceAndCastAnswersAreAdvertisedAndValidated) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayChromeUI.selectDevice", "BayChromeUI.cancelDeviceChooser",
+        "BayChromeUI.refreshDeviceChooser", "BayChromeUI.openBluetoothSettings",
+        "BayChromeUI.startCasting", "BayChromeUI.stopCasting",
+        "BayChromeUI.closeCastDialog"}) {
+    EXPECT_TRUE(methods->contains(method)) << method;
+  }
+  // One that has gone is ignored.
+  EXPECT_EQ(Invoke("BayChromeUI", "selectDevice", "[999,0]"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "cancelDeviceChooser", "[999]"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "startCasting", R"([999,"sink",2])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "stopCasting", R"([999,"route"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "closeCastDialog", "[999]"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayChromeUI", "selectDevice", R"(["a",0])"),
+              "invalid_args");
+  ExpectError(Invoke("BayChromeUI", "selectDevice", R"([1,"a"])"),
+              "invalid_args");
+  // Only the modes Chrome casts with.
+  ExpectError(Invoke("BayChromeUI", "startCasting", R"([1,"sink",3])"),
+              "invalid_args");
+  ExpectError(Invoke("BayChromeUI", "stopCasting", "[1,7]"), "invalid_args");
+}
+
+TEST(CastDialogsTest, DescribesASinkAsTheAppReadsIt) {
+  media_router::UIMediaSink sink(media_router::mojom::MediaRouteProviderId::CAST);
+  sink.id = "sink-1";
+  sink.friendly_name = u"Living room";
+  sink.state = media_router::UIMediaSinkState::AVAILABLE;
+  sink.cast_modes = {media_router::MediaCastMode::TAB_MIRROR,
+                     media_router::MediaCastMode::DESKTOP_MIRROR};
+  const auto described = CastDialogs::DescribeSink(sink);
+  EXPECT_EQ(*described.FindString("id"), "sink-1");
+  EXPECT_EQ(*described.FindString("name"), "Living room");
+  EXPECT_EQ(*described.FindString("state"), "available");
+  // JS CastMode: tab 2, screen 4.
+  EXPECT_EQ(described.FindInt("modes"), 6);
+  EXPECT_EQ(*described.FindString("routeId"), "");
+  EXPECT_EQ(*described.FindString("issue"), "");
+}
+
+}  // namespace bay

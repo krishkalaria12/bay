@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import type { ReactNode } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { type StyleProp, type ViewStyle } from "react-native";
 
 /**
  * Where a control appears on hover (a row's ✕, a folder's refresh). The slot is as wide as what it shows at rest, and

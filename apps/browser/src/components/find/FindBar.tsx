@@ -1,15 +1,18 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useFind } from "../../store/hooks";
 import type { FindState } from "../../store/types";
 import { IconButton, useHover } from "../ui/primitives";
 import { replaceInField } from "../site/selection";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { setFind as findCommand } from "../../runtime/windowUiActions";
 
 export function FindBar({ tabId }: { tabId: string }) {
   const hasPage = useBrowser((s) => !!s.tabs[tabId]?.url);
@@ -41,7 +44,7 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
     if (find.query) void webviews.get(tabId)?.find(find.query, true, false);
   }, [find.focusRequest]);
 
-  const setFind = (patch: Partial<FindState>) => useBrowser.getState().setFind(tabId, patch);
+  const setFind = (patch: Partial<FindState>) => reportBrowserCommand(findCommand(tabId, patch));
 
   const run = (backwards: boolean, query?: string, findNext = true) => {
     const text = query ?? find.query;

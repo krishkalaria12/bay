@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../../effect/ports/store";
 // The app's own scripts (Bay Scripts): the folder the user keeps them in, and the engine profiles they are
 // loaded into.
 //
@@ -31,17 +32,19 @@ import {
 import { create } from "zustand";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import type { BrowserState } from "../../store/browserStore";
+import type { BrowserProjection } from "../../runtime/projection";
 import { activeTabId, engineProfile, isIncognitoSpace } from "../../store/model";
 import { tabEngine } from "../../store/engines";
 import { shownPeek } from "../../store/peeks";
-import { pageOf, usePages } from "../window/pageState";
+import { usePages } from "../window/pageState";
 
 /** The scripts could not be applied. */
 export class AutomationFailure extends TaggedError("AutomationFailure")<{
@@ -53,8 +56,6 @@ export class AutomationFailure extends TaggedError("AutomationFailure")<{
 export type ScriptsOutcome = { ok: true } | { disabled: true } | { removed: true } | { error: string };
 
 type Wanted = "present" | "absent";
-
-const enabled = () => useBrowser.getState().settings.cliControl ?? false;
 
 /** The engine profiles the scripts go to, and the names they are known by. */
 export function scriptsTargets(s: Pick<BrowserState, "spaceOrder" | "spaces">): Map<string, string[]> {
@@ -82,6 +83,9 @@ const withoutPrivate = (path: string) => path.replace(/^\/private(?=\/(tmp|var|e
 const loadedFrom = (ext: InstalledExtension, path: string) => !!ext.path && withoutPrivate(ext.path) === withoutPrivate(path);
 
 const BLOCKED = "Bay Scripts can only hold content scripts, and the engine blocked this copy.";
+
+/** How long a folder that is still being published waits before it is read again. */
+const SCRIPTS_RETRY_MS = 100;
 
 const withError = (unloaded: ScriptsOutcome, refused: string): ScriptsOutcome =>
   "error" in unloaded ? { error: `${refused} (and the loaded copy couldn't be removed: ${unloaded.error})` } : { error: refused };
@@ -209,7 +213,7 @@ export class CliEngine extends Context.Service<
 }
 
 /** The current pane, including a Peek over it, once its Chromium page exists. */
-export function shownCliTab(s: BrowserState): number | null {
+export function shownCliTab(s: BrowserProjection): number | null {
   const windowId = s.ui.focusedWindowId;
 
   if (!windowId || !s.windows[windowId]) return null;
@@ -217,17 +221,15 @@ export function shownCliTab(s: BrowserState): number | null {
   const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
   const tab = id ? s.tabs[id] : undefined;
 
-  if (
-    !id ||
-    !tab ||
-    !/^(https?|about|data|blob):/i.test(tab.url) ||
-    !(tab.navigation || tab.adoptId) ||
-    tabEngine(s, id) !== "chromium" ||
-    pageOf(id).newTabShown
-  )
+  if (!id || !tab || !/^(https?|about|data|blob):/i.test(tab.url) || !(tab.navigation || tab.adoptId) || tabEngine(s, id) !== "chromium" || tab.newTabHistory)
     return null;
 
   return usePages.getState().chromeTabs[id] ?? null;
+}
+
+/** The engine's active tab: the window that shows a page says which tab the commands act on. */
+export function tellCliActiveTab(active: number | null): Promise<CliControlStatus> {
+  return setCliActiveTab(active);
 }
 
 /** What the app shows of the terminal control and its installer. */
@@ -255,7 +257,7 @@ export class AutomationService extends Context.Service<
     /** Asks for the scripts to be applied. */
     readonly schedule: Effect.Effect<void>;
     /** Starts the terminal control: the server is asked for, and the active tab is kept. */
-    readonly startCli: Effect.Effect<void>;
+    readonly startCli: (options?: { activeTab?: boolean }) => Effect.Effect<void>;
     /** Installs the command line tool, and says how it went. */
     readonly install: () => Effect.Effect<CliInstallResult>;
   }
@@ -263,6 +265,8 @@ export class AutomationService extends Context.Service<
   static readonly layer = Layer.effect(
     AutomationService,
     Effect.gen(function* () {
+      const useBrowser = yield* AuthorityStore;
+      const enabled = () => useBrowser.getState().settings.cliControl ?? false;
       const engine = yield* AutomationEngine;
       const scope = yield* Scope.Scope;
 
@@ -276,6 +280,8 @@ export class AutomationService extends Context.Service<
       let lastStatus: string | null = null;
       let running = false;
       let again = false;
+      // A folder the command line tool is still publishing is read again shortly, with no watch event of its own.
+      let retry: Fiber.Fiber<void> | undefined;
 
       const load = (profile: string, path: string): Effect.Effect<ScriptsOutcome> =>
         Effect.gen(function* () {
@@ -317,7 +323,26 @@ export class AutomationService extends Context.Service<
 
           if (!enabled() || again) return;
 
-          if (folder.state === "empty" || folder.state === "busy" || folder.state === "pending") return;
+          if (folder.state === "busy" || folder.state === "pending") {
+            // A watcher can fire before the tool releases its publication lock, and a Windows directory exchange
+            // briefly has no extension in place.
+            retry = yield* Effect.forkIn(
+              Effect.sleep(Duration.millis(SCRIPTS_RETRY_MS)).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    retry = undefined;
+
+                    if (enabled()) Queue.offerUnsafe(requests, { kind: "scripts" });
+                  }),
+                ),
+              ),
+              scope,
+            );
+
+            return;
+          }
+
+          if (folder.state === "empty") return;
 
           const generation = folder.generation ?? 0;
           const targets = scriptsTargets(useBrowser.getState());
@@ -375,6 +400,15 @@ export class AutomationService extends Context.Service<
 
       const schedule = (): Effect.Effect<void> =>
         Effect.gen(function* () {
+          // A pass that runs now reads the folder itself: the retry that was waiting is not needed.
+          if (retry) {
+            const waiting = retry;
+
+            retry = undefined;
+
+            yield* Fiber.interrupt(waiting);
+          }
+
           if (running) {
             again = true;
 
@@ -410,9 +444,14 @@ export class AutomationService extends Context.Service<
       let generation = 0;
       let cliApplied: boolean | null = null;
       let sentActive: number | null | undefined;
+      // A document that has no pages of its own (the coordinator on Linux and Windows) never names the active tab:
+      // the window that shows the page says so.
+      let ownsActiveTab = true;
 
       const pushActive = (): Effect.Effect<void> =>
         Effect.gen(function* () {
+          if (!ownsActiveTab) return;
+
           const server = useCli.getState().server;
 
           if (server?.state !== "on" && server?.state !== "starting") {
@@ -502,7 +541,10 @@ export class AutomationService extends Context.Service<
                   const error = result.ok ? null : (result.error ?? "The installer stopped.");
                   const binPath = result.binPath ?? useCli.getState().binPath;
 
-                  useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+                  // The installer says which version it left in place; an older installer leaves the app to look.
+                  const installedVersion = result.installedVersion === undefined ? installedCliVersion() : result.installedVersion;
+
+                  useCli.setState({ installing: false, step: null, installedVersion, binPath, error });
 
                   try {
                     writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
@@ -526,31 +568,38 @@ export class AutomationService extends Context.Service<
           }),
         );
 
-      const startCli = Effect.gen(function* () {
-        const stopListening = cli.onChanged((server) => {
-          void Effect.runFork(applyCli(server, inFlight === 0));
+      let cliStarted = false;
+
+      const startCli = (options: { activeTab?: boolean } = {}) =>
+        Effect.gen(function* () {
+          if (cliStarted) return;
+          cliStarted = true;
+          ownsActiveTab = options.activeTab ?? true;
+
+          const stopListening = cli.onChanged((server) => {
+            void Effect.runFork(applyCli(server, inFlight === 0));
+          });
+
+          const stopStore = useBrowser.subscribe((s) => {
+            Queue.offerUnsafe(requests, { kind: "cli", on: s.settings.cliControl === true });
+            void Effect.runFork(pushActive());
+          });
+
+          const stopPages = usePages.subscribe(() => {
+            void Effect.runFork(pushActive());
+          });
+
+          Queue.offerUnsafe(requests, { kind: "cli", on: useBrowser.getState().settings.cliControl === true });
+
+          yield* Scope.addFinalizer(
+            scope,
+            Effect.sync(() => {
+              stopListening();
+              stopStore();
+              stopPages();
+            }),
+          );
         });
-
-        const stopStore = useBrowser.subscribe((s) => {
-          Queue.offerUnsafe(requests, { kind: "cli", on: s.settings.cliControl === true });
-          void Effect.runFork(pushActive());
-        });
-
-        const stopPages = usePages.subscribe(() => {
-          void Effect.runFork(pushActive());
-        });
-
-        Queue.offerUnsafe(requests, { kind: "cli", on: useBrowser.getState().settings.cliControl === true });
-
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.sync(() => {
-            stopListening();
-            stopStore();
-            stopPages();
-          }),
-        );
-      });
 
       const start = Effect.gen(function* () {
         let watching = false;

@@ -9,13 +9,16 @@ import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
+import type { BrowserState } from "../store/browserStore";
+import type { BrowserProjection } from "../runtime/projection";
+import { browserRead } from "../store/read";
 import { downloadsIn } from "../store/windowUi";
 import { engineProfile } from "../store/model";
 import { isInternalTab } from "../components/pages/internalPages";
 
 // The name renameFile settled on, which gains " (1)" when the suggestion was taken.
-const baseName = (path: string) => path.split("/").pop() ?? path;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 type DownloadPageContext = { title?: string; url?: string };
 
@@ -31,7 +34,10 @@ function sameDocument(a: string, b: string): boolean {
 }
 
 /** The page a download came from, so its name can say something about it. */
-export function pageForDownload(d: Download, s: BrowserState = useBrowser.getState()): DownloadPageContext {
+export function pageForDownload(
+  d: Download,
+  s: Pick<BrowserProjection, "tabs" | "windowOrder" | "windows" | "downloads" | "spaceOrder" | "history"> = browserRead.getState(),
+): DownloadPageContext {
   const urls = [d.tabUrl, d.referrer].filter((u): u is string => !!u && u !== d.url);
 
   if (!urls.length) return {};
@@ -66,7 +72,7 @@ export function pageForDownload(d: Download, s: BrowserState = useBrowser.getSta
 }
 
 /** The window a download belongs to. */
-export function windowForDownload(s: BrowserState, d: Download): string | null {
+export function windowForDownload(s: Pick<BrowserProjection, "ui" | "windowOrder" | "downloads" | "windows">, d: Download): string | null {
   const focused = s.ui.focusedWindowId;
 
   if (focused && downloadsIn(s, focused).some((x) => x.id === d.id)) return focused;
@@ -126,6 +132,7 @@ export class DownloadWorkService extends Context.Service<
   static readonly layer = Layer.effect(
     DownloadWorkService,
     Effect.gen(function* () {
+      const browser = yield* AuthorityStore;
       const engine = yield* DownloadEngine;
 
       // The downloads that were named already: once for each download, so an undo sticks.
@@ -150,7 +157,7 @@ export class DownloadWorkService extends Context.Service<
 
           if (!path) return yield* Effect.succeed(null);
 
-          yield* Effect.sync(() => useBrowser.getState().updateDownloadFile(download.id, { filename: baseName(path), path }));
+          yield* Effect.sync(() => browser.getState().updateDownloadFile(download.id, { filename: baseName(path), path }));
 
           return yield* Effect.succeed(path);
         });
@@ -161,14 +168,14 @@ export class DownloadWorkService extends Context.Service<
 
           if (!path) return yield* Effect.succeed(null);
 
-          yield* Effect.sync(() => useBrowser.getState().updateDownloadFile(download.id, { filename: baseName(path), path }));
+          yield* Effect.sync(() => browser.getState().updateDownloadFile(download.id, { filename: baseName(path), path }));
 
           return yield* Effect.succeed(path);
         });
 
       const finish = (download: Download): Effect.Effect<{ path: string; original: { filename: string; path: string } } | null, DownloadFailure> =>
         Effect.gen(function* () {
-          const s = useBrowser.getState();
+          const s = browser.getState();
 
           if (!s.settings.tidyDownloads || download.state !== "finished" || !download.path) return yield* Effect.succeed(null);
 
@@ -188,7 +195,7 @@ export class DownloadWorkService extends Context.Service<
           const name = suggested ?? cleaned;
 
           // The model takes a moment: the file may have been renamed, removed or the setting turned off meanwhile.
-          const now = useBrowser.getState();
+          const now = browser.getState();
           const current = now.downloads.find((x) => x.id === download.id);
 
           if (!now.settings.tidyDownloads || !current || current.filename !== download.filename || current.state !== "finished") {

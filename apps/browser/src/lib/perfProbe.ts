@@ -713,8 +713,7 @@ if (perfProbeEnabled) {
     },
     read: () => ({ ...stats, elapsed: now() - stats.since }),
     now,
-    // SAFETY: require("react-native") returns the same module namespace as the static import.
-    batch: (fn: () => void) => (require("react-native") as typeof import("react-native")).unstable_batchedUpdates(fn),
+    batch: (fn: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(fn),
     findFibers,
     nameOf,
     cpuProfile,

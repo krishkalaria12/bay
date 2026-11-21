@@ -1,0 +1,575 @@
+diff --git a/ui/gtk/BUILD.gn b/ui/gtk/BUILD.gn
+--- a/ui/gtk/BUILD.gn
++++ b/ui/gtk/BUILD.gn
+@@ -71,6 +71,7 @@
+ }
+ 
+ component("gtk") {
++  friend = [ ":gtk_unittests" ]
+   visibility = [
+     ":gtk_unittests",
+     "//ui/linux:linux_ui_factory",
+@@ -132,6 +133,7 @@
+   deps = [
+     ":gtk_stubs",
+     "//base",
++    "//build/config/linux/dbus:buildflags",
+     "//cc/paint",
+     "//printing/buildflags",
+     "//services/data_decoder/public/cpp",
+@@ -165,6 +167,17 @@
+     "//url",
+   ]
+ 
++  if (is_linux && use_dbus) {
++    sources += [
++      "window_button_layout_portal.cc",
++      "window_button_layout_portal.h",
++    ]
++    deps += [
++      "//components/dbus",
++      "//dbus",
++    ]
++  }
++
+   if (enable_printing) {
+     deps += [ "//printing" ]
+   }
+@@ -221,6 +234,14 @@
+       "//ui/base/glib",
+       "//ui/linux:linux_ui",
+     ]
++    if (is_linux && use_dbus) {
++      sources += [ "window_button_layout_portal_unittest.cc" ]
++      deps += [
++        "//components/dbus",
++        "//dbus:test_support",
++        "//testing/gmock",
++      ]
++    }
+   }
+ } else {
+   group("gtk_unittests") {
+diff --git a/ui/gtk/settings_provider_gtk.h b/ui/gtk/settings_provider_gtk.h
+--- a/ui/gtk/settings_provider_gtk.h
++++ b/ui/gtk/settings_provider_gtk.h
+@@ -10,6 +10,8 @@
+ #include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "build/build_config.h"
++#include "build/config/linux/dbus/buildflags.h"
+ #include "ui/base/glib/scoped_gsignal.h"
+ #include "ui/gtk/settings_provider.h"
+ #include "ui/linux/linux_ui.h"
+@@ -20,6 +22,7 @@
+ namespace gtk {
+ 
+ class GtkUi;
++class WindowButtonLayoutPortal;
+ 
+ class SettingsProviderGtk : public SettingsProvider {
+  public:
+@@ -62,6 +65,9 @@
+   raw_ptr<GtkUi> delegate_;
+ 
+   ScopedGSignal signal_;
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_DBUS)
++  std::unique_ptr<WindowButtonLayoutPortal> button_layout_portal_;
++#endif
+ 
+   std::vector<std::unique_ptr<FrameActionSettingWatcher>>
+       frame_action_setting_watchers_;
+diff --git a/ui/gtk/settings_provider_gtk.cc b/ui/gtk/settings_provider_gtk.cc
+--- a/ui/gtk/settings_provider_gtk.cc
++++ b/ui/gtk/settings_provider_gtk.cc
+@@ -10,6 +10,10 @@
+ #include "ui/gtk/gtk_compat.h"
+ #include "ui/gtk/gtk_ui.h"
+ #include "ui/gtk/gtk_util.h"
++
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_DBUS)
++#include "ui/gtk/window_button_layout_portal.h"
++#endif
+ 
+ namespace gtk {
+ 
+@@ -67,6 +71,12 @@
+ SettingsProviderGtk::SettingsProviderGtk(GtkUi* delegate)
+     : delegate_(delegate) {
+   DCHECK(delegate_);
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_DBUS)
++  button_layout_portal_ =
++      std::make_unique<WindowButtonLayoutPortal>(base::BindRepeating(
++          &SettingsProviderGtk::SetWindowButtonOrderingFromGtkLayout,
++          base::Unretained(this)));
++#endif
+   GtkSettings* settings = gtk_settings_get_default();
+   signal_ = ScopedGSignal(
+       settings, "notify::gtk-decoration-layout",
+@@ -104,8 +114,13 @@
+ 
+ void SettingsProviderGtk::OnDecorationButtonLayoutChanged(GtkSettings* settings,
+                                                           GParamSpec* param) {
+-  SetWindowButtonOrderingFromGtkLayout(
+-      GetGtkSettingsStringProperty(settings, "gtk-decoration-layout"));
++  const auto layout =
++      GetGtkSettingsStringProperty(settings, "gtk-decoration-layout");
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_DBUS)
++  button_layout_portal_->SetGtkLayout(layout);
++#else
++  SetWindowButtonOrderingFromGtkLayout(layout);
++#endif
+ }
+ 
+ }  // namespace gtk
+diff --git a/ui/gtk/window_button_layout_portal.h b/ui/gtk/window_button_layout_portal.h
+new file mode 100644
+--- /dev/null
++++ b/ui/gtk/window_button_layout_portal.h
+@@ -0,0 +1,60 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef UI_GTK_WINDOW_BUTTON_LAYOUT_PORTAL_H_
++#define UI_GTK_WINDOW_BUTTON_LAYOUT_PORTAL_H_
++
++#include <cstdint>
++#include <optional>
++#include <string>
++
++#include "base/component_export.h"
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
++#include "components/dbus/utils/call_method.h"
++#include "components/dbus/utils/connect_to_signal.h"
++
++namespace dbus {
++class Bus;
++class ObjectProxy;
++}  // namespace dbus
++
++namespace gtk {
++// Owned by the process's GTK settings provider, independent of appearance.
++// Publishes portal strings when available, otherwise the latest GTK layout.
++class COMPONENT_EXPORT(GTK) WindowButtonLayoutPortal {
++ public:
++  using ApplyLayout = base::RepeatingCallback<void(const std::string&)>;
++  explicit WindowButtonLayoutPortal(ApplyLayout apply);
++  WindowButtonLayoutPortal(ApplyLayout apply, scoped_refptr<dbus::Bus> bus);
++  ~WindowButtonLayoutPortal();
++  void SetGtkLayout(const std::string& layout);
++
++ private:
++  void OnPortalReady(uint32_t version);
++  void Subscribe();
++  void OnConnected(const std::string& interface,
++                   const std::string& signal,
++                   bool connected);
++  void Read();
++  void OnRead(uint64_t generation, dbus_utils::CallMethodResultSig<"v"> result);
++  void OnChanged(dbus_utils::ConnectToSignalResultSig<"ssv"> result);
++  void OnOwnerChanged(dbus_utils::ConnectToSignalResultSig<"sss"> result);
++  void Apply();
++
++  ApplyLayout apply_;
++  scoped_refptr<dbus::Bus> bus_;
++  raw_ptr<dbus::ObjectProxy> proxy_;
++  std::optional<std::string> gtk_layout_;
++  std::optional<std::string> portal_layout_;
++  std::optional<std::string> applied_layout_;
++  uint64_t generation_ = 0;
++  bool connected_ = false;
++  bool subscription_started_ = false;
++  base::WeakPtrFactory<WindowButtonLayoutPortal> weak_factory_{this};
++};
++}  // namespace gtk
++#endif
+diff --git a/ui/gtk/window_button_layout_portal.cc b/ui/gtk/window_button_layout_portal.cc
+new file mode 100644
+--- /dev/null
++++ b/ui/gtk/window_button_layout_portal.cc
+@@ -0,0 +1,140 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "ui/gtk/window_button_layout_portal.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "components/dbus/thread_linux/dbus_thread_linux.h"
++#include "components/dbus/utils/variant.h"
++#include "components/dbus/xdg/portal.h"
++#include "dbus/bus.h"
++#include "dbus/object_proxy.h"
++
++namespace gtk {
++namespace {
++constexpr char kService[] = "org.freedesktop.portal.Desktop";
++constexpr char kPath[] = "/org/freedesktop/portal/desktop";
++constexpr char kInterface[] = "org.freedesktop.portal.Settings";
++constexpr char kNamespace[] = "org.gnome.desktop.wm.preferences";
++constexpr char kKey[] = "button-layout";
++}  // namespace
++
++WindowButtonLayoutPortal::WindowButtonLayoutPortal(ApplyLayout apply)
++    : WindowButtonLayoutPortal(std::move(apply),
++                               dbus_thread_linux::GetSharedSessionBus()) {}
++WindowButtonLayoutPortal::WindowButtonLayoutPortal(ApplyLayout apply,
++                                                   scoped_refptr<dbus::Bus> bus)
++    : apply_(std::move(apply)),
++      bus_(std::move(bus)),
++      proxy_(bus_->GetObjectProxy(kService, dbus::ObjectPath(kPath))) {
++  // Do not overwrite the portal registrar's single owner-change callback on
++  // the portal proxy. The bus daemon supports multiple signal subscribers.
++  dbus_utils::ConnectToSignal<"sss">(
++      bus_->GetObjectProxy(DBUS_SERVICE_DBUS, dbus::ObjectPath(DBUS_PATH_DBUS)),
++      DBUS_INTERFACE_DBUS, "NameOwnerChanged",
++      base::BindRepeating(&WindowButtonLayoutPortal::OnOwnerChanged,
++                          weak_factory_.GetWeakPtr()),
++      base::DoNothing());
++  dbus_xdg::RequestXdgDesktopPortal(
++      bus_.get(), base::BindOnce(&WindowButtonLayoutPortal::OnPortalReady,
++                                 weak_factory_.GetWeakPtr()));
++}
++WindowButtonLayoutPortal::~WindowButtonLayoutPortal() = default;
++
++void WindowButtonLayoutPortal::SetGtkLayout(const std::string& layout) {
++  gtk_layout_ = layout;
++  Apply();
++}
++void WindowButtonLayoutPortal::OnPortalReady(uint32_t version) {
++  if (version)
++    Subscribe();
++}
++void WindowButtonLayoutPortal::Subscribe() {
++  if (subscription_started_)
++    return;
++  subscription_started_ = true;
++  dbus_utils::ConnectToSignal<"ssv">(
++      proxy_, kInterface, "SettingChanged",
++      base::BindRepeating(&WindowButtonLayoutPortal::OnChanged,
++                          weak_factory_.GetWeakPtr()),
++      base::BindOnce(&WindowButtonLayoutPortal::OnConnected,
++                     weak_factory_.GetWeakPtr()));
++}
++void WindowButtonLayoutPortal::OnConnected(const std::string& interface,
++                                           const std::string& signal,
++                                           bool connected) {
++  connected_ = connected;
++  if (!connected_)
++    subscription_started_ = false;
++  // Subscribe before reading, so a concurrent change cannot be missed.
++  if (connected_)
++    Read();
++}
++void WindowButtonLayoutPortal::Read() {
++  dbus_utils::CallMethod<"ss", "v">(
++      proxy_, kInterface, "Read",
++      base::BindOnce(&WindowButtonLayoutPortal::OnRead,
++                     weak_factory_.GetWeakPtr(), ++generation_),
++      kNamespace, kKey);
++}
++void WindowButtonLayoutPortal::OnRead(
++    uint64_t generation,
++    dbus_utils::CallMethodResultSig<"v"> result) {
++  if (generation != generation_ || !result.has_value())
++    return;
++  auto inner = std::move(std::get<0>(*result)).Take<dbus_utils::Variant>();
++  if (!inner)
++    return;
++  auto layout = std::move(*inner).Take<std::string>();
++  if (!layout)
++    return;
++  portal_layout_ = std::move(*layout);
++  Apply();
++}
++void WindowButtonLayoutPortal::OnChanged(
++    dbus_utils::ConnectToSignalResultSig<"ssv"> result) {
++  if (!result.has_value())
++    return;
++  auto& [name, key, value] = *result;
++  if (name != kNamespace || key != kKey)
++    return;
++  // Even a malformed newer value invalidates an outstanding startup read.
++  ++generation_;
++  portal_layout_ = std::move(value).Take<std::string>();
++  Apply();
++}
++void WindowButtonLayoutPortal::OnOwnerChanged(
++    dbus_utils::ConnectToSignalResultSig<"sss"> result) {
++  if (!result.has_value())
++    return;
++  const auto& [name, old_owner, new_owner] = *result;
++  if (name != kService)
++    return;
++  ++generation_;
++  portal_layout_.reset();
++  // Clear the override before a restarted service replies. GTK may have
++  // changed while the old override was active.
++  auto weak = weak_factory_.GetWeakPtr();
++  Apply();
++  if (!weak || new_owner.empty())
++    return;
++  if (connected_)
++    Read();
++  else if (!subscription_started_)
++    Subscribe();
++}
++void WindowButtonLayoutPortal::Apply() {
++  const auto& layout = portal_layout_ ? portal_layout_ : gtk_layout_;
++  if (!layout || applied_layout_ == layout)
++    return;
++  applied_layout_ = layout;
++  // A sink can destroy the provider. No member access follows.
++  auto apply = apply_;
++  const auto value = *layout;
++  apply.Run(value);
++}
++}  // namespace gtk
+diff --git a/ui/gtk/window_button_layout_portal_unittest.cc b/ui/gtk/window_button_layout_portal_unittest.cc
+new file mode 100644
+--- /dev/null
++++ b/ui/gtk/window_button_layout_portal_unittest.cc
+@@ -0,0 +1,235 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "ui/gtk/window_button_layout_portal.h"
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/test/bind.h"
++#include "base/test/task_environment.h"
++#include "components/dbus/utils/write_value.h"
++#include "components/dbus/xdg/portal.h"
++#include "dbus/mock_bus.h"
++#include "dbus/mock_object_proxy.h"
++#include "testing/gmock/include/gmock/gmock.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace gtk {
++namespace {
++using testing::_;
++using testing::Return;
++constexpr char kService[] = "org.freedesktop.portal.Desktop";
++constexpr char kPath[] = "/org/freedesktop/portal/desktop";
++constexpr char kInterface[] = "org.freedesktop.portal.Settings";
++constexpr char kNamespace[] = "org.gnome.desktop.wm.preferences";
++
++class WindowButtonLayoutPortalTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    dbus_xdg::SetPortalStateForTesting(
++        dbus_xdg::PortalRegistrarState::kSuccess);
++    bus_ = base::MakeRefCounted<dbus::MockBus>(dbus::Bus::Options());
++    proxy_ = base::MakeRefCounted<dbus::MockObjectProxy>(
++        bus_.get(), kService, dbus::ObjectPath(kPath));
++    daemon_ = base::MakeRefCounted<dbus::MockObjectProxy>(
++        bus_.get(), DBUS_SERVICE_DBUS, dbus::ObjectPath(DBUS_PATH_DBUS));
++    EXPECT_CALL(*bus_, GetObjectProxy(kService, dbus::ObjectPath(kPath)))
++        .WillRepeatedly(Return(proxy_.get()));
++    EXPECT_CALL(*bus_, GetObjectProxy(DBUS_SERVICE_DBUS,
++                                      dbus::ObjectPath(DBUS_PATH_DBUS)))
++        .WillRepeatedly(Return(daemon_.get()));
++    EXPECT_CALL(*daemon_,
++                ConnectToSignal(DBUS_INTERFACE_DBUS, "NameOwnerChanged", _, _))
++        .WillRepeatedly([&](const std::string&, const std::string&,
++                            dbus::ObjectProxy::SignalCallback signal,
++                            dbus::ObjectProxy::OnConnectedCallback connected) {
++          owner_changed_ = std::move(signal);
++        });
++    EXPECT_CALL(*proxy_, ConnectToSignal(kInterface, "SettingChanged", _, _))
++        .WillRepeatedly([&](const std::string&, const std::string&,
++                            dbus::ObjectProxy::SignalCallback signal,
++                            dbus::ObjectProxy::OnConnectedCallback connected) {
++          changed_ = std::move(signal);
++          connected_ = std::move(connected);
++        });
++    EXPECT_CALL(*proxy_, CallMethodWithErrorResponse(_, _, _))
++        .WillRepeatedly([&](dbus::MethodCall* call, int,
++                            dbus::ObjectProxy::ResponseOrErrorCallback cb) {
++          EXPECT_EQ(call->GetInterface(), kInterface);
++          EXPECT_EQ(call->GetMember(), "Read");
++          dbus::MessageReader reader(call);
++          std::string name, key;
++          ASSERT_TRUE(reader.PopString(&name));
++          ASSERT_TRUE(reader.PopString(&key));
++          EXPECT_EQ(name, kNamespace);
++          EXPECT_EQ(key, "button-layout");
++          EXPECT_FALSE(reader.HasMoreData());
++          reads_.push_back(std::move(cb));
++        });
++    provider_ = std::make_unique<WindowButtonLayoutPortal>(
++        base::BindLambdaForTesting(
++            [&](const std::string& layout) { applied_.push_back(layout); }),
++        bus_);
++    provider_->SetGtkLayout(":minimize,maximize,close");
++  }
++  void TearDown() override {
++    provider_.reset();
++    dbus_xdg::SetPortalStateForTesting(dbus_xdg::PortalRegistrarState::kIdle);
++  }
++  void Connect(bool success = true) {
++    std::move(connected_).Run(kInterface, "SettingChanged", success);
++  }
++  void Reply(size_t index, dbus_utils::Variant value, bool nested = true) {
++    auto response = dbus::Response::CreateEmpty();
++    dbus::MessageWriter writer(response.get());
++    dbus_utils::WriteValue(
++        writer, nested ? dbus_utils::Variant::Wrap<"v">(std::move(value))
++                       : std::move(value));
++    std::move(reads_[index]).Run(response.get(), nullptr);
++  }
++  void Change(dbus_utils::Variant value,
++              const std::string& name = kNamespace,
++              const std::string& key = "button-layout") {
++    dbus::Signal signal(kInterface, "SettingChanged");
++    dbus::MessageWriter writer(&signal);
++    writer.AppendString(name);
++    writer.AppendString(key);
++    dbus_utils::WriteValue(writer, std::move(value));
++    changed_.Run(&signal);
++  }
++  void Owner(const std::string& old_owner,
++             const std::string& new_owner,
++             const std::string& name = kService) {
++    dbus::Signal signal(DBUS_INTERFACE_DBUS, "NameOwnerChanged");
++    dbus::MessageWriter writer(&signal);
++    writer.AppendString(name);
++    writer.AppendString(old_owner);
++    writer.AppendString(new_owner);
++    owner_changed_.Run(&signal);
++  }
++  base::test::TaskEnvironment tasks_;
++  scoped_refptr<dbus::MockBus> bus_;
++  scoped_refptr<dbus::MockObjectProxy> proxy_, daemon_;
++  dbus::ObjectProxy::SignalCallback changed_, owner_changed_;
++  dbus::ObjectProxy::OnConnectedCallback connected_;
++  std::vector<dbus::ObjectProxy::ResponseOrErrorCallback> reads_;
++  std::vector<std::string> applied_;
++  std::unique_ptr<WindowButtonLayoutPortal> provider_;
++};
++
++TEST_F(WindowButtonLayoutPortalTest, ReadsAfterSubscriptionAndOverridesGtk) {
++  EXPECT_TRUE(reads_.empty());
++  Connect();
++  ASSERT_EQ(reads_.size(), 1u);
++  Reply(0, dbus_utils::Variant::Wrap<"s">("close:minimize,maximize"));
++  EXPECT_EQ(applied_.back(), "close:minimize,maximize");
++  provider_->SetGtkLayout("minimize:close");
++  EXPECT_EQ(applied_.size(), 2u);
++  Owner(":1.1", "");
++  EXPECT_EQ(applied_.back(), "minimize:close");
++}
++TEST_F(WindowButtonLayoutPortalTest, EmptyPortalStringIsAnOverride) {
++  Connect();
++  Reply(0, dbus_utils::Variant::Wrap<"s">(""));
++  provider_->SetGtkLayout("close:");
++  EXPECT_EQ(applied_.back(), "");
++  Owner(":1.1", "");
++  EXPECT_EQ(applied_.back(), "close:");
++}
++TEST_F(WindowButtonLayoutPortalTest, FailedReadRetainsLiveGtkFallback) {
++  Connect();
++  std::move(reads_[0]).Run(nullptr, nullptr);
++  provider_->SetGtkLayout("close:");
++  EXPECT_EQ(applied_.back(), "close:");
++}
++TEST_F(WindowButtonLayoutPortalTest, MalformedReadRetainsGtkFallback) {
++  Connect();
++  Reply(0, dbus_utils::Variant::Wrap<"s">("close:"), false);
++  EXPECT_EQ(applied_.size(), 1u);
++}
++TEST_F(WindowButtonLayoutPortalTest, WrongReadTypeRetainsGtkFallback) {
++  Connect();
++  Reply(0, dbus_utils::Variant::Wrap<"u">(1));
++  EXPECT_EQ(applied_.size(), 1u);
++}
++TEST_F(WindowButtonLayoutPortalTest, NewerSignalWinsOverInitialRead) {
++  Connect();
++  Change(dbus_utils::Variant::Wrap<"s">("close:"));
++  Reply(0, dbus_utils::Variant::Wrap<"s">(":close"));
++  EXPECT_EQ(applied_.back(), "close:");
++}
++TEST_F(WindowButtonLayoutPortalTest,
++       OtherSettingsAndDuplicateValuesAreIgnored) {
++  Connect();
++  Change(dbus_utils::Variant::Wrap<"s">("close:"), "other");
++  Change(dbus_utils::Variant::Wrap<"s">("close:"), kNamespace, "other");
++  Reply(0, dbus_utils::Variant::Wrap<"s">("close:"));
++  Change(dbus_utils::Variant::Wrap<"s">("close:"));
++  EXPECT_EQ(applied_.size(), 2u);
++}
++TEST_F(WindowButtonLayoutPortalTest,
++       InvalidSignalRestoresGtkAndCancelsOldRead) {
++  Connect();
++  Change(dbus_utils::Variant::Wrap<"s">("close:"));
++  provider_->SetGtkLayout("maximize:close");
++  Change(dbus_utils::Variant::Wrap<"u">(3));
++  Reply(0, dbus_utils::Variant::Wrap<"s">(":close"));
++  EXPECT_EQ(applied_.back(), "maximize:close");
++}
++TEST_F(WindowButtonLayoutPortalTest,
++       RestartRereadsAndIgnoresPreviousOwnerReply) {
++  Connect();
++  Owner(":1.1", "");
++  Owner("", ":1.2");
++  ASSERT_EQ(reads_.size(), 2u);
++  Reply(1, dbus_utils::Variant::Wrap<"s">("close:"));
++  Reply(0, dbus_utils::Variant::Wrap<"s">(":close"));
++  EXPECT_EQ(applied_.back(), "close:");
++  const auto count = reads_.size();
++  Owner("", ":1.9", "other");
++  EXPECT_EQ(reads_.size(), count);
++}
++TEST_F(WindowButtonLayoutPortalTest, FailedSignalSubscriptionUsesGtk) {
++  Connect(false);
++  EXPECT_TRUE(reads_.empty());
++  provider_->SetGtkLayout("close:");
++  EXPECT_EQ(applied_.back(), "close:");
++}
++TEST_F(WindowButtonLayoutPortalTest, OwnerReturnRetriesFailedSubscription) {
++  Connect(false);
++  Owner("", ":1.2");
++  Connect();
++  ASSERT_EQ(reads_.size(), 1u);
++  Reply(0, dbus_utils::Variant::Wrap<"s">("close:"));
++  EXPECT_EQ(applied_.back(), "close:");
++}
++TEST_F(WindowButtonLayoutPortalTest,
++       FailedPortalSetupUsesGtkAndRecoversOnOwner) {
++  provider_.reset();
++  dbus_xdg::SetPortalStateForTesting(dbus_xdg::PortalRegistrarState::kFailed);
++  provider_ = std::make_unique<WindowButtonLayoutPortal>(
++      base::BindLambdaForTesting(
++          [&](const std::string& layout) { applied_.push_back(layout); }),
++      bus_);
++  provider_->SetGtkLayout("close:");
++  EXPECT_EQ(applied_.back(), "close:");
++  EXPECT_TRUE(reads_.empty());
++  Owner("", ":1.2");
++  Connect();
++  ASSERT_EQ(reads_.size(), 1u);
++  Reply(0, dbus_utils::Variant::Wrap<"s">(":close"));
++  EXPECT_EQ(applied_.back(), ":close");
++}
++TEST_F(WindowButtonLayoutPortalTest, TeardownCancelsReadAndSignalCallbacks) {
++  Connect();
++  provider_.reset();
++  Reply(0, dbus_utils::Variant::Wrap<"s">("close:"));
++  Change(dbus_utils::Variant::Wrap<"s">("close:"));
++  Owner(":1.1", ":1.2");
++  EXPECT_EQ(applied_.size(), 1u);
++}
++}  // namespace
++}  // namespace gtk

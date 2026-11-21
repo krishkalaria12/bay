@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -300,8 +300,10 @@
+ void ThemeService::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
+ #if BUILDFLAG(IS_LINUX)
++  // Bay: native menus, bubbles and dialogs default to Bay's own light and dark
++  // colors on every desktop, rather than the GTK or Qt theme.
+   registry->RegisterIntegerPref(prefs::kSystemTheme,
+-                                static_cast<int>(ui::GetDefaultSystemTheme()));
++                                static_cast<int>(ui::SystemTheme::kDefault));
+ #endif
+   registry->RegisterFilePathPref(prefs::kCurrentThemePackFilename,
+                                  base::FilePath());

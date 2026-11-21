@@ -10,8 +10,6 @@
                                                  remake a patch: edit there, diff against --until the line above)
   series.py files                                every path the series touches, by step
 
-Every command takes --platform mac|win|linux|android to use only the steps that platform takes (see `series`).
-
 The base is the tree as CEF's own patches, ungoogled-chromium and domain substitution leave it, before any line of
 `series`: ~/chromium-build/series-base (NN_SERIES_BASE), one file per touched path, relative to chromium/src (CEF's
 files under cef/). `check` exits 0 when every step applies strictly (git apply: no fuzz) and the result equals the
@@ -22,7 +20,9 @@ Environment: CHROMIUM_SRC (default ~/chromium-build/chromium_git/chromium/src), 
 
 import argparse
 import filecmp
+import json
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -39,6 +39,7 @@ class Step:
     def __init__(self, kind, name, line, platforms="all"):
         self.kind, self.name, self.line = kind, name, line
         self.platforms = platforms
+        self.target = None  # read_series sets the platform being built.
 
     def __repr__(self):
         return f"{self.kind} {self.name}"
@@ -57,7 +58,7 @@ class Step:
         if self.kind not in ("cef", "chromium"):
             return set()
         out, new = set(), False
-        for line in open(self.patch, encoding="utf-8", errors="surrogateescape"):
+        for line in Path(self.patch).read_text(encoding="utf-8", errors="surrogateescape").splitlines():
             if line.startswith("--- "):
                 new = line.strip() == "--- /dev/null"
             m = re.match(r"^\+\+\+ (?:b/)?(\S+)", line)
@@ -69,12 +70,12 @@ class Step:
         """(path relative to chromium/src, is_dir) for everything the step writes."""
         if self.kind in ("cef", "chromium"):
             out = []
-            for line in open(self.patch, encoding="utf-8", errors="surrogateescape"):
+            for line in Path(self.patch).read_text(encoding="utf-8", errors="surrogateescape").splitlines():
                 m = re.match(r"^\+\+\+ (?:b/)?(\S+)", line)
                 if m and m.group(1) != "/dev/null":
                     out.append((os.path.join(self.root, m.group(1)), False))
             return dedupe(out)
-        return layer_paths(os.path.join(REPO, self.name))
+        return layer_paths(os.path.join(REPO, self.name), self.target)
 
 
 def dedupe(items):
@@ -86,9 +87,14 @@ def dedupe(items):
     return out
 
 
-def layer_paths(layer):
+def layer_paths(layer, target=None):
     """What a layer's apply.sh writes: the directories it mirrors from <layer>/src (copied whole) and each
     Chromium file it hooks (`"$src/<path>"`)."""
+    portable = os.path.join(layer, "apply.py")
+    if os.path.isfile(portable):
+        result = run([sys.executable, portable, "--list-paths"], REPO,
+                     dict(os.environ, BAY_ENGINE_PLATFORM=target or host_platform()), check=True)
+        return [tuple(item) for item in json.loads(result.stdout)]
     script = open(os.path.join(layer, "apply.sh")).read()
     out = []
     m = re.search(r"^owned=\(([^)]*)\)", script, re.M)
@@ -100,6 +106,10 @@ def layer_paths(layer):
         else:
             out.append((path, False))
     return dedupe([(d, True) for d in dirs] + out)
+
+
+def host_platform():
+    return "win" if sys.platform == "win32" else "mac" if sys.platform == "darwin" else "linux"
 
 
 DESKTOP = ("mac", "win", "linux")
@@ -115,34 +125,45 @@ def selects(platforms, target):
 
 def read_series(target=None):
     """The steps in order: every one, or only those `target` takes."""
-    if target is not None and target not in PLATFORMS:
+    supported = set(PLATFORMS)
+    if target is not None and target not in supported:
         sys.exit(f"unknown series platform: {target}")
     steps = []
-    for n, raw in enumerate(open(os.path.join(HERE, "series")), 1):
+    for n, raw in enumerate(Path(HERE, "series").read_text(encoding="utf-8").splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
         fields = line.split()
         if len(fields) != 3:
-            sys.exit(f"series:{n}: expected `cef|chromium|layer <platforms> <name>`: {raw.rstrip()}")
+            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win|linux|android[,platform...] <name>`: {raw.rstrip()}")
         kind, platforms, name = fields
         selected = platforms.split(",")
-        valid_platforms = platforms == "all" or (set(selected) <= set(PLATFORMS) and len(selected) == len(set(selected)))
-        if kind not in ("cef", "chromium", "layer") or not valid_platforms:
+        if (kind not in ("cef", "chromium", "layer") or
+                (platforms != "all" and not set(selected) <= supported) or
+                len(selected) != len(set(selected))):
             sys.exit(f"series:{n}: invalid kind or platform: {raw.rstrip()}")
         step = Step(kind, name, n, platforms)
+        step.target = target or host_platform()
         if kind != "layer" and not os.path.isfile(step.patch):
             sys.exit(f"series:{n}: no such patch {name}")
-        if kind == "layer" and not os.path.isfile(os.path.join(REPO, name, "apply.sh")):
+        if kind == "layer" and not any(os.path.isfile(os.path.join(REPO, name, f"apply.{extension}")) for extension in ("sh", "py")):
             sys.exit(f"series:{n}: no {name}/apply.sh")
         steps.append(step)
     names = [s.name for s in steps if s.kind != "layer"]
     unlisted = sorted(set(f for f in os.listdir(HERE) if f.endswith(".patch")) - set(names))
     if unlisted:
         sys.exit("patches missing from series: " + ", ".join(unlisted))
-    if target is None:
-        return steps
-    return [step for step in steps if selects(step.platforms, target)]
+    return [step for step in steps if target is None or selects(step.platforms, target)]
+
+
+def layer_command(step):
+    layer = os.path.join(REPO, step.name)
+    script = os.path.join(layer, "apply.py")
+    if os.path.isfile(script):
+        return [sys.executable, script]
+    if sys.platform == "win32":
+        sys.exit(f"{step.name}: a cross-platform apply.py is required on Windows")
+    return [os.path.join(layer, "apply.sh")]
 
 
 def run(cmd, cwd, env=None, check=False):
@@ -152,13 +173,29 @@ def run(cmd, cwd, env=None, check=False):
     return p
 
 
+def normalize_windows_patch_files(step, tree):
+    # CEF's Windows patcher can leave CRLF in a file even with autocrlf off.
+    # Use the patches' LF bytes in both the live tree and scratch replay, so
+    # strict validation sees the same input as application. Never touch layers
+    # or binary files, or alter the recorded pre-patch baseline.
+    if step.kind not in ("cef", "chromium") or step.target != "win":
+        return
+    for relative, _ in step.paths():
+        path = Path(tree, relative)
+        if path.is_file():
+            content = path.read_bytes()
+            if b"\r\n" in content and b"\0" not in content:
+                path.write_bytes(content.replace(b"\r\n", b"\n"))
+
+
 def apply_step(step, tree, strict=True):
     """Applies one step to `tree` (a chromium/src or a scratch copy of its touched files). Returns an error or
     None. strict: git apply (exact context, offsets allowed, no fuzz)."""
     if step.kind == "layer":
-        env = dict(os.environ, CHROMIUM_SRC=tree)
-        p = run([os.path.join(REPO, step.name, "apply.sh")], REPO, env)
+        env = dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target)
+        p = run(layer_command(step), REPO, env)
         return None if p.returncode == 0 else (p.stderr or p.stdout).strip()
+    normalize_windows_patch_files(step, tree)
     cwd = os.path.join(tree, step.root)
     p = run(["git", "apply", "--whitespace=nowarn", step.patch], cwd)
     if p.returncode == 0:
@@ -174,13 +211,36 @@ def apply_step(step, tree, strict=True):
     return None if p.returncode == 0 else (p.stdout + p.stderr).strip()
 
 
-def is_applied(step, tree):
-    if step.kind == "layer":
-        p = run([os.path.join(REPO, step.name, "apply.sh"), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree))
-        return p.returncode == 0
+def reverses(step, tree):
     cwd = os.path.join(tree, step.root)
     return run(["git", "apply", "--check", "-R", step.patch], cwd).returncode == 0 or \
         run(["patch", "-p1", "--dry-run", "-R", "-s", "-f", "-i", step.patch], cwd).returncode == 0
+
+
+def is_applied(step, tree, later=()):
+    """Whether `step` is in `tree`. `later` are the steps after it in series, applied or not."""
+    if step.kind == "layer":
+        p = run([*layer_command(step), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target))
+        return p.returncode == 0
+    if reverses(step, tree):
+        return True
+    # A later step that edits the same files hides this one from a reverse check: chromium-branding.patch creates
+    # BRANDING and the Linux branding patch rewrites it. Undo the later steps that share files, on a scratch copy.
+    paths = {path for path, _ in step.paths()}
+    overlapping = []
+    for other in later:
+        if other.kind != "layer" and other.root == step.root and paths & {path for path, _ in other.paths()}:
+            overlapping.append(other)
+            paths |= {path for path, _ in other.paths()}
+    if not overlapping:
+        return False
+    with tempfile.TemporaryDirectory(prefix="nn-applied-") as scratch:
+        for path in paths:
+            copy_path(tree, scratch, path, False)
+        for other in reversed(overlapping):
+            # A later step that isn't in the tree doesn't reverse; it leaves the copy as it is.
+            run(["git", "apply", "-R", "--whitespace=nowarn", other.patch], os.path.join(scratch, other.root))
+        return reverses(step, scratch)
 
 
 def phase_of(step):
@@ -232,10 +292,12 @@ def cmd_files(args):
 
 
 def cmd_apply(args):
-    for step in read_series(args.platform):
+    steps = read_series(args.platform)
+    for index, step in enumerate(steps):
         if args.phase and phase_of(step) != args.phase:
             continue
-        if step.kind != "layer" and is_applied(step, SRC):
+        normalize_windows_patch_files(step, SRC)
+        if step.kind != "layer" and is_applied(step, SRC, steps[index + 1:]):
             print(f"already applied {step.name}")
             continue
         error = apply_step(step, SRC, strict=False)
@@ -334,22 +396,22 @@ def tree_differs(cmp):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    platform = argparse.ArgumentParser(add_help=False)
-    platform.add_argument("--platform", choices=PLATFORMS,
-                          help="only the steps this platform takes (default: every step)")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("apply", parents=[platform])
+    p = sub.add_parser("apply")
     p.add_argument("--phase", choices=["cef", "chromium"])
-    p = sub.add_parser("check", parents=[platform])
+    p = sub.add_parser("check")
     p.add_argument("--keep", metavar="DIR", help="scratch directory to keep")
     p.add_argument("-v", "--verbose", action="store_true")
-    p = sub.add_parser("capture-base", parents=[platform])
+    p = sub.add_parser("capture-base")
     p.add_argument("--phase", choices=["cef", "chromium"])
     p.add_argument("--force", action="store_true", help="replace files already captured")
-    p = sub.add_parser("materialize", parents=[platform])
+    p = sub.add_parser("materialize")
     p.add_argument("--until", required=True)
     p.add_argument("dir")
-    sub.add_parser("files", parents=[platform])
+    sub.add_parser("files")
+    # Put --platform after the subcommand, like --phase.
+    for command_parser in sub.choices.values():
+        command_parser.add_argument("--platform", choices=list(PLATFORMS), default=host_platform())
     args = parser.parse_args()
     handler = {"apply": cmd_apply, "check": cmd_check, "capture-base": cmd_capture_base,
                "materialize": cmd_materialize, "files": cmd_files}[args.command]

@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
+import { nativeSnapshot, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
 
 export type CliInstallResult = {
   ok: boolean;
@@ -19,7 +19,7 @@ type CliNative = {
 
 const Cli = requireOptionalNativeModule<CliNative>("BayCli");
 
-export const installedCliVersion = (): string | null => Cli?.installedVersion() ?? null;
+export const installedCliVersion = (): string | null => (Cli ? nativeSnapshot("BayCli", "installedVersion", [], () => Cli.installedVersion()) : null);
 
 export const installCli = (): Promise<CliInstallResult> =>
   Cli ? Cli.install() : Promise.resolve({ ok: false, appVersion: "", error: "This build of Bay can't install the bay command.", lines: [] });

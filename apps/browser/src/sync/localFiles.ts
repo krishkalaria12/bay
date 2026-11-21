@@ -1,7 +1,8 @@
 import * as v from "valibot";
 import { assignPositions, type Adapter } from "@bay/sync";
 import { isJsonObject, type JsonInput } from "../lib/json";
-import { useBrowser } from "../store/browserStore";
+import { syncStore } from "./store";
+import { withoutSidebarUndo } from "../store/sidebarUndo";
 import { normalizeLocalFiles } from "../store/localFiles";
 import { isIncognitoSpace } from "../store/model";
 import type { LocalFilePin } from "../store/types";
@@ -17,7 +18,7 @@ export function localFilesAdapter(spaceId: string): Adapter {
   return {
     prefix: "file:",
     extract: (base) => {
-      const s = useBrowser.getState();
+      const s = syncStore().getState();
 
       if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) return null;
 
@@ -41,7 +42,7 @@ export function localFilesAdapter(spaceId: string): Adapter {
       };
     },
     apply: (visible, changed) => {
-      const s = useBrowser.getState();
+      const s = syncStore().getState();
 
       if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) return false;
       const localFiles = { ...s.localFiles };
@@ -81,7 +82,7 @@ export function localFilesAdapter(spaceId: string): Adapter {
       incoming.forEach(({ pin }, order) => {
         localFiles[pin.id] = { ...pin, order };
       });
-      useBrowser.setState({ localFiles });
+      withoutSidebarUndo(() => syncStore().setState({ localFiles }));
     },
   };
 }

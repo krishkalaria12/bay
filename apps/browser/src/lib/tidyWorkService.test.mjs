@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../effect/ports/store.ts";
 // The tidy work (lib/tidyWorkService.ts): what a run applies, and what it leaves alone.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -46,7 +47,10 @@ const fakeEngine = () => {
 
 const withWork = async (use) => {
   const engine = fakeEngine();
-  const runtime = ManagedRuntime.make(Layer.mergeAll(TidyWorkService.layer.pipe(Layer.provide(engine.layer)), testClockLayer));
+
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(TidyWorkService.layer.pipe(Layer.provide(AuthorityStore.layer(useBrowser)), Layer.provide(engine.layer)), testClockLayer),
+  );
 
   try {
     await use({ lab: engine.lab, runtime });
