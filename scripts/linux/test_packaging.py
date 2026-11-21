@@ -237,7 +237,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("bay-1.3.0/opt/bay/chrome_sandbox", members)
         self.assertEqual(members["bay-1.3.0/opt/bay/chrome-sandbox"].mode, 0o755, "a tarball never ships a setuid sandbox")
         self.assertTrue(all(member.uid == 0 and member.gid == 0 for member in members.values()))
-        metainfo = tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz").extractfile("bay-1.3.0/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml").read()
+        metainfo = tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz").extractfile("bay-1.3.0/usr/share/metainfo/in.baybrowser.bay.metainfo.xml").read()
         self.assertIn(b'<release version="1.3.0" date="2026-10-15" />', metainfo, "dated from release-notes/1.3.0.md")
         self.assertIn("bay-1.3.0-linux-x64.tar.xz", (output / "SHA256SUMS").read_text())
         with tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz") as tar:
@@ -250,10 +250,10 @@ class ReleaseTests(unittest.TestCase):
         self.release("tar", output)
         share = output / "bay-1.3.0/usr/share"
         with tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz") as tar:
-            for name in ("applications/bay.desktop", "metainfo/in.krishkalaria.bay.metainfo.xml"):
+            for name in ("applications/bay.desktop", "metainfo/in.baybrowser.bay.metainfo.xml"):
                 tar.extract(f"bay-1.3.0/usr/share/{name}", output, filter="data")
         subprocess.run(["desktop-file-validate", share / "applications/bay.desktop"], check=True)
-        subprocess.run(["appstreamcli", "validate", "--no-net", "--pedantic", share / "metainfo/in.krishkalaria.bay.metainfo.xml"],
+        subprocess.run(["appstreamcli", "validate", "--no-net", "--pedantic", share / "metainfo/in.baybrowser.bay.metainfo.xml"],
                        check=True, capture_output=True)
 
     def test_rejects_a_version_that_is_not_x_y_z(self):
@@ -292,7 +292,7 @@ class ReleaseTests(unittest.TestCase):
         output = self.root / "stores"
         self.release("tar,flatpak,nixpkgs", output)
         tarball = output / "bay-1.3.0-linux-x64.tar.xz"
-        manifest = (output / "flatpak/in.krishkalaria.bay.yaml").read_text()
+        manifest = (output / "flatpak/in.baybrowser.bay.yaml").read_text()
         self.assertIn("url: https://github.com/krishkalaria12/bay/releases/download/v1.3.0/bay-1.3.0-linux-x64.tar.xz\n", manifest)
         self.assertIn(f'sha256: "{engine.sha256(tarball)}"', manifest)
         self.assertNotIn("@", manifest.replace("@v", ""))

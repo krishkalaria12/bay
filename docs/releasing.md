@@ -164,12 +164,12 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
 
 After the first release:
 
-4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.krishkalaria.bay.metainfo.xml`
+4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.baybrowser.bay.metainfo.xml`
    (`<screenshots>`, with images at stable `https://baybrowser.in/...` URLs): Flathub's linter refuses an app
    without them, and the site's are the Mac app's. Then fork `flathub/flathub`, branch from `new-pr`, add the files from `bay-linux-packages/flatpak/` and open a
-   pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
-   merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at
-   flathub.org and verify the domain `krishkalaria.in`, which the app ID names.
+   pull request into `new-pr` titled "Add in.baybrowser.bay". Reviewers build it and may ask for changes; once it's
+   merged, Flathub makes `flathub/in.baybrowser.bay` and you're its maintainer. For the verified badge, sign in at
+   flathub.org and verify the domain `baybrowser.in`, which the app ID names.
 5. **Snap Store.** Register the name and ask for the sandbox, which Chromium-based snaps need and the store grants by
    hand (a post in forum.snapcraft.io's "store-requests" asking for `browser-support` with `allow-sandbox` for `bay`):
 
