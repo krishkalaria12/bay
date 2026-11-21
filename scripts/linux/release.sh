@@ -108,7 +108,7 @@ Depends: ca-certificates, fonts-liberation, libasound2, libatk-bridge2.0-0, liba
 Provides: www-browser, gnome-www-browser
 Section: web
 Priority: optional
-Homepage: https://bay.krishkalaria.in
+Homepage: https://baybrowser.in
 Description: A fast browser with your tabs in a sidebar
  Bay is a browser built around a sidebar, on Chromium: spaces, pinned tabs and
  folders, Peek and Split View, a command bar, and built-in ad blocking.
@@ -139,7 +139,7 @@ if want appimage; then
   image="$output/Bay-$version-x86_64.AppImage"
   # Updates read one fixed file, which scripts/linux/publish.sh points at each release's image, so they don't depend on
   # GitHub's latest release, which is the Mac app's.
-  (cd "$output" && ARCH=x86_64 appimagetool --no-appstream -u "zsync|https://bay.krishkalaria.in/linux/Bay-x86_64.AppImage.zsync" \
+  (cd "$output" && ARCH=x86_64 appimagetool --no-appstream -u "zsync|https://baybrowser.in/linux/Bay-x86_64.AppImage.zsync" \
     "$appdir" "$image" >/dev/null)
   artifacts+=("$image" "$image.zsync")
 fi

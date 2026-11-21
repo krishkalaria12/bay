@@ -11,7 +11,7 @@ Version:        @VERSION@
 Release:        1
 Summary:        A fast browser with your tabs in a sidebar
 License:        Apache-2.0
-URL:            https://bay.krishkalaria.in
+URL:            https://baybrowser.in
 BuildArch:      x86_64
 Requires:       xdg-utils
 

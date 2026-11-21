@@ -4,7 +4,7 @@
 #   1. signs the .rpm, then every artifact and the checksums, and adds them to the GitHub release v<version>, which the
 #      Mac release has already published;
 #   2. rebuilds the signed APT and RPM repositories and the AppImage update file on the prerelease linux-repo. The
-#      packages stay on v<version>: apps/web/public/_redirects serves both at https://bay.krishkalaria.in/linux/;
+#      packages stay on v<version>: apps/web/public/_redirects serves both at https://baybrowser.in/linux/;
 #   3. pushes bay-bin to the AUR;
 #   4. uploads the snap to the Snap Store's stable channel, when SNAPCRAFT_STORE_CREDENTIALS is set and there's a snap.
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 github=${GITHUB_REPOSITORY:-krishkalaria12/bay}
-site=https://bay.krishkalaria.in/linux
+site=https://baybrowser.in/linux
 packages="" version="" dry=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,7 +76,7 @@ gpg --export --export-options export-minimal "$BAY_GPG_KEY" >"$out/repo/bay.gpg"
 gpg --armor --export --export-options export-minimal "$BAY_GPG_KEY" >"$out/repo/bay.asc"
 [[ -s "$out/repo/bay.gpg" ]] || die "gpg has no public key for $BAY_GPG_KEY"
 
-# APT, as a flat repository: deb [signed-by=/usr/share/keyrings/bay.gpg] https://bay.krishkalaria.in/linux/apt ./
+# APT, as a flat repository: deb [signed-by=/usr/share/keyrings/bay.gpg] https://baybrowser.in/linux/apt ./
 # Its Filename is pool/v<version>/<deb>, which the site redirects to the release's asset.
 apt="$out/apt"
 mkdir -p "$apt/pool/$tag"
@@ -96,7 +96,7 @@ sign --clearsign --output "$apt/InRelease" "$apt/Release"
 sign --armor --detach-sign --output "$apt/Release.gpg" "$apt/Release"
 cp "$apt"/{Packages,Packages.gz,Release,InRelease,Release.gpg} "$out/repo/"
 
-# RPM, for dnf and zypper: baseurl https://bay.krishkalaria.in/linux/rpm, packages at pool/v<version>/<rpm> as above.
+# RPM, for dnf and zypper: baseurl https://baybrowser.in/linux/rpm, packages at pool/v<version>/<rpm> as above.
 rpmrepo="$out/rpm"
 mkdir -p "$rpmrepo/pool/$tag"
 cp "$out/release/$rpm" "$rpmrepo/pool/$tag/"

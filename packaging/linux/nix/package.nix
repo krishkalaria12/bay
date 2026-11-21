@@ -216,7 +216,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   meta = {
     description = "Fast browser with your tabs in a sidebar";
-    homepage = "https://bay.krishkalaria.in";
+    homepage = "https://baybrowser.in";
     downloadPage = "https://github.com/krishkalaria12/bay/releases";
     license = lib.licenses.asl20;
     # Add yourself to maintainers/maintainer-list.nix in the same pull request.

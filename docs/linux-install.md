@@ -2,13 +2,13 @@
 
 Bay for Linux runs on x86_64 distributions with glibc. Installing from a package repository keeps Bay up to date with
 the rest of the system. Every package and repository is signed with Bay's key,
-`https://bay.krishkalaria.in/linux/bay.asc`.
+`https://baybrowser.in/linux/bay.asc`.
 
 ## Debian, Ubuntu, Linux Mint, Pop!_OS
 
 ```bash
-curl -fsSL https://bay.krishkalaria.in/linux/bay.gpg | sudo tee /usr/share/keyrings/bay.gpg >/dev/null
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bay.gpg] https://bay.krishkalaria.in/linux/apt ./" \
+curl -fsSL https://baybrowser.in/linux/bay.gpg | sudo tee /usr/share/keyrings/bay.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bay.gpg] https://baybrowser.in/linux/apt ./" \
   | sudo tee /etc/apt/sources.list.d/bay.list
 sudo apt update && sudo apt install bay
 ```
@@ -16,14 +16,14 @@ sudo apt update && sudo apt install bay
 ## Fedora, RHEL, CentOS Stream
 
 ```bash
-sudo curl -fsSL -o /etc/yum.repos.d/bay.repo https://bay.krishkalaria.in/linux/bay.repo
+sudo curl -fsSL -o /etc/yum.repos.d/bay.repo https://baybrowser.in/linux/bay.repo
 sudo dnf install bay
 ```
 
 ## openSUSE
 
 ```bash
-sudo zypper addrepo https://bay.krishkalaria.in/linux/bay.repo
+sudo zypper addrepo https://baybrowser.in/linux/bay.repo
 sudo zypper install bay
 ```
 

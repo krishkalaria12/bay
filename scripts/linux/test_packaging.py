@@ -280,7 +280,7 @@ class ReleaseTests(unittest.TestCase):
         checksum = engine.sha256(output / "bay-1.3.0-linux-x64.tar.xz")
         lines = (output / "aur/.SRCINFO").read_text().splitlines()
         self.assertEqual(lines[:5], ["pkgbase = bay-bin", "\tpkgdesc = A fast browser with your tabs in a sidebar, on Chromium",
-                                     "\tpkgver = 1.3.0", "\tpkgrel = 1", "\turl = https://bay.krishkalaria.in"])
+                                     "\tpkgver = 1.3.0", "\tpkgrel = 1", "\turl = https://baybrowser.in"])
         for line in ("\tarch = x86_64", "\tdepends = gtk3", "\tdepends = xdg-utils",
                      "\toptdepends = kwallet: keep saved passwords in KWallet", "\toptions = !strip", "\toptions = !debug",
                      "\tsource = https://github.com/krishkalaria12/bay/releases/download/v1.3.0/bay-1.3.0-linux-x64.tar.xz",
@@ -445,7 +445,7 @@ class PublishTests(unittest.TestCase):
         self.assertIn('<location href="pool/v1.3.0/bay-1.3.0-1.x86_64.rpm"/>', listing)
         self.assertIn(engine.sha256(self.out / "release/bay-1.3.0-1.x86_64.rpm"), listing)
         config = (repo / "bay.repo").read_text()
-        self.assertIn("baseurl=https://bay.krishkalaria.in/linux/rpm\n", config)
+        self.assertIn("baseurl=https://baybrowser.in/linux/rpm\n", config)
         self.assertIn("repo_gpgcheck=1\n", config)
 
     def test_appimage_update_file_points_at_the_release_image(self):

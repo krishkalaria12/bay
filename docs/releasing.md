@@ -133,7 +133,7 @@ first is in: Flathub's checks GitHub's releases every few hours and merges its o
 (r-ryantm) runs the package's update script. The run's `bay-linux-packages` holds the files for the first pull
 requests: `flatpak/` and `nixpkgs/package.nix`.
 
-The site serves both repositories at `bay.krishkalaria.in/linux/` (`apps/web/public/_redirects`): indexes and keys
+The site serves both repositories at `baybrowser.in/linux/` (`apps/web/public/_redirects`): indexes and keys
 redirect to `linux-repo`, and each package to its release, so `apt`, `dnf` and `zypper` download from GitHub. The
 repositories list only the newest release. The redirects deploy with the site from `main`, so they have to be there
 before the first Linux release. Users set it up with `docs/linux-install.md`.
@@ -165,7 +165,7 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
 After the first release:
 
 4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.krishkalaria.bay.metainfo.xml`
-   (`<screenshots>`, with images at stable `https://bay.krishkalaria.in/...` URLs): Flathub's linter refuses an app
+   (`<screenshots>`, with images at stable `https://baybrowser.in/...` URLs): Flathub's linter refuses an app
    without them, and the site's are the Mac app's. Then fork `flathub/flathub`, branch from `new-pr`, add the files from `bay-linux-packages/flatpak/` and open a
    pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
    merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at

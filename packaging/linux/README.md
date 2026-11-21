@@ -24,7 +24,7 @@ can't find. `--verify DIR` rechecks a staged app.
 | `bay-<version>-linux-x64.tar.xz` | any distro, and the AUR package's source | unpacks to `bay-<version>/` with `opt/`, `usr/`, `etc/`; the sandbox isn't setuid |
 | `bay_<version>_amd64.deb` | Debian, Ubuntu | browser alternatives and the AppArmor profile in `postinst` |
 | `bay-<version>-1.x86_64.rpm` | Fedora, openSUSE | bundled libraries are neither provided nor required |
-| `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `bay.krishkalaria.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
+| `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `baybrowser.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
 | `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
 | `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.krishkalaria.bay` repository's files for this release: the manifest (`flatpak/in.krishkalaria.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
