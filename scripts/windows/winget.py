@@ -16,7 +16,7 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 INSTALLER_SCRIPT = REPO / 'packaging/windows/Bay.iss'
-IDENTIFIER = 'KrishKalaria.Bay'
+IDENTIFIER = 'BayBrowser.Bay'
 MANIFEST_VERSION = '1.28.0'
 GITHUB = 'krishkalaria12/bay'
 SHORT_DESCRIPTION = 'A fast browser with your tabs in a sidebar'

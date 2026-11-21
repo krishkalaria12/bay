@@ -49,24 +49,24 @@ class ManifestTests(unittest.TestCase):
         self.assertIn('\nUninstallDisplayName=Bay\n', script)
         self.assertIn('\nAppPublisher=Bay\n', script)
         with tempfile.TemporaryDirectory() as directory:
-            text = self.write(directory)['KrishKalaria.Bay.installer.yaml']
+            text = self.write(directory)['BayBrowser.Bay.installer.yaml']
         self.assertIn('- DisplayName: Bay\n  Publisher: Bay\n', text)
 
     def test_writes_the_three_manifests_for_the_release_download(self):
         with tempfile.TemporaryDirectory() as directory:
             files = self.write(directory)
-        self.assertEqual(sorted(files), ['KrishKalaria.Bay.installer.yaml', 'KrishKalaria.Bay.locale.en-US.yaml',
-                                         'KrishKalaria.Bay.yaml'])
+        self.assertEqual(sorted(files), ['BayBrowser.Bay.installer.yaml', 'BayBrowser.Bay.locale.en-US.yaml',
+                                         'BayBrowser.Bay.yaml'])
         digest = hashlib.sha256(b'fixture installer').hexdigest().upper()
-        text = files['KrishKalaria.Bay.installer.yaml']
+        text = files['BayBrowser.Bay.installer.yaml']
         self.assertIn('  InstallerUrl: https://github.com/krishkalaria12/bay/releases/download/v1.7.0/'
                       'Bay-1.7.0-windows-x64-setup.exe\n', text)
         self.assertIn(f'  InstallerSha256: {digest}\n', text)
         self.assertIn("\nProductCode: '{C345791D-67B8-4C97-AB2B-D6DDE1F93B72}_is1'\n", text)
         self.assertIn('\nInstallerType: inno\nScope: user\n', text)
         self.assertIn('\nReleaseDate: 2026-11-21\n', text)
-        for name, kind in (('KrishKalaria.Bay.yaml', 'version'), ('KrishKalaria.Bay.installer.yaml', 'installer'),
-                           ('KrishKalaria.Bay.locale.en-US.yaml', 'defaultLocale')):
+        for name, kind in (('BayBrowser.Bay.yaml', 'version'), ('BayBrowser.Bay.installer.yaml', 'installer'),
+                           ('BayBrowser.Bay.locale.en-US.yaml', 'defaultLocale')):
             self.assertTrue(files[name].startswith(
                 f'# yaml-language-server: $schema=https://aka.ms/winget-manifest.{kind}.{winget.MANIFEST_VERSION}.schema.json\n\n'))
             self.assertIn(f'\nManifestType: {kind}\nManifestVersion: {winget.MANIFEST_VERSION}\n', files[name])
@@ -75,11 +75,11 @@ class ManifestTests(unittest.TestCase):
     def test_manifests_read_back_as_written(self):
         with tempfile.TemporaryDirectory() as directory:
             files = self.write(directory)
-        locale = yaml.safe_load(files['KrishKalaria.Bay.locale.en-US.yaml'])
+        locale = yaml.safe_load(files['BayBrowser.Bay.locale.en-US.yaml'])
         self.assertEqual(locale['PackageVersion'], '1.7.0')
         self.assertEqual(locale['Description'], winget.DESCRIPTION)
         self.assertEqual(locale['Tags'], list(winget.TAGS))
-        installer_manifest = yaml.safe_load(files['KrishKalaria.Bay.installer.yaml'])
+        installer_manifest = yaml.safe_load(files['BayBrowser.Bay.installer.yaml'])
         self.assertEqual(installer_manifest['Installers'][0]['Architecture'], 'x64')
         self.assertEqual(installer_manifest['FileExtensions'], ['htm', 'html', 'pdf'])
 
@@ -104,9 +104,9 @@ class ManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'winget'
             output.mkdir()
-            (output / 'KrishKalaria.Bay.stale.yaml').write_text('old')
+            (output / 'BayBrowser.Bay.stale.yaml').write_text('old')
             winget.write(installer(directory), '1.7.0', output)
-            self.assertNotIn('KrishKalaria.Bay.stale.yaml', [path.name for path in output.iterdir()])
+            self.assertNotIn('BayBrowser.Bay.stale.yaml', [path.name for path in output.iterdir()])
 
 
 class PublishTests(unittest.TestCase):

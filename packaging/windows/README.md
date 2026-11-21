@@ -88,7 +88,7 @@ It reads release notes from `release-notes/<version>.md` when present. Publishin
 is a separate step: `scripts/windows/publish.py` adds the installer to the GitHub
 release and submits it to winget (`docs/releasing.md` › Windows). The winget
 manifests come from `scripts/windows/winget.py`; the package is
-`KrishKalaria.Bay`, matched to the installed copy by Inno's uninstall key (the
+`BayBrowser.Bay`, matched to the installed copy by Inno's uninstall key (the
 `AppId` with `_is1`) and `UninstallDisplayName`.
 
 The installer registers Bay in the current user's RegisteredApplications,

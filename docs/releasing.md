@@ -208,12 +208,12 @@ What a release publishes:
 | Where | What |
 |---|---|
 | Release `v<version>` | `Bay-<version>-windows-x64-setup.exe` and its `.sha256` |
-| `microsoft/winget-pkgs` | a pull request adding `KrishKalaria.Bay` `<version>`: the manifests from `scripts/windows/winget.py`, which point at the release's installer |
+| `microsoft/winget-pkgs` | a pull request adding `BayBrowser.Bay` `<version>`: the manifests from `scripts/windows/winget.py`, which point at the release's installer |
 
 winget-pkgs' bots install the package in a sandbox and a moderator merges it, which takes a few days for the first
 version; later versions of an existing package usually go faster. `publish.py` skips the pull
 request when winget-pkgs already has the version, so a rerun only re-uploads the installer. People install with
-`winget install KrishKalaria.Bay` (or `winget install bay`) and update with `winget upgrade KrishKalaria.Bay`.
+`winget install BayBrowser.Bay` (or `winget install bay`) and update with `winget upgrade BayBrowser.Bay`.
 
 To see the manifests a release would submit without uploading anything, put an X.Y.Z installer and its `.sha256` from
 `package.ps1` in a folder and run `python scripts/windows/publish.py --release <folder> --version <version> --dry-run`;
