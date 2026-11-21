@@ -1,0 +1,12 @@
+#!/bin/bash
+# /usr/bin/bay (a link to this script) and the AppImage start Bay here. Chrome reads CHROME_WRAPPER to name this script,
+# not the bare executable, when it relaunches itself or registers as the default browser; an AppImage names the image,
+# since its mount point goes away when Bay quits.
+set -e
+
+HERE=$(dirname "$(readlink -f "$0")")
+export CHROME_WRAPPER="${APPIMAGE:-$(readlink -f "$0")}"
+# The libraries shipped beside the executable (libEGL, libGLESv2, libvulkan, libvk_swiftshader) win over the system's.
+export LD_LIBRARY_PATH="$HERE${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+exec -a "$0" "$HERE/bay" "$@"

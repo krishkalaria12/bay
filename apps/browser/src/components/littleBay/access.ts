@@ -1,3 +1,4 @@
+import { isMac, menuKeyName, virtualKeyCode } from "@bay/platform";
 import type { HotKeyStatus } from "@bay/desktop";
 import { create } from "zustand";
 import type { LittleBayShortcut } from "../../store/settings";
@@ -8,6 +9,10 @@ import type { LittleBayShortcut } from "../../store/settings";
 
 /** Arc's ⌥⌘N, as the shortcut starts when it's turned on: "n" is key code 45 (kVK_ANSI_N). */
 export const DEFAULT_LITTLE_BAY_SHORTCUT: LittleBayShortcut = { key: "n", keyCode: 45, modifiers: ["option", "command"] };
+
+/** Resolves a saved shortcut using this host's key codes. */
+export const hotKeyCode = (shortcut: { key: string; keyCode: number }, mac: boolean = isMac): number | null =>
+  mac ? shortcut.keyCode : virtualKeyCode(menuKeyName(shortcut.key));
 
 /** Whether the shortcut is registered: "taken" when another app holds it. */
 export const useLittleBayAccess = create<{ status: HotKeyStatus }>()(() => ({ status: "off" }));

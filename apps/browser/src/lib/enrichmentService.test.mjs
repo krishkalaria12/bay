@@ -1,3 +1,4 @@
+import { AuthorityStore } from "../effect/ports/store.ts";
 // The enrichment service (lib/enrichmentService.ts): the batched lookups, the invalidation, and what it holds.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -108,7 +109,11 @@ const withService = async (use) => {
   const diagnostics = fakeDiagnostics();
 
   const runtime = ManagedRuntime.make(
-    EnrichmentService.layer.pipe(Layer.provide(engine.layer), Layer.provideMerge(Layer.mergeAll(diagnostics.layer, testClockLayer))),
+    EnrichmentService.layer.pipe(
+      Layer.provide(AuthorityStore.layer(useBrowser)),
+      Layer.provide(engine.layer),
+      Layer.provideMerge(Layer.mergeAll(diagnostics.layer, testClockLayer)),
+    ),
   );
 
   try {

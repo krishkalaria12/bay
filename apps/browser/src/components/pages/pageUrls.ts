@@ -1,24 +1,14 @@
 import { focus } from "../../lib/actions";
-import { useBrowser } from "../../store/browserStore";
+import { browserRead } from "../../store/read";
+import { activate, navigate, newTab } from "../../runtime/tabActions";
 import { activeTabId, resolveWindowId, viewTabIds } from "../../store/model";
-import { INTERNAL_SCHEME, internalPageOf, tabDestination, type InternalPageId } from "./internalPages";
 
-export * from "./internalPages";
+export { INTERNAL_PAGES, internalUrl, internalPageOf, internalQuery, tabDestination, isInternalTab, type InternalPageId } from "../../store/internalPages";
 
-export const internalUrl = (page: InternalPageId, query?: string) => `${INTERNAL_SCHEME}${page}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
+import { internalUrl, internalPageOf, tabDestination, type InternalPageId } from "../../store/internalPages";
 
-export function internalQuery(url: string): string {
-  const q = /[?&]q=([^&#]*)/.exec(url)?.[1];
-
-  try {
-    return q ? decodeURIComponent(q) : "";
-  } catch {
-    return q ?? "";
-  }
-}
-
-export function openInternalPage(page: InternalPageId, windowId?: string | null, options: { query?: string; background?: boolean } = {}) {
-  const s = useBrowser.getState();
+export async function openInternalPage(page: InternalPageId, windowId?: string | null, options: { query?: string; background?: boolean } = {}) {
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
 
   if (!id) return;
@@ -28,15 +18,15 @@ export function openInternalPage(page: InternalPageId, windowId?: string | null,
   const existing = viewTabIds(s, id).find((t) => internalPageOf(tabDestination(s.tabs[t]!)) === page);
 
   if (existing) {
-    if (options.query) s.navigate(existing, url);
+    if (options.query) await navigate(existing, url);
 
-    if (!options.background) s.activate(existing);
+    if (!options.background) await activate(existing);
 
     return;
   }
 
   const active = activeTabId(s, id);
 
-  if (active && !s.tabs[active]!.url && !options.background) return s.navigate(active, url);
-  s.newTab(id, { url, background: options.background });
+  if (active && !s.tabs[active]!.url && !options.background) return navigate(active, url);
+  await newTab(id, { url, background: options.background });
 }

@@ -7,17 +7,21 @@ each exception is explained in the patch list's header):
   - PARTIAL_EXCLUDE: applied without the listed files (git apply --exclude);
   - PARTIAL_FUZZY: applied with `patch`, dropping the hunk CEF already covers;
   - FIXUPS: small edits after the series (CEF build requirements);
+  - CONTEXT: a hunk whose context assumes a skipped patch, given the context the tree has;
   - everything else: `git apply` exactly, falling back to `patch -F2`.
 Run once on a fresh (CEF-patched) tree.
 
 Usage: 03-ungoogled.py [--dry-run]
 """
+import hashlib
 import pathlib
+import os
 import subprocess
 import sys
+import tempfile
 
-CB = pathlib.Path.home() / 'chromium-build'
-SRC = CB / 'chromium_git/chromium/src'
+CB = pathlib.Path(os.environ.get('CB', pathlib.Path.home() / 'chromium-build'))
+SRC = pathlib.Path(os.environ.get('CHROMIUM_SRC', CB / 'chromium_git/chromium/src'))
 UG = CB / 'ungoogled'
 UGMAC = CB / 'ungoogled-macos'
 REPORT = CB / 'logs/ungoogled-patches.tsv'
@@ -28,8 +32,6 @@ SB = ('assumes safe_browsing_mode=0 / removed Safe Browsing prefs; Safe Browsing
 SKIP = {
     'core/ungoogled-chromium/fix-building-with-prunned-binaries.patch': 'assumes pruned binaries (not pruned)',
     'core/ungoogled-chromium/build-with-wasm-rollup.patch': 'only needed when prebuilt rollup is pruned',
-    'extra/inox-patchset/0016-chromium-sandbox-pie.patch': 'Linux-only',
-    'extra/ungoogled-chromium/remove-disable-setuid-sandbox-as-bad-flag.patch': 'Linux-only',
     'core/inox-patchset/0001-fix-building-without-safebrowsing.patch': SB,
     'core/ungoogled-chromium/fix-building-without-safebrowsing.patch': SB,
     'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch': SB,
@@ -43,6 +45,14 @@ SKIP = {
     'extra/ungoogled-chromium/enable-extra-locales.patch':
         "breaks CEF's cef_strings.grd output list; not privacy-related",
 }
+# Linux's sandbox needs these (a PIE chrome-sandbox, and --disable-setuid-sandbox
+# left alone); they touch nothing macOS or Windows builds.
+LINUX_ONLY = (
+    'extra/inox-patchset/0016-chromium-sandbox-pie.patch',
+    'extra/ungoogled-chromium/remove-disable-setuid-sandbox-as-bad-flag.patch',
+)
+if not sys.platform.startswith('linux'):
+    SKIP.update({rel: 'Linux-only' for rel in LINUX_ONLY})
 PARTIAL_EXCLUDE = {
     # Its webstore_installer.cc hunks stub out Web Store installs; Bay
     # needs them. The default component extensions stay disabled.
@@ -52,6 +62,37 @@ PARTIAL_EXCLUDE = {
         ['chrome/browser/ui/views/toolbar/toolbar_view.cc'],  # conflicts with CEF's toolbar patch
     'extra/ungoogled-chromium/add-flag-for-incognito-themes.patch':
         ['chrome/browser/ui/views/frame/browser_widget.cc'],  # conflicts with CEF's frame patch
+}
+# The second security_page.html hunk removes the Advanced Protection link, and its trailing context assumes the
+# Safe Browsing disable dialog is gone too (a patch skipped above, SB). macOS's patch takes the hunk with fuzz;
+# GNU patch rejects it. Keyed by the upstream patch's SHA-256, so a new pin fails loudly rather than drifting.
+CONTEXT = {
+    'extra/ungoogled-chromium/remove-uneeded-ui.patch': (
+        '1d61ad24b0dcd88a7c758665aadc86dc945ffe57099c0ddcae0e0f7f2e66695b',
+        '@@ -172,10 +165,4 @@\n'
+        '         on-click="onManageCertificatesClick_" external>\n'
+        '     </cr-link-row>\n'
+        ' \n'
+        '-    <cr-link-row id="advancedProtectionProgramLink" class="hr"\n'
+        '-        label="$i18n{advancedProtectionProgramTitle}"\n'
+        '-        sub-label="$i18n{advancedProtectionProgramDesc}"\n'
+        '-        on-click="onAdvancedProtectionProgramLinkClick_"\n'
+        '-        external>\n'
+        '-    </cr-link-row>\n'
+        '   </settings-subpage>\n',
+        '@@ -172,12 +165,6 @@\n'
+        '         on-click="onManageCertificatesClick_" external>\n'
+        '     </cr-link-row>\n'
+        ' \n'
+        '-    <cr-link-row id="advancedProtectionProgramLink" class="hr"\n'
+        '-        label="$i18n{advancedProtectionProgramTitle}"\n'
+        '-        sub-label="$i18n{advancedProtectionProgramDesc}"\n'
+        '-        on-click="onAdvancedProtectionProgramLinkClick_"\n'
+        '-        external>\n'
+        '-    </cr-link-row>\n'
+        '     <template is="dom-if" if="[[showDisableSafebrowsingDialog_]]" restamp>\n'
+        '       <settings-simple-confirmation-dialog\n'
+        '           title-text="$i18n{safeBrowsingDisableDialog}"\n'),
 }
 PARTIAL_FUZZY = {
     'core/ungoogled-chromium/disable-gcm.patch': 'GCMClientImpl::Start hunk (CEF already stubs Start)',
@@ -90,16 +131,34 @@ def series():
         line = line.strip()
         if line and not line.startswith('#'):
             yield UG / 'patches', line
-    yield UGMAC / 'patches', 'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch'
+    if sys.platform == 'darwin':
+        yield UGMAC / 'patches', 'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch'
 
 
 def run(cmd):
     return subprocess.run(cmd, cwd=SRC, capture_output=True, text=True)
 
 
+def with_context(rel, path, scratch):
+    """The patch to apply for `rel`: upstream's, or a copy with CONTEXT's hunk."""
+    if rel not in CONTEXT:
+        return path
+    digest, old, new = CONTEXT[rel]
+    data = pathlib.Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        sys.exit(f'{rel} changed upstream; recheck its CONTEXT entry')
+    text = data.decode()
+    assert text.count(old) == 1, f'CONTEXT hunk missing in {rel}'
+    adjusted = pathlib.Path(scratch) / pathlib.Path(rel).name
+    adjusted.write_text(text.replace(old, new, 1))
+    return str(adjusted)
+
+
+scratch_directory = tempfile.TemporaryDirectory(prefix='bay-ungoogled-')
+scratch = scratch_directory.name
 rows = []
 for base, rel in series():
-    path = str(base / rel)
+    path = with_context(rel, str(base / rel), scratch)
     if rel in SKIP:
         rows.append((rel, 'skipped', SKIP[rel]))
         continue
@@ -111,9 +170,20 @@ for base, rel in series():
         rows.append((rel, 'partial' if ok else 'FAILED', 'without ' + ', '.join(PARTIAL_EXCLUDE[rel])))
         continue
     if rel in PARTIAL_FUZZY:
+        result = run(['patch', '-p1', '-F2', '--dry-run', '--forward', '-i', path])
+        # The CEF-stubbed Start hunk is the only accepted reject. Never hide
+        # additional conflicts as a successful partial application.
+        rejects = [line for line in result.stdout.splitlines() if 'FAILED at' in line]
+        expected = len(rejects) == 1 and 'Hunk #1 FAILED at' in rejects[0]
+        if result.returncode != 0 and not expected:
+            rows.append((rel, 'FAILED', result.stdout + result.stderr))
+            continue
         if not dry:
-            run(['patch', '-p1', '-F2', '--forward', '--no-backup-if-mismatch', '-r', '-', '-i', path])
-        rows.append((rel, 'partial', 'dropped: ' + PARTIAL_FUZZY[rel]))
+            applied = run(['patch', '-p1', '-F2', '--forward', '--no-backup-if-mismatch', '-r', '-', '-i', path])
+            if applied.returncode not in ((0, 1) if expected else (0,)):
+                rows.append((rel, 'FAILED', applied.stdout + applied.stderr))
+                continue
+        rows.append((rel, 'partial', 'dropped: ' + PARTIAL_FUZZY[rel] if expected else 'applied exactly'))
         continue
     if run(['git', 'apply', '--check', '-p1', path]).returncode == 0:
         if not dry:
@@ -137,10 +207,12 @@ if not dry:
             assert s.count(old) == 1, f'fixup anchor missing in {rel}'
             f.write_text(s.replace(old, new, 1))
 
+REPORT.parent.mkdir(parents=True, exist_ok=True)
 REPORT.write_text('patch\tstatus\tdetail\n' + ''.join('\t'.join(r) + '\n' for r in rows))
 for r in rows:
     if r[1] != 'applied':
         print('%-8s %s  %s' % (r[1], r[0], r[2]))
 counts = {s: sum(1 for r in rows if r[1] == s) for s in ('applied', 'partial', 'skipped', 'FAILED')}
 print(' '.join(f'{k}={v}' for k, v in counts.items()))
+scratch_directory.cleanup()
 sys.exit(1 if counts['FAILED'] else 0)

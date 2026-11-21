@@ -1,13 +1,16 @@
+import type { DeepReadonly } from "../runtime/projection";
 import type { SplitView, TabGroup } from "./types";
 
 // Which group and which splits hold each tab, built once per groups/splits map (the store replaces those maps
 // when they change, never edits them), so per-tab lookups in selectors don't scan every group and split.
-const groupIndexes = new WeakMap<Record<string, TabGroup>, Map<string, TabGroup>>();
-const splitIndexes = new WeakMap<Record<string, SplitView>, Map<string, SplitView[]>>();
+// Keyed by the map itself; a read-only projection's maps index the same way as the store's.
+const groupIndexes = new WeakMap<object, Map<string, unknown>>();
+const splitIndexes = new WeakMap<object, Map<string, unknown[]>>();
 
 // The first group (in the map's order) holding each tab, as Object.values(groups).find would give.
-export function groupIndex(groups: Record<string, TabGroup>): Map<string, TabGroup> {
-  let index = groupIndexes.get(groups);
+export function groupIndex<G extends DeepReadonly<TabGroup>>(groups: Readonly<Record<string, G>>): Map<string, G> {
+  // SAFETY: the checks above established this shape.
+  let index = groupIndexes.get(groups) as Map<string, G> | undefined;
 
   if (!index) {
     index = new Map();
@@ -20,8 +23,9 @@ export function groupIndex(groups: Record<string, TabGroup>): Map<string, TabGro
 }
 
 // Every split holding each tab, in the map's order.
-export function splitIndex(splits: Record<string, SplitView>): Map<string, SplitView[]> {
-  let index = splitIndexes.get(splits);
+export function splitIndex<V extends DeepReadonly<SplitView>>(splits: Readonly<Record<string, V>>): Map<string, V[]> {
+  // SAFETY: the checks above established this shape.
+  let index = splitIndexes.get(splits) as Map<string, V[]> | undefined;
 
   if (!index) {
     index = new Map();

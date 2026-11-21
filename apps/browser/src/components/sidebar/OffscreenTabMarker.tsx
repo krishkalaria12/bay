@@ -1,7 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
-import { Pressable, View } from "react-native";
 import { useTheme, useWindowTint } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";

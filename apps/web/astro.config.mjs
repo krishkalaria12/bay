@@ -5,7 +5,7 @@ import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 
 // Keep in step with site.url in src/site.ts.
-const site = "https://bay.krishkalaria.in";
+const site = "https://baybrowser.in";
 
 export default defineConfig({
   site,

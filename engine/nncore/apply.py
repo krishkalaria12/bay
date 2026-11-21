@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Install NNCore: copy the web host layer (//bay/core; //bay/filter is engine/shared's), or run apply.sh for the
+macOS Chrome host."""
+import argparse
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--list-paths", action="store_true")
+    args = parser.parse_args()
+    here = Path(__file__).resolve().parent
+    platform = os.environ.get("BAY_ENGINE_PLATFORM",
+                              {"win32": "win", "darwin": "mac"}.get(sys.platform, "linux"))
+    if platform not in ("mac", "win", "linux"):
+        parser.error(f"unknown engine platform: {platform}")
+    web_host = platform in ("win", "linux")
+    if args.list_paths:
+        if web_host:
+            print(json.dumps([["bay/core", True]]))
+        else:
+            import re
+            script = (here / "apply.sh").read_text()
+            hooks = sorted(set(re.findall(r'\$src/([^"\s]+)', script)))
+            print(json.dumps([["bay/core", True]] + [[p, False] for p in hooks if not p.startswith("bay") and not p.endswith("/")]))
+        return 0
+    if not web_host:
+        return subprocess.call(["bash", str(here / "apply.sh"), *(["--check"] if args.check else [])])
+    spec = importlib.util.spec_from_file_location("bay_chromium_apply", here.parent / "chromium/apply.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = Path(os.environ.get("CHROMIUM_SRC", str(Path.home() / "chromium-build/chromium_git/chromium/src")))
+    source, destination = here / "src/bay/core", root / "bay/core"
+    if args.check:
+        if module.differs(source, destination):
+            print("drift: bay/core")
+            return 1
+    else:
+        module.sync(source, destination)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

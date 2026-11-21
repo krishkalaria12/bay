@@ -13,6 +13,7 @@ import {
   spaceHeaderHiddenStore,
 } from "./derivedStores.ts";
 import { useBrowser } from "./browserStore.ts";
+import { browserRead } from "./read.ts";
 import { spaceFolded } from "./model.ts";
 
 test("space folding inputs skip transient updates and follow single-space header changes", () => {
@@ -191,7 +192,7 @@ test("the quiet view skips live updates and follows everything else", async () =
   try {
     for (let i = 0; i < 20; i++) useBrowser.getState().updateLive(id, { progress: i / 100 });
     assert.equal(calls, 0);
-    assert.strictEqual(quietStore.getState(), useBrowser.getState());
+    assert.strictEqual(quietStore.getState(), browserRead.getState());
     useBrowser.getState().updateTab(id, { title: "New" }, { progress: 0.5 });
     assert.equal(calls, 1, "a change with live in it still notifies");
     useBrowser.getState().setSelection(w, [id]);
@@ -201,4 +202,38 @@ test("the quiet view skips live updates and follows everything else", async () =
   } finally {
     stop();
   }
+});
+
+test("scoped and engine views follow the installed runtime source and restore the local source", async () => {
+  const { createBrowserStore } = await import("./browserStore.ts");
+  const { browserRead, createLocalBrowserReadSource } = await import("./read.ts");
+  const { quietStore } = await import("./derivedStores.ts");
+  const { useEngineView } = await import("./engineView.ts");
+  const remote = createBrowserStore();
+  const w = remote.getState().createWindow({ url: "https://remote.example" });
+  const id = remote.getState().windows[w].activeTabIds.default;
+  const restore = browserRead.install(createLocalBrowserReadSource(remote));
+  let durable = 0;
+  let live = 0;
+  const stops = [quietStore.subscribe(() => durable++), tabLiveStore(id).subscribe(() => live++)];
+
+  try {
+    assert.equal(tabStore(id).getState().url, "https://remote.example");
+    assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
+    remote.getState().updateLive(id, { progress: 0.5 });
+    assert.equal(live, 1);
+    assert.equal(durable, 0);
+    remote.getState().updateTab(id, { engine: "webkit" });
+    assert.equal(durable, 1);
+    assert.equal(useEngineView.getState().tabs[id].engine, "webkit");
+    useBrowser.getState().hydrate({});
+    assert.equal(durable, 1, "a renderer's unused local store must not notify runtime consumers");
+    assert.equal(tabStore(id).getState().url, "https://remote.example");
+  } finally {
+    stops.forEach((stop) => stop());
+    restore();
+  }
+
+  assert.equal(tabStore(id).getState(), undefined);
+  assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
 });

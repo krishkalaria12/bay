@@ -10,3 +10,13 @@
 # The newest nightly (scripts/release/publish.sh re-uploads it each night).
 /nightly https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
 /nightly/ https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
+
+# Linux package repositories (scripts/linux/publish.sh, docs/linux-install.md). The packages are on their release; the
+# indexes, keys and AppImage update file on the prerelease linux-repo, which each Linux release replaces.
+/linux/apt/pool/:tag/:file https://github.com/krishkalaria12/bay/releases/download/:tag/:file 302
+/linux/rpm/pool/:tag/:file https://github.com/krishkalaria12/bay/releases/download/:tag/:file 302
+# A flat repository's indexes are fetched as apt/./<file>.
+/linux/apt/./:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
+/linux/apt/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
+/linux/rpm/repodata/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
+/linux/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302

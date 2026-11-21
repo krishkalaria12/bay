@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import { Scheduler } from "../effect/ports/scheduler";
-import { useBrowser } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
 import { activeTabId, pinnedPage } from "../store/model";
 import { SOURCES, type LiveSource } from "./sources";
 import { applyFetch, finishCompleting, live, removeFolder, setStatus, useLive } from "./activityStore";
@@ -64,9 +64,14 @@ export class ActivityService extends Context.Service<
     ActivityService,
     Effect.gen(function* () {
       const scheduler = yield* Scheduler;
+      const browser = yield* AuthorityStore;
       const sources = yield* LiveSources;
       const scope = yield* Scope.Scope;
       const services = yield* Effect.context<never>();
+      let workScope = Scope.forkUnsafe(scope);
+      let backgroundScope: Scope.Closeable | undefined;
+      let generation = 0;
+      let started = false;
 
       // The refresh each folder is having now.
       const jobs = new Map<string, Fiber.Fiber<void>>();
@@ -87,7 +92,7 @@ export class ActivityService extends Context.Service<
           }),
         );
 
-      const runFolder = (folderId: string): Effect.Effect<void> =>
+      const runFolder = (folderId: string, owner: number): Effect.Effect<void> =>
         Effect.gen(function* () {
           const folder = live().folders[folderId];
 
@@ -117,7 +122,7 @@ export class ActivityService extends Context.Service<
           });
 
           // The folder was deleted while it ran: nothing is written.
-          if (!live().folders[folderId]) return;
+          if (owner !== generation || !live().folders[folderId]) return;
 
           const ids = new Set(next.map((it) => it.id));
           const missing = prev.filter((it) => !ids.has(it.id) && !animating.has(it.id) && !failed.some((f) => f.source === it.source));
@@ -137,6 +142,8 @@ export class ActivityService extends Context.Service<
 
             if (Exit.isSuccess(resolved)) Object.assign(gone, resolved.value);
           }
+
+          if (owner !== generation || !live().folders[folderId]) return;
 
           const firstFailure = failed[0];
 
@@ -161,9 +168,11 @@ export class ActivityService extends Context.Service<
             yield* Effect.forkIn(
               Effect.andThen(
                 Effect.sleep(Duration.millis(COMPLETION_MS)),
-                Effect.sync(() => finishCompleting(folderId, leaving)),
+                Effect.sync(() => {
+                  if (owner === generation && live().folders[folderId]) finishCompleting(folderId, leaving);
+                }),
               ),
-              scope,
+              workScope,
             );
           }
         });
@@ -175,14 +184,15 @@ export class ActivityService extends Context.Service<
 
             // A folder is refreshed once at a time: the second ask waits for the first.
             if (running) {
-              yield* restore(Fiber.join(running));
+              // A stop interrupts the folder's read; the caller's ask is answered either way.
+              yield* restore(Effect.exit(Fiber.join(running)));
 
               return;
             }
 
             let fiber: Fiber.Fiber<void>;
 
-            const work = runFolder(folderId).pipe(
+            const work = runFolder(folderId, generation).pipe(
               Effect.ensuring(
                 Effect.sync(() => {
                   if (jobs.get(folderId) === fiber) jobs.delete(folderId);
@@ -190,10 +200,10 @@ export class ActivityService extends Context.Service<
               ),
             );
 
-            fiber = yield* Effect.forkIn(restore(work), scope);
+            fiber = yield* Effect.forkIn(restore(work), workScope);
             jobs.set(folderId, fiber);
 
-            yield* restore(Fiber.join(fiber));
+            yield* restore(Effect.exit(Fiber.join(fiber)));
           }),
         );
 
@@ -213,17 +223,60 @@ export class ActivityService extends Context.Service<
       };
 
       const start = Effect.gen(function* () {
+        if (started) return;
+        started = true;
+        const owner = generation;
+        const background = Scope.forkUnsafe(workScope);
+        backgroundScope = background;
+
+        const hold = (acquire: () => () => void) =>
+          Effect.gen(function* () {
+            const release = acquire();
+            yield* Scope.addFinalizer(background, Effect.sync(release));
+          });
+
+        const holdNative = (acquire: () => { remove(): void }) =>
+          hold(() => {
+            const subscription = acquire();
+
+            return () => subscription.remove();
+          });
+
         // The first refresh waits for the app to settle.
         yield* Effect.forkIn(
           Effect.andThen(
             Effect.sleep(Duration.millis(FIRST_REFRESH_MS)),
             Effect.sync(() => live().folderOrder.forEach((id) => ask(id))),
           ),
-          scope,
+          background,
         );
+
+        // A stopped service cancels completion timers; resume those animations here.
+        for (const [folderId, ids] of Object.entries(live().completing)) {
+          if (!ids.length) continue;
+
+          yield* Effect.forkIn(
+            Effect.andThen(
+              Effect.sleep(Duration.millis(COMPLETION_MS)),
+              Effect.sync(() => {
+                if (live().folders[folderId]) finishCompleting(folderId, ids);
+              }),
+            ),
+            background,
+          );
+        }
+
+        // A tab whose folder went while the app was away leaves its folder.
+        yield* Effect.sync(() => {
+          const folders = live().folders;
+
+          for (const t of Object.values(browser.getState().tabs))
+            if (t.liveItem && !folders[t.liveItem.folderId]) browser.getState().updateTab(t.id, { liveItem: undefined });
+        });
 
         // The sweep asks for the folders that are stale, on the app's shared grid.
         yield* scheduler.every({
+          scope: background,
           every: SWEEP_MS,
           needed: () => live().folderOrder.length > 0,
           watch: (changed) => useLive.subscribe((s, prev) => s.folderOrder !== prev.folderOrder && changed()),
@@ -232,80 +285,95 @@ export class ActivityService extends Context.Service<
           }),
         });
 
-        const events = onWindowEvent((e) => {
-          if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void ask(id);
-        });
+        yield* holdNative(() =>
+          onWindowEvent((e) => {
+            if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void ask(id);
+          }),
+        );
 
-        const stopOrphans = useLive.subscribe((s, prev) => {
-          if (s.folders !== prev.folders) {
-            const folders = live().folders;
+        yield* hold(() =>
+          useLive.subscribe((s, prev) => {
+            if (s.folders !== prev.folders) {
+              const folders = live().folders;
 
-            for (const t of Object.values(useBrowser.getState().tabs))
-              if (t.liveItem && !folders[t.liveItem.folderId]) useBrowser.getState().updateTab(t.id, { liveItem: undefined });
-          }
-        });
+              for (const t of Object.values(browser.getState().tabs))
+                if (t.liveItem && !folders[t.liveItem.folderId]) browser.getState().updateTab(t.id, { liveItem: undefined });
+            }
+          }),
+        );
 
-        const stopSpaces = useBrowser.subscribe((s, prev) => {
-          if (s.spaces === prev.spaces) return;
+        yield* hold(() =>
+          browser.subscribe((s, prev) => {
+            if (s.spaces === prev.spaces) return;
 
-          for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
-        });
+            for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
+          }),
+        );
 
-        const stopPins = useBrowser.subscribe((s, prev) => {
-          if (s.tabs === prev.tabs) return;
+        yield* hold(() =>
+          browser.subscribe((s, prev) => {
+            if (s.tabs === prev.tabs) return;
 
-          for (const id in s.tabs) {
-            const t = s.tabs[id]!;
+            for (const id in s.tabs) {
+              const t = s.tabs[id]!;
 
-            // Pinned (a tile or a row), it leaves its live folder.
-            if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) useBrowser.getState().updateTab(id, { liveItem: undefined });
-          }
-        });
+              // Pinned (a tile or a row), it leaves its live folder.
+              if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) browser.getState().updateTab(id, { liveItem: undefined });
+            }
+          }),
+        );
 
         const lastNudge = new Map<string, number>();
 
-        const stopWindows = useBrowser.subscribe((s, prev) => {
-          if (s.windows === prev.windows) return;
+        yield* hold(() =>
+          browser.subscribe((s, prev) => {
+            if (s.windows === prev.windows) return;
 
-          for (const windowId of s.windowOrder) {
-            const before = activeTabId(prev, windowId);
+            for (const windowId of s.windowOrder) {
+              const before = activeTabId(prev, windowId);
 
-            if (!before || before === activeTabId(s, windowId)) continue;
+              if (!before || before === activeTabId(s, windowId)) continue;
 
-            const folderId = s.tabs[before]?.liveItem?.folderId;
+              const folderId = s.tabs[before]?.liveItem?.folderId;
 
-            if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
+              if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
 
-            lastNudge.set(folderId, Date.now());
-            void Effect.runForkWith(services)(
-              Effect.forkIn(
-                Effect.andThen(
-                  Effect.sleep(Duration.millis(3_000)),
-                  Effect.sync(() => ask(folderId)),
+              lastNudge.set(folderId, Date.now());
+              void Effect.runForkWith(services)(
+                Effect.forkIn(
+                  Effect.andThen(
+                    Effect.sleep(Duration.millis(3_000)),
+                    Effect.sync(() => {
+                      if (owner === generation) ask(folderId);
+                    }),
+                  ),
+                  background,
                 ),
-                scope,
-              ),
-            );
-          }
-        });
-
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.sync(() => {
-            events.remove();
-            stopOrphans();
-            stopSpaces();
-            stopPins();
-            stopWindows();
-            fetchedSources.clear();
-            jobs.clear();
+              );
+            }
           }),
         );
-      });
+      }).pipe(
+        Effect.onExit((exit) => {
+          if (Exit.isSuccess(exit)) return Effect.void;
+          started = false;
+          const background = backgroundScope;
+          backgroundScope = undefined;
 
-      const stop = Effect.sync(() => {
+          return background ? Scope.close(background, exit) : Effect.void;
+        }),
+      );
+
+      const stop = Effect.suspend(() => {
+        generation++;
+        started = false;
+        backgroundScope = undefined;
+        const previous = workScope;
+        workScope = Scope.forkUnsafe(scope);
         fetchedSources.clear();
         jobs.clear();
+
+        return Scope.close(previous, Exit.succeed(undefined));
       });
 
       return ActivityService.of({ refresh, start, stop });

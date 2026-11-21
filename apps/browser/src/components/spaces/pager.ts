@@ -1,16 +1,18 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as windowCommands from "../../runtime/windowActions";
 import * as cef from "@bay/chromium";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/chromium";
 import { useEffect } from "react";
-import { unstable_batchedUpdates } from "react-native";
-import { Easing, Extrapolation, interpolate, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
+import { batchedUpdates, capabilities } from "@bay/platform";
+import { Easing, Extrapolation, interpolate, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { WHEEL_BURST_MS, WHEEL_COOLDOWN_MS, WHEEL_THRESHOLD } from "../window/constants";
 
 export type PagerPage = { id: string; slot: number; resting?: boolean };
 
-function restPages(current: string | null, order: string[]): PagerPage[] {
+function restPages(current: string | null, order: readonly string[]): PagerPage[] {
   if (!current) return [];
   const i = order.indexOf(current);
   const before = i > 0 ? order[i - 1] : undefined;
@@ -26,7 +28,7 @@ class SpacePager {
   // pages: the current profile's neighbours to keep warm; ack: the newest native sequence JS has handled.
   readonly state = create<{ pages: PagerPage[] | null; ack: number }>(() => ({ pages: null, ack: 0 }));
   private surfaces = 0;
-  private switching = false;
+  private switching = 0;
   private unsubscribe: () => void;
   private lastEvent: object | null = null;
   private wheelState = { sum: 0, last: 0, trigger: 0 };
@@ -52,12 +54,11 @@ class SpacePager {
       if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
 
-        // No surface (the sidebar closed, its peek showing) means no native controller to move the pages: they slide
-        // here, as its would.
-        if (!this.surfaces && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
+        // Without an active native pager, React's selection moves the pages.
+        if (!this.active && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
       }
 
-      if (!this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
+      if (capabilities.swipe && !this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });
   }
 
@@ -77,7 +78,7 @@ class SpacePager {
 
   // A profile chosen outside the pager: native jumps to it, and no older native event may move the
   // store until that has landed.
-  private selectExternal(spaceId: string, order: string[]) {
+  private selectExternal(spaceId: string, order: readonly string[]) {
     const generation = ++this.externalGeneration;
     this.external = generation;
 
@@ -101,15 +102,10 @@ class SpacePager {
     // The native order may differ from the store's by now; the index is only a fallback without one.
     // The pager names the space it shows `profileId` (packages/nncore swipe.tsx).
     const id = snapshot.profileId !== undefined ? snapshot.profileId : s.spaceOrder[snapshot.selected];
-    unstable_batchedUpdates(() => {
+    batchedUpdates(() => {
       if (w && !w.incognito && id && s.spaces[id] && id !== w.spaceId) {
-        this.switching = true;
-
-        try {
-          s.switchSpace(this.windowId, id);
-        } finally {
-          this.switching = false;
-        }
+        this.switching++;
+        reportBrowserCommand(windowCommands.switchSpace(this.windowId, id).finally(() => this.switching--));
       }
 
       this.state.setState({ ack: snapshot.sequence });
@@ -132,7 +128,7 @@ class SpacePager {
   }
 
   get active() {
-    return this.surfaces > 0 && !!this.current();
+    return capabilities.swipe && this.surfaces > 0 && !!this.current();
   }
 
   wheel(e: SwipeEvent) {
@@ -159,7 +155,7 @@ class SpacePager {
       if (ok) return;
       const next = useBrowser.getState().spaceOrder[this.index() + delta];
 
-      if (this.index() >= 0 && next) useBrowser.getState().switchSpace(this.windowId, next);
+      if (this.index() >= 0 && next) reportBrowserCommand(windowCommands.switchSpace(this.windowId, next));
     });
   }
 
@@ -169,9 +165,9 @@ class SpacePager {
 
     if (!s.spaces[spaceId] || !this.current() || index < 0) return;
 
-    if (!this.active) return s.switchSpace(this.windowId, spaceId);
+    if (!this.active) return reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
     void cef.switchPager(this.windowId, index, s.spaceOrder.join("\n")).then((ok) => {
-      if (!ok) useBrowser.getState().switchSpace(this.windowId, spaceId);
+      if (!ok) reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
     });
   }
 
@@ -250,7 +246,7 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
     }),
   );
 
-  return selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
+  return capabilities.swipe && selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
 }
 
 // A page's place in the pager: off to the side at rest, outside the surface's clip.

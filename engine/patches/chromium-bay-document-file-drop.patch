@@ -1,0 +1,45 @@
+--- a/chrome/browser/ui/webui_browser/webui_browser_web_contents_delegate.h
++++ b/chrome/browser/ui/webui_browser/webui_browser_web_contents_delegate.h
+@@ -46,6 +46,9 @@
+       base::OnceCallback<void(content::NavigationHandle&)>
+           navigation_handle_callback) override;
+   void SetFocusToLocationBar() override;
++  bool CanDragEnter(content::WebContents* source,
++                    const content::DropData& data,
++                    blink::DragOperationsMask operations_allowed) override;
+   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+       content::WebContents* source,
+       const input::NativeWebKeyboardEvent& event) override;
+--- a/chrome/browser/ui/webui_browser/webui_browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_web_contents_delegate.cc
+@@ -13,7 +13,14 @@
+ #include "content/public/browser/web_contents_observer.h"
+ #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
++#include "content/public/common/drop_data.h"
+ 
++// Bay's desktop host: what the window's own document is dragged over with, so
++// files dropped on it from the desktop can be pinned by their real paths, which
++// the page itself never sees.
++void (*g_bay_document_drag_enter)(content::WebContents* source,
++                                  const content::DropData& data) = nullptr;
++
+ WebUIBrowserWebContentsDelegate::WebUIBrowserWebContentsDelegate(
+     WebUIBrowserWindow* window)
+     : window_(window) {}
+@@ -35,6 +42,15 @@
+   observers_.RemoveObserver(observer);
+ }
+ 
++bool WebUIBrowserWebContentsDelegate::CanDragEnter(
++    content::WebContents* source,
++    const content::DropData& data,
++    blink::DragOperationsMask operations_allowed) {
++  if (g_bay_document_drag_enter)
++    g_bay_document_drag_enter(source, data);
++  return true;
++}
++
+ void WebUIBrowserWebContentsDelegate::DraggableRegionsChanged(
+     const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+     content::WebContents* contents) {

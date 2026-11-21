@@ -1,0 +1,51 @@
+--- a/cef/BUILD.gn
++++ b/cef/BUILD.gn
+@@ -251,26 +251,28 @@
+ # Set by GetRequiredArgs() in //cef/tools/gn_args.py.
+ #
+ 
+-# Enable support for Print Preview.
+-assert(enable_print_preview)
+-
+-# Enable support for Widevine CDM.
+-assert(enable_widevine)
+-
+-if (is_mac || is_win) {
+-  # Enable Widevine CDM host verification and storage ID.
+-  assert(enable_cdm_host_verification)
+-  assert(enable_cdm_storage_id)
+-  assert(alternate_cdm_storage_id_key != "")
+-  assert(enable_rlz)
+-}
+-
+-# Enable Views UI framework.
+-assert(toolkit_views)
+-
+-if (is_clang) {
+-  # Don't use the chrome style plugin.
+-  assert(!clang_use_chrome_plugins)
++if (enable_cef) {
++  # Enable support for Print Preview.
++  assert(enable_print_preview)
++
++  # Enable support for Widevine CDM.
++  assert(enable_widevine)
++
++  if (is_mac || is_win) {
++    # Enable Widevine CDM host verification and storage ID.
++    assert(enable_cdm_host_verification)
++    assert(enable_cdm_storage_id)
++    assert(alternate_cdm_storage_id_key != "")
++    assert(enable_rlz)
++  }
++
++  # Enable Views UI framework.
++  assert(toolkit_views)
++
++  if (is_clang) {
++    # Don't use the chrome style plugin.
++    assert(!clang_use_chrome_plugins)
++  }
+ }
+ 
+ 

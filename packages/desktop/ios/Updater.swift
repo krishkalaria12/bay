@@ -42,7 +42,7 @@ public final class AppUpdater: NSObject {
   static var feedOverride: String? {
     let env = ProcessInfo.processInfo.environment
     if let feed = env["BAY_UPDATE_FEED_URL"] ?? UserDefaults.standard.string(forKey: "NNUpdateFeedURL") { return feed }
-    // SUFeedURL (bay.krishkalaria.in) counts checks as copies in use; background instances go straight to the same file.
+    // SUFeedURL (baybrowser.in) counts checks as copies in use; background instances go straight to the same file.
     return env["BAY_BACKGROUND"] == "1" ? "https://github.com/krishkalaria12/bay/releases/latest/download/appcast.xml" : nil
   }
 

@@ -3,7 +3,10 @@
 #include <string>
 #include <string_view>
 
+#include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
 #include "cef/libcef/browser/chrome/hidden_from_extensions.h"  // nogncheck
+#endif
 #include "chrome/browser/bay/nn_cli_token_policy_internal.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
@@ -44,7 +47,13 @@ bool IsPrivilegedContents(content::WebContents* contents) {
   if (!browser) {
     return true;
   }
+#if BUILDFLAG(IS_MAC)
   return cef::IsHiddenFromExtensions(browser);
+#else
+  // Bay's document and coordinator are privileged WebUI contents. The token
+  // connection must never attach to either, even in a normal Bay window.
+  return contents->GetWebUI() != nullptr;
+#endif
 }
 
 bool IsWebProcess(content::RenderProcessHost* process) {

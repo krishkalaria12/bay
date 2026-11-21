@@ -19,7 +19,7 @@
   "env": {
     "easels": {
       "name": "bay-web",
-      "routes": [{ "pattern": "bay.krishkalaria.in", "custom_domain": true }],
+      "routes": [{ "pattern": "baybrowser.in", "custom_domain": true }],
       "vars": { "BAY_EASEL_WEB_SHARING": "true" },
       "r2_buckets": [{ "binding": "EASELS", "bucket_name": "bay-easels" }],
       "ratelimits": [
@@ -32,5 +32,7 @@
     },
   },
   // The zone must be on Cloudflare, and the hostname must have no DNS record yet; deploy creates it.
-  "routes": [{ "pattern": "bay.krishkalaria.in", "custom_domain": true }],
+  "routes": [{ "pattern": "baybrowser.in", "custom_domain": true }],
+  // Branch builds run `wrangler preview`, which needs this block; previews use the settings above.
+  "previews": {},
 }

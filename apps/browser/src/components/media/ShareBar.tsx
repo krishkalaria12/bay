@@ -1,11 +1,12 @@
+import { View } from "@bay/platform";
 import { changeCaptureSource, stopCapture } from "@bay/chromium";
 import { Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useLatched } from "../../lib/useLatched";
-import { useBrowser } from "../../store/browserStore";
 import { engineProfile } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { PromptButton } from "../toolbar/buttons";

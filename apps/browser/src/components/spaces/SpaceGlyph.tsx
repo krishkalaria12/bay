@@ -1,7 +1,7 @@
 import { Symbol } from "@bay/desktop";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { iconColor } from "../iconPicker/symbolColors";
 import { profileSymbol } from "./icons";
 
