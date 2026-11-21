@@ -1,6 +1,5 @@
 package bay.app.browser
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween

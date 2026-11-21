@@ -6,7 +6,6 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
