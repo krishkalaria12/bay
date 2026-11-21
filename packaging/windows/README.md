@@ -97,6 +97,40 @@ It leaves Windows' protected UserChoice alone. Use Windows Settings to select
 Bay as the default browser. Uninstall removes app-owned registration and files;
 profiles outside the install directory remain available for reinstall.
 
+## Microsoft Store package
+
+`package.ps1 -Msix` stages the app as for the installer, then `scripts/windows/msix.py`
+writes `AppxManifest.xml`, copies the logos from `msix/Assets` and leaves out
+`update.ps1`: the Store signs and updates the package. `makepri` indexes the
+logos' scales and target sizes into `resources.pri` and `makeappx` packs
+`Bay-<version>-windows-x64.msix`. The manifest runs `Bay.exe` as a full-trust
+desktop app, registers http/https and .htm/.html/.pdf with
+`--single-argument "%1"` as the installer's ProgIDs do, and declares
+`notification_helper.exe` as the toast activator's COM server.
+`scripts/windows/sideload-msix.ps1` signs a copy with a throwaway certificate
+for installing outside the Store. Redraw the logos with
+`msix/make-assets.py` after the icon changes. Store setup and submission:
+`docs/releasing.md` › Microsoft Store.
+
+The packaged app keeps its profile in the package's own AppData, so it doesn't
+share one with an installed copy, and uninstalling removes it.
+
+Known gaps, unverified until a sideloaded package runs on Windows:
+
+- Window identity. Chromium gives every window the AppUserModelID
+  `Bay.Browser` (`chromium-bay-branding-win.patch`); a packaged app's is
+  `<package family>!Bay`. Windows may group Bay's windows apart from its
+  pinned taskbar icon. The fix is an engine change: use the package's ID when
+  `GetCurrentPackageFamilyName` succeeds.
+- Native notifications. Chromium only uses Windows toasts when the Start menu
+  shortcut with the activator exists, which the installer makes and an MSIX
+  doesn't; the packaged app may fall back to Chromium's own popups.
+- Installed web apps. Their shortcuts point at `chrome_proxy.exe` inside the
+  package's folder, which Windows may refuse to start from outside it.
+- `elevation_service.exe` and `elevated_tracing_service.exe` ship but can't be
+  registered as services from a package; a per-user installer doesn't register
+  them either.
+
 ## Updater protocol
 
 Updater policy is embedded in Bay.exe as RCDATA resource 201 before final

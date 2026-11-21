@@ -297,6 +297,27 @@ jobs:
             dist/windows/*-setup.exe.sha256
           if-no-files-found: error
           compression-level: 0
+      - name: Package for the Microsoft Store
+        # New, and the Store isn't set up yet, so a failure doesn't stop the installer. The identity is Partner Center's
+        # (docs/releasing.md › Microsoft Store); without it the package is for sideloading only.
+        id: msix
+        continue-on-error: true
+        env:
+          BAY_MSIX_NAME: ${{ vars.BAY_MSIX_NAME }}
+          BAY_MSIX_PUBLISHER: ${{ vars.BAY_MSIX_PUBLISHER }}
+          BAY_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.BAY_MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          & scripts/windows/package.ps1 -Version $env:VERSION -Msix -OutputDirectory dist/windows-msix
+          $package = Get-Item "dist/windows-msix/Bay-$env:VERSION-windows-x64.msix"
+          & scripts/windows/sideload-msix.ps1 -Package $package.FullName
+      - uses: actions/upload-artifact@v4
+        # The Store's package, and a signed copy with its certificate to install by hand.
+        if: steps.msix.outcome == 'success'
+        with:
+          name: bay-windows-msix
+          path: dist/windows-msix/
+          if-no-files-found: error
+          compression-level: 0
   publish:
     needs: [plan, installer]
     if: needs.plan.outputs.publish == 'true'

@@ -232,6 +232,42 @@ they're written to `<folder>/winget`.
 2. **Agreement.** The first pull request asks its author to accept Microsoft's contributor license agreement in a
    comment; reply as the bot says. Later pull requests don't ask again.
 
+### Microsoft Store
+
+Every run of `windows-build.yml` also packs an MSIX (`package.ps1 -Msix`, `scripts/windows/msix.py`) into the
+artifact `bay-windows-msix`: `Bay-<version>-windows-x64.msix` for the Store, and `-sideload.msix` with
+`Bay-sideload.cer`, the same package signed by a throwaway certificate so it installs without the Store. The step is
+allowed to fail without stopping the installer. The Store signs what it publishes and updates it, so the package leaves
+out the in-app updater; its files stay unsigned. Submit a release run's package (version `X.Y.Z.0`): each submission's
+version has to be higher than the last, and the Store refuses a last part other than 0.
+
+To try a package before the Store has it: download `bay-windows-msix`, trust the certificate once from an
+administrator PowerShell, then open the `-sideload.msix`:
+
+```powershell
+Import-Certificate -FilePath Bay-sideload.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+```
+
+#### One-time setup
+
+1. **Partner Center.** Enrol at storedeveloper.microsoft.com as an individual (free, with an ID check), then Apps and
+   games › New product › MSIX or PWA app, and reserve the name (Bay, or Bay Browser if it's taken).
+2. **Identity.** Product management › Product identity lists `Package/Identity/Name`, `Package/Identity/Publisher` and
+   `Package/Properties/PublisherDisplayName`. Store them, so the next build's package is the Store's:
+
+   ```bash
+   gh variable set BAY_MSIX_NAME --body '<Package/Identity/Name>'
+   gh variable set BAY_MSIX_PUBLISHER --body '<Package/Identity/Publisher>'
+   gh variable set BAY_MSIX_PUBLISHER_DISPLAY_NAME --body '<Package/Properties/PublisherDisplayName>'
+   ```
+
+   Until then the package is `BayBrowser.Bay` by `CN=BayBrowser`, for sideloading only.
+3. **First submission.** Pricing: free. Properties: category Productivity; it needs a privacy policy URL, since Bay uses
+   the internet. Age ratings: the questionnaire (unrestricted web access). Packages: the `.msix`. Store listing: the
+   description and at least one screenshot of Bay on Windows. Submission options: explain `runFullTrust`, e.g. "Bay is
+   a Chromium-based desktop web browser; its multi-process, sandboxed engine runs as a full-trust desktop app."
+   Certification takes a few days. Later versions are a new submission with the new package.
+
 ## Reading a Linux or Windows crash report
 
 Crash reports from the desktop host name each frame by module and offset: a minidump has no symbols. Linux builds keep
