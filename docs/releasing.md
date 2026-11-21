@@ -126,6 +126,12 @@ What a release publishes:
 | Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
 | Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
 | AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
+| Snap Store `bay` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
+
+Flathub and nixpkgs build from the release's tarball, and their bots open a pull request for each new release once the
+first is in: Flathub's checks GitHub's releases every few hours and merges its own (`flathub.json`), and nixpkgs'
+(r-ryantm) runs the package's update script. The run's `bay-linux-packages` holds the files for the first pull
+requests: `flatpak/` and `nixpkgs/package.nix`.
 
 The site serves both repositories at `bay.krishkalaria.in/linux/` (`apps/web/public/_redirects`): indexes and keys
 redirect to `linux-repo`, and each package to its release, so `apt`, `dnf` and `zypper` download from GitHub. The
@@ -156,8 +162,29 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
 
 3. **Site.** Get the `/linux/` lines of `apps/web/public/_redirects` onto `main` and deployed.
 
-Not published yet: Flathub, the Snap Store and nixpkgs need packaging of their own. The `.deb` doesn't add the APT
-repository on its own, so a `.deb` installed by hand doesn't update.
+After the first release:
+
+4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.krishkalaria.bay.metainfo.xml`
+   (`<screenshots>`, with images at stable `https://bay.krishkalaria.in/...` URLs): Flathub's linter refuses an app
+   without them, and the site's are the Mac app's. Then fork `flathub/flathub`, branch from `new-pr`, add the files from `bay-linux-packages/flatpak/` and open a
+   pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
+   merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at
+   flathub.org and verify the domain `krishkalaria.in`, which the app ID names.
+5. **Snap Store.** Register the name and ask for the sandbox, which Chromium-based snaps need and the store grants by
+   hand (a post in forum.snapcraft.io's "store-requests" asking for `browser-support` with `allow-sandbox` for `bay`):
+
+   ```bash
+   snapcraft register bay
+   snapcraft export-login --snaps=bay --channels=stable --acls package_access,package_push,package_release - \
+     | gh secret set SNAPCRAFT_STORE_CREDENTIALS
+   ```
+
+   The next release uploads it; the first one can be uploaded by hand with `snapcraft upload --release=stable`.
+6. **nixpkgs.** Add yourself to `maintainers/maintainer-list.nix` and `bay-linux-packages/nixpkgs/package.nix` as
+   `pkgs/by-name/ba/bay/package.nix` (filling in `maintainers`), check it with `nix-build -A bay`, and open the pull
+   request.
+
+The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.
 
 ## Reading a Linux or Windows crash report
 

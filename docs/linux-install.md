@@ -27,6 +27,20 @@ sudo zypper addrepo https://bay.krishkalaria.in/linux/bay.repo
 sudo zypper install bay
 ```
 
+## Flatpak (any distribution)
+
+Bay is `in.krishkalaria.bay` on Flathub, so GNOME Software and KDE Discover list it too:
+
+```bash
+flatpak install flathub in.krishkalaria.bay
+```
+
+## Snap (any distribution with snapd)
+
+```bash
+sudo snap install bay
+```
+
 ## Arch, Manjaro, EndeavourOS
 
 Bay is `bay-bin` in the AUR:
@@ -37,8 +51,9 @@ yay -S bay-bin
 
 ## NixOS
 
-Each release has `bay-<version>-nixos-x64.nar.zst` with a README showing how to import and install it. To install
-Bay declaratively, use `packaging/linux/nix` (`docs/linux-building.md` › NixOS).
+Bay is `bay` in nixpkgs: add `pkgs.bay` to `environment.systemPackages`, or try it with `nix run nixpkgs#bay`. Each
+release also has `bay-<version>-nixos-x64.nar.zst`, with a README showing how to import it, for a version nixpkgs
+doesn't have yet.
 
 ## Any other distribution: AppImage or tarball
 
