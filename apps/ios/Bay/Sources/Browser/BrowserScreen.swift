@@ -139,7 +139,8 @@ struct BrowserScreen: View {
         SearchCard(
           browser: browser, initialText: browser.searchInNewTab ? "" : (browser.activeTab?.url ?? ""),
           // A new tab starts as a normal one unless asked for private; editing a private tab's address stays private.
-          privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)))
+          privately: browser.searchPrivately || (!browser.searchInNewTab && (browser.activeTab?.private ?? false)),
+          page: browser.searchOverPage)
         .environment(\.colorScheme, searchOverDarkPage ? .dark : scheme)
       }
       Group {
@@ -247,6 +248,23 @@ struct BrowserScreen: View {
       TabPicture(tab: tab, color: browser.pageColors[tab.id])
         .offset(x: browser.swipeOffset + (browser.swipeOffset < 0 ? width : -width))
     }
+    if browser.swipeIncomingNew {
+      newTabPicture.offset(x: browser.swipeOffset + UIScreen.main.bounds.width + Self.swipeGap)
+    }
+  }
+
+  /// The new tab coming in past the last tab: the start page's wallpaper, and what it's for.
+  private var newTabPicture: some View {
+    ZStack {
+      WallpaperView(id: app.preferences.wallpaper)
+      VStack(spacing: Space.md) {
+        BayIconView(.add, size: 40, color: BayColor.foreground.opacity(0.7))
+        BayText(strings.t("tabs.newTab"), variant: .headline, tone: .overWallpaper)
+      }
+    }
+    .ignoresSafeArea()
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
   }
 
   /// The gap between the page and the tab coming in beside it.
@@ -254,7 +272,7 @@ struct BrowserScreen: View {
 
   /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
   private var searchOverDarkPage: Bool {
-    guard !browser.searchInNewTab, let rgb = browser.pageColors[app.activeTabId], rgb.count >= 3 else { return false }
+    guard browser.searchKeepsPage, let rgb = browser.pageColors[app.activeTabId], rgb.count >= 3 else { return false }
     return isDarkColor(red: rgb[0], green: rgb[1], blue: rgb[2])
   }
 

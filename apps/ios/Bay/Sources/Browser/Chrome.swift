@@ -320,7 +320,7 @@ struct BrowserBar: View {
       site.isEmpty
       ? strings.t("bar.search") : strings.t(insecure ? "bar.searchOrEnterInsecure" : "bar.searchOrEnter", ["site": site])
     return Button {
-      browser.search(inNewTab: false)
+      browser.searchFromBar()
     } label: {
       // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
       // says so with a mark beside it.

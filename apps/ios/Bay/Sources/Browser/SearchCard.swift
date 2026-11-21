@@ -110,11 +110,15 @@ struct SearchCard: View {
   @State private var grown = false
   @State private var listening = false
   @FocusState private var focused: Bool
-  private let initialText: String
+  /// The address being edited, which the field starts with; empty for a new search.
+  @State private var address: String
+  /// Opened from a page's bar for a new tab, that page: its row comes first, and tapping it edits its address instead.
+  private let page: BrowserTab?
 
-  init(browser: BrowserModel, initialText: String, privately: Bool) {
+  init(browser: BrowserModel, initialText: String, privately: Bool, page: BrowserTab? = nil) {
     self.browser = browser
-    self.initialText = initialText
+    self.page = page
+    _address = State(initialValue: initialText)
     _remote = StateObject(wrappedValue: TypingFetch(http: browser.app.http))
     _siteResults = StateObject(wrappedValue: TypingFetch(http: browser.app.http))
     _query = State(initialValue: initialText)
@@ -126,7 +130,8 @@ struct SearchCard: View {
     // Until the prefilled address is changed, the rows are the space's recent pages, as on an empty field: the address
     // alone matches little more than its own page.
     app.store.suggestions(
-      query: untouched ? "" : query, remote: remote.items, currentUrl: initialText.isEmpty ? nil : initialText,
+      // The page the sheet is over isn't a recent page to go to: it's in its own row, or in the field.
+      query: untouched ? "" : query, remote: remote.items, currentUrl: address.isEmpty ? page?.url : address,
       now: Double(AppModel.now()))
   }
 
@@ -145,17 +150,20 @@ struct SearchCard: View {
   private var colors: ScopeColors? { ScopeColors(hex: scope?.color) }
 
   /// The field still holds the page's address it opened with.
-  private var untouched: Bool { !initialText.isEmpty && query == initialText }
+  private var untouched: Bool { !address.isEmpty && query == address }
+
+  /// The page under a new tab's search, until something is typed.
+  private var pageRow: BrowserTab? { address.isEmpty && scope == nil && query.isEmpty ? page : nil }
 
   private var showsShortcuts: Bool { scope == nil && query.isEmpty && !shortcuts.isEmpty }
 
   /// Nothing to list under the field (a new person, before typing): the sheet is just the field, on the keyboard.
   private func bare(_ rows: [Suggestion]) -> Bool {
-    rows.isEmpty && !showsShortcuts && !privately && (query.isEmpty || untouched)
+    rows.isEmpty && !showsShortcuts && pageRow == nil && !privately && (query.isEmpty || untouched)
   }
 
-  /// Search was opened over a page, not for a new tab.
-  private var overPage: Bool { !browser.searchInNewTab && browser.hasPage }
+  /// Search was opened over a page: to edit its address, or from its bar for a new tab.
+  private var overPage: Bool { browser.hasPage && browser.searchKeepsPage }
 
   private var text: Color { privately ? Color(RGBA(0xF4, 0xF4, 0xF5)) : BayColor.foreground }
   private var secondary: Color { privately ? Color(RGBA(0xA1, 0xA1, 0xAA)) : BayColor.muted }
@@ -196,6 +204,9 @@ struct SearchCard: View {
                 .padding(.leading, Space.lg).padding(.top, 2)
                 .accessibilityIdentifier("private-notice")
             }
+            if let pageRow {
+              pageButton(pageRow)
+            }
             if showsShortcuts {
               shortcutRow
             }
@@ -227,11 +238,7 @@ struct SearchCard: View {
       focused = true
       withAnimation(Motion.settle.animation) { grown = true }
       // A prefilled address starts selected, so typing replaces it (as in Safari and Lens).
-      if !initialText.isEmpty {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-          UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
-        }
-      }
+      if !address.isEmpty { selectAll(after: 0.35) }
       // Opened from the widget's microphone: listening at once, as if the mic had been tapped.
       if browser.searchListening { listen() }
       shortcuts = app.store.scopeShortcuts(limit: UInt32(Self.shortcutPlaces))
@@ -453,6 +460,51 @@ struct SearchCard: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(Text(verbatim: label))
+  }
+
+  private func selectAll(after seconds: Double) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+      UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+    }
+  }
+
+  /// The page a new tab's search was opened over: its address, and a tap to edit it in its own tab instead.
+  private func pageButton(_ page: BrowserTab) -> some View {
+    let hint = strings.t("search.editPage")
+    return Button {
+      editPage(page)
+    } label: {
+      HStack(spacing: Space.md) {
+        SiteIcon(url: page.url).frame(width: 28)
+        VStack(alignment: .leading, spacing: 0) {
+          BayText(pageTitle(title: page.title, url: page.url), color: text).lineLimit(1)
+          BayText(hint, variant: .footnote, color: secondary).lineLimit(1)
+        }
+        .padding(.vertical, 6)
+        Spacer(minLength: 0)
+        BayIconView(.fill, size: IconSize.small, color: secondary).frame(width: 44, height: 44)
+      }
+      .padding(.leading, Space.sm)
+      .frame(minHeight: SearchSheet.rowHeight)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.pressFeedback)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text(verbatim: "\(hint), \(displayUrl(url: page.url))"))
+    .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("search-edit-page")
+  }
+
+  /// The page's row: the field takes its address, selected, and what's chosen opens in its tab.
+  private func editPage(_ page: BrowserTab) {
+    Haptics.press()
+    browser.editPageAddress()
+    address = page.url
+    privately = page.private
+    suppressed = true
+    query = page.url
+    focused = true
+    selectAll(after: 0.05)
   }
 
   private func fill(_ text: String) {

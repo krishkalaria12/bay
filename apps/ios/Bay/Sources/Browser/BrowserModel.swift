@@ -110,6 +110,10 @@ final class BrowserModel: ObservableObject {
   /// The search was started for a new tab (from the switcher) rather than for the page on screen.
   @Published private(set) var searchInNewTab = false
   @Published private(set) var searchPrivately = false
+  /// The page the bar's search opened over, for a new tab: the sheet's first row edits its address instead.
+  @Published private(set) var searchOverPage: BrowserTab?
+  /// The search sheet is about the page on screen (editing it, or from its bar), so the page stays frosted behind.
+  var searchKeepsPage: Bool { !searchInNewTab || searchOverPage != nil }
   /// The search card starts listening as it opens: the widget's microphone (C7).
   @Published private(set) var searchListening = false
   /// What each loaded page last reported.
@@ -258,7 +262,30 @@ final class BrowserModel: ObservableObject {
     searchInNewTab = inNewTab
     searchPrivately = privately
     searchListening = listening
+    searchOverPage = nil
     overlay = .search
+  }
+
+  /// The bar's search. Over a page it's for a new tab, so searching never loses the page (a private page's new tab is
+  /// private too), and the page stays frosted behind; the sheet's first row edits the page's address instead
+  /// (`editPageAddress`). Over a new tab, it searches in that tab.
+  func searchFromBar() {
+    guard hasPage, let page = activeTab else { return search(inNewTab: false) }
+    search(inNewTab: true, privately: page.private)
+    searchOverPage = page
+  }
+
+  /// The sheet's "this page" row: the search goes back to the page on screen, its address to edit.
+  func editPageAddress() {
+    searchInNewTab = false
+    searchOverPage = nil
+  }
+
+  /// Swiped past the last tab: a new tab, its search up.
+  func swipedToNewTab() {
+    let privately = activeTab?.private ?? false
+    openTab("", privately: privately)
+    search(inNewTab: false, privately: privately)
   }
 
   func dismissSearch() {
@@ -401,10 +428,13 @@ final class BrowserModel: ObservableObject {
 
   /// Sliding the bar sideways, as Arc Search does: the page follows the finger and the tab beside it comes in as its
   /// picture; let go far or fast enough and it carries on to that tab, else it springs back. The picture stays over the
-  /// page it became for a moment, while a page that wasn't loaded draws.
+  /// page it became for a moment, while a page that wasn't loaded draws. Past the last tab a new tab comes in, its search
+  /// up as it lands (Safari's way to a new tab).
   @Published private(set) var swipeOffset: CGFloat = 0
   /// The tab coming in beside the page, while there is one that way.
   @Published private(set) var swipeIncoming: BrowserTab?
+  /// A new tab is coming in, past the last tab.
+  @Published private(set) var swipeIncomingNew = false
   /// The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`).
   @Published private(set) var swipeCover: BrowserTab?
   @Published private(set) var swipeCoverShown = false
@@ -417,6 +447,11 @@ final class BrowserModel: ObservableObject {
     return app.tabs.indices.contains(next) ? app.tabs[next] : nil
   }
 
+  /// A drag left from the last tab, which brings a new tab.
+  private func towardsNew(_ towards: CGFloat) -> Bool {
+    towards < 0 && app.tabs.last?.id == app.activeTabId
+  }
+
   /// The finger has moved `distance` along the bar since the drag began.
   func swipeMoved(_ distance: CGFloat) {
     swipeSettling?.cancel()
@@ -427,17 +462,36 @@ final class BrowserModel: ObservableObject {
     }
     let next = neighbour(towards: distance)
     if next?.id != swipeIncoming?.id { swipeIncoming = next }
-    // Past the first or last tab the page gives a little, and comes back.
-    swipeOffset = next == nil ? distance * 0.18 : distance
+    let toNew = next == nil && towardsNew(distance)
+    if toNew != swipeIncomingNew { swipeIncomingNew = toNew }
+    // Before the first tab the page gives a little, and comes back.
+    swipeOffset = next == nil && !toNew ? distance * 0.18 : distance
   }
 
   /// The finger left after `distance`, heading for `predicted`: on to the tab coming in, or back.
   func swipeEnded(_ distance: CGFloat, predicted: CGFloat, width: CGFloat) {
     let target = neighbour(towards: distance)
+    let toNew = target == nil && towardsNew(distance)
     let flicked = abs(predicted - distance) > 120 && (predicted - distance).sign == distance.sign
-    guard let target, abs(distance) > width * 0.28 || flicked else {
+    guard target != nil || toNew, abs(distance) > width * 0.28 || flicked else {
       withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { swipeOffset = 0 }
-      settle(after: 0.32) { [weak self] in self?.swipeIncoming = nil }
+      settle(after: 0.32) { [weak self] in
+        self?.swipeIncoming = nil
+        self?.swipeIncomingNew = false
+      }
+      return
+    }
+    guard let target else {
+      Haptics.press()
+      withAnimation(.spring(response: 0.26, dampingFraction: 1)) { swipeOffset = -width }
+      settle(after: 0.24) { [weak self] in
+        guard let self else { return }
+        self.app.dispatch(.tipSeen(id: .bar))
+        self.capture(self.app.activeTabId)
+        self.swipedToNewTab()
+        self.swipeIncomingNew = false
+        self.swipeOffset = 0
+      }
       return
     }
     Haptics.press()
@@ -1022,8 +1076,9 @@ final class BrowserModel: ObservableObject {
       panel = nil
       link = nil
       switch command {
-      case .search: search(inNewTab: false)
-      case .voice: search(inNewTab: false, listening: true)
+      // The widget's search is a new search, so it doesn't take the page over: a new tab, as from the bar.
+      case .search: search(inNewTab: hasPage)
+      case .voice: search(inNewTab: hasPage, listening: true)
       case .newTab, .privateTab:
         overlay = .none
         openTab("", privately: command == .privateTab)
