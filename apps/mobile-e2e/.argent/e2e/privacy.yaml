@@ -42,10 +42,9 @@ steps:
   - await: { hidden: { id: page-blocking }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
 
-  # An HTTP address opens over HTTPS.
+  # An HTTP address opens over HTTPS (in a new tab: search over a page is for one).
   - tap: { id: bar-search }
-  - await: { visible: { id: clear-address }, timeout: 10000 }
-  - tap: { id: clear-address }
+  - await: { visible: { id: address-input }, timeout: 10000 }
   - type: { into: { id: address-input }, text: "http://example.org/" }
   - await: { idle: true, timeout: 20000 }
   - tap: { id: bar-more }

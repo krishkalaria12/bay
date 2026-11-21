@@ -12,8 +12,11 @@ steps:
   - run: ../flows/close-sheet
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
 
-  # The visit is in history with its page title, and inline completion fills the address.
+  # The visit is in history with its page title, and inline completion fills the address. Search over a page is for a
+  # new tab; its first row edits the page's own address, which keeps these steps in one tab for Back and Forward.
   - tap: { id: bar-search }
+  - await: { visible: { id: search-edit-page }, timeout: 10000 }
+  - tap: { id: search-edit-page }
   - await: { visible: { id: clear-address }, timeout: 10000 }
   - tap: { id: clear-address }
   - type: { into: { id: address-input }, text: "exam", submit: false }
@@ -26,6 +29,8 @@ steps:
 
   # Anything that isn't an address searches with the engine from Settings (Google by default).
   - tap: { id: bar-search }
+  - await: { visible: { id: search-edit-page }, timeout: 10000 }
+  - tap: { id: search-edit-page }
   - await: { visible: { id: clear-address }, timeout: 10000 }
   - tap: { id: clear-address }
   - type: { into: { id: address-input }, text: "bay browser" }
