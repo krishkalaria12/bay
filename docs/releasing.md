@@ -186,6 +186,52 @@ After the first release:
 
 The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.
 
+## Windows
+
+Windows ships beside a Mac release, with the same version, as Linux does: its installer goes on the release
+`v<version>`, so publish that first. The installer is unsigned (Bay has no code-signing certificate yet), so its own
+updater is off and it reaches people through winget, which takes unsigned installers and usually installs without the
+SmartScreen prompt a downloaded installer gets. One run of `.github/workflows/windows-build.yml` builds (or reuses) the
+engine and packages the installer, then its **publish** job runs `scripts/windows/publish.py`:
+
+```bash
+gh workflow run windows-build.yml -f version=<version> -f publish=true
+```
+
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or
+`WINGET_TOKEN` isn't set. A release must pass the launch check that's only advisory in a test build, and is packaged on
+the stable channel. A release run has its own concurrency group, so a `windows-build-N` tag pushed meanwhile neither
+cancels it nor is cancelled by it.
+
+What a release publishes:
+
+| Where | What |
+|---|---|
+| Release `v<version>` | `Bay-<version>-windows-x64-setup.exe` and its `.sha256` |
+| `microsoft/winget-pkgs` | a pull request adding `KrishKalaria.Bay` `<version>`: the manifests from `scripts/windows/winget.py`, which point at the release's installer |
+
+winget-pkgs' bots install the package in a sandbox and a moderator merges it, which takes a few days for the first
+version; later versions of an existing package usually go faster. `publish.py` skips the pull
+request when winget-pkgs already has the version, so a rerun only re-uploads the installer. People install with
+`winget install KrishKalaria.Bay` (or `winget install bay`) and update with `winget upgrade KrishKalaria.Bay`.
+
+To see the manifests a release would submit without uploading anything, put an X.Y.Z installer and its `.sha256` from
+`package.ps1` in a folder and run `python scripts/windows/publish.py --release <folder> --version <version> --dry-run`;
+they're written to `<folder>/winget`.
+
+### One-time setup
+
+1. **winget token.** wingetcreate forks `microsoft/winget-pkgs` into the token's account and opens each pull request
+   from there. Make a classic personal access token (github.com › Settings › Developer settings › Tokens (classic))
+   with only `public_repo`, no expiry or a long one, and store it:
+
+   ```bash
+   gh secret set WINGET_TOKEN
+   ```
+
+2. **Agreement.** The first pull request asks its author to accept Microsoft's contributor license agreement in a
+   comment; reply as the bot says. Later pull requests don't ask again.
+
 ## Reading a Linux or Windows crash report
 
 Crash reports from the desktop host name each frame by module and offset: a minidump has no symbols. Linux builds keep
