@@ -1,0 +1,36 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -1878,7 +1878,7 @@
+       ]
+     }
+     extract_symbols("chrome_symbols") {
+-      binary = "$root_out_dir/chrome"
++      binary = "$root_out_dir/$_chrome_output_name"
+ 
+       if (current_cpu == "x86") {
+         # GYP used "ia32" so keep that naming for back-compat.
+diff --git a/chrome/installer/linux/BUILD.gn b/chrome/installer/linux/BUILD.gn
+--- a/chrome/installer/linux/BUILD.gn
++++ b/chrome/installer/linux/BUILD.gn
+@@ -71,7 +71,7 @@
+ }
+ 
+ packaging_files_executables = [
+-  "$root_out_dir/chrome",
++  "$root_out_dir/bay",
+   "$root_out_dir/chrome_crashpad_handler",
+   "$root_out_dir/chrome_management_service",
+   "$root_out_dir/chrome_sandbox",
+@@ -210,7 +210,10 @@
+ }
+ 
+ strip_binary("strip_chrome_binary") {
+-  binary_input = "$root_out_dir/chrome"
++  binary_input = "$root_out_dir/bay"
++  # Keep the filenames expected by Chromium's installer scripts.
++  stripped_binary_output = "$root_out_dir/chrome.stripped"
++  symbol_output = "$root_out_dir/chrome.debug"
+   deps = [ "//chrome" ]
+ }
+ 

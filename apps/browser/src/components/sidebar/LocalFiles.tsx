@@ -1,3 +1,4 @@
+import { Pressable, View } from "@bay/platform";
 import {
   localFiles,
   LocalFilesArea,
@@ -11,11 +12,12 @@ import {
   type LocalFileListing,
 } from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { closeLocalFileTab, localFileStatusText, openLocalFile, peekLocalFile, reconnectLocalFile } from "../../lib/localFiles";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId, useQuietBrowser } from "../../store/hooks";
 import { localFilePins } from "../../store/localFiles";
 import { spaceFolded } from "../../store/model";
@@ -23,6 +25,7 @@ import type { LocalFilePin } from "../../store/types";
 import { useSidebarMetrics } from "./tokens";
 import { blurSidebar, registerSidebarKeyboardRows, type SidebarKeyboardRow } from "./keyboard";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
+import { platformWords } from "../../lib/platformWords";
 
 const fileRowId = (id: string, relativePath = "") => `file|${encodeURIComponent(id)}${relativePath ? `|${encodeURIComponent(relativePath)}` : ""}`;
 
@@ -144,7 +147,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
     if (!current) return;
     const name = await prompt({ title: "Rename Pin", value: current.name, confirmTitle: "Rename", windowId });
 
-    if (name?.trim()) useBrowser.getState().renameLocalFile(pin.id, name);
+    if (name?.trim()) await dispatchBrowserCommand({ method: "renameLocalFile", id: pin.id, name });
   };
 
   const peek = (relativePath = "") => {
@@ -164,8 +167,8 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
 
   const menu = async () => {
     const choice = await showMenu([
-      { id: "open", title: folder ? "Open in Finder" : "Open", enabled: available },
-      { id: "reconnect", title: "Locate on This Mac…" },
+      { id: "open", title: folder ? platformWords.openFolderTitle : "Open", enabled: available },
+      { id: "reconnect", title: `Locate on ${platformWords.thisComputerTitle}…` },
       { id: "refresh", title: "Refresh" },
       { separator: true },
       { id: "rename", title: "Rename Pin…" },
@@ -178,7 +181,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
 
     if (!s.localFiles[pin.id]) return;
 
-    if (choice === "remove") s.removeLocalFile(pin.id);
+    if (choice === "remove") await dispatchBrowserCommand({ method: "removeLocalFile", id: pin.id });
     else if (choice === "open") void open();
     else if (choice === "reconnect") void reconnect();
     else if (choice === "refresh") setRetry((v) => v + 1);
@@ -187,9 +190,10 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
       const pins = localFilePins(s, pin.spaceId);
       const index = pins.findIndex((p) => p.id === pin.id);
 
-      if (choice === "up" && index > 0) s.moveLocalFile(pin.id, pins[index - 1]!.id);
+      if (choice === "up" && index > 0) await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index - 1]!.id });
 
-      if (choice === "down" && index < pins.length - 1) s.moveLocalFile(pin.id, pins[index + 2]?.id ?? null);
+      if (choice === "down" && index < pins.length - 1)
+        await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index + 2]?.id ?? null });
     }
   };
 
@@ -210,9 +214,9 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
             if (!access || available) peek();
             else void reconnect();
           },
-          close: () => useBrowser.getState().removeLocalFile(pin.id),
+          close: () => reportBrowserCommand(dispatchBrowserCommand({ method: "removeLocalFile", id: pin.id })),
           rename: () => void rename(),
-          expand: (collapsed) => useBrowser.getState().setLocalFileExpanded(pin.id, !collapsed),
+          expand: (collapsed) => reportBrowserCommand(dispatchBrowserCommand({ method: "setLocalFileExpanded", id: pin.id, expanded: !collapsed })),
         }}
         rootPath={pin.path}
         name={pin.name}
@@ -224,7 +228,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
           if (!access) return;
 
           if (!available) void reconnect();
-          else if (folder) useBrowser.getState().setLocalFileExpanded(pin.id, !pin.expanded);
+          else if (folder) reportBrowserCommand(dispatchBrowserCommand({ method: "setLocalFileExpanded", id: pin.id, expanded: !pin.expanded }));
           else void open();
         }}
         onContextMenu={() => void menu()}
@@ -379,7 +383,7 @@ function FileRow({
   return (
     <SidebarKeyboardRowView
       rowId={keyboardRow.id}
-      label={`${name}${folder ? ", folder" : ""}${available ? "" : ", unavailable on this Mac"}`}
+      label={`${name}${folder ? ", folder" : ""}${available ? "" : `, unavailable on ${platformWords.thisComputer}`}`}
       accessibilityState={folder ? { expanded } : undefined}
       onAccessibilityTap={onPress}
     >
@@ -390,7 +394,7 @@ function FileRow({
         onContextMenu={onContextMenu}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={`${name}${folder ? ", folder" : ""}${available ? "" : ", unavailable on this Mac"}`}
+        accessibilityLabel={`${name}${folder ? ", folder" : ""}${available ? "" : `, unavailable on ${platformWords.thisComputer}`}`}
         accessibilityState={folder ? { expanded } : undefined}
         tooltip={rootPath + (relativePath ? `/${relativePath}` : "")}
         style={{

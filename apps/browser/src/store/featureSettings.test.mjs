@@ -10,6 +10,10 @@ const { loadSession } = await import("../lib/persist.ts");
 const { flushPersistence, startPersistence } = await import("../lib/persistenceService.ts");
 const { settingsAdapter, profilesAdapter } = await import("../sync/adapters.ts");
 const stub = await import("../test-native-stub.mjs");
+const { configureSyncStore } = await import("../sync/store.ts");
+
+configureSyncStore(useBrowser);
+
 const S = () => useBrowser.getState();
 
 test("search shortcuts default to Arc for older sessions and normalize invalid saved modes", () => {

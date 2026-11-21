@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 import * as v from "valibot";
 import { ChromeUI } from "./chromeDialogs";
 

@@ -182,8 +182,8 @@ const emitter = g.expo?.EventEmitter?.prototype;
 
 if (!g.__nnApplyHeldReports && bridge && emitter && v.is(v.function_(), bridge.__callFunction) && v.is(v.function_(), bridge.__invokeCallback)) {
   // Required here, not imported: tests load this module without React Native.
-  // SAFETY: require returns the react-native module, which exports unstable_batchedUpdates.
-  const batch = (update: () => void) => (require("react-native") as typeof import("react-native")).unstable_batchedUpdates(update);
+  // SAFETY: the checks above established this shape.
+  const batch = (update: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(update);
   // A 0 ms timer runs at once on the JS thread (RCTTiming), so its call queues behind the ones already waiting.
   const held = createHold({ batch, schedule: (callback) => setTimeout(callback, 0), report: (error) => g.ErrorUtils?.reportFatalError(error) });
   holdPageReports(bridge, held);

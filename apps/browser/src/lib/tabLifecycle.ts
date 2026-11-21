@@ -1,16 +1,20 @@
 import * as v from "valibot";
-import { listTasks, releaseProfile, type SystemState, type WebViewHandle } from "@bay/chromium";
+import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/chromium";
+import { onAppEvent, onWindowEvent } from "@bay/desktop";
 import { create } from "zustand";
 import { pageOf } from "../components/window/pageState";
 import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages/internalPages";
-import { useBrowser, type BrowserState } from "../store/browserStore";
-import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
+import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace } from "../store/model";
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./bridgeEvents";
+import { everySlowly } from "./throttledTimers";
 import { webviews } from "./webviews";
-import { LIFECYCLE_EVAL_TIMEOUT_MS } from "./constants";
+import { LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
 import { siteKeptAwake } from "./keptAwakeSites";
 
 // The policy of a Mac with more than 16 GB; policyFor gives a smaller one's.
@@ -104,7 +108,8 @@ export function keepAliveReason(s: BrowserState, id: string): string | null {
 
   if (page.permission) return "asking for permission";
 
-  if (page.newTabShown) return "kept for Forward";
+  // The tab kept the page it showed, so Back has somewhere to go.
+  if (tab.newTabHistory) return "kept for Forward";
   const media = useMedia.getState();
 
   if (media.pipOpen[id]) return "picture in picture";
@@ -334,11 +339,11 @@ function releaseUnusedProfiles() {
 // MARK: Launch
 
 /** The tabs reopened in the background at launch: the most recent few, on a Mac with the memory and power for them. */
-export function recentTabsToReload(sys: SystemState): string[] {
+export function recentTabsToReload(sys: SystemState, state: BrowserState = store()): string[] {
   const gb = sys.physicalMemory / 2 ** 30;
   const busy = sys.onBattery || sys.lowPowerMode || sys.memoryPressure !== "normal";
   const count = busy ? 0 : gb >= 32 ? 4 : gb >= 16 ? 3 : gb >= 8 ? 1 : 0;
-  const s = store();
+  const s = state;
   const shown = shownTabIds(s);
   const since = Date.now() - 24 * 60 * 60_000;
 
@@ -353,14 +358,28 @@ export function recentTabsToReload(sys: SystemState): string[] {
 /** How long after launch, and after each other, the recent tabs are reopened. */
 export const RELOAD_SPACING_MS = 2000;
 
+/**
+ * The tabs reopened in the background at launch, one after another: the most recent few, on a Mac with the memory
+ * and power for them. Each one waits its turn, and each checks the Mac again before it reopens.
+ */
+export function reloadRecentTabs(sys: SystemState): string[] {
+  const ids = recentTabsToReload(sys);
+
+  ids.forEach((id, index) => {
+    setTimeout(() => wakeRecentTab(id, sys), RELOAD_SPACING_MS * (index + 1));
+  });
+
+  return ids;
+}
+
 /** Reopens one of the recent tabs, unless the Mac has since become busy or the tab has a page already. */
-export function wakeRecentTab(id: string, sys: SystemState) {
+export function wakeRecentTab(id: string, sys: SystemState, read: () => BrowserState = store) {
   const latest = currentSystem() ?? sys;
 
   if (latest.onBattery || latest.lowPowerMode || latest.memoryPressure !== "normal") return;
-  const t = store().tabs[id];
+  const t = read().tabs[id];
 
-  if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
+  if (t?.url && !t.navigation && !t.adoptId) reportBrowserCommand(dispatchBrowserCommand({ method: "wakeTab", tabId: id }));
 }
 
 // MARK: What the lifecycle service hears (pageLifecycleService.ts)
@@ -390,6 +409,87 @@ export function noteSystem(state: SystemState): boolean {
 
 /** The Mac's memory and power as the app last heard them. */
 export const lastSystem = currentSystem;
+
+// MARK: Start
+
+let stopLifecycle: (() => void) | undefined;
+
+/**
+ * Starts the lifecycle watcher: the Mac's window and app events, the memory and power it reports, the sweep on the
+ * shared grid, and the recent tabs reopening once the Mac has said what it has.
+ *
+ * The policy itself is the one above (the service in pageLifecycleService.ts reaches the same functions): what is
+ * kept, what sleeps, and the check a page answers before it does.
+ */
+export function startTabLifecycle(): () => void {
+  if (stopLifecycle) return stopLifecycle;
+
+  const removals: (() => void)[] = [];
+
+  const windows = onWindowEvent((event) => {
+    if (event.type === "focus") setAppActive(true);
+  });
+
+  const app = onAppEvent((event) => {
+    if (event.type === "resignActive" || event.type === "screenLocked") setAppActive(false);
+  });
+
+  removals.push(
+    () => windows.remove(),
+    () => app.remove(),
+  );
+
+  trackShown();
+
+  removals.push(
+    useBrowser.subscribe((s, prev) => {
+      if (s.windows !== prev.windows || s.splits !== prev.splits) trackShown(s);
+    }),
+  );
+
+  const reported = onSystemState((state) => {
+    // Memory pressure that just rose sweeps at once.
+    if (noteSystem(state)) void sweep();
+  });
+
+  removals.push(() => reported.remove());
+
+  // The Mac says what memory and power it has: until it does, nothing reopens.
+  void Promise.resolve(systemState()).then(
+    (state) => {
+      noteSystem(state);
+      setTimeout(() => reloadRecentTabs(lastSystem() ?? state), 3000);
+    },
+    () => {},
+  );
+
+  removals.push(
+    everySlowly({
+      every: LIFECYCLE_SWEEP_MS,
+      run: () => {
+        trackShown();
+
+        void sweep();
+      },
+    }),
+  );
+
+  if (__DEV__) installLifecycleDevHandle();
+
+  stopLifecycle = () => {
+    stopLifecycle = undefined;
+
+    for (const remove of removals.reverse()) {
+      try {
+        remove();
+      } catch (error) {
+        console.error("[runtime] tab lifecycle cleanup failed", error);
+      }
+    }
+  };
+
+  return stopLifecycle;
+}
 
 /** The lifecycle policy's own dev-harness surface, read only by tests. */
 export function installLifecycleDevHandle() {

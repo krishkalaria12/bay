@@ -19,13 +19,15 @@ for (const name of names.length ? names : Object.keys(scenes)) {
 
   if (!scene) throw new Error(`no scene "${name}": ${Object.keys(scenes).join(", ")}`);
   const data = join(tmpdir(), `bay-shots-${name}`);
-  const app = await open(scene.session, data);
+  const app = await open(scene.session, data, scene.env);
 
   try {
     for (const shot of scene.shots) {
       if (shot.before) await app.eval(shot.before);
       await sleep(shot.settle ?? 3000);
-      const [window] = windowsOf(app.pid);
+      // The browser window is the biggest; `pick: "smallest"` takes a panel's own window (Settings, Import).
+      const windows = windowsOf(app.pid).sort((a, b) => b.width * b.height - a.width * a.height);
+      const window = shot.pick === "smallest" ? windows.at(-1) : windows[0];
       await photograph(app.pid, window, join(out, `${shot.file}.webp`), shot.crop);
 
       if (shot.publish) await publish(join(out, `${shot.file}.webp`), join(publicShots, `${shot.file}.jpg`));

@@ -8,7 +8,8 @@ import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { useBrowser } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
+
 import { activeTabId } from "../store/model";
 
 /** The native side could not answer about the file. */
@@ -64,6 +65,7 @@ export class LocalFileService extends Context.Service<
   static readonly layer = Layer.effect(
     LocalFileService,
     Effect.gen(function* () {
+      const browser = yield* AuthorityStore;
       const engine = yield* LocalFileEngine;
 
       // A file this Mac may not read keeps this outcome: the app does not ask again.
@@ -71,14 +73,14 @@ export class LocalFileService extends Context.Service<
 
       const open = (windowId: string, pinId: string, relativePath = ""): Effect.Effect<LocalFileAccess> =>
         Effect.gen(function* () {
-          const s = useBrowser.getState();
+          const s = browser.getState();
           const pin = s.localFiles[pinId];
           const w = s.windows[windowId];
 
           if (!pin || !w || w.incognito || !s.spaces[pin.spaceId]) return yield* Effect.succeed(inaccessible);
 
           const access = yield* engine.open(pin.path, relativePath).pipe(Effect.catch(() => Effect.succeed(inaccessible)));
-          const next = useBrowser.getState();
+          const next = browser.getState();
 
           if (access.status !== "available" || !access.browserReadable || !access.url?.startsWith("file://")) {
             return yield* Effect.succeed(access);
@@ -92,19 +94,23 @@ export class LocalFileService extends Context.Service<
           const existing = Object.values(next.tabs).find((tab) => tab.spaceId === pin.spaceId && tab.url === access.url && !tab.peekOf);
 
           if (existing) next.activate(existing.id, windowId);
-          else next.newTab(windowId, { url: access.url, spaceId: pin.spaceId, snapshot: { title: relativePath ? (access.name ?? pin.name) : pin.name } });
+          else {
+            const id = next.newTab(windowId, { url: access.url, spaceId: pin.spaceId });
+
+            browser.getState().updateTab(id, { customTitle: relativePath ? (access.name ?? pin.name) : pin.name });
+          }
 
           return yield* Effect.succeed(access);
         });
 
       const peek = (windowId: string, pinId: string, relativePath = ""): Effect.Effect<LocalFileAccess> =>
         Effect.gen(function* () {
-          const pin = useBrowser.getState().localFiles[pinId];
+          const pin = browser.getState().localFiles[pinId];
 
           if (!pin) return yield* Effect.succeed(inaccessible);
 
           const access = yield* engine.inspect(pin.path, relativePath).pipe(Effect.catch(() => Effect.succeed(inaccessible)));
-          const s = useBrowser.getState();
+          const s = browser.getState();
 
           if (s.localFiles[pinId]?.path !== pin.path || !s.windows[windowId] || s.windows[windowId]!.incognito) {
             return yield* Effect.succeed(inaccessible);
@@ -117,7 +123,7 @@ export class LocalFileService extends Context.Service<
           if (from && access.browserReadable && access.url?.startsWith("file://")) {
             // Shared-space tabs can still be hosted by another window. The peek belongs to this window's page.
             if (s.tabs[from]?.windowId !== windowId) s.activate(from, windowId);
-            useBrowser.getState().openPeek(from, access.url);
+            browser.getState().openPeek(from, access.url);
 
             return yield* Effect.succeed(access);
           }
@@ -127,7 +133,7 @@ export class LocalFileService extends Context.Service<
 
       const reconnect = (pinId: string): Effect.Effect<boolean> =>
         Effect.gen(function* () {
-          const pin = useBrowser.getState().localFiles[pinId];
+          const pin = browser.getState().localFiles[pinId];
 
           if (!pin) return yield* Effect.succeed(false);
 
@@ -137,16 +143,27 @@ export class LocalFileService extends Context.Service<
 
       const close = (windowId: string, pinId: string, relativePath: string): Effect.Effect<void> =>
         Effect.gen(function* () {
-          const pin = useBrowser.getState().localFiles[pinId];
+          const pin = browser.getState().localFiles[pinId];
 
           if (!pin) return;
 
           const access = yield* engine.inspect(pin.path, relativePath).pipe(Effect.catch(() => Effect.succeed(inaccessible)));
-          const s = useBrowser.getState();
+          const s = browser.getState();
 
           if (s.localFiles[pinId]?.path !== pin.path || !s.windows[windowId] || !access.url) return;
 
-          for (const tab of Object.values(s.tabs)) if (tab.spaceId === pin.spaceId && tab.url === access.url) s.closeTab(tab.id);
+          // The window's peek of the file closes as a peek; the tabs that show it close together, as one edit.
+          const peekId = s.peeks[windowId]?.tabId;
+
+          if (peekId && s.tabs[peekId]?.spaceId === pin.spaceId && s.tabs[peekId]?.url === access.url) s.closePeek(windowId);
+
+          const after = browser.getState();
+
+          const tabIds = Object.values(after.tabs)
+            .filter((tab) => !tab.peekOf && tab.spaceId === pin.spaceId && tab.url === access.url)
+            .map((tab) => tab.id);
+
+          if (tabIds.length) after.closeTabs(tabIds);
         });
 
       return LocalFileService.of({ open, peek, reconnect, close });

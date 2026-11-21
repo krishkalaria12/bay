@@ -1,3 +1,5 @@
+import { ReadBrowser } from "../../effect/windowPorts";
+import { AuthorityStore } from "../../effect/ports/store";
 // The app's extensions: what the engine has installed, the events it reports, and the commands the app sends it.
 //
 // The workflow is the service's: the snapshot is acquired once per profile, the engine's report is listened to
@@ -16,7 +18,7 @@ import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import type { Operation } from "../../effect/errors";
 import { Diagnostics } from "../../effect/ports/diagnostics";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { applyExtensionSearchEngines } from "./searchEngines";
 import { extensionProfile, useExtensions } from "./store";
 
@@ -150,6 +152,20 @@ type ExtensionRequest = {
   readonly changed: boolean;
 };
 
+export class ExtensionsSearchEngines extends Context.Service<
+  ExtensionsSearchEngines,
+  { readonly apply: (profile: string, engines: chromium.EngineSearchEngineList) => void }
+>()("bay/ExtensionsSearchEngines") {
+  static readonly layer = Layer.effect(
+    ExtensionsSearchEngines,
+    Effect.gen(function* () {
+      const store = yield* AuthorityStore;
+
+      return ExtensionsSearchEngines.of({ apply: (profile, engines) => applyExtensionSearchEngines(profile, engines, store) });
+    }),
+  );
+}
+
 export class ExtensionsService extends Context.Service<
   ExtensionsService,
   {
@@ -176,6 +192,8 @@ export class ExtensionsService extends Context.Service<
   static readonly layer = Layer.effect(
     ExtensionsService,
     Effect.gen(function* () {
+      const useBrowser = yield* ReadBrowser;
+      const searchEngines = yield* ExtensionsSearchEngines;
       const engine = yield* ExtensionsEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
@@ -240,7 +258,7 @@ export class ExtensionsService extends Context.Service<
           }
 
           reconciled.add(profile);
-          applyExtensionSearchEngines(profile, listed.value);
+          searchEngines.apply(profile, listed.value);
         });
 
       // The reconciliation that is waiting for a profile.

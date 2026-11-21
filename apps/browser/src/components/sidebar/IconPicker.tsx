@@ -1,12 +1,13 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../window/layout";
 import { useLive } from "../../activity/activityStore";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { IconGrid, type IconChoice } from "../iconPicker/IconGrid";
 import { useHover } from "../ui/primitives";
 import { SPACE_EMOJI } from "../spaces/icons";

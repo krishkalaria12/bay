@@ -350,7 +350,8 @@ struct FindBar: View {
       ? "" : find.count == 0 ? strings.t("find.noMatches") : strings.t("find.matchCount", ["index": "\(find.index + 1)", "count": "\(find.count ?? 0)"])
     HStack(spacing: Space.xs) {
       HStack(spacing: Space.sm) {
-        TextField(strings.t("find.placeholder"), text: Binding(get: { browser.find?.query ?? "" }, set: browser.findChanged))
+        // A closure, not the method itself: Xcode 26's compiler crashes converting a main-actor method to the setter.
+        TextField(strings.t("find.placeholder"), text: Binding(get: { browser.find?.query ?? "" }, set: { browser.findChanged($0) }))
           .focused($focused)
           .textInputAutocapitalization(.never)
           .disableAutocorrection(true)

@@ -1,7 +1,7 @@
 import { deleteHistoryUrls, importHistoryRows } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
-import { engineProfile, isIncognitoSpace } from "./model";
+import { engineProfileFor, isIncognitoSpace } from "./model";
 import type { HistoryEntry } from "./types";
 import { MAX_HISTORY } from "./constants";
 
@@ -33,7 +33,7 @@ export function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryE
 
 const failed = (what: string) => (error: Error) => console.warn(`[history] ${what}`, error);
 
-export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set) => ({
+export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set, get) => ({
   history: {},
   historyReady: {},
   historyFloor: {},
@@ -41,7 +41,7 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
   removeHistory(spaceId, urls) {
     if (!urls.length || isIncognitoSpace(spaceId)) return;
     set((s) => ({ history: { ...s.history, [spaceId]: (s.history[spaceId] ?? []).filter((h) => !urls.includes(h.url)) } }));
-    void deleteHistoryUrls(engineProfile(spaceId), urls).catch(failed("delete"));
+    void deleteHistoryUrls(engineProfileFor(spaceId, get().spaces), urls).catch(failed("delete"));
   },
 
   importHistory(spaceId, entries) {
@@ -63,7 +63,7 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
 
       return { history: { ...s.history, [spaceId]: merged } };
     });
-    void importHistoryRows(engineProfile(spaceId), rows).catch(failed("import"));
+    void importHistoryRows(engineProfileFor(spaceId, get().spaces), rows).catch(failed("import"));
 
     return added;
   },

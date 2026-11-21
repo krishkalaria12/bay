@@ -1,0 +1,44 @@
+diff --git a/chrome/browser/policy/BUILD.gn b/chrome/browser/policy/BUILD.gn
+--- a/chrome/browser/policy/BUILD.gn
++++ b/chrome/browser/policy/BUILD.gn
+@@ -34,7 +34,10 @@ source_set("path_parser") {
+   if (is_mac) {
+     deps += [ "//build:branding_buildflags" ]
+   } else if (is_win) {
+-    deps += [ "//chrome/install_static:install_static_util" ]
++    deps += [
++      "//cef/libcef/features:buildflags",
++      "//chrome/install_static:install_static_util",
++    ]
+   }
+ 
+   if (is_win) {
+diff --git a/chrome/browser/policy/policy_path_parser_win.cc b/chrome/browser/policy/policy_path_parser_win.cc
+--- a/chrome/browser/policy/policy_path_parser_win.cc
++++ b/chrome/browser/policy/policy_path_parser_win.cc
+@@ -12,6 +12,7 @@
+ 
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/win/registry.h"
++#include "cef/libcef/features/features.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/install_static/policy_path_parser.h"
+@@ -23,11 +24,17 @@ namespace {
+ bool LoadUserDataDirPolicyFromRegistry(HKEY hive,
+                                        const char* key_name_str,
+                                        base::FilePath* dir) {
++#if BUILDFLAG(ENABLE_CEF)
+   const std::wstring policy_key =
+       policy::ChromeBrowserPolicyConnector::GetPolicyKey();
+   if (policy_key.empty()) {
+     return false;
+   }
++#else
++  // Bay: chrome.exe links this parser but not the connector (chrome.dll's);
++  // without CEF the connector's key is Chrome's own.
++  const std::wstring policy_key = policy::kRegistryChromePolicyKey;
++#endif
+ 
+   std::wstring value;
+   std::wstring key_name(base::ASCIIToWide(key_name_str));

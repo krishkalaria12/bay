@@ -1,4 +1,5 @@
 import { hasWebKit, type PageEngine } from "@bay/chromium";
+import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
 import type { Tab } from "./types";
 
@@ -11,7 +12,8 @@ import type { Tab } from "./types";
 export const ENGINE_NAMES: Record<PageEngine, string> = { chromium: "Chromium", webkit: "WebKit" };
 export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", webkit: "safari" };
 
-type EngineState = Pick<BrowserState, "tabs">;
+// Read-only, so the coordinator's store and a window's projection (runtime/projection.ts) both answer.
+type EngineState = DeepReadonly<Pick<BrowserState, "tabs">>;
 
 type Site = { key: string; host: string };
 
@@ -85,7 +87,7 @@ export const chosenEngine = (url: string | undefined | null): PageEngine | undef
 
 export const engineForUrl = (url: string | undefined | null): PageEngine => chosenEngine(url) ?? "chromium";
 
-const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undefined => {
+const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
 
   if (!id) return undefined;
@@ -103,7 +105,7 @@ const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undef
   return undefined;
 };
 
-function engineOf(s: EngineState, t: Tab, depth: number): PageEngine {
+function engineOf(s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine {
   if (!hasWebKit() || chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
 
   if (t.engine) return t.engine;
@@ -122,6 +124,16 @@ export function tabEngine(s: EngineState, tabId: string): PageEngine {
   const t = s.tabs[tabId];
 
   return t ? engineOf(s, t, 0) : "chromium";
+}
+
+/** An address the user typed follows its site's engine, else keeps the page's engine. */
+export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
+  if (chromiumOnly(url)) return "chromium";
+  const chosen = chosenEngine(url);
+
+  if (chosen) return chosen;
+
+  return tab.url || tab.navigation ? tabEngine(s, tab.id) : "chromium";
 }
 
 /** The engine a tab's icon is marked with: only a web page away from Chromium. */

@@ -1,6 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 
 #include "chrome/browser/bay/nn_extensions.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/nn_scripts_policy.h"
 
 #include <map>
@@ -332,7 +333,7 @@ NN_ENGINE_CALL(nn_extensions_list) {
 NN_ENGINE_CALL(nn_extensions_install) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();
@@ -341,7 +342,7 @@ NN_ENGINE_CALL(nn_extensions_install) {
     return call.TakeReply().Error(
         "Extension installation is blocked by policy.");
   }
-  base::FilePath load_path(path);
+  base::FilePath load_path = base::FilePath::FromUTF8Unsafe(path);
   const bool scripts = bay::NamesScriptsFolder(load_path);
   base::ScopedClosureRunner scripts_install;
   if (scripts) {
@@ -357,8 +358,9 @@ NN_ENGINE_CALL(nn_extensions_install) {
       extensions::UnpackedInstaller::Create(profile);
   installer->set_be_noisy_on_failure(false);
   installer->set_completion_callback(base::BindOnce(
-      [](base::WeakPtr<Profile> profile, bool scripts,
-         base::ScopedClosureRunner scripts_install, Reply reply,
+      [](base::WeakPtr<Profile> profile,
+         bool scripts, base::ScopedClosureRunner scripts_install,
+         Reply reply,
          const extensions::Extension* extension, const base::FilePath&,
          const std::u16string& error) {
         scripts_install.RunAndReset();
@@ -371,7 +373,8 @@ NN_ENGINE_CALL(nn_extensions_install) {
         if (!profile) {
           return reply.Error("The profile closed");
         }
-        if (scripts && extension->path() != bay::ScriptsFolder()) {
+        if (scripts &&
+            bay::ScriptsFolderInstallProblem(extension->path()).has_value()) {
           std::u16string ignored;
           bay::ManagementDelegate(profile.get())
               ->UninstallExtension(profile.get(), id,
@@ -384,7 +387,8 @@ NN_ENGINE_CALL(nn_extensions_install) {
         bay::LiftPolicyBlockIfAllowed(profile.get(), id);
         reply.Send(base::DictValue().Set("id", id));
       },
-      profile->GetWeakPtr(), scripts, std::move(scripts_install),
+      profile->GetWeakPtr(),
+      scripts, std::move(scripts_install),
       call.TakeReply()));
   installer->Load(load_path);
 }
@@ -392,7 +396,7 @@ NN_ENGINE_CALL(nn_extensions_install) {
 NN_ENGINE_CALL(nn_extensions_install_crx) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();
@@ -422,7 +426,7 @@ NN_ENGINE_CALL(nn_extensions_install_crx) {
                                          : installer->expected_id()));
       },
       call.TakeReply(), installer));
-  installer->InstallCrx(base::FilePath(path));
+  installer->InstallCrx(base::FilePath::FromUTF8Unsafe(path));
 }
 
 NN_ENGINE_CALL(nn_extensions_set_enabled) {

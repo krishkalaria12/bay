@@ -1,0 +1,17 @@
+diff --git a/components/os_crypt/async/browser/freedesktop_secret_key_provider.h b/components/os_crypt/async/browser/freedesktop_secret_key_provider.h
+--- a/components/os_crypt/async/browser/freedesktop_secret_key_provider.h
++++ b/components/os_crypt/async/browser/freedesktop_secret_key_provider.h
+@@ -158,9 +158,10 @@
+   static constexpr char kKeyName[] = "Chrome Safe Storage";
+   static constexpr char kAppName[] = "chrome";
+ #else
+-  static constexpr char kKWalletFolder[] = "Chromium Keys";
+-  static constexpr char kKeyName[] = "Chromium Safe Storage";
+-  static constexpr char kAppName[] = "chromium";
++  // Bay: its own item, not the one other Chromium builds share.
++  static constexpr char kKWalletFolder[] = "Bay Keys";
++  static constexpr char kKeyName[] = "Bay Safe Storage";
++  static constexpr char kAppName[] = "bay";
+ #endif
+ 
+   void InitializeFreedesktopSecretService();

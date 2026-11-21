@@ -1,5 +1,7 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import { setSwitcherCapture } from "@bay/desktop";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { recentTabIds } from "../../store/tabTidying";
 import { setSidebarUi, sidebarUi } from "./state";
 import { SWITCHER_SHOW_AFTER_MS } from "./constants";
@@ -44,7 +46,7 @@ export function commitSwitcher(index?: number) {
   endSwitcher();
   const id = s.ids[index ?? s.index];
 
-  if (id && useBrowser.getState().tabs[id]) useBrowser.getState().activate(id, s.windowId);
+  if (id && useBrowser.getState().tabs[id]) reportBrowserCommand(tabCommands.activate(id, s.windowId));
 }
 
 export function cancelSwitcher() {
