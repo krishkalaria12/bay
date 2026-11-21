@@ -343,6 +343,7 @@
   "save.topOfList": "En haut de la liste",
   "search.clear": "Effacer",
   "search.close": "Fermer la recherche",
+  "search.editPage": "Modifier l’adresse de cet onglet",
   "search.fillIn": "Compléter avec {title}",
   "search.leaveSite": "Rechercher partout plutôt que sur {name}",
   "search.listening": "À l’écoute",

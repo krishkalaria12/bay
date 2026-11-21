@@ -504,7 +504,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     Box {
         // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
         // says so with a mark beside it.
-        BarButton("bar-search", label, { browser.search(inNewTab = false) }, width = 128.dp) {
+        BarButton("bar-search", label, browser::searchFromBar, width = 128.dp) {
             Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
                 if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
                 BayIconView(BayIcon.SEARCH, size = IconSize.control)

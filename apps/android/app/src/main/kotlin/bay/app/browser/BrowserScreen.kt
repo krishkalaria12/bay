@@ -161,7 +161,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 visible = shown,
             )
             if (shown) {
-                TabSwipeLayer(browser)
+                TabSwipeLayer(browser, strings)
                 TabCoverLayer(browser)
             }
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
@@ -173,7 +173,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
             // Under the search sheet the page stays put, frosted: the engine draws on a SurfaceView, which no blur in the
             // app reaches, so its picture is drawn over it, blurred (Android 12 and later; dimmed only before that).
-            if (browser.overlay == Overlay.SEARCH && !browser.searchInNewTab) {
+            if (browser.overlay == Overlay.SEARCH && browser.searchKeepsPage) {
                 val pixels = with(androidx.compose.ui.platform.LocalDensity.current) { 240.dp.roundToPx() }
                 rememberFileImage(browser.activeTab?.snapshot, pixels)?.let { picture ->
                     androidx.compose.foundation.Image(
@@ -228,11 +228,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         } else {
             val active = browser.activeTab
             // Search opened over a dark page is dark too, so the sheet doesn't glare over it.
-            val pageRgb = if (browser.searchInNewTab) null else browser.shownColor(browser.pageColors[app.activeTabId])
+            val pageRgb = if (browser.searchKeepsPage) browser.shownColor(browser.pageColors[app.activeTabId]) else null
             val overDark = pageRgb != null && pageRgb.size >= 3 &&
                 androidx.compose.ui.graphics.Color(pageRgb[0].toFloat() / 255, pageRgb[1].toFloat() / 255, pageRgb[2].toFloat() / 255).luminance() <= 0.4f
             bay.design.BayTheme(dark = overDark || androidx.compose.foundation.isSystemInDarkTheme()) {
-                SearchCard(browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(), browser.searchPrivately || (!browser.searchInNewTab && active?.private == true))
+                SearchCard(
+                    browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(),
+                    browser.searchPrivately || (!browser.searchInNewTab && active?.private == true), browser.searchOverPage,
+                )
             }
         }
         androidx.compose.animation.AnimatedVisibility(

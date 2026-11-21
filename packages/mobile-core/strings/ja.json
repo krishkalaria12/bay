@@ -343,6 +343,7 @@
   "save.topOfList": "リストの先頭",
   "search.clear": "消去",
   "search.close": "検索を閉じる",
+  "search.editPage": "このタブのアドレスを編集",
   "search.fillIn": "{title}を入力",
   "search.leaveSite": "{name} ではなくすべてを検索",
   "search.listening": "聞き取り中",

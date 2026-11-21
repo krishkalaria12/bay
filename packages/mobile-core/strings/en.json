@@ -343,6 +343,7 @@
   "save.topOfList": "Top of the list",
   "search.clear": "Clear",
   "search.close": "Close search",
+  "search.editPage": "Edit this tab's address",
   "search.fillIn": "Fill in {title}",
   "search.leaveSite": "Search everything instead of {name}",
   "search.listening": "Listening",

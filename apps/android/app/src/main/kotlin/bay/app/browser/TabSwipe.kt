@@ -23,13 +23,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import bay.app.Strings
 import bay.core.BrowserTab
 import bay.core.pageTitle
+import bay.design.BayIcon
+import bay.design.BayIconView
 import bay.design.BayText
 import bay.design.Space
 import bay.design.TextTone
 import bay.design.TextVariant
 import bay.design.Theme
+import bay.design.overWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +43,7 @@ import kotlinx.coroutines.launch
 /**
  * Sliding the bar sideways to the tab before or after, as Arc Search does: the page follows the finger and the next
  * tab's picture comes in beside it; let go far or fast enough and it carries on to that tab, else it springs back.
+ * Past the last tab a new tab comes in, its search up as it lands (Safari's way to a new tab).
  * One compositor draws the window (BayTabView), so only the page on screen is live: the tab coming in is its picture,
  * left over the live page for a moment once it's shown, until the page has drawn.
  */
@@ -51,6 +56,10 @@ class TabSwipe(private val browser: BrowserModel) {
 
     /** The tab coming in beside the page, while there is one that way. */
     var incoming by mutableStateOf<BrowserTab?>(null)
+        private set
+
+    /** A new tab is coming in, past the last tab. */
+    var incomingNew by mutableStateOf(false)
         private set
 
     /** The tab just swiped or zoomed to, its picture over its page until the page draws (`cover`). */
@@ -72,6 +81,11 @@ class TabSwipe(private val browser: BrowserModel) {
         return tabs.getOrNull(index + if (towards < 0) 1 else -1)
     }
 
+    /** A drag left from the last tab, which brings a new tab. */
+    private fun towardsNew(towards: Float): Boolean {
+        return towards < 0 && browser.app.tabs.lastOrNull()?.id == browser.app.activeTabId
+    }
+
     fun drag(amount: Float) {
         settling?.cancel()
         if (cover != null) {
@@ -81,8 +95,9 @@ class TabSwipe(private val browser: BrowserModel) {
         dragged += amount
         val next = neighbour(dragged)
         incoming = next
-        // Past the first or last tab the page gives a little, and comes back.
-        val shown = if (next != null) dragged else dragged * 0.18f
+        incomingNew = next == null && towardsNew(dragged)
+        // Before the first tab the page gives a little, and comes back.
+        val shown = if (next != null || incomingNew) dragged else dragged * 0.18f
         scope.launch { offset.snapTo(shown) }
     }
 
@@ -91,13 +106,22 @@ class TabSwipe(private val browser: BrowserModel) {
         val distance = dragged
         dragged = 0f
         val target = neighbour(distance)
+        val toNew = target == null && towardsNew(distance)
         val fast = kotlin.math.abs(velocity) > width * 1.2f && kotlin.math.sign(velocity) == kotlin.math.sign(distance)
-        val go = target != null && (kotlin.math.abs(distance) > width * 0.28f || fast)
+        val go = (target != null || toNew) && (kotlin.math.abs(distance) > width * 0.28f || fast)
         settling?.cancel()
         settling = scope.launch {
-            if (!go || target == null) {
+            if (!go) {
                 offset.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 520f), velocity)
                 incoming = null
+                incomingNew = false
+                return@launch
+            }
+            if (target == null) {
+                offset.animateTo(-width, spring(dampingRatio = 1f, stiffness = 700f), velocity)
+                browser.swipedToNewTab()
+                incomingNew = false
+                offset.snapTo(0f)
                 return@launch
             }
             offset.animateTo(if (distance < 0) -width else width, spring(dampingRatio = 1f, stiffness = 700f), velocity)
@@ -145,6 +169,7 @@ class TabSwipe(private val browser: BrowserModel) {
         covering?.cancel()
         dragged = 0f
         incoming = null
+        incomingNew = false
         cover = null
         scope.launch {
             offset.snapTo(0f)
@@ -186,7 +211,7 @@ fun TabPicture(browser: BrowserModel, tab: BrowserTab, modifier: Modifier = Modi
 
 /** The tab coming in beside the page moving with a swipe. */
 @Composable
-fun TabSwipeLayer(browser: BrowserModel) {
+fun TabSwipeLayer(browser: BrowserModel, strings: Strings) {
     val swipe = browser.tabSwipe
     // Decoded ahead, so the picture is there the moment a drag starts.
     val tabs = browser.app.tabs
@@ -198,6 +223,25 @@ fun TabSwipeLayer(browser: BrowserModel) {
             val moved = swipe.offset.value
             translationX = if (moved < 0) moved + swipe.width + GAP.toPx() else moved - swipe.width - GAP.toPx()
         })
+    }
+    if (swipe.incomingNew) {
+        NewTabPicture(browser, strings, Modifier.graphicsLayer { translationX = swipe.offset.value + swipe.width + GAP.toPx() })
+    }
+}
+
+/** The new tab coming in past the last tab: the start page's wallpaper, and what it's for. */
+@Composable
+private fun NewTabPicture(browser: BrowserModel, strings: Strings, modifier: Modifier) {
+    Box(modifier.fillMaxSize().clearAndSetSemantics {}) {
+        Wallpaper(browser.app.preferences.wallpaper)
+        Column(
+            Modifier.align(Alignment.Center).padding(Space.xl),
+            verticalArrangement = Arrangement.spacedBy(Space.md),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BayIconView(BayIcon.ADD, size = 40.dp, color = Theme.colors.overWallpaper)
+            BayText(strings.t("tabs.newTab"), variant = TextVariant.HEADLINE, color = Theme.colors.overWallpaper)
+        }
     }
 }
 

@@ -84,10 +84,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import bay.app.AppModel
 import bay.app.Strings
+import bay.core.BrowserTab
 import bay.core.HttpRequest
 import bay.core.SearchScope
 import bay.core.Suggestion
 import bay.core.addressFor
+import bay.core.pageTitle
 import bay.core.parseScopeSuggestions
 import bay.core.parseSuggestionsBody
 import bay.core.scopeSuggestRequest
@@ -152,15 +154,18 @@ private class ScopeColors(val fill: Color) {
 /**
  * The search card: a field that grows out of the bar's capsule, with the rows for what's typed, on the keyboard. Typing
  * a site's name offers it ("Search IMDb"); choosing it, or a space after its keyword ("yt "), turns the field into the
- * site's chip, and the rows become the site's own.
+ * site's chip, and the rows become the site's own. Opened from a page's bar for a new tab, `page` is that page: its row
+ * comes first, and tapping it edits its address instead.
  */
 @Composable
-fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, startPrivately: Boolean) {
+fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, startPrivately: Boolean, page: BrowserTab? = null) {
     val app = browser.app
     val scope = rememberCoroutineScope()
     // A prefilled address starts selected, so typing replaces it. The field keeps the keyboard's edits itself, so
     // fast typing isn't lost while the rows are worked out.
     val field = rememberTextFieldState(initialText, TextRange(0, initialText.length))
+    // The address being edited, which the field starts with; empty for a new search.
+    var address by remember { mutableStateOf(initialText) }
     val query = field.text.toString()
     var privately by remember { mutableStateOf(startPrivately) }
     // No inline completion over a prefilled address, or straight after deleting.
@@ -193,8 +198,10 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     } else {
         // Until the prefilled address is changed, the rows are the space's recent pages, as on an empty field: the
         // address alone matches little more than its own page.
-        val asked = if (initialText.isNotEmpty() && query == initialText) "" else query
-        val result = app.store.suggestions(asked, remote, initialText.ifEmpty { null }, now)
+        val asked = if (address.isNotEmpty() && query == address) "" else query
+        // The page the sheet is over isn't a recent page to go to: it's in its own row, or in the field.
+        val current = address.takeIf { it.isNotEmpty() } ?: page?.url
+        val result = app.store.suggestions(asked, remote, current, now)
         rows = result.items.filter { it is Suggestion.Page || it is Suggestion.Search || it is Suggestion.Calc || it is Suggestion.Scope }
         completion = if (suppressed) "" else result.completion
     }
@@ -227,6 +234,20 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
     fun fill(next: String) {
         filling = true
         field.setTextAndPlaceCursorAtEnd(next)
+        focus.requestFocus()
+    }
+
+    // The page's row: the field takes its address, selected, and what's chosen opens in its tab.
+    fun editPage(target: BrowserTab) {
+        Haptics.press(view)
+        browser.editPageAddress()
+        address = target.url
+        privately = target.private
+        filling = true
+        field.edit {
+            replace(0, length, target.url)
+            selection = TextRange(0, target.url.length)
+        }
         focus.requestFocus()
     }
 
@@ -331,7 +352,9 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
 
     // Nothing to list under the field (a new person, before typing): the sheet is just the field, on the keyboard.
     val showsShortcuts = chosen == null && query.isEmpty() && shortcuts.isNotEmpty()
-    val bare = rows.isEmpty() && !showsShortcuts && !privately && (query.isEmpty() || query == initialText)
+    // The page under a new tab's search, until something is typed.
+    val pageRow = page?.takeIf { address.isEmpty() && chosen == null && query.isEmpty() }
+    val bare = rows.isEmpty() && !showsShortcuts && pageRow == null && !privately && (query.isEmpty() || query == address)
 
     Box(Modifier.fillMaxSize().testTag("search-card")) {
         // The page stays where it is, blurred behind (BrowserScreen) and dimmed here.
@@ -436,6 +459,7 @@ fun SearchCard(browser: BrowserModel, strings: Strings, initialText: String, sta
                 if (privately) {
                     BayText(strings.t("search.privateNotice"), Modifier.padding(start = Space.lg, top = 2.dp).testTag("private-notice"), variant = TextVariant.FOOTNOTE, color = secondary)
                 }
+                pageRow?.let { PageRow(app, strings, it, text, secondary) { editPage(it) } }
                 if (showsShortcuts) {
                     Shortcuts(app, strings, shortcuts, privately, { enter(it) }) { open(OpenTarget.Url(it.home)) }
                 }
@@ -499,6 +523,30 @@ private fun Shortcuts(app: AppModel, strings: Strings, sites: List<SearchScope>,
         }
         // Always five places, so one site's tile is as wide as five sites' tiles.
         repeat(SHORTCUT_PLACES - sites.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
+    }
+}
+
+/** The page a new tab's search was opened over: its address, and a tap to edit it in its own tab instead. */
+@Composable
+private fun PageRow(app: AppModel, strings: Strings, page: BrowserTab, text: Color, secondary: Color, edit: () -> Unit) {
+    val address = displayUrl(page.url)
+    val hint = strings.t("search.editPage")
+    Row(
+        Modifier.fillMaxWidth()
+            .testTag("search-edit-page")
+            .semantics(mergeDescendants = true) { contentDescription = "$hint, $address"; role = Role.Button }
+            .pressFeedback(onClick = edit)
+            .heightIn(min = SearchSheet.rowHeight)
+            .padding(start = Space.sm, end = Space.md),
+        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) { SiteIcon(app, page.url) }
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            BayText(pageTitle(page.title, page.url), color = text, maxLines = 1)
+            BayText(hint, variant = TextVariant.FOOTNOTE, color = secondary, maxLines = 1)
+        }
+        BayIconView(BayIcon.FILL, size = IconSize.small, color = secondary)
     }
 }
 

@@ -247,9 +247,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** Tabs stopped from the mini player or the system's controls: the pause report that follows stays out. */
     private val stopped = HashSet<String>()
 
-    /** The search was started for a new tab (from the switcher) rather than for the page on screen. */
+    /** The search was started for a new tab (from the switcher or the bar) rather than for the page on screen. */
     var searchInNewTab by mutableStateOf(false)
         private set
+
+    /** The page the bar's search opened over, for a new tab: the sheet's first row edits its address instead. */
+    var searchOverPage by mutableStateOf<BrowserTab?>(null)
+        private set
+
+    /** The search sheet is about the page on screen (editing it, or from its bar), so the page stays frosted behind. */
+    val searchKeepsPage get() = !searchInNewTab || searchOverPage != null
     var searchPrivately by mutableStateOf(false)
         private set
 
@@ -390,7 +397,34 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         if (!inNewTab && hasPage) capture(app.activeTabId)
         searchInNewTab = inNewTab
         searchPrivately = privately
+        searchOverPage = null
         overlay = Overlay.SEARCH
+    }
+
+    /**
+     * The bar's search. Over a page it's for a new tab, so searching never loses the page (a private page's new tab is
+     * private too), and the page stays frosted behind; the sheet's first row edits the page's address instead
+     * ([editPageAddress]). Over a new tab, it searches in that tab.
+     */
+    fun searchFromBar() {
+        val page = activeTab?.takeIf { hasPage }
+        if (page == null) return search(inNewTab = false)
+        capture(page.id)
+        search(inNewTab = true, privately = page.private)
+        searchOverPage = page
+    }
+
+    /** The sheet's "this page" row: the search goes back to the page on screen, its address to edit. */
+    fun editPageAddress() {
+        searchInNewTab = false
+        searchOverPage = null
+    }
+
+    /** Swiped past the last tab: a new tab, its search up. */
+    fun swipedToNewTab() {
+        val privately = activeTab?.private == true
+        openTab("", privately)
+        search(inNewTab = false, privately = privately)
     }
 
     /**
@@ -407,7 +441,8 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         overlay = Overlay.NONE
         when (command) {
             BayCommand.SEARCH, BayCommand.VOICE -> {
-                search(inNewTab = false)
+                // The widget's search is a new search, so it doesn't take the page over: a new tab, as from the bar.
+                search(inNewTab = hasPage)
                 searchListening = command == BayCommand.VOICE
             }
             BayCommand.NEW_TAB, BayCommand.PRIVATE_TAB -> openTab("", privately = command == BayCommand.PRIVATE_TAB)
