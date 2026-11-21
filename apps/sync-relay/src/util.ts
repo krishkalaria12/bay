@@ -20,6 +20,29 @@ export function empty(): Response {
   return new Response(null, { status: 204 });
 }
 
+// Bay on Windows and Linux syncs from its chrome://bay page, so the browser asks before each call. The relay can answer
+// any origin: every request carries its chain's bearer secret, never a cookie.
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, PUT, POST, DELETE",
+  "access-control-allow-headers": "authorization, content-type",
+  "access-control-max-age": "86400",
+};
+
+/** The answer to the browser's question before a call (a CORS preflight). */
+export function preflight(): Response {
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+/** `response`, readable by a page of any origin. */
+export function readableAnywhere(response: Response): Response {
+  const open = new Response(response.body, response);
+
+  open.headers.set("access-control-allow-origin", "*");
+
+  return open;
+}
+
 export async function sha256hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
 
