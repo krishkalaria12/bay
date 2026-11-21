@@ -1,0 +1,85 @@
+# Bay for the Snap Store, from the release tarball. scripts/linux/release.sh --formats snap fills in the version, puts
+# the tarball beside this file as the project's snap/snapcraft.yaml and packs it with snapcraft.
+name: bay
+title: Bay
+base: core24
+version: "@VERSION@"
+summary: A fast browser with your tabs in a sidebar
+description: |
+  Bay is a browser built around a sidebar. Favorites sit on top, pinned tabs and folders under them, and the day's tabs
+  below. Spaces keep work and home apart, each with its own theme and its own sign-ins.
+
+  Built on Chromium, so sites and Chrome Web Store extensions work as they do in Chrome. Bay adds spaces, pinned tabs
+  and folders, Peek and Split View, a command bar, built-in ad blocking with uBlock Origin Lite, and import from Arc,
+  Chrome, Firefox, Brave and other browsers.
+license: Apache-2.0
+website: https://bay.krishkalaria.in
+contact: https://github.com/krishkalaria12/bay/issues
+issues: https://github.com/krishkalaria12/bay/issues
+source-code: https://github.com/krishkalaria12/bay
+icon: snap/gui/bay.png
+grade: stable
+confinement: strict
+# Faster to start than xz, at a larger download.
+compression: lzo
+platforms:
+  amd64:
+
+apps:
+  bay:
+    command: bin/bay
+    desktop: usr/share/applications/bay.desktop
+    common-id: in.krishkalaria.bay
+    extensions: [gnome]
+    environment:
+      # The profile outlives a revision instead of being copied into each one.
+      CHROME_CONFIG_HOME: $SNAP_USER_COMMON
+      CHROME_DESKTOP: bay_bay.desktop
+      GTK_USE_PORTAL: "1"
+    plugs:
+      - audio-playback
+      - audio-record
+      - bluez
+      - browser-sandbox
+      - camera
+      - cups-control
+      - hardware-observe
+      - home
+      - joystick
+      - mount-observe
+      - network
+      - network-bind
+      - network-manager-observe
+      - opengl
+      - password-manager-service
+      - removable-media
+      - screen-inhibit-control
+      - u2f-devices
+      - unity7
+      - upower-observe
+    slots:
+      - mpris
+
+plugs:
+  # A snap can't ship a setuid sandbox; this lets Chromium's sandbox use user namespaces instead.
+  browser-sandbox:
+    interface: browser-support
+    allow-sandbox: true
+
+slots:
+  mpris:
+    interface: mpris
+    name: bay
+
+parts:
+  bay:
+    plugin: dump
+    source: bay-@VERSION@-linux-x64.tar.xz
+    override-build: |
+      craftctl default
+      cd "$CRAFT_PART_INSTALL"
+      rm -rf usr/bin etc/apparmor.d opt/bay/bay-wrapper
+      # snapd points Exec at the app; the icon has to be a path in the snap.
+      sed -i -e 's|^Exec=/usr/bin/bay|Exec=bay|' -e '/^TryExec=/d' \
+        -e 's|^Icon=bay$|Icon=${SNAP}/usr/share/icons/hicolor/256x256/apps/bay.png|' usr/share/applications/bay.desktop
+      install -Dm 755 "$CRAFT_PROJECT_DIR/snap/local/bay" bin/bay
