@@ -1,0 +1,54 @@
+diff --git a/components/crash/core/app/crashpad_linux.cc b/components/crash/core/app/crashpad_linux.cc
+--- a/components/crash/core/app/crashpad_linux.cc
++++ b/components/crash/core/app/crashpad_linux.cc
+@@ -21,6 +21,7 @@
+ #include "base/system/sys_info.h"
+ #include "build/branding_buildflags.h"
+ #include "build/chromeos_buildflags.h"
++#include "cef/libcef/features/features.h"
+ #include "components/crash/core/app/crash_reporter_client.h"
+ #include "components/crash/core/app/crash_switches.h"
+ #include "content/public/common/content_descriptors.h"
+@@ -167,10 +168,18 @@
+     crash_reporter_client->GetCrashDumpLocation(database_path);
+     crash_reporter_client->GetCrashMetricsLocation(&metrics_path);
+ 
++    base::FilePath handler_path;
++#if BUILDFLAG(ENABLE_CEF)
+     // Use the same main (default) or subprocess helper exe.
+-    base::FilePath handler_path;
+     base::PathService::Get(content::CHILD_PROCESS_EXE, &handler_path);
+     DCHECK(!handler_path.empty());
++#else
++    // Chrome's entry point does not dispatch the CEF embedded handler mode.
++    if (!base::PathService::Get(base::DIR_EXE, &handler_path)) {
++      return false;
++    }
++    handler_path = handler_path.Append("chrome_crashpad_handler");
++#endif
+ 
+     // When --use-cros-crash-reporter is set (below), the handler passes dumps
+     // to ChromeOS's /sbin/crash_reporter which in turn passes the dump to
+@@ -255,9 +264,11 @@
+     }
+ #endif
+ 
++#if BUILDFLAG(ENABLE_CEF)
+     // Since we're using the same main or subprocess helper exe we must specify
+     // the process type.
+     arguments.push_back(std::string("--type=") + switches::kCrashpadHandler);
++#endif
+ 
+     crash_reporter_client->GetCrashOptionalArguments(&arguments);
+ 
+diff --git a/components/crash/core/app/BUILD.gn b/components/crash/core/app/BUILD.gn
+--- a/components/crash/core/app/BUILD.gn
++++ b/components/crash/core/app/BUILD.gn
+@@ -92,6 +92,7 @@
+ 
+   if (is_linux || is_chromeos) {
+     sources += [ "crashpad_linux.cc" ]
++    deps += [ "//cef/libcef/features:buildflags" ]
+     data_deps = [ ":chrome_crashpad_handler" ]
+   }
+ 

@@ -1,5 +1,7 @@
+import type { JsonObject } from "../lib/json";
 import { folderInsertionBeforeId, folderTabIds, withFolderPlacementUndo } from "./folders";
 import type { StateCreator } from "zustand";
+import type { BrowserProjection, DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
 import { autoGroupName } from "./groupNames";
 import { tidyTabTitle } from "../lib/tidyTabTitle";
@@ -39,8 +41,6 @@ export type TabPlacement = {
 
 export type GroupPlacement = { pinned: boolean; beforeId?: string | null };
 
-type CustomTitlePatch = { customTitle?: string | null };
-
 export type OrganizeSlice = {
   selection: Record<string, string[]>;
   cleanedTabs: ClosedTab[];
@@ -66,8 +66,8 @@ export type OrganizeSlice = {
   moveGroupToBookmarksBar(groupId: string): void;
 
   /**
-   * Sorts the loose tabs into tab groups as `plan` says, or by site without one (lib/tidyTabs.ts asks the model first);
-   * the number of groups made or added to. Pinned tabs and tabs already in a group stay.
+   * Sorts the loose tabs into tab groups as `plan` says, or by site without one (lib/tidyTabs.ts asks the model
+   * first); the number of groups made or added to. Pinned tabs and tabs already in a group stay.
    */
   tidyTabs(windowId: string, plan?: TabTidyPlan): number;
   /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
@@ -79,12 +79,16 @@ export type OrganizeSlice = {
   closeAbandonedNewTabs(): void;
 };
 
-export const keptDeletedGroups = (list: ClosedGroup[], now = Date.now()) => list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
+export const keptDeletedGroups = <G extends Pick<ClosedGroup, "closedAt">>(list: readonly G[], now = Date.now()) =>
+  list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
 
-export const groupOf = (s: Pick<BrowserState, "groups">, tabId: string | undefined): TabGroup | undefined =>
-  tabId ? groupIndex(s.groups).get(tabId) : undefined;
+// SAFETY: the groups' own index holds the group's own shape.
+export const groupOf = <S extends Pick<BrowserState, "groups"> | Pick<BrowserProjection, "groups">>(
+  s: S,
+  tabId: string | undefined,
+): S["groups"][string] | undefined => (tabId ? (groupIndex(s.groups).get(tabId) as S["groups"][string] | undefined) : undefined);
 
-export function selectedTabIds(s: BrowserState, windowId: string): string[] {
+export function selectedTabIds(s: BrowserState | BrowserProjection, windowId: string): string[] {
   const view = viewTabIds(s, windowId);
   const selected = (s.selection[windowId] ?? []).filter((id) => view.includes(id));
 
@@ -112,10 +116,12 @@ export const awayFromPin = (t: Pick<Tab, "pinned" | "pinnedRow" | "url" | "pinne
   pinnedPage(t) && !!t.pinnedUrl && !!t.url && !samePage(t.url, t.pinnedUrl);
 
 // A name the user gave wins; otherwise one from the tabs' titles (store/groupNames.ts).
-const autoLabels = new WeakMap<TabGroup, { tabs: object; members: (Tab | undefined)[]; label: string }>();
+type ReadTab = DeepReadonly<Tab>;
+
+const autoLabels = new WeakMap<object, { tabs: object; members: (ReadTab | undefined)[]; label: string }>();
 
 // Memoized per group on its member tabs: headers ask on every store update, and naming reads every title.
-export function groupLabel(s: Pick<BrowserState, "tabs">, g: TabGroup): string {
+export function groupLabel(s: Pick<BrowserProjection, "tabs">, g: DeepReadonly<TabGroup>): string {
   if (g.name) return g.name;
   const cached = autoLabels.get(g);
 
@@ -126,7 +132,7 @@ export function groupLabel(s: Pick<BrowserState, "tabs">, g: TabGroup): string {
   }
 
   const members = g.tabIds.map((id) => s.tabs[id]);
-  const label = autoGroupName(members.filter((t): t is Tab => !!t?.url)) || "New Group";
+  const label = autoGroupName(members.filter((t): t is ReadTab => !!t?.url)) || "New Group";
   autoLabels.set(g, { tabs: s.tabs, members, label });
 
   return label;
@@ -138,8 +144,12 @@ export function isSiteMuted(s: Pick<BrowserState, "settings" | "privateSiteMutes
   return own ?? (s.settings.mutedSites ?? []).includes(host);
 }
 
-export const cleanedTabsFor = (s: Pick<BrowserState, "windows" | "cleanedTabs" | "privateCleanedTabs">, windowId: string): ClosedTab[] =>
-  s.windows[windowId]?.incognito ? (s.privateCleanedTabs[windowId] ?? NO_CLEANED) : s.cleanedTabs;
+export const cleanedTabsFor = <
+  S extends Pick<BrowserState, "windows" | "cleanedTabs" | "privateCleanedTabs"> | Pick<BrowserProjection, "windows" | "cleanedTabs" | "privateCleanedTabs">,
+>(
+  s: S,
+  windowId: string,
+): S["cleanedTabs"] => (s.windows[windowId]?.incognito ? (s.privateCleanedTabs[windowId] ?? NO_CLEANED) : s.cleanedTabs);
 
 const NO_CLEANED: ClosedTab[] = [];
 
@@ -250,11 +260,9 @@ export function withGroup(
     pinned: !!o.pinned,
     tabIds: tabIds.filter((id) => members.has(id)),
     createdAt: Date.now(),
+    ...(o.autoUngroup ? { autoUngroup: true } : undefined),
+    ...(o.pinnedOpenerId ? { pinnedOpenerId: o.pinnedOpenerId } : undefined),
   };
-
-  if (o.autoUngroup) group.autoUngroup = true;
-
-  if (o.pinnedOpenerId) group.pinnedOpenerId = o.pinnedOpenerId;
 
   const groups = { ...leaveGroups(s.groups, members), [group.id]: group };
   tabIds = orderSections(tabIds, s.tabs, groups, s.pinnedFolders);
@@ -265,26 +273,26 @@ export function withGroup(
 
 function closedEntries(s: BrowserState, ids: string[]): ClosedTab[] {
   const now = Date.now();
-  const entries: ClosedTab[] = [];
 
-  for (const id of ids) {
-    const t = s.tabs[id];
+  return ids
+    .flatMap((id) => {
+      const t = s.tabs[id];
 
-    if (!t || !t.url) continue;
-    const group = groupOf(s, t.id);
+      return t && t.url ? [t] : [];
+    })
+    .map((t) => {
+      const group = groupOf(s, t.id);
 
-    entries.push({
-      kind: "tab" as const,
-      id: newId("ct"),
-      tab: snapshotTab(t),
-      windowId: t.windowId,
-      index: Math.max(listOfTab(s, t.id)?.tabIds.indexOf(t.id) ?? 0, 0),
-      group: group ? { id: group.id, name: group.name, icon: group.icon, color: group.color } : null,
-      closedAt: now,
+      return {
+        kind: "tab" as const,
+        id: newId("ct"),
+        tab: snapshotTab(t),
+        windowId: t.windowId,
+        index: Math.max(listOfTab(s, t.id)?.tabIds.indexOf(t.id) ?? 0, 0),
+        group: group ? { id: group.id, name: group.name, icon: group.icon, color: group.color } : null,
+        closedAt: now,
+      };
     });
-  }
-
-  return entries;
 }
 
 function closeQuietly(s: BrowserState, ids: string[]): BrowserState {
@@ -425,7 +433,7 @@ export function cleanUpHours(s: Pick<BrowserState, "spaces" | "settings">, space
   return own === undefined ? s.settings.cleanUpInactiveTabsAfterHours : own;
 }
 
-export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
+export function cleanUpCandidates(s: BrowserProjection, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
   const view = viewTabIds(s, windowId, spaceId);
   const out = new Set<string>();
   visitCleanUpCandidates(s, view, windowId, inactiveForMs, now, spaceId, (id) => {
@@ -442,7 +450,7 @@ export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveFor
 const clearable = new Map<string, { inputs: unknown[]; result: boolean }>();
 
 /** Whether Clear would put a tab away: the window's space has a tab besides the shown, pinned, kept, playing, grouped and split. */
-export function hasClearableTabs(s: BrowserState, windowId: string, spaceId?: string): boolean {
+export function hasClearableTabs(s: BrowserProjection, windowId: string, spaceId?: string): boolean {
   const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, playingAudioVersion(s.live)];
   const key = `${windowId}|${spaceId ?? ""}`;
   const cached = clearable.get(key);
@@ -458,13 +466,13 @@ export function hasClearableTabs(s: BrowserState, windowId: string, spaceId?: st
 }
 
 /** Whether cleanup would remove a tab, stopping at the first eligible one. */
-export function hasCleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): boolean {
+export function hasCleanUpCandidates(s: BrowserProjection, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): boolean {
   return visitCleanUpCandidates(s, viewTabIds(s, windowId, spaceId), windowId, inactiveForMs, now, spaceId, () => true);
 }
 
 // Returning true from visit stops the scan. Both queries share protection and duplicate keeper rules.
 function visitCleanUpCandidates(
-  s: BrowserState,
+  s: BrowserProjection,
   view: string[],
   windowId: string,
   inactiveForMs: number,
@@ -479,7 +487,7 @@ function visitCleanUpCandidates(
   const active = activeTabId(s, windowId, spaceId);
   const grouped = groupIndex(s.groups);
   const inSplit = splitIndex(s.splits);
-  const keep = (t: Tab) => shown.has(t.id) || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
+  const keep = (t: DeepReadonly<Tab>) => shown.has(t.id) || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
 
   // Clear usually finds an ordinary inactive tab here, without building duplicate buckets.
   for (const id of view) {
@@ -490,7 +498,7 @@ function visitCleanUpCandidates(
     if (now - t.lastActiveAt >= inactiveForMs && visit(id)) return true;
   }
 
-  const byPage = new Map<string, Tab[]>();
+  const byPage = new Map<string, DeepReadonly<Tab>[]>();
 
   for (const id of view) {
     const t = s.tabs[id]!;
@@ -532,7 +540,7 @@ export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {
 }
 
 /** As Arc's ⌃Tab: the most recent tabs of every space the window can show (not one another window shows now). */
-export function recentTabIds(s: BrowserState, windowId: string): string[] {
+export function recentTabIds(s: BrowserProjection, windowId: string): string[] {
   const w = s.windows[windowId];
 
   if (!w) return [];
@@ -577,7 +585,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
     const { pinnedRow: _, folderId: _f, ...rest } = t;
     const wasRow = !!t.pinnedRow;
-    let extra: CustomTitlePatch = {};
+    let extra: { customTitle?: string | null } | undefined;
 
     if (tidyEnabled && row && !wasRow && !t.customTitle) {
       const short = tidyTabTitle(t.title, t.url);
@@ -585,12 +593,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
       if (short && short !== t.title) extra = { customTitle: short };
     }
 
-    const nextTab: Tab = { ...rest, pinned: p.pinned, pinnedUrl, ...extra };
-
-    if (row) nextTab.pinnedRow = true;
-
-    if (folderId) nextTab.folderId = folderId;
-    tabs[id] = nextTab;
+    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : undefined), ...(folderId ? { folderId } : undefined), ...extra };
   }
 
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
@@ -633,7 +636,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
 }
 
 export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserState> | null {
-  const gone = (map: Record<string, ClosedTab[] | Record<string, boolean>>) => Object.keys(map).filter((id) => !s.windows[id]);
+  const gone = (map: JsonObject) => Object.keys(map).filter((id) => !s.windows[id]);
   const cleaned = gone(s.privateCleanedTabs);
   const mutes = gone(s.privateSiteMutes);
 
@@ -642,7 +645,8 @@ export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserStat
   return { privateCleanedTabs: without(s.privateCleanedTabs, cleaned), privateSiteMutes: without(s.privateSiteMutes, mutes) };
 }
 
-export function hostOfTab(tab: Tab): string {
+/** A tab's host without its "www.": the site a group of tabs shares. */
+export function hostOfTab(tab: Pick<Tab, "url">): string {
   try {
     return new URL(tab.url).hostname.replace(/^www\./, "");
   } catch {
@@ -650,13 +654,14 @@ export function hostOfTab(tab: Tab): string {
   }
 }
 
+/** The groups Tidy may make and the groups it may add to. */
 export type TabTidyPlan = {
   newGroups: { name?: string; tabIds: string[] }[];
   joins: { groupId: string; tabIds: string[] }[];
 };
 
 // A check for tabs Tidy may move: open, and not pinned, grouped or split.
-function looseTabCheck(s: BrowserState): (id: string) => boolean {
+function looseTabCheck(s: BrowserProjection): (id: string) => boolean {
   const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
   const inSplit = splitIndex(s.splits);
 
@@ -664,19 +669,19 @@ function looseTabCheck(s: BrowserState): (id: string) => boolean {
 }
 
 /** The tabs Tidy may sort in the window's space, in sidebar order: loose web pages. */
-export function tidyCandidates(s: BrowserState, windowId: string, spaceId?: string): string[] {
+export function tidyCandidates(s: BrowserProjection, windowId: string, spaceId?: string): string[] {
   const isLoose = looseTabCheck(s);
 
   return viewTabIds(s, windowId, spaceId).filter((id) => isLoose(id) && /^(?:https?|file):/i.test(s.tabs[id]!.url));
 }
 
-type TidyTabCounts = { tabCount: number; loose: string[] };
+export type TidyTabCounts = { tabCount: number; loose: string[] };
 
 // The divider's selector runs on every store update; this is worked out again only when the lists and groups change.
 const tidyCounts = new Map<string, { inputs: unknown[]; result: TidyTabCounts }>();
 
 /** What the divider's Tidy goes by: the list's tabs, grouped ones included, and the loose ones among them. */
-export function tidyTabCounts(s: BrowserState, windowId: string, spaceId?: string): TidyTabCounts {
+export function tidyTabCounts(s: BrowserProjection, windowId: string, spaceId?: string): TidyTabCounts {
   const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits];
   const key = `${windowId}|${spaceId ?? ""}`;
   const cached = tidyCounts.get(key);
@@ -693,7 +698,7 @@ export function tidyTabCounts(s: BrowserState, windowId: string, spaceId?: strin
 }
 
 /** The grouping that needs no model: a group per site with two or more tabs, the rest together under "Other". */
-export function siteTidyPlan(s: BrowserState, ids: string[]): TabTidyPlan {
+export function siteTidyPlan(s: BrowserProjection, ids: string[]): TabTidyPlan {
   const clusters = new Map<string, string[]>();
   const leftovers: string[] = [];
 
@@ -747,7 +752,7 @@ function tidyingTabs(s: BrowserState, plan: TabTidyPlan): [BrowserState, number]
     const ids = tabIds.filter(isLoose);
 
     if (ids.length < 2) continue;
-    const [state, id] = withGroup(next, ids, { pinned: false, name });
+    const [state, id] = withGroup(next, ids, { pinned: false, ...(name ? { name } : undefined) });
     next = state;
 
     if (id) made++;

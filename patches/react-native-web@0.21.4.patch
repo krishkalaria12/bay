@@ -1,0 +1,52 @@
+diff --git a/dist/cjs/exports/StyleSheet/compiler/createReactDOMStyle.js b/dist/cjs/exports/StyleSheet/compiler/createReactDOMStyle.js
+index bc5bf2adc9abd9b5cee5ec3869b950c15fedfa9e..dbf55d4b3361ad040a1e83a29414303a7f30303b 100644
+--- a/dist/cjs/exports/StyleSheet/compiler/createReactDOMStyle.js
++++ b/dist/cjs/exports/StyleSheet/compiler/createReactDOMStyle.js
+@@ -28,7 +28,7 @@ var _canUseDom = _interopRequireDefault(require("../../../modules/canUseDom"));
+ var emptyObject = {};
+ var supportsCSS3TextDecoration = !_canUseDom.default || window.CSS != null && window.CSS.supports != null && (window.CSS.supports('text-decoration-line', 'none') || window.CSS.supports('-webkit-text-decoration-line', 'none'));
+ var MONOSPACE_FONT_STACK = 'monospace,monospace';
+-var SYSTEM_FONT_STACK = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
++var SYSTEM_FONT_STACK = '"Bay UI",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+ var STYLE_SHORT_FORM_EXPANSIONS = {
+   borderColor: ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
+   borderBlockColor: ['borderTopColor', 'borderBottomColor'],
+diff --git a/dist/exports/StyleSheet/compiler/createReactDOMStyle.js b/dist/exports/StyleSheet/compiler/createReactDOMStyle.js
+index e69decd5c6c0ae6840a361f0c175552ac064ff97..88fa6cead827a879ca328779b2bcecd8e1317579 100644
+--- a/dist/exports/StyleSheet/compiler/createReactDOMStyle.js
++++ b/dist/exports/StyleSheet/compiler/createReactDOMStyle.js
+@@ -23,7 +23,7 @@ import canUseDOM from '../../../modules/canUseDom';
+ var emptyObject = {};
+ var supportsCSS3TextDecoration = !canUseDOM || window.CSS != null && window.CSS.supports != null && (window.CSS.supports('text-decoration-line', 'none') || window.CSS.supports('-webkit-text-decoration-line', 'none'));
+ var MONOSPACE_FONT_STACK = 'monospace,monospace';
+-var SYSTEM_FONT_STACK = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
++var SYSTEM_FONT_STACK = '"Bay UI",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+ var STYLE_SHORT_FORM_EXPANSIONS = {
+   borderColor: ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
+   borderBlockColor: ['borderTopColor', 'borderBottomColor'],
+diff --git a/dist/exports/StyleSheet/compiler/createReactDOMStyle.js.flow b/dist/exports/StyleSheet/compiler/createReactDOMStyle.js.flow
+index 9bffe28fbf06886bb3483bb5dddab86a019941ba..9533fd19c0ac4714e302ebcc25557d002943289a 100644
+--- a/dist/exports/StyleSheet/compiler/createReactDOMStyle.js.flow
++++ b/dist/exports/StyleSheet/compiler/createReactDOMStyle.js.flow
+@@ -27,7 +27,7 @@ type Style = {
+ const emptyObject = {};
+ const supportsCSS3TextDecoration = !canUseDOM || window.CSS != null && window.CSS.supports != null && (window.CSS.supports('text-decoration-line', 'none') || window.CSS.supports('-webkit-text-decoration-line', 'none'));
+ const MONOSPACE_FONT_STACK = 'monospace,monospace';
+-const SYSTEM_FONT_STACK = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
++const SYSTEM_FONT_STACK = '"Bay UI",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+ const STYLE_SHORT_FORM_EXPANSIONS = {
+   borderColor: ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
+   borderBlockColor: ['borderTopColor', 'borderBottomColor'],
+diff --git a/src/exports/StyleSheet/compiler/createReactDOMStyle.js b/src/exports/StyleSheet/compiler/createReactDOMStyle.js
+index 6274527512c48d57868ec000d430f4f570f002b8..b161fb6b32b16d8596fefb08bccf013bbff55017 100644
+--- a/src/exports/StyleSheet/compiler/createReactDOMStyle.js
++++ b/src/exports/StyleSheet/compiler/createReactDOMStyle.js
+@@ -35,7 +35,7 @@ const supportsCSS3TextDecoration =
+ const MONOSPACE_FONT_STACK = 'monospace,monospace';
+ 
+ const SYSTEM_FONT_STACK =
+-  '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
++  '"Bay UI",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+ 
+ const STYLE_SHORT_FORM_EXPANSIONS = {
+   borderColor: [

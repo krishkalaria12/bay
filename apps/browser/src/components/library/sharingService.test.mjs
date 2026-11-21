@@ -33,6 +33,9 @@ const fakeEngine = () => {
         lab.keys.delete(id);
       }),
     readRecords: () => lab.records,
+    readCurrentRecords: () => Effect.sync(() => lab.records),
+    acquireLock: () => Effect.succeed(null),
+    requestNative: () => Effect.succeed(null),
     saveRecords: (json) =>
       Effect.sync(() => {
         lab.saved.push(JSON.parse(json));

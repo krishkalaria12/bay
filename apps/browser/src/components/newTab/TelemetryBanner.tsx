@@ -1,10 +1,11 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserPrompt";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { dismissAsk, setSharing, useTelemetry } from "../../telemetry/client";
 import { SHARING_COPY } from "../../telemetry/copy";
 import { onboardingCompletedAt, useOnboarding } from "../onboarding/state";

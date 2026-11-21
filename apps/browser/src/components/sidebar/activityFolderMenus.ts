@@ -5,7 +5,7 @@ import { calendarConnected, connectCalendar, setCalendarHidden, useCalendar } fr
 import { deleteLiveFolder, newLiveFolder, openLiveItem, refreshFolder, statusText } from "../../activity/activityEngine";
 import { ALERT_LEADS } from "../../activity/meetings";
 import { SOURCES } from "../../activity/sources";
-import { live, markRead, moveFolder, setLive, updateCalendarSettings, updateFolder } from "../../activity/activityStore";
+import { live, markRead, markUnread, moveFolder, updateCalendarSettings, updateFolder } from "../../activity/activityStore";
 import type { LiveItem, LiveSourceId } from "../../activity/types";
 import { openSettings } from "../settings/windows";
 import { openIconPicker } from "./actions";
@@ -127,7 +127,7 @@ export async function openLiveItemMenu(windowId: string, folderId: string, item:
   else if (choice === "copyMd") copyText(markdownLink(item.title, item.url));
   else if (choice === "unread") {
     if (unread) markRead(folderId, [item.id]);
-    else setLive((s) => ({ unread: { ...s.unread, [folderId]: [...(s.unread[folderId] ?? []), item.id] } }));
+    else markUnread(folderId, item.id);
   } else if (choice === "close" && tabId) void closeTab(tabId);
 }
 

@@ -1,3 +1,6 @@
+import * as v from "valibot";
+import { nativeContracts } from "../../../packages/platform/src/nativeContracts.ts";
+
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 
@@ -35,8 +38,7 @@ export const heldSaves = { on: false, queue: [], error: null };
 
 export const saveDocument = (name, contents) =>
   new Promise((resolve, reject) => {
-    if (heldSaves.error) return reject(heldSaves.error);
-    const land = () => (docs.set(name, contents), resolve());
+    const land = () => (heldSaves.error ? reject(heldSaves.error) : (docs.set(name, contents), resolve()));
 
     if (heldSaves.on) heldSaves.queue.push(land);
     else land();
@@ -53,7 +55,7 @@ export const calendarAuthorization = () => "notDetermined";
 export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
 export const systemCalendarEvents = () => Promise.resolve([]);
-export const onCalendarChanged = () => ({ remove() {} });
+export const onCalendarChanged = (listener) => (calendarChangedListeners.add(listener), { remove: () => calendarChangedListeners.delete(listener) });
 
 export const keychainAnswers = {
   get: async () => null,
@@ -86,13 +88,13 @@ export const confirm = (...args) => shellDialogAnswers.confirm(...args);
 export const openTextFile = (...args) => shellDialogAnswers.openTextFile(...args);
 export const prompt = (...args) => shellDialogAnswers.prompt(...args);
 export const saveTextFile = (...args) => shellDialogAnswers.saveTextFile(...args);
-export const onWindowEvent = () => ({ remove() {} });
+export const onWindowEvent = (listener) => (windowEventListeners.add(listener), { remove: () => windowEventListeners.delete(listener) });
 export const focusedWindows = [];
 export const sidebarMoveUndoCalls = [];
 export const setSidebarMoveUndo = (windowId, available, focus = false) => (sidebarMoveUndoCalls.push({ windowId, available, focus }), Promise.resolve());
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
 export const openWindow = () => Promise.resolve();
-export const onAppEvent = () => ({ remove() {} });
+export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
 
 // The updater: what it knows, and what it reports.
 export const updaterAnswers = { state: { available: false }, pending: null };
@@ -162,8 +164,8 @@ export const removeNotifications = () => Promise.resolve();
 
 // The app's notification permission, and the questions the native side asks.
 export const notificationAnswers = { permission: "granted", request: true, settings: 0 };
-export const notificationPermission = () => Promise.resolve(notificationAnswers.permission);
-export const requestNotificationPermission = () => Promise.resolve(notificationAnswers.request);
+export const notificationPermission = () => (notificationState.queries++, Promise.resolve(notificationAnswers.permission));
+export const requestNotificationPermission = () => (notificationState.requests++, Promise.resolve(notificationAnswers.request));
 export const openNotificationSettings = () => (notificationAnswers.settings++, Promise.resolve());
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
@@ -194,8 +196,17 @@ export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
 
 // expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
-export const requireOptionalNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? null;
+export const requireOptionalNativeModule = (name) => {
+  const stub = globalThis.nnTestNativeModules?.[name] ?? null;
+
+  return stub == null ? null : assertNativeStub(name, stub, { partial: true });
+};
+
 export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? {};
+
+// The platform's native helpers: a test runs without a native host, so the fallback answers.
+export const nativeRandomUUID = (fallback) => fallback();
+export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 
 // Saved passwords, one store per simulated device (sync tests).
 export const passwordStores = new Map();
@@ -555,3 +566,146 @@ export const uninstallExtension = async (id, profile) => {
 
   if (at >= 0) installedExtensions.splice(at, 1);
 };
+
+// Native controls shared by the WebUI and macOS service tests.
+export const calendarChangedListeners = new Set();
+
+export const emitCalendarChanged = () => calendarChangedListeners.forEach((listener) => listener());
+
+export const readCurrentEaselShareRecords = async () => easelSharingAnswers.readRecords();
+
+export const requestEaselShare = (...args) => easelSharingAnswers.request?.(...args) ?? null;
+
+export const setDialogPresenter = () => {};
+
+export const windowEventListeners = new Set();
+
+export const emitWindowEvent = (event) => windowEventListeners.forEach((listener) => listener(event));
+
+export const appEventListeners = new Set();
+
+export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+
+export const appearanceState = { query: () => Promise.resolve(false) };
+
+export const isDarkAppearance = () => appearanceState.query();
+
+export const pageEventListeners = new Set();
+
+export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
+
+export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
+
+export const pageOpenListeners = new Set();
+
+export const onPageOpen = (listener) => (pageOpenListeners.add(listener), { remove: () => pageOpenListeners.delete(listener) });
+
+export const emitPageOpen = (event) => pageOpenListeners.forEach((listener) => listener(event));
+
+export const finishedPageOpens = [];
+
+export const finishPageOpen = (offerId, tabId) => (finishedPageOpens.push({ offerId, tabId }), Promise.resolve());
+
+export const pageEventSource = { replay: [], openReplay: [], error: null, starts: 0, stops: 0 };
+
+export const startPageEvents = () => {
+  pageEventSource.starts++;
+  pageEventSource.replay.forEach(emitPageEvent);
+  pageEventSource.openReplay.forEach(emitPageOpen);
+
+  return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
+};
+
+export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
+
+export const notificationState = {
+  querySupported: true,
+  queries: 0,
+  requests: 0,
+  get permission() {
+    return notificationAnswers.permission;
+  },
+  set permission(value) {
+    notificationAnswers.permission = value;
+  },
+  get requested() {
+    return notificationAnswers.request;
+  },
+  set requested(value) {
+    notificationAnswers.request = value;
+  },
+};
+
+export const hasNotificationPermissionQuery = () => notificationState.querySupported;
+
+export const menuShortcuts = () => Promise.resolve([]);
+
+export const showMenu = () => Promise.resolve(null);
+
+export const documentSpecks = (rects) => Promise.resolve(rects.map(() => []));
+
+export function assertNativeStub(name, stub, { partial = false } = {}) {
+  const contract = nativeContracts.modules[name];
+
+  if (!contract) throw new Error(`Unknown native stub ${name}`);
+
+  if (!stub || !v.is(v.object({}), stub)) throw new TypeError(`${name} must be an object`);
+
+  for (const [method, spec] of Object.entries(contract.methods)) {
+    if (partial && !(method in stub)) continue;
+
+    if (spec.optional && stub[method] == null) continue;
+
+    if (!v.is(v.function_(), stub[method])) throw new TypeError(`${name}.${method} must be a function`);
+  }
+
+  for (const [key, type] of Object.entries(contract.constants)) {
+    if (partial && !(key in stub)) continue;
+
+    if (["number", "string", "boolean"].includes(type) && !v.is(v[type](), stub[key])) {
+      throw new TypeError(`${name}.${key} must be ${type}`);
+    }
+  }
+
+  if (!partial && contract.events.length && !v.is(v.function_(), stub.addListener)) {
+    throw new TypeError(`${name}.addListener must be a function`);
+  }
+
+  return stub;
+}
+
+export const copyText = () => {};
+
+export const windowButtonLayout = () => ({ left: [], right: process.env.BAY_TEST_PLATFORM === "windows" ? ["minimize", "maximize", "close"] : [] });
+
+export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
+
+export const windowState = (windowId) => captionState.query(windowId);
+
+export const tabDragNative = { calls: [], frame: () => Promise.resolve(null) };
+
+export const windowFrame = (id) => tabDragNative.frame(id);
+
+export const hapticTick = () => {};
+
+export const dragPreview = Object.fromEntries(
+  ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
+);
+
+export const libraryImageUri = (path) => `file://${path}`;
+
+const permissionListeners = new Map();
+
+const permissionListener = (name) => (listener) => {
+  permissionListeners.set(name, listener);
+
+  return { remove: () => permissionListeners.delete(name) };
+};
+
+export const onPermission = permissionListener("onPermission");
+
+export const onPermissionDismissed = permissionListener("onPermissionDismissed");
+
+export const permissionEvents = { fire: (name, value) => permissionListeners.get(name)?.(value) };
+
+export const resolvePermission = () => Promise.resolve();

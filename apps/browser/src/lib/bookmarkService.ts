@@ -25,12 +25,11 @@ import * as Scope from "effect/Scope";
 import type { Operation } from "../effect/errors";
 import { Diagnostics } from "../effect/ports/diagnostics";
 import { bookmarkUuidFor, isBookmarkUuid, rootIdsFor } from "../store/bookmarks";
-import { useBrowser, type BrowserState } from "../store/browserStore";
-import { engineProfile, isIncognitoSpace } from "../store/model";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
+import { engineProfileFor, isIncognitoSpace } from "../store/model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks as BookmarkTree } from "../store/types";
 import { BOOKMARKS_CACHE_FILE, BOOKMARKS_CACHE_SAVE_MS, LEGACY_BOOKMARKS_FILE, LEGACY_BOOKMARKS_KEPT_MS } from "./constants";
-
-const store = () => useBrowser.getState();
 
 // MARK: Chrome's bookmarks
 
@@ -336,20 +335,20 @@ const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
   ...new Set(
     Object.keys(s.spaces)
       .filter((id) => !isIncognitoSpace(id))
-      .map(engineProfile),
+      .map((id) => engineProfileFor(id, s.spaces)),
   ),
 ];
 
 const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
-  Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfile(id) === engine);
+  Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfileFor(id, s.spaces) === engine);
 
 /**
  * Puts a tree in the store: the engine's subtree is replaced; icons the store knew stay.
  *
  * `ready`: sync may use a tree only once bookmarks.json is in Chrome; before, its bookmarks would read as deleted.
  */
-function adopt(engine: string, flat: Flat, { ready = false } = {}) {
-  useBrowser.setState((s) => {
+function adopt(browser: BrowserStore, engine: string, flat: Flat, { ready = false } = {}) {
+  browser.setState((s) => {
     const roots = rootIdsFor(engine);
     const old = flatFromStore(s.bookmarks, engine);
     const nodes = { ...s.bookmarks.nodes };
@@ -418,7 +417,7 @@ interface TreesById {
 }
 
 // The cache's trees, or on the launch that moves bookmarks.json in, that file's (under the UUIDs it moves to).
-function launchTrees(): TreesById {
+function launchTrees(browser: BrowserStore): TreesById {
   const out: TreesById = {};
 
   for (const [engine, nodes] of Object.entries(readCache())) {
@@ -433,11 +432,11 @@ function launchTrees(): TreesById {
   try {
     // SAFETY: JSON.parse yields the legacy bookmarks document shape written by the old app.
     const legacy = (JSON.parse(readDocument(LEGACY_BOOKMARKS_FILE) ?? "null") as { bookmarks?: BookmarkTree } | null)?.bookmarks;
-    const s = store();
+    const s = browser.getState();
 
     for (const [spaceId, roots] of Object.entries(legacy?.roots ?? {})) {
       if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) continue;
-      const engine = engineProfile(spaceId);
+      const engine = engineProfileFor(spaceId, s.spaces);
       const ids = rootIdsFor(engine);
       const id = (old: string) => (old === roots.bar ? ids.bar : old === roots.other ? ids.other : bookmarkUuidFor(old));
       const nodes: BookmarkTree["nodes"] = {};
@@ -455,17 +454,15 @@ function launchTrees(): TreesById {
   return out;
 }
 
-let cacheTimer: ReturnType<typeof setTimeout> | undefined;
-
 /**
  * Shows the trees Chrome confirmed last, until Chrome's own arrive. The launch shows them at once, before Chrome
  * has been asked for anything.
  */
-export const showCachedTrees = (): void => {
-  for (const [engine, flat] of Object.entries(launchTrees())) {
-    if (!engineProfiles(store()).includes(engine)) continue;
+export const showCachedTrees = (browser: BrowserStore): void => {
+  for (const [engine, flat] of Object.entries(launchTrees(browser))) {
+    if (!engineProfiles(browser.getState()).includes(engine)) continue;
 
-    adopt(engine, flat, { ready: false });
+    adopt(browser, engine, flat, { ready: false });
   }
 };
 
@@ -492,6 +489,9 @@ export class Bookmarks extends Context.Service<
   static readonly layer = Layer.effect(
     Bookmarks,
     Effect.gen(function* () {
+      const browser = (yield* AuthorityStore).store;
+      const store = () => browser.getState();
+      let cacheTimer: ReturnType<typeof setTimeout> | undefined;
       const engine = yield* BookmarkEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
@@ -513,6 +513,9 @@ export class Bookmarks extends Context.Service<
 
       // Sync may use a tree only once bookmarks.json is in Chrome: before, its bookmarks would read as deleted.
       let legacyMoved = false;
+
+      // Moves when the service stops: a read that was already waiting for Chrome does not write its answer.
+      let generation = 0;
 
       // The trees Chrome confirmed, as the store shows them (with icons).
       const saveCache = () => {
@@ -561,9 +564,14 @@ export class Bookmarks extends Context.Service<
       /** Reads Chrome's tree and makes the store's edits since the last confirmed tree again on it. */
       const readTree = (profile: string, state: EngineState): Effect.Effect<void, BookmarkError> =>
         Effect.gen(function* () {
+          const run = generation;
+
           yield* engine.watch(profile);
 
           const fetched = flatFromEngine(yield* engine.tree(profile), profile);
+
+          // The service stopped while Chrome was answering: the answer is not this store's to show.
+          if (run !== generation) return;
           // Before the first read the store had only the cache, so the rest are edits (made at launch).
           const base = state.shadow ?? state.shown ?? flatFromStore({ nodes: {}, roots: {} }, profile);
           const edits = bookmarkOps(base, flatFromStore(store().bookmarks, profile), profile);
@@ -571,7 +579,7 @@ export class Bookmarks extends Context.Service<
 
           state.shadow = fetched;
           state.shown = null;
-          adopt(profile, merged, { ready: legacyMoved });
+          adopt(browser, profile, merged, { ready: legacyMoved });
 
           if (!edits.length) return;
 
@@ -713,7 +721,7 @@ export class Bookmarks extends Context.Service<
             for (const [spaceId, roots] of Object.entries(b.roots ?? {})) {
               if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) continue;
 
-              const profile = engineProfile(spaceId);
+              const profile = engineProfileFor(spaceId, s.spaces);
 
               if (done.has(profile)) continue;
 
@@ -791,6 +799,7 @@ export class Bookmarks extends Context.Service<
       };
 
       const stopWatchingNow = () => {
+        generation++;
         stopWatching?.();
         stopWatching = undefined;
         forget();
@@ -800,16 +809,16 @@ export class Bookmarks extends Context.Service<
         if (stopWatching) return Effect.void;
 
         // The trees Chrome confirmed last show at once, until Chrome's own arrive.
-        showCachedTrees();
+        showCachedTrees(browser);
 
-        for (const [profile, flat] of Object.entries(launchTrees())) {
+        for (const [profile, flat] of Object.entries(launchTrees(browser))) {
           if (!engineProfiles(store()).includes(profile)) continue;
 
           stateOf(profile).shown ??= flat;
         }
 
         const changes = onBookmarksChanged(changed);
-        const stopSubscription = useBrowser.subscribe(onStore);
+        const stopSubscription = browser.subscribe(onStore);
 
         stopWatching = () => {
           changes.remove();
@@ -821,11 +830,16 @@ export class Bookmarks extends Context.Service<
           cacheTimer = undefined;
         };
 
+        // A stop while the old file moves in ends this start: a later start reads the trees again.
+        const run = generation;
+
         return Effect.gen(function* () {
           // The app's scope owns the listener and the subscription.
           yield* Scope.addFinalizer(scope, Effect.sync(stopWatchingNow));
 
           const result = yield* migrate();
+
+          if (run !== generation) return;
 
           legacyMoved = result !== "kept";
 

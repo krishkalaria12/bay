@@ -43,6 +43,12 @@ const BUNDLED = {
   firefox: require("../../../assets/browsers/firefox.png"),
   zen: require("../../../assets/browsers/zen.png"),
   safari: require("../../../assets/browsers/safari.png"),
-} satisfies Record<string, ImageSourcePropType>;
+  opera: require("../../../assets/browsers/opera.png"),
+  operaGX: require("../../../assets/browsers/operaGX.png"),
+  vivaldi: require("../../../assets/browsers/vivaldi.png"),
+  chromium: require("../../../assets/browsers/chromium.png"),
+  helium: require("../../../assets/browsers/helium.png"),
+  island: require("../../../assets/browsers/island.png"),
+};
 
 export const bundledBrowserIcon = (id: string): ImageSourcePropType | null => lookup(BUNDLED, id) ?? null;

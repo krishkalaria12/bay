@@ -1,3 +1,5 @@
+import { useBrowser } from "../../store/browserStore.ts";
+import { ReadBrowser } from "../../effect/windowPorts.ts";
 // The link preview (components/site/previewService.ts): what a hovered link says about the page it points at.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -13,7 +15,10 @@ const noPages = Layer.succeed(PreviewEngine)({ fetch: () => Effect.succeed(null)
 
 const withPreview = async (use) => {
   const http = fakeHttp();
-  const runtime = ManagedRuntime.make(PreviewService.layer.pipe(Layer.provide(Layer.mergeAll(http.layer, noPages))));
+
+  const runtime = ManagedRuntime.make(
+    PreviewService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(http.layer, noPages))),
+  );
 
   try {
     await use({ http, runtime });

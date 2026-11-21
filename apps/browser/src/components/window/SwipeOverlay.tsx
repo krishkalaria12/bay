@@ -1,8 +1,10 @@
+import { View } from "@bay/platform";
 import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/chromium";
 import { useQuietBrowser } from "../../store/hooks";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useEffectEvent } from "../../lib/useEffectEvent";
+import { StyleSheet, Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,7 +16,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { Favicon, NewTabIcon } from "../ui/primitives";
 import { HistoryPopover } from "./HistoryPopover";
@@ -78,6 +80,13 @@ const makeCapsuleValues = (): CapsuleValues => ({
   fade: makeMutable(1),
   scale: makeMutable(1),
 });
+
+// The desktop host's pages report their swipes as page events (TabWebView's onSwipe); macOS's come through SwipeArea.
+const pageSwipes = new Map<string, (e: SwipeEvent) => void>();
+
+export function pageSwipe(tabId: string, e: SwipeEvent) {
+  pageSwipes.get(tabId)?.(e);
+}
 
 export function SwipeOverlay({ tabId }: { tabId: string }) {
   const history = useHistoryAvailability(tabId);
@@ -281,6 +290,14 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     [],
   );
   useSwipeDevHandle(tabId, area);
+  const onPageSwipe = useEffectEvent((e: SwipeEvent) => onSwipe(e));
+  useEffect(() => {
+    pageSwipes.set(tabId, onPageSwipe);
+
+    return () => {
+      if (pageSwipes.get(tabId) === onPageSwipe) pageSwipes.delete(tabId);
+    };
+  }, [tabId, onPageSwipe]);
 
   return (
     <>

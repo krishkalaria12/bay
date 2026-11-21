@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Bay web shader bench</title>
+<body style="margin: 0; overflow: hidden">
+  <script type="module">
+    // One shader-bench scenario (?scenario=…), timed in the page; apps/browser/scripts/perf/shader-bench.mjs runs it.
+    import { createSurface } from "/webgl/surface.ts";
+    import { registerStatic, staticStats } from "/webgl/staticRenderer.ts";
+    import { drawPowerUp, POWER_UP_SOURCES } from "/webgl/powerUpRenderer.ts";
+    import { edgeLight } from "/webgl/shaders/edgeLight.ts";
+    import { backdrop } from "/webgl/shaders/backdrop.ts";
+    import { areaLight } from "/webgl/shaders/areaLight.ts";
+    import { areaLightUniforms, backdropUniforms, POWER_UP_FINISH, powerUpUniforms } from "/webgl/uniforms.ts";
+
+    const params = new URLSearchParams(location.search);
+    const scenario = params.get("scenario");
+    const views = Number(params.get("views") ?? 1);
+    const W = innerWidth,
+      H = innerHeight;
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    const longTasks = [];
+    new PerformanceObserver((list) => longTasks.push(...list.getEntries().map((e) => e.duration))).observe({ type: "longtask", buffered: true });
+    const gpuInfo = (gl) => {
+      const ext = gl.getExtension("WEBGL_debug_renderer_info");
+      return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    };
+
+    async function backdrops() {
+      // `views` full-window backdrops (the window, space-swipe pages), invalidated together as a theme change does.
+      const canvases = Array.from({ length: views }, () => {
+        const c = document.createElement("canvas");
+        c.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+        document.body.append(c);
+        return c;
+      });
+      let resolve;
+      let left = 0;
+      const slots = canvases.map((c) => registerStatic(c, () => --left === 0 && resolve()));
+      const pairs = [
+        ["#694256", "#302B44"],
+        ["#E4D0DE", "#B9B4CE"],
+      ];
+      const flush = [],
+        settled = [];
+      let first = 0;
+      for (let i = 0; i < 61; i++) {
+        const done = new Promise((r) => (resolve = r));
+        left = views;
+        const t0 = performance.now();
+        for (const slot of slots)
+          slot.update({ source: backdrop, cssWidth: W, cssHeight: H, values: (w, h) => backdropUniforms({ colors: pairs[i % 2], grainOpacity: 0.09 }, w, h) });
+        await done;
+        // The frame after the flush: the copy has reached the compositor.
+        await frame();
+        if (i === 0) first = performance.now() - t0;
+        else {
+          flush.push(staticStats.flushMs);
+          settled.push(performance.now() - t0);
+        }
+        await frame();
+      }
+      const gl = document.createElement("canvas").getContext("webgl2");
+      return { gpu: gl ? gpuInfo(gl) : "none", first, flush, settled, longTasks };
+    }
+
+    async function animated(kind) {
+      const canvas = document.createElement("canvas");
+      canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+      document.body.append(canvas);
+      canvas.width = Math.round(W * devicePixelRatio);
+      canvas.height = Math.round(H * devicePixelRatio);
+      const s = createSurface(
+        canvas,
+        () => {},
+        () => {},
+      );
+      const size = { width: canvas.width, height: canvas.height, cssWidth: W, cssHeight: H };
+      const props = { palette: ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"], speed: 0.8, origin: 0.5 };
+      const timer = s.gl.getExtension("EXT_disjoint_timer_query_webgl2");
+      const t0 = performance.now();
+      const draw = (t) =>
+        kind === "powerUp"
+          ? drawPowerUp(s, size, powerUpUniforms(props, t), null)
+          : (s.gl.viewport(0, 0, size.width, size.height),
+            s.draw(areaLight, areaLightUniforms({ source: { x: W * 0.3, y: H * 0.35, width: W * 0.4, height: H * 0.2 } }, 1, t, true, true, W, H)));
+      // Wall time until the programs link; the main thread is free meanwhile (see `startup`).
+      const sources = kind === "powerUp" ? POWER_UP_SOURCES : [areaLight];
+      while (s.ready(...sources) === false) await frame();
+      draw(0);
+      s.gl.finish();
+      const compile = performance.now() - t0;
+      const work = [],
+        intervals = [],
+        gpu = [];
+      const queries = [];
+      let t = 0,
+        last = null;
+      const end = kind === "powerUp" ? POWER_UP_FINISH : 4;
+      while (t < end) {
+        const now = await frame();
+        if (last !== null) {
+          intervals.push(now - last);
+          t += (now - last) / 1000;
+        }
+        last = now;
+        // Collect finished GPU timings from earlier frames.
+        while (queries.length && s.gl.getQueryParameter(queries[0], s.gl.QUERY_RESULT_AVAILABLE)) {
+          const q = queries.shift();
+          if (!s.gl.getParameter(timer.GPU_DISJOINT_EXT)) gpu.push(s.gl.getQueryParameter(q, s.gl.QUERY_RESULT) / 1e6);
+          s.gl.deleteQuery(q);
+        }
+        const q = timer ? s.gl.createQuery() : null;
+        if (q) s.gl.beginQuery(timer.TIME_ELAPSED_EXT, q);
+        const w0 = performance.now();
+        draw(Math.min(t, end));
+        work.push(performance.now() - w0);
+        if (q) {
+          s.gl.endQuery(timer.TIME_ELAPSED_EXT);
+          queries.push(q);
+        }
+      }
+      return { gpu: gpuInfo(s.gl), compile, work, intervals, gpuMs: gpu, longTasks };
+    }
+
+    // What a first draw costs the main thread: making the context, then starting every program, then the longest
+    // single wait while they link in the background; and the wall time until all of them are ready.
+    async function startup() {
+      const t0 = performance.now();
+      const canvas = document.createElement("canvas");
+      const s = createSurface(
+        canvas,
+        () => {},
+        () => {},
+      );
+      const context = performance.now() - t0;
+      const sources = [backdrop, areaLight, edgeLight, ...POWER_UP_SOURCES];
+      const t1 = performance.now();
+      s.ready(...sources);
+      const start = performance.now() - t1;
+      let poll = 0;
+      for (;;) {
+        const t = performance.now();
+        const ready = s.ready(...sources);
+        poll = Math.max(poll, performance.now() - t);
+        if (ready !== false) break;
+        await frame();
+      }
+      return { gpu: gpuInfo(s.gl), context: [context], start: [start], poll: [poll], linked: [performance.now() - t0], longTasks };
+    }
+
+    window.results = await (scenario === "backdrop" ? backdrops() : scenario === "startup" ? startup() : animated(scenario));
+  </script>
+</body>

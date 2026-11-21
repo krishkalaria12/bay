@@ -241,3 +241,36 @@ test("the bang list is asked for without cookies, and with the version it has", 
     assert.equal(reply.body, "", "the body comes back whole");
   });
 });
+
+test("off the Mac, suggestions go through the engine in the profile that registered the engine", async () => {
+  const network = fakeNetwork();
+  const asked = [];
+
+  const layer = Layer.succeed(SearchNetwork)({
+    fetch: () => Effect.die(new Error("the page's fetch is not used when the engine answers")),
+    suggest: async (profile, url, client) => {
+      asked.push({ profile, url, client });
+
+      return { body: suggestions(["from the engine"]) };
+    },
+  });
+
+  await withService({ ...network, layer }, async (runtime) => {
+    const answers = [];
+
+    await suggest(runtime, "bar", { engine: ENGINE, query: "a", policy: "ask", profile: "work", client: "window-1", onResult: (list) => answers.push(list) });
+
+    await until("the engine's answer", () => answers.length === 1);
+
+    assert.deepEqual(asked, [{ profile: "work", url: "https://test.example/suggest?q=a", client: "window-1" }]);
+    assert.deepEqual(answers, [["from the engine"]]);
+
+    // An extension's engine whose profile is gone is not asked in another.
+    await suggest(runtime, "bar", { engine: ENGINE, query: "b", policy: "ask", profile: null, client: "window-1", onResult: (list) => answers.push(list) });
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    assert.equal(asked.length, 1);
+    assert.equal(answers.length, 1);
+  });
+});

@@ -33,6 +33,7 @@ import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
 import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
+import { retireConnections } from "./connections";
 
 export type LiveSource = {
   id: LiveSourceId;
@@ -203,3 +204,22 @@ const gdrive: LiveSource = {
 };
 
 export const SOURCES: Record<LiveSourceId, LiveSource> = { github, bitbucket, notion, confluence, gdrive };
+
+// Compatibility entry points share the Effect connection implementation.
+export { connectGithub, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
+
+export type { DeviceSignIn as DeviceFlow } from "./connections";
+
+/**
+ * The coordinator's service-state owner holds the account requests. When it stops, the flows end and a connection
+ * still waiting on a provider or the Keychain writes nothing, so it cannot land in the owner that comes next.
+ */
+export function startAccountRequests(): () => void {
+  let stopped = false;
+
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    retireConnections();
+  };
+}

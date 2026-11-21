@@ -1,5 +1,6 @@
 import { Surface, Symbol } from "@bay/desktop";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, View } from "@bay/platform";
+import { ActivityIndicator, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
 import { useHover } from "../ui/primitives";

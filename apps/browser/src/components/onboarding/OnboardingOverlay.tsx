@@ -1,14 +1,16 @@
+import { isMac, View } from "@bay/platform";
+import { WindowBackdrop } from "@bay/shaders";
 import { Surface, VisualEffect, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springPresets";
-import { hex } from "../../lib/theme";
+import { hex, useTheme, useWindowTint } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { Intro } from "./Intro";
 import { dismissOnboarding, FIRST_STEP, goToStep, useOnboarding } from "./state";
 import { DefaultBrowserStep, OutroStep, PersonalizeStep, PinnedTabsStep } from "./steps";
-import { ImportStep } from "./importStep";
+import { BackgroundImportStatus, ImportFlowHost, ImportStep } from "./importStep";
 import { PrivacyStep } from "./privacyStep";
 import { SearchStep } from "./searchStep";
 import { ToolTour } from "./tour/ToolTour";
@@ -19,10 +21,11 @@ export function OnboardingOverlay() {
   const windowId = useWindowId();
   const active = useOnboarding((s) => s.windowId === windowId);
   const session = useOnboarding((s) => s.session);
+  const importing = useOnboarding((s) => s.importInBackground === windowId);
 
   return (
     <>
-      {active ? <Overlay key={session} session={session} /> : null}
+      {active || importing ? <ImportFlowHost windowId={windowId}>{active ? <Overlay key={session} session={session} /> : null}</ImportFlowHost> : null}
       <ToolTour />
     </>
   );
@@ -30,6 +33,8 @@ export function OnboardingOverlay() {
 
 function Overlay({ session }: { session: number }) {
   const colors = useOnboardingColors();
+  const theme = useTheme();
+  const windowTint = useWindowTint();
   const step = useOnboarding((s) => s.step);
   const leaving = useOnboarding((s) => s.leaving);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -70,8 +75,19 @@ function Overlay({ session }: { session: number }) {
       style={[StyleSheet.absoluteFill, presenceStyle]}
       onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
-      <VisualEffect material="fullScreenUI" blendingMode="withinWindow" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
+      {isMac ? (
+        <>
+          <VisualEffect material="fullScreenUI" blendingMode="withinWindow" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
+        </>
+      ) : (
+        // The web hosts can't blur the window behind: the card sits on the space's own gradient (the WebGL backdrop
+        // shader, over its CSS gradient), softened so the card stands out.
+        <>
+          <WindowBackdrop {...theme.backdrop} colors={windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.backdropScrim }]} />
+        </>
+      )}
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       {step !== "intro" && width > 0 && (
         <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]} pointerEvents="box-none">
@@ -87,7 +103,8 @@ function Overlay({ session }: { session: number }) {
               shadowOffset={[0, 18]}
               style={{ flex: 1, overflow: "hidden" }}
             >
-              <View key={step} style={{ flex: 1 }}>
+              {/* Chromium joins drag regions whatever lies over them: the card opts out, or its icon drags move the window. */}
+              <View key={step} mouseDownCanMoveWindow={false} style={{ flex: 1 }}>
                 {step === "import" && <ImportStep />}
                 {step === "personalize" && <PersonalizeStep />}
                 {step === "search" && <SearchStep />}
@@ -101,6 +118,7 @@ function Overlay({ session }: { session: number }) {
         </View>
       )}
       {step === "intro" && <Intro onDone={() => goToStep(FIRST_STEP)} />}
+      <BackgroundImportStatus bottom={Math.max(6, (size.height - height) / 2 - 40)} />
     </Animated.View>
   );
 }

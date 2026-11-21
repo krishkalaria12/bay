@@ -1,9 +1,10 @@
 import { onExtensionsChanged, type EngineTask } from "@bay/chromium";
 import { onAppEvent } from "@bay/desktop";
+import * as Effect from "effect/Effect";
 import { useTranslate } from "../components/site/pageWorkService";
 import { useBrowser } from "../store/browserStore";
 import { useSync } from "../sync/engine";
-import { capture, endSession, isSharing, startClient } from "./client";
+import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient, stopClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
 import { EXTENSION_SETTLE_MS } from "./config";
@@ -143,7 +144,11 @@ export function sampleUsage() {
 /** The native crashes of the last run, which the Mac keeps for a while. */
 export const reportNativeCrashesOnce = () => reportNativeCrashes();
 
-export function startUsage() {
+let stopUsage: (() => void) | undefined;
+
+export function startUsage(): () => void {
+  if (stopUsage) return stopUsage;
+  const stopWatching = watchUsage();
   const session = startClient();
 
   if (session) {
@@ -151,25 +156,96 @@ export function startUsage() {
 
     if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
   }
+
+  const stop = () => {
+    if (stopUsage !== stop) return;
+    stopUsage = undefined;
+    stopWatching();
+    stopClient();
+  };
+
+  stopUsage = stop;
+
+  return stop;
 }
 
 /**
  * Watches what the usage counts: the store, sync, translation and the extensions, and the quit that sends the
  * session's counts. The usage service holds the watch in the app's scope (usageService.ts); the answer stops it.
  */
+let usageWatch: { users: number; stop: () => void } | undefined;
+
 export function watchUsage(): () => void {
-  const quit = onAppEvent((e) => e.type === "willQuit" && sessionEnding());
-  const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions(), () => quit.remove()];
+  if (!usageWatch) {
+    const quit = onAppEvent((e) => e.type === "willQuit" && sessionEnding());
+    const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions(), () => quit.remove()];
+    usageWatch = { users: 0, stop: () => stops.forEach((stop) => stop?.()) };
+  }
+
+  const watch = usageWatch;
+  watch.users++;
+  let released = false;
 
   return () => {
-    for (const stop of stops) stop();
+    if (released) return;
+    released = true;
+
+    if (--watch.users === 0) {
+      watch.stop();
+
+      if (usageWatch === watch) usageWatch = undefined;
+    }
   };
 }
 
 export function sessionEnding() {
-  if (!isSharing()) return;
-  emitCounts();
-  emitOmniboxLatency();
-  capture("app_session_ended", { duration_minutes: Math.round((Date.now() - startedAt) / 60_000) });
-  endSession();
+  void prepareTelemetryForQuit().catch((error) => console.warn("Couldn't checkpoint telemetry before quitting", error));
+}
+
+// MARK: The quit
+
+// The quit is prepared once: the session's counts are sent once, and the delivery holds until the app decides.
+let quitPrepared = false;
+
+/**
+ * The quit handshake: the session's counts are sent and the telemetry is written to disk. The delivery holds while
+ * the app decides, and the answer never waits for the network.
+ */
+export function prepareTelemetryForQuit(): Promise<void> {
+  if (!quitPrepared) {
+    quitPrepared = true;
+
+    if (isSharing()) {
+      emitCounts();
+      emitOmniboxLatency();
+      capture("app_session_ended", { duration_minutes: Math.round((Date.now() - startedAt) / 60_000) });
+    }
+  }
+
+  return endSession();
+}
+
+/** The quit was called off: the delivery goes on with what is queued. */
+export function resumeTelemetryAfterQuit(): Promise<void> {
+  quitPrepared = false;
+
+  return resumeClientAfterQuit();
+}
+
+// MARK: The dev harness
+
+/** The hourly sample, now: the dev harness's way to see it without waiting an hour. */
+export async function devHourly(): Promise<void> {
+  // The runtime and the usage service are reached when the sample is asked for: the app's own start does not pull
+  // the runtime in through this module, and the service's own imports reach back into it.
+  const [{ runDesktop }, { UsageService }] = await Promise.all([import("../effect/runtime"), import("./usageService")]);
+
+  await runDesktop(
+    Effect.gen(function* () {
+      const usage = yield* UsageService;
+
+      yield* usage.sampleNow;
+    }),
+  );
+  await flush();
 }

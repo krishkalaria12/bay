@@ -1,10 +1,13 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { AccessibilityInfo, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { AccessibilityInfo, StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
+import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { useHover } from "../ui/primitives";
 import type { ReleaseNotes } from "./releaseNotes";
@@ -346,7 +349,7 @@ function Stamp() {
           backgroundColor: "#FFFFFF",
         }}
       >
-        <Image source={APP_ICON} style={{ width: 54, height: 54 }} />
+        <Image cachePolicy="memory" source={APP_ICON} style={{ width: 54, height: 54 }} />
       </View>
       <View
         style={{

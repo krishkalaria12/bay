@@ -23,7 +23,7 @@ async function devHourly() {
 }
 
 export function startTelemetry() {
-  startUsage();
+  const stop = startUsage();
 
   if (__DEV__) {
     // SAFETY: nnTelemetry is telemetry's own dev-harness surface, read only by tests.
@@ -55,4 +55,6 @@ export function startTelemetry() {
       crash: devCrash,
     };
   }
+
+  return stop;
 }

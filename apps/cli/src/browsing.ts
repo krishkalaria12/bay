@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EndpointError, requireControl } from "./endpoint.ts";
+import { chromiumRoot, documentsRoot, EndpointError, requireControl } from "./endpoint.ts";
 import { isRecord, isString } from "./util.ts";
 
 const CHROME_EPOCH_OFFSET = 11_644_473_600;
@@ -153,7 +153,7 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
 
   for (const spot of chosen) {
     outOfTime(deadline, "history()");
-    const folder = join(data, "Chromium", spot.directory);
+    const folder = join(chromiumRoot(data), spot.directory);
     const work = mkdtempSync(join(tmpdir(), "bay-history-"));
     let db: Database | undefined;
 
@@ -224,7 +224,7 @@ function checkedRoot(root: string | null, name: string): string {
 }
 
 function readSession(root: string): SessionDoc {
-  const path = join(root, "session.json");
+  const path = join(documentsRoot(root), "session.json");
   let stats: ReturnType<typeof lstatSync>;
 
   try {
@@ -268,7 +268,7 @@ function spaceProfiles(session: SessionDoc): SpaceProfile[] {
     const space = byId.get(id)!;
     const profileId = isString(space.profileId) && space.profileId ? space.profileId : id;
     const engine = profileId === DEFAULT_SPACE_ID ? "" : profileId;
-    const directory = engine ? `Profile ${engine}` : "Default";
+    const directory = engine ? (process.platform === "darwin" ? `Profile ${engine}` : engine) : "Default";
 
     if (seen.has(directory)) continue;
     seen.add(directory);
@@ -375,14 +375,14 @@ function messageOf<T>(error: T): string {
 // Kept for the space picker's sanity: a Chromium profile folder is one of these, never a link to somewhere else.
 export function profileFolders(root: string): string[] {
   try {
-    return readdirSync(join(root, "Chromium")).filter((name) => {
+    return readdirSync(chromiumRoot(root)).filter((name) => {
       if (name !== "Default" && !name.startsWith("Profile ")) return false;
       const suffix = name.startsWith("Profile ") ? name.slice(8) : "";
 
       if (PRIVATE_PREFIXES.some((prefix) => suffix.toLowerCase().startsWith(prefix.toLowerCase()))) return false;
 
       if (suffix.includes("@") || suffix.includes(":")) return false;
-      const folder = join(root, "Chromium", name, "History");
+      const folder = join(chromiumRoot(root), name, "History");
 
       try {
         return lstatSync(folder).isFile();
