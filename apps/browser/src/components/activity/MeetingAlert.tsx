@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { Surface } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../window/layout";
 import { dismiss, joinEvent, useMeetingAlert } from "../../activity/meetingAlerts";
@@ -17,7 +18,9 @@ import {
   timeRange,
   type CalendarEvent,
 } from "../../activity/meetings";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { activate } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { viewTabIds } from "../../store/model";
 import { IconButton } from "../ui/primitives";
 import { measureRow, type Anchor } from "../sidebar/state";
@@ -132,7 +135,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
               icon="calendar"
               height={30}
               onPress={() => {
-                useBrowser.getState().activate(calendarTab);
+                reportBrowserCommand(activate(calendarTab));
                 dismiss(event);
               }}
             />

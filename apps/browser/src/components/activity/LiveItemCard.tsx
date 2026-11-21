@@ -1,23 +1,17 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, Text, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { Text } from "react-native";
+import { Image } from "expo-image";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { openLiveItem } from "../../activity/activityEngine";
 import { summarizeChecks } from "../../activity/github";
 import { ago } from "../../activity/meetings";
 import { useLive } from "../../activity/activityStore";
 import type { LiveItem, PullRequestCheck } from "../../activity/types";
-import { useBrowser } from "../../store/browserStore";
+import { newTab } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { besideRow, useSidebarOnRight } from "../window/layout";
 import { useHover } from "../ui/primitives";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
@@ -94,14 +88,16 @@ export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: str
       }}
     >
       <Text style={{ fontSize: size * 0.42, fontWeight: "600", color: theme.textPrimary }}>{initials || "?"}</Text>
-      {uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ position: "absolute", width: size, height: size }} /> : null}
+      {uri && !failed ? (
+        <Image cachePolicy="memory" source={{ uri }} onError={() => setFailed(true)} style={{ position: "absolute", width: size, height: size }} />
+      ) : null}
     </View>
   );
 }
 
 const open = (windowId: string, url: string) => {
   dismissHover();
-  useBrowser.getState().newTab(windowId, { url });
+  reportBrowserCommand(newTab(windowId, { url }));
 };
 
 function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; folderId: string; windowId: string }) {

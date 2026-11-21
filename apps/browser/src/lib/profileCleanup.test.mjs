@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
 const { useBrowser } = await import("../store/browserStore.ts");
+const { AuthorityStore } = await import("../effect/ports/store.ts");
 const { fakeDiagnostics } = await import("../effect/testing.ts");
 const { ProfileCleanup, ProfileEngine } = await import("./profileCleanup.ts");
 
@@ -35,7 +36,7 @@ const fakeEngine = () => {
 const setup = () => {
   const engine = fakeEngine();
   const diagnostics = fakeDiagnostics();
-  const layer = ProfileCleanup.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, diagnostics.layer)));
+  const layer = ProfileCleanup.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, diagnostics.layer, AuthorityStore.layer(useBrowser))));
   const runtime = ManagedRuntime.make(layer);
 
   return { engine: engine.fake, diagnostics, runtime };

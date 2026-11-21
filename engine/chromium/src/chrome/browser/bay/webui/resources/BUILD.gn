@@ -1,0 +1,34 @@
+# Copyright 2026 Bay. Apache-2.0.
+import("//tools/typescript/ts_library.gni")
+import("//tools/typescript/webui_path_mappings.gni")
+
+# Compile only generated Mojo bindings. build_webui's authored-source lint
+# pipeline does not support this Mojo-only target in the pinned Chromium tree.
+copy("copy_mojo") {
+  sources =
+      [ "$root_gen_dir/chrome/browser/bay/webui/native_host.mojom-webui.ts" ]
+  outputs = [ "$target_gen_dir/preprocessed/{{source_file_part}}" ]
+  deps = [ "//chrome/browser/bay/webui:mojom_ts__generator" ]
+}
+
+webui_path_mappings("build_path_map") {
+  ts_deps = [ "//ui/webui/resources/mojo:build_ts" ]
+  webui_context_type = "trusted"
+}
+
+ts_library("build_ts") {
+  root_dir = "$target_gen_dir/preprocessed"
+  out_dir = "$target_gen_dir/tsc"
+  in_files = [ "native_host.mojom-webui.ts" ]
+  composite = true
+  definitions = [ "//tools/typescript/definitions/strings.d.ts" ]
+  path_mappings_file = "$target_gen_dir/path_mappings_build_path_map.json"
+  extra_deps = [
+    ":build_path_map",
+    ":copy_mojo",
+  ]
+  deps = [
+    "//tools/typescript/definitions:build_ts",
+    "//ui/webui/resources/mojo:build_ts",
+  ]
+}

@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { Text, View, type TextStyle } from "react-native";
+import { Text, type TextStyle } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -12,7 +13,7 @@ import Animated, {
   withSequence,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { MARQUEE_FADE, MARQUEE_FADE_STEPS, MARQUEE_PAUSE_MS, MARQUEE_SPEED } from "./constants";
 
 export type MarqueeGroup = {

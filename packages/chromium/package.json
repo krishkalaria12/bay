@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@bay/core": "workspace:*",
+    "@bay/platform": "workspace:*",
     "valibot": "^1.5.0"
   },
   "peerDependencies": {

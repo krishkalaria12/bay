@@ -1,26 +1,23 @@
 import { WindowProfile as NativeWindowProfile } from "@bay/desktop";
-import { useStore } from "zustand";
-import { DEFAULT_SPACE_ID } from "../../store/constants";
-import { useWindowField } from "../../store/hooks";
-import { engineIdOf } from "../../store/spaces";
-import { spaceOrderStore, spacesStore } from "../../store/derivedStores";
+import { useShallow } from "zustand/react/shallow";
+import { useQuietBrowser, useWindowId } from "../../store/hooks";
+import { engineProfileFor } from "../../store/model";
 
 export function WindowProfile() {
-  // The window's space, the spaces and their order, each followed on its own: a page's progress or title runs none.
-  const spaceId = useWindowField((w) => w.spaceId, "");
-  const incognito = useWindowField((w) => !!w.incognito, false);
-  const order = useStore(spaceOrderStore);
-  const spaces = useStore(spacesStore);
+  const windowId = useWindowId();
 
-  // engineProfile's, from the spaces themselves.
-  const profileOf = (id: string) => {
-    if (spaces[id]) return engineIdOf(spaces[id]);
+  const [profile, neighbours] = useQuietBrowser(
+    useShallow((s) => {
+      const w = s.windows[windowId];
 
-    return id === DEFAULT_SPACE_ID ? "" : id;
-  };
+      if (!w) return ["", "[]"];
+      const at = w.incognito ? -1 : s.spaceOrder.indexOf(w.spaceId);
+      const next = at < 0 ? [] : [s.spaceOrder[at - 1], s.spaceOrder[at + 1]].flatMap((id) => (id ? [engineProfileFor(id, s.spaces)] : []));
 
-  const at = !spaceId || incognito ? -1 : order.indexOf(spaceId);
-  const neighbours = at < 0 ? [] : [order[at - 1], order[at + 1]].flatMap((p) => (p ? [profileOf(p)] : []));
+      return [engineProfileFor(w.spaceId, s.spaces), JSON.stringify(next)];
+    }),
+  );
 
-  return <NativeWindowProfile profile={spaceId ? profileOf(spaceId) : ""} neighbours={neighbours} style={{ position: "absolute", width: 0, height: 0 }} />;
+  // SAFETY: the checks above established this shape.
+  return <NativeWindowProfile profile={profile} neighbours={JSON.parse(neighbours) as string[]} style={{ position: "absolute", width: 0, height: 0 }} />;
 }

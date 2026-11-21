@@ -2,22 +2,30 @@
 import type { ImageMetadata } from "astro";
 import { Image } from "astro:assets";
 
-// A real screenshot of Bay, in the same white board as the mockups.
+// A real screenshot of a Bay window (scripts/shots), with its own rounded corners and the hero's shadow, and a
+// handwritten note beside it.
 interface Props {
   src: ImageMetadata;
   alt: string;
+  note?: string;
+  /** Where the note sits and how it leans: absolute-position classes. */
+  noteClass?: string;
+  /** How wide the shot shows, for the browser's choice of size. */
+  sizes?: string;
+  class?: string;
 }
 
-const { src, alt } = Astro.props;
+const { src, alt, note, noteClass, sizes = "(min-width: 1024px) 640px, calc(100vw - 40px)", class: className } = Astro.props;
 ---
 
-<figure class="card relative p-2 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.35)] sm:p-3">
+<figure class:list={["relative", className]}>
+  {note && <figcaption class:list={["hand absolute z-10 text-[23px] leading-none whitespace-nowrap sm:text-[26px]", noteClass]}>{note}</figcaption>}
   <Image
     src={src}
     alt={alt}
-    widths={[640, 960, 1360, 1800]}
-    sizes="(min-width: 1024px) 640px, 100vw"
-    class="h-auto w-full rounded-xl"
+    widths={[640, 960, 1280, 1600]}
+    sizes={sizes}
+    class="h-auto w-full [filter:drop-shadow(0_24px_32px_rgba(30,32,60,0.28))]"
     loading="lazy"
     decoding="async"
   />

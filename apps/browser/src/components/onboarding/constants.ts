@@ -62,9 +62,6 @@ export const HANDOFF_ICON = 84;
 // The tear between the halves: diamonds of Bay's sky biting into the other side.
 export const HANDOFF_TOOTH = 8;
 
-// How close the dragged icon's centre has to come to Bay's for it to take it.
-export const HANDOFF_DROP_RADIUS = 76;
-
 // How far the dotted path, and the icon sent along it with Return, dips between the two.
 export const HANDOFF_DIP = 26;
 export const HANDOFF_DOTS = 15;

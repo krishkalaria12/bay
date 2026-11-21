@@ -1,21 +1,23 @@
+import { createSpace } from "../../runtime/spaceActions";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportProgress, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm } from "@bay/desktop";
+import { isMac, platformOS } from "@bay/platform";
 import * as Effect from "effect/Effect";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
-import { runDesktop } from "../../effect/runtime";
+import { runWindow } from "../../effect/windowRuntime";
 import { APP_NAME } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import { emptyCounts, importDiaProfile, openInWebStore, profileColorFor, type ImportCounts, type ExtensionFailure } from "./apply";
-import { DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
+import { DONE_DELAY_MS, ENCRYPTED, KINDS, kindsWithoutUnlock } from "./constants";
 import { importModule } from "./module";
 import { ImportFailure, ImportUnavailable, ImportWorkflow, type LockedProfile, type Workflow } from "./workflow";
 
 // The workflow's answers come from the runtime, so the service stays the only way to the native module.
 const ask = <A, E>(use: (w: Workflow) => Effect.Effect<A, E>): Promise<A> =>
-  runDesktop(
+  runWindow(
     Effect.gen(function* () {
       const w = yield* ImportWorkflow;
 
@@ -60,13 +62,16 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
   // Profiles whose passwords wait for their primary password (the primaryPassword step).
   const [locked, setLocked] = useState<LockedProfile[]>([]);
   const abort = useRef<AbortController | null>(null);
+  // The browser the user chose last: an answer about an earlier choice is not shown for this one.
+  const choice = useRef(0);
+  const checkingUnlock = useRef(false);
   const requested = useImportRequest((s) => s.browserId);
 
   const recheckAccess = async () => {
     if (!api) return;
 
     if (step === "safari") {
-      const access = await ask((w) => w.safariAccess());
+      const access = await ask((w) => w.safariAccess()).catch(() => false);
 
       return setFullDiskAccess(access);
     }
@@ -84,6 +89,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
   };
 
   const choose = (b: BrowserSource) => {
+    const selected = ++choice.current;
     setSource(b);
     const defaults = b.profiles.filter((p) => p.isDefault);
     setSourceProfiles((defaults.length ? defaults : b.profiles.slice(0, 1)).map((p) => p.id));
@@ -97,7 +103,15 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
 
     setKinds(new Set(available));
 
-    if (b.family === "safari") void ask((w) => w.safariAccess()).then(setFullDiskAccess);
+    if (b.family === "safari")
+      void ask((w) => w.safariAccess()).then(
+        (access) => {
+          if (choice.current === selected) setFullDiskAccess(access);
+        },
+        () => {
+          if (choice.current === selected) setFullDiskAccess(false);
+        },
+      );
     setDia(null);
     setExtensions([]);
     setNotes([]);
@@ -117,38 +131,50 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
   const allSpaces: (SpaceSummary & { spaceId: string })[] = (source?.profiles ?? []).flatMap((p) => (p.spaces ?? []).map((s) => ({ ...s, spaceId: p.id })));
   const isArc = source?.family === "arc";
   const isDiaTabs = source?.family === "automation";
+  // Linux's basic store needs no keyring: the encrypted data comes without one.
+  const basicStore = platformOS === "linux" && source?.family === "chromium";
 
+  // One check at a time: a second click while the keychain is asked does not start a second import.
   const next = async () => {
-    if (!source) return;
-    setError(null);
+    if (!source || checkingUnlock.current) return;
+    const selected = choice.current;
 
-    if (step === "choose" && isDiaTabs) {
-      setDiaStatus("checking");
-      setStep("dia");
+    return checkUnlock(
+      checkingUnlock,
+      async () => {
+        setError(null);
 
-      return void refreshDia();
-    }
+        if (step === "choose" && isDiaTabs) {
+          setDiaStatus("checking");
+          setStep("dia");
 
-    if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
+          return void refreshDia();
+        }
 
-    if (step === "choose") {
-      if (source.needsFullDiskAccess) return setStep("access");
+        if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
 
-      if (source.requiresExport) return setStep("safari");
+        if (step === "choose") {
+          if (source.needsFullDiskAccess) return setStep("access");
 
-      if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
-    }
+          if (source.requiresExport) return setStep("safari");
 
-    if (
-      (step === "choose" || step === "profiles") &&
-      ENCRYPTED.some((k) => kinds.has(k)) &&
-      source.needsKeychain &&
-      !(await ask((w) => w.unlocked(source.id)))
-    ) {
-      return setStep("unlock");
-    }
+          if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
+        }
 
-    void run(kinds);
+        if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain) {
+          const unlocked = await ask((w) => w.unlocked(source.id));
+
+          if (choice.current !== selected) return;
+
+          if (!unlocked) return setStep("unlock");
+        }
+
+        void run(kinds);
+      },
+      () => {
+        if (choice.current === selected) setError(`Couldn't check access to ${source.name}. Try again.`);
+      },
+    );
   };
 
   const unlock = async () => {
@@ -161,15 +187,19 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
       void run(kinds);
     } catch {
       setUnlocking(false);
-      setError(`macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`);
+      setError(
+        isMac
+          ? `macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`
+          : basicStore
+            ? `Couldn't unlock ${source.name}'s data. Try again, or continue without unlocking to import data that doesn't need the keyring.`
+            : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`,
+      );
     }
   };
 
   // Addresses need no key; cards, passwords and cookies do (the importer skips cards with a warning).
   const skipEncrypted = () => {
-    const without = new Set(kinds);
-    without.delete("passwords");
-    without.delete("cookies");
+    const without = kindsWithoutUnlock(kinds, basicStore);
     setKinds(without);
     void run(without);
   };
@@ -193,7 +223,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
 
     // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
     // SAFETY: SpaceColor | undefined, icon assertion matches the runtime value validated at this call site.
-    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
+    return createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
 
   const finish = () => setTimeout(() => setStep("done"), DONE_DELAY_MS);
@@ -401,7 +431,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
 
     for (const [i, p] of selected.entries()) {
       const dest = await destination(i, p.name);
-      total.tabs += importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
+      total.tabs += await importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
     }
 
     setStatus(Object.fromEntries(order.map((k) => [k, "done"])));
@@ -467,7 +497,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
             ? `${APP_NAME} still doesn't have Full Disk Access. Grant it above, or use the export file below.`
             : "Couldn't read Safari's data. Try the export file below.",
         );
-        void ask((w) => w.safariAccess()).then(setFullDiskAccess);
+        void ask((w) => w.safariAccess()).then(setFullDiskAccess, () => setFullDiskAccess(false));
       },
     );
   };
@@ -480,7 +510,12 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
 
     if (source.family === "safari") return void importSafariDirect();
 
-    if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && !(await ask((w) => w.unlocked(source.id)))) return void unlock();
+    if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain) {
+      const unlocked = await ask((w) => w.unlocked(source.id)).catch(() => false);
+
+      if (!unlocked) return void unlock();
+    }
+
     void run(kinds);
   };
 
@@ -504,7 +539,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
     );
   };
 
-  const openExtensions = () => {
+  const openExtensions = async () => {
     const bySpace = new Map<string, Set<string>>();
 
     for (const { spaceId, extension } of extensions) {
@@ -514,7 +549,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
       bySpace.get(spaceId)!.add(extension.webStoreUrl);
     }
 
-    for (const [spaceId, urls] of bySpace) openInWebStore(spaceId, [...urls]);
+    for (const [spaceId, urls] of bySpace) await openInWebStore(spaceId, [...urls]);
     setExtensions([]);
   };
 
@@ -659,6 +694,7 @@ export function useImportFlow({ askPrimaryPassword = true }: { askPrimaryPasswor
     next,
     unlock,
     skipEncrypted,
+    basicStore,
     locked,
     unlockPrimaryPassword,
     skipPrimaryPassword,
@@ -689,6 +725,19 @@ export function lockedNote(browser: string, locked: LockedProfile[]): string {
 
 // SAFETY: { code? assertion matches the runtime value validated at this call site.
 const errorCode = (cause: unknown) => (cause as { code?: string }).code;
+
+// Runs a check that asks the native side, marking it busy while it runs; a check that fails says so.
+async function checkUnlock(checking: { current: boolean }, action: () => Promise<void>, onError: () => void): Promise<void> {
+  checking.current = true;
+
+  try {
+    await action();
+  } catch {
+    onError();
+  } finally {
+    checking.current = false;
+  }
+}
 
 function defaultTarget(): string {
   const s = useBrowser.getState();

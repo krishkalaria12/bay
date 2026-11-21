@@ -1,4 +1,4 @@
-import type { View } from "react-native";
+import { type View } from "@bay/platform";
 
 export type Rect = { x: number; y: number; width: number; height: number };
 

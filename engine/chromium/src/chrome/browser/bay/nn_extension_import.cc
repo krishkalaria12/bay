@@ -18,6 +18,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
@@ -72,10 +73,12 @@ struct Snapshot {
 bool ContainsLinks(const base::FilePath& path) {
   if (base::IsLink(path))
     return true;
-  base::FileEnumerator files(path, true,
-                             base::FileEnumerator::FILES |
-                                 base::FileEnumerator::DIRECTORIES |
-                                 base::FileEnumerator::SHOW_SYM_LINKS);
+  int types = base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES;
+#if BUILDFLAG(IS_POSIX)
+  // Windows reports reparse points as entries without this flag.
+  types |= base::FileEnumerator::SHOW_SYM_LINKS;
+#endif
+  base::FileEnumerator files(path, true, types);
   for (auto current = files.Next(); !current.empty(); current = files.Next()) {
     if (base::IsLink(current))
       return true;
@@ -141,7 +144,7 @@ const Extension* FindImported(Profile* profile,
     const auto* source = prefs->ReadPrefAsDict(candidate->id(), kProvenance);
     if (source && source->FindString("id") && source->FindString("profile") &&
         *source->FindString("id") == source_id &&
-        *source->FindString("profile") == source_profile.value())
+        *source->FindString("profile") == source_profile.AsUTF8Unsafe())
       return candidate.get();
   }
   return nullptr;
@@ -311,7 +314,8 @@ class ImportState : public ProfileState {
         if (!provenance || !provenance->FindString("id") ||
             !provenance->FindString("profile") ||
             *provenance->FindString("id") != job.source_id ||
-            *provenance->FindString("profile") != job.source_profile.value()) {
+            *provenance->FindString("profile") !=
+                job.source_profile.AsUTF8Unsafe()) {
           return Fail(key,
                       "An incomplete import of this extension belongs to "
                       "another source profile");
@@ -332,7 +336,7 @@ class ImportState : public ProfileState {
         id, kProvenance,
         base::Value(base::DictValue()
                         .Set("id", job.source_id)
-                        .Set("profile", job.source_profile.value())));
+                        .Set("profile", job.source_profile.AsUTF8Unsafe())));
     profile()->GetPrefs()->CommitPendingWrite();
     if (!job.store) {
       extensions::util::SetDeveloperModeForProfile(profile(), true);
@@ -567,14 +571,16 @@ NN_ENGINE_CALL(nn_extensions_import) {
   const bool firefox = call.String("source") == "firefox";
   const std::string id = call.String("id");
   const std::string source_id = call.String("sourceId");
-  const base::FilePath source(call.String("sourceProfilePath"));
-  const base::FilePath path(call.String("path"));
+  const base::FilePath source =
+      base::FilePath::FromUTF8Unsafe(call.String("sourceProfilePath"));
+  const base::FilePath path =
+      base::FilePath::FromUTF8Unsafe(call.String("path"));
   if (!source.IsAbsolute() || (!store && !path.IsAbsolute()) ||
       (store &&
        (!crx_file::id_util::IdIsValid(id) || (!firefox && id != source_id)))) {
     return call.TakeReply().Error("Invalid extension import source");
   }
-  if (bay::ProfileAt(source.value())) {
+  if (bay::ProfileAt(source.AsUTF8Unsafe())) {
     return call.TakeReply().Error(
         "Close the source profile before importing its extensions");
   }

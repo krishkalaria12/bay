@@ -6,8 +6,8 @@ Bay is an independent browser. It is not made by, or affiliated with, The Browse
 
 ## Pages
 
-- [Bay](https://bay.krishkalaria.in/): what Bay is, what it does, and answers to common questions.
-- [How to switch from Arc to Bay](https://bay.krishkalaria.in/switch-from-arc/): importing spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, and where each Arc feature is in Bay.
+- [Bay](https://baybrowser.in/): what Bay is, what it does, and answers to common questions.
+- [How to switch from Arc to Bay](https://baybrowser.in/switch-from-arc/): importing spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, and where each Arc feature is in Bay.
 
 ## What Bay does
 

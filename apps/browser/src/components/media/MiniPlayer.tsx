@@ -1,7 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Text, type GestureResponderEvent, type TextStyle } from "react-native";
+import { Image } from "expo-image";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { toggleMute } from "../../lib/actions";
 import { hex } from "../../lib/theme";
 import { useTab } from "../../store/hooks";
@@ -193,9 +195,10 @@ function AlbumArt({
           {art ? (
             <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }, fadeStyle]}>
               <Image
+                cachePolicy="memory"
                 key={art}
                 source={{ uri: art }}
-                resizeMode="cover"
+                contentFit="cover"
                 onLoad={() => fade.set(withTiming(1, { duration: 200 }))}
                 onError={() => setFailed(art)}
                 style={{ width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }}

@@ -4,7 +4,9 @@
 // to the service. The opt-out is plain and immediate: it changes the generation, stops the uploads in flight and
 // clears the queue and the identity at once, without waiting for a delivery that may be running.
 import { engineInfo } from "@bay/chromium";
-import { readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/desktop";
+import { sendService } from "../runtime/serviceClient";
+import { platformWords } from "../lib/platformWords";
+import { readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/desktop";
 import { create } from "zustand";
 import * as Effect from "effect/Effect";
 import type { JsonValue } from "../lib/json";
@@ -52,8 +54,31 @@ function readJson<T>(name: string): T | null {
 
 let saved: Saved = { ...DEFAULT };
 
+// The documents' revision: it moves when the choice or the queue is written. A checkpoint writes what is current,
+// and writes again when the app changed while it was writing.
+let documentRevision = 0;
+
+// The quit's attempts: a checkpoint that belongs to an older attempt is not the answer any more.
+let quitGeneration = 0;
+
+// The delivery is held while the app is quitting: what is queued stays queued, and nothing goes out.
+let suspended = false;
+
+// The checkpoint of the last attempt: the same promise while it is pending, and a new one when the documents moved.
+let quitCheckpoint: Promise<void> | null = null;
+let quitCheckpointPending = false;
+let acknowledgedRevision = -1;
+
+// The writes of the last checkpoint, so a later one waits for them.
+let checkpointWrites: Promise<void> = Promise.resolve();
+
+// The generation the running delivery started with: a result from a delivery the user has opted out of is not
+// written down.
+let deliveryGeneration = 0;
+
 function save(patch: Partial<Saved>) {
   saved = { ...saved, ...patch };
+  documentRevision++;
 
   try {
     writeDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved));
@@ -91,7 +116,7 @@ function context(): TelemetryContext {
     $app_name: "Bay",
     $app_version: info.appVersion,
     $app_build: info.appBuild,
-    $os: "macOS",
+    $os: platformWords.osName,
     $os_version: info.osVersion,
     arch: info.arch,
     engine_version: engineVersion,
@@ -114,8 +139,12 @@ let generation = 0;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 function persistQueue(now = false) {
+  documentRevision++;
   clearTimeout(persistTimer);
   persistTimer = undefined;
+
+  // While the app is quitting, the queue is written by the checkpoint and not by a timer.
+  if (suspended && !now) return;
 
   const write = () => {
     try {
@@ -239,12 +268,23 @@ function parseQueue(contents: string): Queue | null {
 // The queue the service sends, as the app's own code keeps it. It is exported so the service's tests can drive the
 // real thing.
 export const telemetryConsole: TelemetryConsole = {
-  sharing: () => saved.sharing,
-  generation: () => generation,
+  // While the app is quitting, the delivery holds: the service asks the console, and the console says no.
+  sharing: () => saved.sharing && !suspended,
+  // The service reads the generation when a delivery starts, and again when it checks whether it is still current.
+  generation: () => {
+    deliveryGeneration = generation;
+
+    return generation;
+  },
   events,
   logs,
   inflight,
-  recorded: (entry, body) => logRequest(entry, body),
+  recorded: (entry, body) => {
+    // A result from a delivery that belongs to a choice the user has already changed is not written down.
+    if (deliveryGeneration !== generation) return;
+
+    logRequest(entry, body);
+  },
   serialized: () => JSON.stringify(queue),
   restore: (contents) => {
     // Nothing that was queued before the user opted out comes back.
@@ -345,6 +385,7 @@ export async function flush() {
 export type SharingSource = "settings" | "onboarding" | "ask";
 
 export function setSharing(on: boolean, source: SharingSource) {
+  if (sendService("telemetrySetSharing", [on, source])) return;
   const now = Date.now();
 
   if (on === saved.sharing) return save({ decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
@@ -367,7 +408,8 @@ export function setSharing(on: boolean, source: SharingSource) {
     installId: uuidv4(),
     crashCursor: now,
     lastVersion: appInfo().appVersion,
-    sessionOpen: true,
+    // Turned on while the app quits: the session is already over, so the next launch is not read as a crash.
+    sessionOpen: !suspended,
     decidedAt: now,
     askDoneAt: saved.askDoneAt ?? now,
   });
@@ -375,7 +417,9 @@ export function setSharing(on: boolean, source: SharingSource) {
   void startDelivery();
 }
 
-export const dismissAsk = () => save({ askDoneAt: Date.now() });
+export const dismissAsk = () => {
+  if (!sendService("telemetryDismissAsk")) save({ askDoneAt: Date.now() });
+};
 
 // MARK: Lifecycle
 
@@ -392,6 +436,7 @@ export function loadChoice() {
 
 export function startClient(): { previous: PreviousSession; updatedFrom: string | null } | null {
   loadChoice();
+  suspended = false;
   void engineInfo()
     .then((e) => (engineVersion = `NNCore / Chromium ${e.chromiumVersion}`))
     .catch(() => {});
@@ -415,10 +460,98 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
   return { previous, updatedFrom };
 }
 
-export function endSession() {
-  if (!saved.sharing) return;
-  save({ sessionOpen: false });
+/** Holds the delivery: nothing goes out, and what is in flight is stopped. */
+function suspend() {
+  suspended = true;
+  // The queue belongs to the choice that has changed: what is in flight is not sent.
+  generation++;
+
+  for (const stop of inflight) stop();
+  inflight.clear();
+
+  clearTimeout(persistTimer);
+  persistTimer = undefined;
+}
+
+/**
+ * The quit checkpoint: the choice and the queue are written to disk, and the app waits for the answer. The answer
+ * never waits for the network: what is saved is saved.
+ */
+function checkpointDocuments(attempt: number): Promise<void> {
+  const writing = checkpointWrites.then(async () => {
+    while (attempt === quitGeneration) {
+      const revision = documentRevision;
+
+      // Both documents are written, even when one of them fails: a later attempt cannot race the half that landed.
+      const results = await Promise.allSettled([
+        saveDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved)),
+        saveDocument(TELEMETRY_QUEUE_DOC, JSON.stringify(queue)),
+      ]);
+
+      const failed = results.find((result) => result.status === "rejected");
+
+      if (failed?.status === "rejected") throw failed.reason;
+
+      // Nothing changed while the documents were written: they are what the app quits with.
+      if (attempt === quitGeneration && revision === documentRevision) {
+        acknowledgedRevision = revision;
+
+        return;
+      }
+    }
+  });
+
+  checkpointWrites = writing.catch(() => {});
+
+  return writing;
+}
+
+/** Ends the session: the delivery holds and the choice and the queue are written to disk. */
+export function endSession(): Promise<void> {
+  if (quitCheckpoint && (quitCheckpointPending || acknowledgedRevision === documentRevision)) return quitCheckpoint;
+
+  if (!suspended) {
+    suspend();
+    quitGeneration++;
+
+    if (saved.sharing) save({ sessionOpen: false });
+  }
+
+  const checkpoint = checkpointDocuments(quitGeneration);
+  quitCheckpoint = checkpoint;
+  quitCheckpointPending = true;
+
+  const settled = () => {
+    if (quitCheckpoint === checkpoint) quitCheckpointPending = false;
+  };
+
+  void checkpoint.then(settled, settled);
+
+  return quitCheckpoint;
+}
+
+/** Stops a retired coordinator's client: nothing goes out, and what is in flight is stopped. */
+export function stopClient() {
+  suspend();
+  // The checkpoints of a client that is gone are not the app's answer any more.
+  quitGeneration++;
+}
+
+/** The quit was called off: the delivery goes on with what is queued. */
+export function resumeClientAfterQuit(): Promise<void> {
+  if (!suspended) return checkpointWrites;
+
+  suspended = false;
+  quitCheckpoint = null;
+  quitCheckpointPending = false;
+  const attempt = ++quitGeneration;
+
+  if (saved.sharing) save({ sessionOpen: true });
   persistQueue(true);
+
+  // The current choice and the current queue are written once the older checkpoint has settled: opting out meanwhile
+  // must keep its empty queue, and no snapshot is put back. The queue goes out again on the service's own grid.
+  return checkpointDocuments(attempt);
 }
 
 export const crashCursor = () => saved.crashCursor;

@@ -46,6 +46,20 @@ describe("health", () => {
   });
 });
 
+describe("a page of another origin", () => {
+  it("is told it may call, and may read what comes back", async () => {
+    const asked = await call(`/v1/chains/${CHAIN}`, {
+      method: "OPTIONS",
+      headers: { origin: "chrome://bay", "access-control-request-headers": "authorization" },
+    });
+
+    expect(asked.status).toBe(204);
+    expect(asked.headers.get("access-control-allow-origin")).toBe("*");
+    expect(asked.headers.get("access-control-allow-headers")).toContain("authorization");
+    expect((await call(`/v1/chains/${CHAIN}`, { secret: SECRET })).headers.get("access-control-allow-origin")).toBe("*");
+  });
+});
+
 describe("a chain", () => {
   it("doesn't exist until its first file, which claims it", async () => {
     expect((await call(`/v1/chains/${CHAIN}`, { secret: SECRET })).status).toBe(404);

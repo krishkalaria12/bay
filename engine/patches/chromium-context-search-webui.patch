@@ -1,0 +1,49 @@
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -386,6 +386,16 @@
+ #include "ui/base/page_transition_types.h"
+ #endif
+ 
++// Bay's web desktop host offers its app's search engine in place of the default
++// provider: the item's title, empty to leave Chrome's, and running it, true when
++// the app took it.
++std::u16string (*g_bay_context_search_title)(
++    content::WebContents* contents,
++    const content::ContextMenuParams& params) = nullptr;
++bool (*g_bay_context_search)(content::WebContents* contents,
++                             const std::u16string& selection,
++                             int event_flags) = nullptr;
++
+ using base::UserMetricsAction;
+ using blink::ContextMenuData;
+ using blink::ContextMenuDataEditFlags;
+@@ -2980,6 +2990,16 @@
+       ->Classify(params_.selection_text, false, false,
+                  metrics::OmniboxEventProto::INVALID_SPEC, &match, nullptr);
+   selection_navigation_url_ = match.destination_url;
++  if (g_bay_context_search_title &&
++      (AutocompleteMatch::IsSearchType(match.type) ||
++       !selection_navigation_url_.is_valid())) {
++    const std::u16string title =
++        g_bay_context_search_title(source_web_contents_, params_);
++    if (!title.empty()) {
++      menu_model_.AddItem(IDC_CONTENT_CONTEXT_SEARCHWEBFOR, title);
++      return;
++    }
++  }
+   if (!selection_navigation_url_.is_valid()) {
+     return;
+   }
+@@ -3791,6 +3811,12 @@
+     return;
+   }
+   command_executed_ = true;
++
++  if (id == IDC_CONTENT_CONTEXT_SEARCHWEBFOR && g_bay_context_search &&
++      g_bay_context_search(source_web_contents_, params_.selection_text,
++                           event_flags)) {
++    return;
++  }
+ 
+   // Process extension menu items.
+   if (ContextMenuMatcher::IsExtensionsCustomCommandId(id)) {

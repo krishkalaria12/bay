@@ -7,7 +7,7 @@
 // pass is one at a time so a tab switch mid-pass is not dropped.
 import { extensionActionStates } from "@bay/chromium";
 import * as Effect from "effect/Effect";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { ExtensionsService, type ExtensionUpdate } from "./service";
 import { browserIdOf, useExtensions, windowExtensions } from "./store";

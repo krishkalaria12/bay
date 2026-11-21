@@ -76,7 +76,7 @@ nncore="$root/packages/chromium"
 repo="krishkalaria12/bay"
 bundle_id="in.krishkalaria.bay"
 team="GP328GJT66"
-notes_page="https://bay.krishkalaria.in/release-notes/"
+notes_page="https://baybrowser.in/release-notes/"
 notary_profile="${NOTARY_PROFILE:-bay}"
 # App Store Connect API key for notarytool, when scripts/.notary.env (untracked) sets NOTARY_KEY (path to
 # AuthKey_<id>.p8), NOTARY_KEY_ID and NOTARY_ISSUER. Preferred over the keychain profile: notarytool keeps that
@@ -112,6 +112,17 @@ if [ "$phase" = sign ] || [ "$phase" = check ]; then
   [ "$phase" = check ] || [ -d "$archive" ] || die "no $archive: run --phase build first"
 fi
 
+launch_failed() {
+  echo "==> The app's output" >&2
+  tail -n 80 "$check_log" >&2
+  find "$HOME/Library/Logs/DiagnosticReports" -newer "$check_data.start" \( -name 'Bay*' -o -name 'Chromium*' \) 2>/dev/null \
+    | while IFS= read -r report; do
+      echo "==> $report" >&2
+      head -n 120 "$report" >&2
+    done
+  die "$1"
+}
+
 launch_check() {
   echo "==> Launch check"
   # Running the app must leave its bundle as signed: anything written into it breaks the signature (Chrome indexing
@@ -120,7 +131,11 @@ launch_check() {
   check_data="$(mktemp -d "${TMPDIR:-/tmp}/nn-release.XXXXXX")"
   before="$(pgrep -f "^$app/Contents/MacOS/Bay" | sort || true)"
   check_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-  open -g -n --env BAY_BACKGROUND=1 --env BAY_DATA_DIR="$check_data" --env BAY_REMOTE_DEBUGGING_PORT="$check_port" "$app"
+  # The app's output and any crash report it leaves are printed when the check fails (a runner keeps nothing else).
+  check_log="$check_data.log"
+  touch "$check_data.start" "$check_log"
+  open -g -n --stdout "$check_log" --stderr "$check_log" --env BAY_BACKGROUND=1 --env BAY_DATA_DIR="$check_data" \
+    --env BAY_REMOTE_DEBUGGING_PORT="$check_port" "$app"
   blocker_ok=0
   node "$root/scripts/lib/blocker-ready.mjs" "$check_port" 90 && blocker_ok=1
   sleep 5
@@ -131,13 +146,13 @@ launch_check() {
     ps -E -ww -o command= -p "$p" 2>/dev/null | grep -qF "BAY_DATA_DIR=$check_data" && { pid="$p"; break; }
   done
   [ -n "$pid" ] || pid="$(comm -13 <(echo "$before") <(pgrep -f "^$app/Contents/MacOS/Bay" | sort || true) | head -1)"
-  [ -n "$pid" ] || die "the app didn't start (or quit)"
+  [ -n "$pid" ] || launch_failed "the app didn't start (or quit)"
   kill -TERM "$pid"
   for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
   kill -KILL "$pid" 2>/dev/null || true
   codesign --verify --deep --strict "$app" || die "running the app changed its bundle"
-  [ "$blocker_ok" = 1 ] || die "the content blocker wasn't blocking in the exported app (90 s)"
-  rm -rf "$check_data"
+  [ "$blocker_ok" = 1 ] || launch_failed "the content blocker wasn't blocking in the exported app (90 s)"
+  rm -rf "$check_data" "$check_data.start" "$check_log"
 }
 if [ "$phase" = check ]; then
   [ -d "$app" ] || die "no $app: run --phase sign first"

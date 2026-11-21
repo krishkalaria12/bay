@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
+import { desktopHost, launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, ...options] = process.argv.slice(2);
 const realOnly = options.includes("--real-only");
@@ -130,7 +130,33 @@ const translatedShortcuts = [
   ["German synthetic ⌘]", cmd("]", 22), { command: "forward" }, "translated ] on physical 6"],
 ];
 
-const shortcuts = [
+// Keys with no character of their own go by the key code the native side looks up (dev_window_input.cc).
+const KEY_CODES = {
+  "\t": 48,
+  "\r": 36,
+  "\u007f": 51,
+  "\u001b": 53,
+  [F(0xf700)]: 126,
+  [F(0xf701)]: 125,
+  [F(0xf702)]: 123,
+  [F(0xf703)]: 124,
+  [F(0xf729)]: 115,
+  [F(0xf72b)]: 119,
+  [F(0xf72c)]: 116,
+  [F(0xf72d)]: 121,
+  [F(0xf728)]: 117,
+  ...Object.fromEntries([122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111].map((code, i) => [F(0xf704 + i), code])),
+};
+
+// Linux and Windows have their own bindings and no menu bar: the table is what the app says its shortcuts are.
+const desktopShortcuts = async () =>
+  (await nn(`return nn.keyBindings.shortcutCatalog().filter((row) => row.remappable && row.defaultKey);`)).map((row) => {
+    const [command, arg] = row.id.split(":");
+
+    return [row.title, { key: row.defaultKey, keyCode: KEY_CODES[row.defaultKey], modifiers: row.defaultModifiers }, { command, arg }, row.title];
+  });
+
+const macShortcuts = [
   ["⌘,", cmd(",", 43), { command: "openSettings" }, "⌘,"],
   ["⌘Q", cmd("q", 12), { title: /^Quit/ }, "⌘Q", "window-only"],
   ["⌘H", cmd("h", 4), { title: /^Hide / }, "⌘H", "window-only"],
@@ -236,6 +262,8 @@ const shortcuts = [
   ...translatedShortcuts,
 ];
 
+const shortcuts = desktopHost ? await desktopShortcuts() : macShortcuts;
+
 rep.log("Layout regression events are synthetic translated characters; actual AZERTY/German/Dvorak input sources are not exercised.");
 
 rep.log("German Command+Option bracket combinations are not covered: the existing bracket menu shortcuts require Command without Option.");
@@ -278,7 +306,7 @@ async function showPage(name) {
   }
 }
 
-const focuses = {
+const macFocuses = {
   sidebar: { press: { focus: "window" } },
   page: { press: { focus: "page", asKey: true, wait: 800 }, before: () => cdp("?t3", "document.activeElement.blur(), true") },
   field: { press: { focus: "page", asKey: true, wait: 800 }, before: () => cdp("?t3", "document.getElementById('f').focus(), true") },
@@ -299,6 +327,9 @@ const focuses = {
     teardown: () => nn(`nn.runCommand({ command: "devTools", arg: null, windowId: "w1" });`),
   },
 };
+
+// A dry press there asks the window's own table, which no focus changes; the page's and fields' keys need real input.
+const focuses = desktopHost ? { sidebar: macFocuses.sidebar } : macFocuses;
 
 // Each focus is one check: the shortcuts that failed in it.
 let since = Date.now();
@@ -355,6 +386,12 @@ for (const [focusName, focus] of Object.entries(realOnly ? {} : focuses)) {
 
   await focus.teardown?.();
   recordFocus(focusName);
+}
+
+if (desktopHost) {
+  rep.record("real shortcuts", { skip: "its keys and menu items are macOS's" });
+  finish(rep.summary() && !failures ? 0 : 1);
+  await new Promise(() => {});
 }
 
 // One line per check, timed from the one before.

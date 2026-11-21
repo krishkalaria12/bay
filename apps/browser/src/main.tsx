@@ -1,16 +1,13 @@
 // The app itself, which index.js loads once the native build matches this bundle (nativeApi.tsx).
 // First, so every native module listener the app adds applies held page reports before it runs.
 import "./lib/bridgeEvents";
-import { useEffect, useState } from "react";
-import { AppRegistry, unstable_batchedUpdates } from "react-native";
-import { WindowRoot } from "./App";
+import { batchedUpdates, isMac } from "@bay/platform";
 import { quietLaunchTabs } from "./components/window/BlankTabSurface";
-import { DevErrorBoundary } from "./DevErrorBoundary";
+import { registerWindowApplication } from "./windowEntry";
 import { startTranslate } from "./components/site/translateState";
-import { startAppServices } from "./effect/runtime";
 import { startAppIntegration } from "./lib/appMenuIntegration";
 import { startNativeSync } from "./lib/shellBridge";
-import { startPersistence } from "./lib/persistenceService";
+import { startCoordinatorServices } from "./runtime/services";
 import { perfMark, perfProbeEnabled, probeStore } from "./lib/perfProbe";
 import { startTabPages } from "./lib/tabNavigation";
 import { startSync } from "./sync/engine";
@@ -25,65 +22,34 @@ probeStore("browser", useBrowser);
 // Reports stay silent until the user shares them.
 installErrorReporting();
 
-setStoreBatching(unstable_batchedUpdates);
+setStoreBatching(batchedUpdates);
 
-startPersistence();
-
-// The runtime takes over the work that outlives the bootstrap: the saving, and later the rest.
-void startAppServices();
+// The single-runtime entry is its own authority: one owner for the saving, Live and the app's services, as the
+// shared host's coordinator has (runtime/coordinatorEntry.ts). Its pages are in this document, so it watches them too.
+const backgroundServices = startCoordinatorServices({ store: useBrowser, restoreSession: true, pageLifecycle: true });
 
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
 
-startNativeSync();
+startNativeSync({ persistence: backgroundServices });
 
 // After the first window is made: the tab each window starts on doesn't open the command bar.
 quietLaunchTabs();
 
 startAppIntegration();
 
-startCliControl();
+if (isMac) void startCliControl();
 
 startUserScripts();
 
 startTranslate();
 
-startSync();
+startSync(useBrowser);
 
 startTelemetry();
 
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 
-// Development: `globalThis.nnDevMountDelayMs` holds a window's content back that long after its root starts, as a
-// window opened under load mounts late (acceptance move-tab-slow-mount).
-// SAFETY: globalThis is extensible; the cast only declares the optional nnDevMountDelayMs field the dev harness sets.
-const devMountDelay = () => (__DEV__ ? ((globalThis as { nnDevMountDelayMs?: number }).nnDevMountDelayMs ?? 0) : 0);
-
-function Root({ windowId }: { windowId: string }) {
-  const [delay] = useState(devMountDelay);
-  const [held, setHeld] = useState(delay > 0);
-  useEffect(() => {
-    if (!held) return;
-    const timer = setTimeout(() => setHeld(false), delay);
-
-    return () => clearTimeout(timer);
-  }, []);
-  useEffect(() => {
-    perfMark("firstWindow");
-    markFirstWindow();
-  }, []);
-
-  if (held) return null;
-
-  return __DEV__ ? (
-    <DevErrorBoundary>
-      <WindowRoot windowId={windowId} />
-    </DevErrorBoundary>
-  ) : (
-    <WindowRoot windowId={windowId} />
-  );
-}
-
-AppRegistry.registerComponent("main", () => Root);
+registerWindowApplication({ onFirstMount: markFirstWindow });
 
 perfMark("bundleEnd");

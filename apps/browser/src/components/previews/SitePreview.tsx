@@ -1,16 +1,19 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
+import { Pressable, View } from "@bay/platform";
 import * as v from "valibot";
 import { FadeLabel, Symbol } from "@bay/desktop";
 import * as Effect from "effect/Effect";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { ago } from "../../activity/meetings";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { HoverSurface, SmallButton } from "../activity/LiveItemCard";
 import { useHover } from "../ui/primitives";
 import { dismissHover } from "../sidebar/hover";
-import { runDesktop } from "../../effect/runtime";
+import { runWindow } from "../../effect/windowRuntime";
 import { PreviewService, type SitePreview } from "../site/previewService";
 import type { Anchor } from "../sidebar/state";
 import { gmailAccount, previewSiteOf, type GithubData, type GmailData, type PreviewSite, type Pull, type Review } from "./knownSites";
@@ -44,7 +47,7 @@ export function useSitePreview(tabId: string | undefined): PreviewSite | null {
 }
 
 async function ask(tabId: string, site: PreviewSite): Promise<SitePreview> {
-  return runDesktop(
+  return runWindow(
     Effect.gen(function* () {
       const preview = yield* PreviewService;
 
@@ -86,10 +89,9 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
 // An item opens in its pinned tab, as Arc's previews do.
 function openInTab(tabId: string, url: string) {
   dismissHover();
-  const s = useBrowser.getState();
-  s.activate(tabId);
+  reportBrowserCommand(tabCommands.activate(tabId));
 
-  if (url) s.navigate(tabId, url);
+  if (url) reportBrowserCommand(tabCommands.navigate(tabId, url));
 }
 
 export function SitePreview({ tabId, site, anchor }: { tabId: string; site: PreviewSite; anchor: Anchor }) {
