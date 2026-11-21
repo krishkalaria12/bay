@@ -930,7 +930,7 @@ private struct NameShape: Shape {
 // MARK: - The desktop
 
 /// Bay's site, where the desktop app is.
-private let baySite = "https://bay.krishkalaria.in"
+private let baySite = "https://baybrowser.in"
 
 /// Bay on a Mac, as its site shows it.
 private struct DesktopPicture: View {

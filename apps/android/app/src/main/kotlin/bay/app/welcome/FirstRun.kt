@@ -927,7 +927,7 @@ private fun SiteImage(host: String, size: Dp) {
 
 // The desktop.
 
-private const val BAY_SITE = "https://bay.krishkalaria.in"
+private const val BAY_SITE = "https://baybrowser.in"
 
 @Composable
 private fun DesktopPicture(parts: Run, modifier: Modifier) {
