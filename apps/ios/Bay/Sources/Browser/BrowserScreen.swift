@@ -347,14 +347,10 @@ struct TabPicture: View {
     .accessibilityHidden(true)
   }
 
-  /// Pictures are small JPEGs the engine writes; the last few stay decoded, so a drag shows one at once.
-  private static let cache = NSCache<NSString, UIImage>()
-
+  /// A tab's picture at screen size, decoded now the first time (it must show in this frame) and kept by FileImages.
   static func load(_ snapshot: String?) -> UIImage? {
-    guard let snapshot, let path = URL(string: snapshot)?.path else { return nil }
-    if let cached = cache.object(forKey: path as NSString) { return cached }
-    guard let image = UIImage(contentsOfFile: path) else { return nil }
-    cache.setObject(image, forKey: path as NSString)
-    return image
+    guard let path = snapshot.flatMap(URL.init(string:))?.path else { return nil }
+    let screen = UIScreen.main.bounds
+    return FileImages.now(path, pixels: Int(max(screen.width, screen.height) * UIScreen.main.scale))
   }
 }
