@@ -5,7 +5,7 @@ import type { CaptureSource } from "./model";
 import * as Effect from "effect/Effect";
 import { runDesktop } from "../../effect/runtime";
 import { LibraryService, readLibrary, useLibrary } from "./libraryService";
-import { mediaItem, parseEasel, type EaselDocument, type LibraryMedia } from "./model";
+import { fileNameOf, mediaItem, parseEasel, type EaselDocument, type LibraryMedia } from "./model";
 import { newId } from "../../store/model";
 
 export { useLibrary };
@@ -84,7 +84,7 @@ export function applyEaselDocument(id: string, json: string) {
         const mediaId = newId("media");
         media[mediaId] = {
           id: mediaId,
-          name: item.source?.title || item.path.split("/").pop() || "Image",
+          name: item.source?.title || fileNameOf(item.path) || "Image",
           path: item.path,
           width: item.width,
           height: item.height,

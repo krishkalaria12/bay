@@ -1,11 +1,13 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Image, Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../window/layout";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { lastPicture } from "../../lib/tabThumbnails";
@@ -35,7 +37,7 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
 
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
 
-  if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  if (capabilities.calendar && hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
 
   if (hover.kind === "tab" && site) return <SitePreview key={hover.id} tabId={hover.id} site={site} anchor={hover.anchor} />;
 
@@ -148,7 +150,12 @@ function PagePreview({ tabId }: { tabId: string }) {
         borderBottomColor: theme.panelBorder,
       }}
     >
-      <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: HOVER_CARD_WIDTH, height: shown }} accessibilityIgnoresInvertColors />
+      <Image
+        cachePolicy="memory"
+        source={{ uri: `data:image/jpeg;base64,${picture.data}` }}
+        style={{ width: HOVER_CARD_WIDTH, height: shown }}
+        accessibilityIgnoresInvertColors
+      />
     </View>
   );
 }
@@ -172,7 +179,7 @@ function FolderPeek({ folderId, windowId, anchor }: { folderId: string; windowId
   return <Peek label={name || "New Folder"} tabIds={tabIds} windowId={windowId} anchor={anchor} />;
 }
 
-function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: string[]; windowId: string; anchor: Anchor }) {
+function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: readonly string[]; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const more = tabIds.length - HOVER_CARD_PEEK_ROWS;
 

@@ -1,4 +1,4 @@
-import type { View } from "react-native";
+import { type View } from "@bay/platform";
 import { create } from "zustand";
 
 export type Anchor = { x: number; y: number; width: number; height: number };

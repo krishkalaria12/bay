@@ -37,6 +37,10 @@ std::optional<std::string> ScriptsFolderInstallProblem(
 
 base::FilePath ScriptsFolder();
 
+// Blocking preflight, under the CLI's shared lock. Chrome validates the
+// manifest schema; Bay restricts it to content scripts and plain local files.
+std::optional<std::string> ValidateScriptsFolder(const base::FilePath& path);
+
 base::ScopedClosureRunner BeginScriptsInstall();
 
 }

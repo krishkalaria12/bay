@@ -11,13 +11,25 @@ type FileState = { localFiles: Record<string, LocalFilePin> };
 
 const safeId = (id: JsonInput): id is string => v.is(v.string(), id) && !!id && !["__proto__", "constructor", "prototype"].includes(id);
 
+/** Pins sync between devices, so a path may be another platform's: /posix, a Windows drive (C:\ or C:/) or a share
+ * (\\server\share). Each keeps its own form, with its separators tidied. Access is the native host's alone. */
 export function localFilePath(path: JsonInput): string | null {
-  if (!v.is(v.string(), path) || !path.startsWith("/") || path.includes("\0")) return null;
-  const parts = path.split("/").filter(Boolean);
+  if (!v.is(v.string(), path) || path.includes("\0")) return null;
+  const posix = path.startsWith("/");
+  const drive = /^[A-Za-z]:[\\/]/.test(path);
+  const share = path.startsWith("\\\\");
+
+  if (!posix && !drive && !share) return null;
+  // A backslash is an ordinary character in a POSIX name.
+  const parts = path.split(posix ? "/" : /[\\/]/).filter(Boolean);
 
   if (parts.some((part) => part === "." || part === "..")) return null;
 
-  return `/${parts.join("/")}`;
+  if (posix) return `/${parts.join("/")}`;
+
+  if (drive) return `${parts[0]}\\${parts.slice(1).join("\\")}`;
+
+  return `\\\\${parts.join("\\")}`;
 }
 
 export interface LocalFilesById {

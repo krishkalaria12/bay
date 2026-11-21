@@ -8,12 +8,15 @@ import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import type { Operation } from "../effect/errors";
 import { Diagnostics } from "../effect/ports/diagnostics";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import { AuthorityStore } from "../effect/ports/store";
+import type { AppServices } from "../effect/runtime";
+import { useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
 import { engineIdOf } from "../store/spaces";
 import { PROFILE_CLOSE_DELAY_MS } from "./constants";
 
@@ -52,6 +55,7 @@ export class ProfileCleanup extends Context.Service<
   static readonly layer = Layer.effect(
     ProfileCleanup,
     Effect.gen(function* () {
+      const browser = (yield* AuthorityStore).store;
       const engine = yield* ProfileEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
@@ -64,7 +68,7 @@ export class ProfileCleanup extends Context.Service<
 
       const deleteOne = (profile: string): Effect.Effect<void> =>
         Effect.gen(function* () {
-          const state = useBrowser.getState();
+          const state = browser.getState();
 
           if (!state.orphanedProfileData.includes(profile)) return;
 
@@ -101,13 +105,13 @@ export class ProfileCleanup extends Context.Service<
             return;
           }
 
-          useBrowser.getState().profileDataDeleted(profile);
+          browser.getState().profileDataDeleted(profile);
         });
 
       const drain = (): Effect.Effect<void> =>
         Effect.gen(function* () {
           for (;;) {
-            const profile = useBrowser.getState().orphanedProfileData.find((e) => !failed.has(e));
+            const profile = browser.getState().orphanedProfileData.find((e) => !failed.has(e));
 
             if (profile === undefined) return;
 
@@ -118,8 +122,28 @@ export class ProfileCleanup extends Context.Service<
           }
         });
 
-      // The cleanup runs here, in the app's scope: it stops when the app does.
-      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(requests), () => drain())));
+      // The delete runs in a scope of its own, so a stop cancels the wait the queue is in and a start opens a
+      // fresh one. The app's scope still closes it.
+      let workScope: ReturnType<typeof Scope.forkUnsafe> | undefined;
+
+      const open = (): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if (workScope) return;
+
+          const opening = Scope.forkUnsafe(scope);
+
+          workScope = opening;
+          yield* Effect.forkIn(Effect.forever(Effect.flatMap(Queue.take(requests), () => drain())), opening);
+        });
+
+      const close = (): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const closing = workScope;
+
+          workScope = undefined;
+
+          if (closing) yield* Scope.close(closing, Exit.succeed(undefined));
+        });
 
       const onStore = (s: BrowserState, prev: BrowserState) => {
         if (s.orphanedProfileData !== prev.orphanedProfileData) Queue.offerUnsafe(requests, undefined);
@@ -136,10 +160,10 @@ export class ProfileCleanup extends Context.Service<
           // The profiles still queued from the last launch are deleted now.
           Queue.offerUnsafe(requests, undefined);
 
-          return Effect.void;
+          return open();
         }
 
-        const stopSubscription = useBrowser.subscribe(onStore);
+        const stopSubscription = browser.subscribe(onStore);
 
         stopWatching = () => {
           stopSubscription();
@@ -155,12 +179,98 @@ export class ProfileCleanup extends Context.Service<
 
           // The profiles still queued from the last launch are deleted now.
           Queue.offerUnsafe(requests, undefined);
+
+          yield* open();
         });
       });
 
-      const stop = Effect.sync(() => stopWatching?.());
+      const stop = Effect.gen(function* () {
+        stopWatching?.();
+        yield* close();
+      });
 
       return ProfileCleanup.of({ start, stop });
     }),
   );
 }
+
+/**
+ * The runtime the cleanup runs on. It is loaded when the cleanup starts, not when this module is: the policy is
+ * plain, and the app's runtime is not.
+ */
+const run = async <A, E>(browser: BrowserStore, program: Effect.Effect<A, E, AppServices>): Promise<A> => {
+  const { runForStore } = await import("../effect/runtime");
+
+  return runForStore(browser, program);
+};
+
+/**
+ * The profile cleanup a store reaches.
+ *
+ * The cleanup itself is the service above: one queue and one subscription for the app, so a store that asks for the
+ * cleanup twice does not delete a profile's data twice.
+ */
+export type ProfileDataCleanup = {
+  /** The store this cleanup is bound to. */
+  readonly store: BrowserStore;
+  /** Starts the cleanup: the profiles still queued are deleted, and the queue is watched. The answer gives it back. */
+  start(): () => void;
+  /** Stops watching the queue. */
+  stop(): void;
+  /** Stops watching, and lets the store build a fresh cleanup when it asks again. */
+  dispose(): void;
+};
+
+const cleanups = new WeakMap<BrowserStore, ProfileDataCleanup>();
+
+/** The profile cleanup for a store. One store, one cleanup: the queue is watched once. */
+export function createProfileDataCleanup(browser: BrowserStore): ProfileDataCleanup {
+  const existing = cleanups.get(browser);
+
+  if (existing) return existing;
+
+  // Each start's own stop: the stop a start gave back is inert once another start has replaced it.
+  let started = 0;
+
+  const created: ProfileDataCleanup = {
+    store: browser,
+    start() {
+      const own = ++started;
+
+      void run(
+        browser,
+        Effect.gen(function* () {
+          const cleanup = yield* ProfileCleanup;
+
+          yield* cleanup.start;
+        }),
+      );
+
+      return () => {
+        if (own === started) created.stop();
+      };
+    },
+    stop() {
+      started++;
+      void run(
+        browser,
+        Effect.gen(function* () {
+          const cleanup = yield* ProfileCleanup;
+
+          yield* cleanup.stop;
+        }),
+      );
+    },
+    dispose() {
+      if (cleanups.get(browser) === created) cleanups.delete(browser);
+      created.stop();
+    },
+  };
+
+  cleanups.set(browser, created);
+
+  return created;
+}
+
+/** Starts the app's profile cleanup: the profiles still queued are deleted, and the queue is watched. */
+export const startProfileDataCleanup = (): (() => void) => createProfileDataCleanup(useBrowser).start();

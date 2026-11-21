@@ -1,8 +1,11 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings, setTabLayout } from "../../../runtime/settingsActions";
+import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { TidyModelNote } from "../TidyModelNote";
@@ -11,8 +14,7 @@ import { updateCalendarSettings, useLive } from "../../../activity/activityStore
 import { normalizeAwakeSite } from "../../../lib/keptAwakeSites";
 
 export function TabsPane() {
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const top = settings.tabLayout === "top";
 
   return (
@@ -34,7 +36,7 @@ export function TabsPane() {
       <SectionHeader title="General" />
       <Group>
         <Row settingId={SETTINGS.newTabPosition.id} title={top ? SETTINGS.newTabPosition.topTabsTitle : SETTINGS.newTabPosition.title}>
-          <Toggle value={settings.newTabPosition === "top"} onChange={(v) => update({ newTabPosition: v ? "top" : "bottom" })} />
+          <Toggle value={settings.newTabPosition === "top"} onChange={(v) => reportBrowserCommand(updateSettings({ newTabPosition: v ? "top" : "bottom" }))} />
         </Row>
         <SettingToggle setting="warnBeforeClosingLastTab" settingId={SETTINGS.warnBeforeClosingLastTab.id} title={SETTINGS.warnBeforeClosingLastTab.title} />
         <SettingToggle setting="tabReorderHaptics" settingId={SETTINGS.tabReorderHaptics.id} title={SETTINGS.tabReorderHaptics.title} />
@@ -60,7 +62,9 @@ export function TabsPane() {
         }
       />
       <Group>
-        <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
+        {capabilities.calendar && (
+          <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
+        )}
         <SettingToggle
           setting="tidyTabs"
           settingId={SETTINGS.tidyTabs.id}
@@ -84,7 +88,7 @@ export function TabsPane() {
       />
       <Group>
         <SettingToggle setting="previewFolders" title="Folders and groups" description="Their tabs." />
-        <CalendarPreviewToggle />
+        {capabilities.calendar && <CalendarPreviewToggle />}
         <SettingToggle setting="previewGmail" title="Gmail" description="Unread mail, and Compose." />
         <SettingToggle
           setting="previewGithub"
@@ -103,7 +107,7 @@ export function TabsPane() {
           title={
             <Checkbox
               value={settings.cleanUpInactiveTabsAfterHours !== null}
-              onChange={(v) => update({ cleanUpInactiveTabsAfterHours: v ? 24 : null })}
+              onChange={(v) => reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: v ? 24 : null }))}
               label="Clean up tabs I haven't used in:"
             />
           }
@@ -112,7 +116,7 @@ export function TabsPane() {
             value={String(settings.cleanUpInactiveTabsAfterHours ?? 24)}
             options={CLEAN_UP_CHOICES}
             disabled={settings.cleanUpInactiveTabsAfterHours === null}
-            onChange={(v) => update({ cleanUpInactiveTabsAfterHours: Number(v) })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: Number(v) }))}
           />
         </Row>
       </Group>
@@ -121,12 +125,12 @@ export function TabsPane() {
 }
 
 function AwakeSites() {
-  const sites = useBrowser((s) => s.settings.awakeSites);
+  const sites = useBrowserRead((s) => s.settings.awakeSites);
   const theme = useTheme();
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const add = () => {
+  const add = async () => {
     const site = normalizeAwakeSite(input);
 
     if (!site) {
@@ -135,16 +139,20 @@ function AwakeSites() {
       return;
     }
 
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
 
-    if (!s.settings.awakeSites.includes(site)) s.updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
-    setInput("");
-    setError(null);
+    try {
+      if (!s.settings.awakeSites.includes(site)) await updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
+      setInput("");
+      setError(null);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Couldn't keep the website awake.");
+    }
   };
 
   const remove = (site: string) => {
-    const s = useBrowser.getState();
-    s.updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) });
+    const s = browserRead.getState();
+    reportBrowserCommand(updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) }));
   };
 
   return (
@@ -182,18 +190,7 @@ function AwakeSites() {
 function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; title: string; selected: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
-
-  const choose = () => {
-    const s = useBrowser.getState();
-    s.updateSettings({ tabLayout: layout });
-
-    for (const w of Object.values(s.windows)) {
-      if ((w.tabLayout ?? s.settings.tabLayout) !== layout) useBrowser.getState().toggleTabLayout(w.id);
-    }
-
-    useBrowser.getState().updateSettings({ tabLayout: layout });
-  };
-
+  const choose = () => reportBrowserCommand(setTabLayout(layout));
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
 

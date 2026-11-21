@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
+import { AuthorityStore } from "../effect/ports/store.ts";
 
 // Execute hook effects without a renderer. The stores and queued production pipeline stay real.
 const native = new URL("../test-native-stub.mjs", import.meta.url).href;
@@ -121,7 +122,11 @@ function setup(t, profiles = {}, themes = {}) {
   };
 
   const runtime = ManagedRuntime.make(
-    EnrichmentService.layer.pipe(Layer.provide(engineLayer()), Layer.provideMerge(Layer.mergeAll(fakeDiagnostics().layer, testClockLayer))),
+    EnrichmentService.layer.pipe(
+      Layer.provide(AuthorityStore.layer(useBrowser)),
+      Layer.provide(engineLayer()),
+      Layer.provideMerge(Layer.mergeAll(fakeDiagnostics().layer, testClockLayer)),
+    ),
   );
 
   enrichment = runtime;
@@ -484,7 +489,10 @@ test("native lookup answers flush after pending reports and capped resets notify
 test("shared engine profiles coalesce while other profiles and their published maps remain independent", async (t) => {
   const kept = freezeIcons({ pages: { "https://kept/": "kept" }, srcs: {}, appearances: {} });
   setup(t, { kept });
-  setSpaceProfiles({ personal: "shared", work: "shared" });
+  const spaces = useBrowser.getState().spaces;
+  useBrowser.setState({
+    spaces: { ...spaces, personal: { ...spaces.default, id: "personal", profileId: "shared" }, work: { ...spaces.default, id: "work", profileId: "shared" } },
+  });
   tab("a", "https://site/a", "personal");
   tab("b", "https://site/b", "work");
   tab("c", "https://site/c", "other");

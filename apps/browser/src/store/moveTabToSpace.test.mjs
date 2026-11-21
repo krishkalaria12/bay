@@ -40,15 +40,15 @@ test("moved from its own window, a tab takes the window to its new space", () =>
   assert.equal(shown(f.left), f.moving);
 });
 
-test("dropped on another space's strip a tab joins that space; dropped elsewhere on the window it takes the window along", () => {
+test("dropped on another space's strip a tab joins that space; dropped elsewhere on the window it takes the window along", async () => {
   const f = twoSpaces();
-  assert.equal(dropTabsOutside([f.moving], f.left, 1100, 100, undefined, null, f.right), f.right);
+  assert.equal(await dropTabsOutside([f.moving], f.left, 1100, 100, undefined, null, f.right), f.right);
   assert.equal(S().tabs[f.moving].spaceId, f.space);
   assert.equal(S().windows[f.right].spaceId, f.space);
   assert.equal(S().windows[f.left].spaceId, f.home);
 
   const g = twoSpaces();
-  assert.equal(dropTabsOutside([g.moving], g.left, 1100, 100, undefined, null), g.right);
+  assert.equal(await dropTabsOutside([g.moving], g.left, 1100, 100, undefined, null), g.right);
   assert.equal(S().tabs[g.moving].spaceId, g.home);
   assert.equal(S().windows[g.right].spaceId, g.home);
 });

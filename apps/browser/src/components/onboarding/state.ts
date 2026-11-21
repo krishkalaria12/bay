@@ -1,6 +1,7 @@
+import { capabilities } from "@bay/platform";
 import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";
@@ -18,16 +19,19 @@ type OnboardingState = {
   leaving: boolean;
   session: number;
   tourAfter: boolean;
+  // The window whose import carries on behind the later steps, and after the card has gone if it's still running.
+  importInBackground: string | null;
   // What each step set up, as lines for the outro's postcard. A skipped step has none.
   picked: Partial<Record<OnboardingStep, string[]>>;
 };
 
 export const useOnboarding = create<OnboardingState>(() => ({
   windowId: null,
-  step: "intro",
+  step: capabilities.introScreen ? "intro" : FIRST_STEP,
   leaving: false,
   session: 0,
   tourAfter: false,
+  importInBackground: null,
   picked: {},
 }));
 
@@ -55,6 +59,12 @@ function advance(step: OnboardingStep, picked: string[] | undefined) {
 
 // Continue: the step has applied its choices; `picked` describes them.
 export const nextStep = (picked?: string[]) => advance(useOnboarding.getState().step, picked);
+
+// Moving in can take a while: the rest of the steps needn't wait for it.
+export function continueImportInBackground() {
+  useOnboarding.setState((s) => ({ importInBackground: s.windowId }));
+  nextStep();
+}
 
 // Skip: the step applies nothing, and the postcard forgets anything it set before.
 export const skipStep = () => advance(useOnboarding.getState().step, undefined);
@@ -116,9 +126,11 @@ export function startOnboarding(windowId?: string | null, step: OnboardingStep =
 
   if (!id) return;
   endToolTour();
-  useOnboarding.setState((s) => ({ windowId: id, step, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
+  // A build without the intro starts at the first setup step.
+  const first = step === "intro" && !capabilities.introScreen ? FIRST_STEP : step;
+  useOnboarding.setState((s) => ({ windowId: id, step: first, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
 
-  if (step !== "intro") save({ step });
+  if (first !== "intro") save({ step: first });
 }
 
 export function finishOnboarding(options: { tour?: boolean } = {}) {
@@ -133,27 +145,37 @@ export function dismissOnboarding(session: number) {
   const { session: current, windowId, tourAfter } = useOnboarding.getState();
 
   if (current !== session) return;
-  useOnboarding.setState({ windowId: null, step: "intro", leaving: false, tourAfter: false, picked: {} });
+  useOnboarding.setState({ windowId: null, step: capabilities.introScreen ? "intro" : FIRST_STEP, leaving: false, tourAfter: false, picked: {} });
 
   if (tourAfter && windowId) startToolTour(windowId);
 }
 
-export function maybeStartOnboarding() {
+const resumableStep = (saved: Saved) => (saved.step && STEPS.includes(saved.step) && saved.step !== "intro" ? saved.step : FIRST_STEP);
+
+// A saved session means someone already uses Bay. `returning` lets a host that saves its session before asking say so.
+export function maybeStartOnboarding({
+  returning = !!readDocument("session.json"),
+  start = (step, picked) => startOnboarding(null, step, picked),
+}: { returning?: boolean; start?: (step: OnboardingStep, picked: OnboardingState["picked"]) => void } = {}) {
   const saved = readSaved();
 
   if (saved?.completedAt) return;
 
-  if (saved?.startedAt) {
-    const step = saved.step && STEPS.includes(saved.step) && saved.step !== "intro" ? saved.step : FIRST_STEP;
+  if (saved?.startedAt) return start(resumableStep(saved), saved.picked ?? {});
 
-    return startOnboarding(null, step, saved.picked ?? {});
-  }
-
-  if (readDocument("session.json")) return markCompleted();
+  if (returning) return markCompleted();
 
   if (__DEV__ && launchEnvironment("BAY_ONBOARDING") !== "1") return;
   save({ startedAt: Date.now() });
-  startOnboarding();
+  start("intro", {});
+}
+
+/** The coordinator's request, in the window it named. A reloaded window goes on from its saved step. */
+export function startRequestedOnboarding(windowId: string, step: OnboardingStep, picked: OnboardingState["picked"]) {
+  const saved = readSaved();
+
+  if (saved?.completedAt || useOnboarding.getState().windowId === windowId) return;
+  startOnboarding(windowId, saved?.step ? resumableStep(saved) : step, saved?.picked ?? picked);
 }
 
 if (__DEV__)

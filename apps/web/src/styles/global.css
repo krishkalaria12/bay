@@ -43,51 +43,6 @@
   }
 }
 
-/* The working windows' motion (src/components/live). */
-@keyframes born {
-  from {
-    opacity: 0;
-    transform: translateX(-0.8em);
-  }
-}
-@keyframes from-next {
-  from {
-    opacity: 0;
-    transform: translateX(2.5em);
-  }
-}
-@keyframes from-prev {
-  from {
-    opacity: 0;
-    transform: translateX(-2.5em);
-  }
-}
-@keyframes omni {
-  from {
-    opacity: 0;
-    transform: translateY(-0.4em) scale(0.98);
-  }
-}
-@keyframes loadbar {
-  from {
-    transform: scaleX(0);
-    opacity: 1;
-  }
-  80% {
-    transform: scaleX(1);
-    opacity: 1;
-  }
-  to {
-    transform: scaleX(1);
-    opacity: 0;
-  }
-}
-@keyframes reload {
-  30% {
-    opacity: 0.3;
-  }
-}
-
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -224,41 +179,6 @@
       radial-gradient(30% 60% at 86% 62%, color-mix(in srgb, var(--color-note-pink) 85%, transparent), transparent 70%),
       radial-gradient(34% 70% at 98% 18%, color-mix(in srgb, var(--color-note-blue) 85%, transparent), transparent 70%),
       radial-gradient(30% 60% at 58% 96%, color-mix(in srgb, var(--color-note-green) 80%, transparent), transparent 70%), #fff;
-  }
-
-  /*
-    Browser mockups are drawn in em and scale with their container like an image.
-    Tailwind's spacing, type and radius utilities read these variables, so inside .mock
-    `p-4` is 1em of the mockup, not 1rem of the page.
-  */
-  .mock {
-    font-size: calc(100cqw / 64);
-    --spacing: 0.25em;
-    --text-xs: 0.75em;
-    --text-sm: 0.875em;
-    --text-base: 1em;
-    --text-lg: 1.125em;
-    --text-xl: 1.25em;
-    --text-2xl: 1.5em;
-    --text-3xl: 1.875em;
-    --radius-sm: 0.25em;
-    --radius-md: 0.375em;
-    --radius-lg: 0.5em;
-    --radius-xl: 0.75em;
-    --radius-2xl: 1em;
-    line-height: 1.35;
-  }
-  .mock-frame {
-    aspect-ratio: 900 / 580;
-  }
-  /* On a phone the window keeps a readable size: narrower, and taller than wide. */
-  @container (max-width: 560px) {
-    .mock {
-      font-size: calc(100cqw / 36);
-    }
-    .mock-frame {
-      aspect-ratio: 36 / 40;
-    }
   }
 }
 

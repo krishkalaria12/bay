@@ -1,0 +1,127 @@
+diff --git a/chrome/browser/shell_integration_linux.cc b/chrome/browser/shell_integration_linux.cc
+--- a/chrome/browser/shell_integration_linux.cc
++++ b/chrome/browser/shell_integration_linux.cc
+@@ -66,6 +66,19 @@
+ namespace {
+ 
+ const char kXdgSettings[] = "xdg-settings";
++
++// Packaged builds ship a tested helper next to the browser. Keep the PATH
++// fallback for developer builds without a runtime archive.
++std::string XdgSettingsPath() {
++  base::FilePath directory;
++  if (base::PathService::Get(base::DIR_EXE, &directory)) {
++    const auto helper = directory.Append(kXdgSettings);
++    if (base::PathExists(helper))
++      return helper.value();
++  }
++  return kXdgSettings;
++}
++
+ const char kXdgSettingsDefaultBrowser[] = "default-web-browser";
+ const char kXdgSettingsDefaultSchemeHandler[] = "default-url-scheme-handler";
+ const char kWebAppDesktopIdPrefixEnvVar[] = "CHROME_WEB_APP_DESKTOP_ID_PREFIX";
+@@ -106,7 +119,7 @@
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
+ 
+   std::vector<std::string> argv;
+-  argv.push_back(kXdgSettings);
++  argv.push_back(XdgSettingsPath());
+   argv.push_back("set");
+   if (scheme.empty()) {
+     argv.push_back(kXdgSettingsDefaultBrowser);
+@@ -137,7 +150,7 @@
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
+ 
+   std::vector<std::string> argv;
+-  argv.push_back(kXdgSettings);
++  argv.push_back(XdgSettingsPath());
+   argv.push_back("check");
+   if (scheme.empty()) {
+     argv.push_back(kXdgSettingsDefaultBrowser);
+@@ -270,7 +283,7 @@
+                                                 base::BlockingType::MAY_BLOCK);
+ 
+   std::vector<std::string> argv;
+-  argv.push_back(shell_integration_linux::kXdgSettings);
++  argv.push_back(shell_integration_linux::XdgSettingsPath());
+   argv.push_back("get");
+   argv.push_back(shell_integration_linux::kXdgSettingsDefaultSchemeHandler);
+   argv.push_back(url.GetScheme());
+@@ -353,7 +366,10 @@
+ 
+   base::LaunchOptions options;
+   options.fds_to_remap.push_back(std::make_pair(devnull, STDIN_FILENO));
+-  base::Process process = base::LaunchProcess(argv, options);
++  auto command = argv;
++  if (!command.empty() && command[0] == kXdgSettings)
++    command[0] = XdgSettingsPath();
++  base::Process process = base::LaunchProcess(command, options);
+   close(devnull);
+   if (!process.IsValid())
+     return false;
+@@ -843,7 +859,7 @@
+ 
+ bool IsFirefoxDefaultBrowser() {
+   std::vector<std::string> argv;
+-  argv.push_back(shell_integration_linux::kXdgSettings);
++  argv.push_back(shell_integration_linux::XdgSettingsPath());
+   argv.push_back("get");
+   argv.push_back(shell_integration_linux::kXdgSettingsDefaultBrowser);
+ 
+diff --git a/chrome/browser/shell_integration_linux_unittest.cc b/chrome/browser/shell_integration_linux_unittest.cc
+--- a/chrome/browser/shell_integration_linux_unittest.cc
++++ b/chrome/browser/shell_integration_linux_unittest.cc
+@@ -752,6 +752,52 @@
+       << "Contents: " << contents;
+ }
+ 
++#if BUILDFLAG(IS_LINUX)
++TEST(ShellIntegrationTest, BayBundledXdgSettingsWinsOverPath) {
++  base::ScopedTempDir temp;
++  ASSERT_TRUE(temp.CreateUniqueTempDir());
++  base::ScopedPathOverride executable_directory(base::DIR_EXE, temp.GetPath());
++  const auto distro = temp.GetPath().Append("distro");
++  ASSERT_TRUE(base::CreateDirectory(distro));
++  base::ScopedEnvironmentVariableOverride path("PATH", distro.value());
++  const auto sibling = temp.GetPath().Append("xdg-settings");
++  const auto system = distro.Append("xdg-settings");
++  // Harmless scripts model both backends. Never run real desktop utilities.
++  ASSERT_TRUE(base::WriteFile(sibling,
++                              "#!/bin/sh\nif [ \"$1\" = check ]; then echo "
++                              "yes; exit 0; fi\nexit 23\n"));
++  ASSERT_TRUE(base::WriteFile(system, "#!/bin/sh\necho no\nexit 99\n"));
++  ASSERT_TRUE(base::SetPosixFilePermissions(sibling, 0700));
++  ASSERT_TRUE(base::SetPosixFilePermissions(system, 0700));
++  int exit_code = 0;
++  EXPECT_TRUE(LaunchXdgUtility(
++      {"xdg-settings", "set", "default-web-browser", "bay.desktop"},
++      &exit_code));
++  EXPECT_EQ(exit_code, 23);
++  EXPECT_EQ(shell_integration::GetDefaultBrowser(),
++            shell_integration::IS_DEFAULT);
++}
++
++TEST(ShellIntegrationTest, BayDeveloperBuildCanUsePathWithoutBundledHelper) {
++  base::ScopedTempDir temp;
++  ASSERT_TRUE(temp.CreateUniqueTempDir());
++  const auto empty = temp.GetPath().Append("empty");
++  ASSERT_TRUE(base::CreateDirectory(empty));
++  base::ScopedPathOverride executable_directory(base::DIR_EXE, empty);
++  base::ScopedEnvironmentVariableOverride path("PATH", temp.GetPath().value());
++  const auto helper = temp.GetPath().Append("xdg-settings");
++  ASSERT_TRUE(base::WriteFile(
++      helper,
++      "#!/bin/sh\nif [ \"$1\" = check ]; then echo no; exit 0; fi\nexit 24\n"));
++  ASSERT_TRUE(base::SetPosixFilePermissions(helper, 0700));
++  int exit_code = 0;
++  EXPECT_TRUE(LaunchXdgUtility({"xdg-settings", "set"}, &exit_code));
++  EXPECT_EQ(exit_code, 24);
++  EXPECT_EQ(shell_integration::GetDefaultBrowser(),
++            shell_integration::NOT_DEFAULT);
++}
++#endif  // BUILDFLAG(IS_LINUX)
++
+ }  // namespace shell_integration_linux
+ 
+ namespace shell_integration {

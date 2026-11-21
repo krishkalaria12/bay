@@ -8,6 +8,6 @@ export interface JsonObject {
 }
 
 /** Plain objects only: arrays and the other object kinds are not JSON objects. */
-export function isJsonObject(value: JsonValue | null | undefined): value is JsonObject {
+export function isJsonObject(value: unknown): value is JsonObject {
   return v.is(v.object({}), value) && !Array.isArray(value);
 }

@@ -1,7 +1,9 @@
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
-import type { ClosedTab } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+
+type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;
 
 export function startCleanupNotifications(notify: (windowId: string, count: number) => void) {
   const pending = new Map<string, number>();
@@ -14,7 +16,7 @@ export function startCleanupNotifications(notify: (windowId: string, count: numb
 
     if (!removed.length) return;
 
-    const add = (windowId: string | undefined, entries: ClosedTab[], before: ClosedTab[]) => {
+    const add = (windowId: string | undefined, entries: readonly ClosedTab[], before: readonly ClosedTab[]) => {
       if (!windowId || entries === before) return;
       const known = new Set(before.map((entry) => entry.id));
 

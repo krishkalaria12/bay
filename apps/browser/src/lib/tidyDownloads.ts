@@ -5,9 +5,15 @@ import { onDownload } from "@bay/chromium";
 import type { Download } from "@bay/chromium";
 import * as Effect from "effect/Effect";
 import { showToast } from "../components/ui/toasts";
-import { useBrowser, type BrowserState } from "../store/browserStore";
-import { runDesktop } from "../effect/runtime";
+import type { BrowserStore } from "../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
+import { useBrowserRead as useBrowser } from "../store/read";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
+import { runDesktop, runForStore } from "../effect/runtime";
 import { DownloadWorkService, pageForDownload, windowForDownload } from "./downloadWorkService";
+
+// The page a download came from, and the window that showed it: the model's own answers (downloadWorkService.ts).
+export { pageForDownload, windowForDownload };
 
 // MARK: Suggestion store
 
@@ -60,9 +66,11 @@ export function useTidySuggestion(d: Download | undefined): TidyName | null {
 
 // MARK: Applying
 
-const baseName = (path: string) => path.split("/").pop() ?? path;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 export async function applyTidyName(d: Download, suggestion: TidyName): Promise<string | null> {
+  if (hasServiceClient()) return requestService("downloadRename", [d.id, suggestion.filename]);
+
   return runDesktop(
     Effect.gen(function* () {
       const work = yield* DownloadWorkService;
@@ -76,13 +84,14 @@ function clipped(name: string): string {
   return name.length <= 44 ? name : `${name.slice(0, 28)}…${name.slice(-15)}`;
 }
 
-function showRenamed(d: Download, original: { filename: string; path: string }, path: string, windowId: string) {
-  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
+// `owner`: the store that named the download. Its toast and its undo stay with that store.
+function showRenamed(d: Download, original: { filename: string; path: string }, path: string, windowId: string, owner?: BrowserStore) {
+  const renamed = (owner ?? useBrowser).getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
   showToast(windowId, `Renamed to “${renamed.filename}”`, `Was “${clipped(original.filename)}”`, {
     icon: "wand.and.stars",
     key: `tidy-undo:${d.id}`,
     duration: 8000,
-    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId) },
+    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId, owner) },
   });
 }
 
@@ -99,14 +108,18 @@ export async function tidyRename(d: Download, suggestion: TidyName, windowId: st
   showRenamed(d, original, path, windowId);
 }
 
-async function undoTidyName(d: Download, original: { filename: string; path: string }, windowId: string) {
-  const path = await runDesktop(
-    Effect.gen(function* () {
-      const work = yield* DownloadWorkService;
+async function undoTidyName(d: Download, original: { filename: string; path: string }, windowId: string, owner?: BrowserStore) {
+  const undo = Effect.gen(function* () {
+    const work = yield* DownloadWorkService;
 
-      return yield* work.undo(d, original.filename);
-    }),
-  );
+    return yield* work.undo(d, original.filename);
+  });
+
+  const path = owner
+    ? await runForStore(owner, undo)
+    : hasServiceClient()
+      ? await requestService<string | null>("downloadUndo", [d.id, original.filename])
+      : await runDesktop(undo);
 
   if (!path) {
     showToast(windowId, "Couldn’t Undo", "The original name is no longer available.", { icon: "exclamationmark.triangle" });
@@ -126,18 +139,18 @@ export const keepDownloadName = (id: string) => void keptDownloads.add(id);
  * A download finished: with Tidy Downloads on it gets a readable name right away, as in Arc, and a toast with the way
  * back. Once for each download, so an undo sticks. A name a person chose, or one already readable, is left alone.
  */
-export async function tidyFinishedDownload(d: Download, s: BrowserState = useBrowser.getState()): Promise<void> {
+export async function tidyFinishedDownload(d: Download, s: BrowserState = useBrowser.getState(), owner?: BrowserStore): Promise<void> {
   if (!s.settings.tidyDownloads || d.state !== "finished" || !d.path) return;
 
   if (keptDownloads.has(d.id)) return;
 
-  const named = await runDesktop(
-    Effect.gen(function* () {
-      const work = yield* DownloadWorkService;
+  const finish = Effect.gen(function* () {
+    const work = yield* DownloadWorkService;
 
-      return yield* work.finish(d);
-    }),
-  );
+    return yield* work.finish(d);
+  });
+
+  const named = owner ? await runForStore(owner, finish) : await runDesktop(finish);
 
   if (!named) return;
 
@@ -146,14 +159,18 @@ export async function tidyFinishedDownload(d: Download, s: BrowserState = useBro
   if (!windowId) return;
 
   // Nobody asked for this rename, so a file that can't take the name just keeps its own.
-  showRenamed(d, named.original, named.path, windowId);
+  showRenamed(d, named.original, named.path, windowId, owner);
 }
 
-export function startTidyDownloads(): void {
+/** Watches for downloads that finish while Bay watches, and gives them a readable name. */
+export function startTidyDownloads(store: BrowserStore): () => void {
   // Only downloads that finish while Bay watches: the engine replays its finished history at every launch.
   const live = new Set<string>();
-  onDownload((d) => {
+
+  const subscription = onDownload((d) => {
     if (d.state === "downloading") live.add(d.id);
-    else if (live.delete(d.id) && d.state === "finished") void tidyFinishedDownload(d);
+    else if (live.delete(d.id) && d.state === "finished") void tidyFinishedDownload(d, store.getState(), store);
   });
+
+  return () => subscription.remove();
 }

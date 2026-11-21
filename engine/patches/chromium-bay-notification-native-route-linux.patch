@@ -1,0 +1,65 @@
+diff --git a/chrome/browser/notifications/notification_platform_bridge_delegator.h b/chrome/browser/notifications/notification_platform_bridge_delegator.h
+--- a/chrome/browser/notifications/notification_platform_bridge_delegator.h
++++ b/chrome/browser/notifications/notification_platform_bridge_delegator.h
+@@ -49,6 +49,9 @@
+
+   virtual void DisplayServiceShutDown();
+
++  // Reflects the selected route, not the current preference or feature flags.
++  bool HasSystemBridge() const { return system_bridge_ != nullptr; }
++
+  private:
+   // Returns the NotificationPlatformBridge to use for |type|. This method is
+   // expected to return a valid bridge, either the system or message center one.
+diff --git a/chrome/browser/notifications/notification_display_service_impl.h b/chrome/browser/notifications/notification_display_service_impl.h
+--- a/chrome/browser/notifications/notification_display_service_impl.h
++++ b/chrome/browser/notifications/notification_display_service_impl.h
+@@ -51,6 +51,12 @@
+   static NotificationDisplayServiceImpl* GetForProfile(Profile* profile);
+
+   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++  // Native-only callers must inspect the selected per-profile route after
++  // initialization. Global bridge readiness does not rule out message center.
++  bool UsesSystemNotificationBridge() const {
++    return bridge_delegator_initialized_ && bridge_delegator_->HasSystemBridge();
++  }
+
+   // Used to propagate back events originate from the user. The events are
+   // received and dispatched to the right consumer depending on the type of
+diff --git a/chrome/browser/notifications/notification_display_service_impl_unittest.cc b/chrome/browser/notifications/notification_display_service_impl_unittest.cc
+--- a/chrome/browser/notifications/notification_display_service_impl_unittest.cc
++++ b/chrome/browser/notifications/notification_display_service_impl_unittest.cc
+@@ -23,6 +23,11 @@
+ #include "chrome/browser/notifications/notification_display_queue.h"
+ #include "chrome/browser/notifications/notification_platform_bridge_delegator.h"
+ #include "chrome/common/notifications/notification_operation.h"
++#if BUILDFLAG(IS_LINUX)
++#include "chrome/common/chrome_features.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++#endif
+ #include "chrome/test/base/testing_profile.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_task_environment.h"
+@@ -381,3 +386,20 @@
+ }
+
+ #endif  // !BUILDFLAG(IS_ANDROID)
++
++#if BUILDFLAG(IS_LINUX)
++TEST_F(BaseNotificationDisplayServiceImplTest,
++       BayNativeRouteDoesNotFollowPreferenceAfterConstruction) {
++  base::test::ScopedFeatureList features;
++  features.InitWithFeatures(
++      {features::kNativeNotifications, features::kSystemNotifications}, {});
++  profile()->GetPrefs()->SetBoolean(prefs::kAllowSystemNotifications, false);
++  NotificationDisplayServiceImpl fallback(profile());
++  EXPECT_FALSE(fallback.UsesSystemNotificationBridge());
++
++  // The preference changes what a new service selects. It cannot change the
++  // route already selected by this service, even if the global bridge is ready.
++  profile()->GetPrefs()->SetBoolean(prefs::kAllowSystemNotifications, true);
++  EXPECT_FALSE(fallback.UsesSystemNotificationBridge());
++}
++#endif

@@ -1,0 +1,16 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -972,6 +972,13 @@
+     blink::mojom::AutoplayPolicy current_policy) {
+   using PolicyStatus = AutoplayPolicyStatusObserver::PolicyStatus;
+ 
++  // Bay's own document plays its onboarding sound unprompted, as Bay does on
++  // macOS: a user opened the app, and the sound has its own mute button.
++  if (web_contents->GetLastCommittedURL().SchemeIs(content::kChromeUIScheme) &&
++      web_contents->GetLastCommittedURL().host() == "bay") {
++    return blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
++  }
++
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+   PrefService* prefs = profile->GetPrefs();
