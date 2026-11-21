@@ -8,7 +8,9 @@ import unittest
 import xml.etree.ElementTree as ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'engine/patches'))
 import msix
+import series
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / '.github/workflows/windows-build.yml'
@@ -78,6 +80,17 @@ class ManifestTests(unittest.TestCase):
         for element in protocols + associations:
             self.assertEqual(element.get('Parameters'), '--single-argument "%1"')
 
+    def test_shortcuts_reach_bay_through_the_alias_the_engine_names(self):
+        extensions = parse().find('m:Applications/m:Application/m:Extensions', NAMESPACES)
+        alias = extensions.find('uap3:Extension/uap3:AppExecutionAlias/desktop:ExecutionAlias', NAMESPACES)
+        self.assertEqual(alias.get('Alias'), 'baybrowser.exe')
+        patch = (REPO / 'engine/patches/chromium-bay-msix-win.patch').read_text()
+        self.assertIn('FILE_PATH_LITERAL("baybrowser.exe")', patch)
+        # The engine names the package's app by the manifest's Application Id.
+        application = parse().find('m:Applications/m:Application', NAMESPACES)
+        self.assertEqual(application.get('Id'), 'Bay')
+        self.assertIn('(<package family name>!Bay)', patch)
+
     def test_notifications_activate_the_installers_helper(self):
         clsid = re.search(r'AppUserModelToastActivatorCLSID: "([0-9A-F-]+)"',
                           (REPO / 'packaging/windows/Bay.iss').read_text())[1]
@@ -122,6 +135,28 @@ class PrepareTests(unittest.TestCase):
     def test_refuses_a_folder_without_the_app(self):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'no staged Bay.exe'):
             msix.prepare(directory, '1.7.0', 'BayBrowser.Bay', 'CN=BayBrowser', 'Bay')
+
+
+class EnginePatchTests(unittest.TestCase):
+    def added(self):
+        patch = (REPO / 'engine/patches/chromium-bay-msix-win.patch').read_text()
+        return '\n'.join(line[1:] for line in patch.splitlines() if line.startswith('+') and not line.startswith('+++'))
+
+    def test_windows_only_after_the_branding_it_builds_on(self):
+        steps = [step.name for step in series.read_series('win')]
+        self.assertLess(steps.index('chromium-bay-branding-win.patch'), steps.index('chromium-bay-msix-win.patch'))
+        for platform in ('mac', 'linux'):
+            self.assertNotIn('chromium-bay-msix-win.patch', [step.name for step in series.read_series(platform)])
+
+    def test_every_change_waits_for_a_package_identity(self):
+        added = self.added()
+        # One lookup each in chrome_elf's data folder, installer/util and the shortcut helper; none are imports.
+        self.assertEqual(added.count('::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"),'), 3)
+        self.assertIn('IsBayPackage() ? L"Store User Data" : L"User Data"', added)
+        self.assertIn('return package_id.empty() ? app_id : package_id;', added)
+        self.assertIn('bool activator_registered = packaged || IsToastActivatorRegistered();', added)
+        self.assertIn('IsPackageProgId(current_app.get())', added)
+        self.assertIn('L"ms-settings:defaultapps?registeredAUMID="', added)
 
 
 class BuildTests(unittest.TestCase):

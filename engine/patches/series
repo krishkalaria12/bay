@@ -60,6 +60,8 @@ chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
 chromium win chromium-bay-branding-win.patch
+# The Microsoft Store package (packaging/windows/msix): its app ID, toasts, default-browser check and shortcuts.
+chromium win chromium-bay-msix-win.patch
 chromium linux chromium-bay-branding-linux.patch
 chromium linux chromium-bay-binary-inputs-linux.patch
 chromium mac chromium-icloud-keychain-window.patch

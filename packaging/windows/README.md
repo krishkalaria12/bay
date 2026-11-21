@@ -112,24 +112,35 @@ for installing outside the Store. Redraw the logos with
 `msix/make-assets.py` after the icon changes. Store setup and submission:
 `docs/releasing.md` › Microsoft Store.
 
-The packaged app keeps its profile in the package's own AppData, so it doesn't
-share one with an installed copy, and uninstalling removes it.
+Inside the package Windows knows Bay by the package's app ID
+(`<package family name>!Bay`) and keeps its AppData and HKCU writes private, so
+`chromium-bay-msix-win.patch` adapts the engine when
+`GetCurrentApplicationUserModelId` says it runs packaged:
 
-Known gaps, unverified until a sideloaded package runs on Windows:
+- Windows and taskbar pins use the package's app ID instead of `Bay.Browser`,
+  so Bay groups with its pinned icon.
+- Native toasts are on without the installer's Start menu shortcut and
+  registry entry, which the manifest's activator replaces; web apps'
+  notifications use the package's app ID too.
+- The default-browser check matches the package's own handlers (ProgIDs named
+  `AppX…`, whose `Application\AppUserModelID` is the package's app), and
+  "make default" opens Windows 11 Settings on the package's page.
+- Web apps' shortcuts start Bay through the `baybrowser.exe` app execution
+  alias, so they run inside the package with its profile.
+- The profile is `%LOCALAPPDATA%\Bay\Store User Data`, which Windows keeps in
+  the package's private AppData and removes with it. Windows only keeps new
+  files private and lets a package change ones already in AppData, so sharing
+  the installer's `User Data` would let both copies open one profile at once.
 
-- Window identity. Chromium gives every window the AppUserModelID
-  `Bay.Browser` (`chromium-bay-branding-win.patch`); a packaged app's is
-  `<package family>!Bay`. Windows may group Bay's windows apart from its
-  pinned taskbar icon. The fix is an engine change: use the package's ID when
-  `GetCurrentPackageFamilyName` succeeds.
-- Native notifications. Chromium only uses Windows toasts when the Start menu
-  shortcut with the activator exists, which the installer makes and an MSIX
-  doesn't; the packaged app may fall back to Chromium's own popups.
-- Installed web apps. Their shortcuts point at `chrome_proxy.exe` inside the
-  package's folder, which Windows may refuse to start from outside it.
-- `elevation_service.exe` and `elevated_tracing_service.exe` ship but can't be
-  registered as services from a package; a per-user installer doesn't register
-  them either.
+Still limited, as for any packaged desktop app without the restricted
+`unvirtualizedResources` capability (which needs Microsoft's approval): web
+apps' Start menu shortcuts, start-at-login entries and their own protocol and
+file handlers are written to the package's private AppData and registry, so
+Windows doesn't see them. Desktop shortcuts work. For the same reason the
+`bay` CLI can't install itself on PATH or find a Store copy's data: it needs
+the installer. `elevation_service.exe` and
+`elevated_tracing_service.exe` ship but aren't registered, as with the
+per-user installer.
 
 ## Updater protocol
 

@@ -31,6 +31,8 @@ MAX_VERSION_TESTED = '10.0.26100.0'
 # Chromium's guard against a URL or file name being read as a switch, as the installer's ProgIDs pass it.
 ARGUMENTS = '--single-argument "%1"'
 FILE_TYPES = (('html', 'Bay HTML Document', ('.htm', '.html')), ('pdf', 'Bay PDF Document', ('.pdf',)))
+# Starts Bay inside the package from outside it: web apps' shortcuts point here (chromium-bay-msix-win.patch).
+ALIAS = 'baybrowser.exe'
 
 
 def package_version(version):
@@ -107,6 +109,11 @@ def manifest(version, name, publisher, display_name, clsid):
           Square71x71Logo="Assets\\Square71x71Logo.png" Square310x310Logo="Assets\\Square310x310Logo.png" />
       </uap:VisualElements>
       <Extensions>{protocols}{file_types}
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="Bay.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="{ALIAS}" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
         <desktop:Extension Category="windows.toastNotificationActivation">
           <desktop:ToastNotificationActivation ToastActivatorCLSID="{clsid}" />
         </desktop:Extension>
