@@ -140,7 +140,7 @@ TEST_F(EaselSharingTest, NativeRequestsUseOnlyTheFixedEndpointWithoutCookiesOrRe
   auto* pending = factory.GetPendingRequest(0);
   ASSERT_TRUE(pending);
   EXPECT_EQ(pending->request.url.spec(),
-            "https://bay.krishkalaria.in/api/easels/" + id);
+            "https://baybrowser.in/api/easels/" + id);
   EXPECT_EQ(pending->request.method, "PUT");
   EXPECT_EQ(pending->request.credentials_mode, network::mojom::CredentialsMode::kOmit);
   EXPECT_EQ(pending->request.redirect_mode, network::mojom::RedirectMode::kError);
@@ -156,7 +156,7 @@ TEST_F(EaselSharingTest, NativeRequestsUseOnlyTheFixedEndpointWithoutCookiesOrRe
 TEST_F(EaselSharingTest, RevocationAcceptsANoContentResponse) {
   network::TestURLLoaderFactory factory;
   const std::string id(32, 'a');
-  factory.AddResponse("https://bay.krishkalaria.in/api/easels/" + id, "",
+  factory.AddResponse("https://baybrowser.in/api/easels/" + id, "",
                       net::HTTP_NO_CONTENT);
   EaselSharing service(folder_.GetPath(), true, factory.GetSafeWeakWrapper());
   const auto response = Invoke(service, "requestShare",
