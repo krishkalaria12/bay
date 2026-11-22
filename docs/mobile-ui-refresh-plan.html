@@ -1633,7 +1633,11 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           <b>Tabs button and the menu's address, after Arc Search:</b> the Tabs button (and the shrunk bar's chip) shows the two tabs used last before the one
           showing as small fanned cards of their pictures, with the open tabs' count on a badge at their corner from two tabs on, instead of the count in a
           square. The page menu's address reads as the words searched on a results page of any built-in engine or the custom one, and just the site everywhere
-          else (the core's <code>address_label</code>); the whole address is still what's read out, copied and edited.
+          else (the core's <code>address_label</code>); the whole address is still what's read out, copied and edited. Scrolling, measured on the emulator from
+          SurfaceFlinger's frame times: the page keeps every frame during the drag and the fling; the pause after a scroll is the scroll ending, and the frames
+          after it are the overlay scrollbar fading. The emulator's own GPU drops more frames than that in Android's Settings, so it can't judge a hitch: check
+          on a phone. The bar capsule is resized and redrawn on each scroll frame without being recomposed (it cost up to 16 ms of the UI thread a frame on the
+          emulator), and the engine no longer reports an unchanged bar position.
         </li>
       </ul>
 
