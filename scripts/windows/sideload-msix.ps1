@@ -24,7 +24,8 @@ try {
 $publisher = $manifest.Package.Identity.Publisher
 if (-not $publisher) { throw 'The package manifest names no publisher' }
 
-$signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+# Strict mode throws on a missing command's .Source, so take it from the pipeline, which yields nothing instead.
+$signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
 if (-not $signtool) {
     $sdk = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin') -Directory |
         Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
