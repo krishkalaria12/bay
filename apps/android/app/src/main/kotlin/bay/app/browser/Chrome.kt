@@ -406,7 +406,8 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
     val app = browser.app
     val view = androidx.compose.ui.platform.LocalView.current
     val density = LocalDensity.current
-    val count = app.tabs.size
+    // As the tab view counts them: a pinned site's open tab shows in Pinned, not among the tabs.
+    val count = browser.switcherTabs.size
     val spaced = app.spaces.size > 1
     val space = browser.activeSpace
     val tabsLabel = if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs")
@@ -597,7 +598,7 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
             ) {
                 // The site's icon and the tabs' count: which page this is, and the way to the others.
                 browser.activeTab?.url?.takeIf { browser.hasPage }?.let { url -> SiteIcon(app, url, 18.dp) }
-                TabStack(browser, app.tabs.size, small = true, inverted = true)
+                TabStack(browser, browser.switcherTabs.size, small = true, inverted = true)
             }
         }
         // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.

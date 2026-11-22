@@ -260,7 +260,7 @@ struct BrowserBar: View {
     Button(action: browser.bringBarBack) {
       HStack(spacing: 10) {
         if browser.hasPage, let url = browser.activeTab?.url { SiteIcon(url: url, size: 18) }
-        TabStack(browser: browser, count: browser.app.tabs.count, small: true, inverted: true)
+        TabStack(browser: browser, count: browser.switcherTabs.count, small: true, inverted: true)
       }
       .frame(width: Self.miniSize.width, height: Self.miniSize.height)
       .contentShape(Capsule())
@@ -290,7 +290,8 @@ struct BrowserBar: View {
   /// to one and lift to switch, or to + for a new one. Lifting without sliding puts it away.
   private var tabsButton: some View {
     let app = browser.app
-    let count = app.tabs.count
+    // As the tab view counts them: a pinned site's open tab shows in Pinned, not among the tabs.
+    let count = browser.switcherTabs.count
     let spaced = app.spaces.count > 1
     let space = browser.activeSpace
     let tabsLabel = count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")
