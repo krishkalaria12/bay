@@ -1637,10 +1637,10 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           SurfaceFlinger's frame times: the page keeps every frame during the drag and the fling; the pause after a scroll is the scroll ending, and the frames
           after it are the overlay scrollbar fading. The emulator's own GPU drops more frames than that in Android's Settings, so it can't judge a hitch: check
           on a phone. The bar capsule is resized and redrawn on each scroll frame without being recomposed (it cost up to 16 ms of the UI thread a frame on the
-          emulator), and the engine no longer reports an unchanged bar position. iOS now matches Android's page colours: it reads the colour along the page's
-          foot as well as its top, again when a site moves to another page without a load and when the bar comes back after a scroll, and the bar (with what
-          stands on it) is light or dark as the foot is. Its status bar already keeps its icons readable over the strip by itself, and its pill never clipped
-          the spaces column.
+          emulator), and the engine no longer reports an unchanged bar position. iOS now matches Android's page colours: from a small snapshot of what the page
+          draws (WebKit's <code>takeSnapshot</code>; its styles only before it has drawn), it reads the colour along the page's foot as well as its top, again
+          when a site moves to another page without a load and when the bar comes back after a scroll, and the bar (with what stands on it) is light or dark as
+          the foot is. Its status bar already keeps its icons readable over the strip by itself, and its pill never clipped the spaces column.
         </li>
       </ul>
 
