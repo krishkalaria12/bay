@@ -41,6 +41,28 @@ final class BayWKWebView: WKWebView {
     return became
   }
 
+  // The app's menu shortcuts go to the menu before the page: a streaming player takes its own keys whatever the
+  // modifiers (Netflix's S skips the intro, its F goes full screen), and WebKit hands the menu only the keys a page let
+  // through, so ⌘S never reached Bay there. Text editing keeps its keys (copy, paste, select all, undo), and so
+  // do arrows and the other function keys, which move the caret in a field.
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if event.type == .keyDown, Self.isAppShortcut(event), let responder = window?.firstResponder as? NSView, responder.isDescendant(of: self),
+       NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
+      return true
+    }
+    return super.performKeyEquivalent(with: event)
+  }
+
+  static func isAppShortcut(_ event: NSEvent) -> Bool {
+    let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    if mods.contains(.control) { return event.keyCode == 48 }  // ⌃Tab, ⌃⇧Tab
+    guard mods.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased(), let scalar = key.unicodeScalars.first,
+      key.unicodeScalars.count == 1
+    else { return false }
+    let printable = scalar.value > 0x20 && scalar.value != 0x7f && !(0xF700...0xF8FF).contains(scalar.value)
+    return printable && !["a", "c", "v", "x", "z"].contains(key)
+  }
+
   override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
     super.willOpenMenu(menu, with: event)
     if WebKitHub.background {
