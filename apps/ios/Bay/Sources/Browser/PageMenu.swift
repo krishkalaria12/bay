@@ -11,10 +11,10 @@ private enum MenuLayout {
   static let zoomMax = 200
 }
 
-/// What to do with the page showing (bar-more), as one floating sheet: the address with back, forward, copy and reload
-/// on top; Share, Pin, Save and Find; this site's settings and Developer tools a step away; Reader, Hide elements,
-/// Translate and the page's zoom;
-/// Bookmarks, History, Downloads and Settings.
+/// What to do with the page showing (bar-more), as one floating sheet, in order of use: the address with back, forward,
+/// copy and reload on top; what's done to a page most (Share, Save, Find, its desktop look) as tiles; then reading it
+/// (Reader, translation, zoom) and keeping it (the start page); then this site's settings and a private tab; then
+/// Bookmarks, History, Downloads and Settings; the page tools nobody reaches for often last, a step away.
 struct PageMenu: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -49,24 +49,19 @@ struct PageMenu: View {
     ) {
       HStack(spacing: Space.sm) {
         MenuTile(id: "page-share", icon: .share, label: strings.t("pageMenu.share"), action: act(browser.share))
-        let pinned = browser.isPinned
-        MenuTile(
-          id: "page-pin", icon: pinned ? .unpin : .pin, label: strings.t("pageMenu.pin"),
-          accessibilityLabel: strings.t(pinned ? "pageMenu.unpin" : "pageMenu.pinToStart"), active: pinned, action: act(browser.togglePin))
         let bookmarked = browser.isBookmarked
         MenuTile(
           id: "page-bookmark", icon: bookmarked ? .bookmarked : .bookmark, label: strings.t("pageMenu.save"),
           accessibilityLabel: strings.t("pageMenu.bookmark"), active: bookmarked,
           action: { browser.panel = .save })
         MenuTile(id: "page-find", icon: .find, label: strings.t("pageMenu.find"), action: act(browser.startFind))
+        let desktop = browser.siteSetting.desktopMode
+        MenuTile(
+          id: "page-desktop", icon: .desktop, label: strings.t("pageMenu.desktop"), accessibilityLabel: strings.t("site.desktop"), active: desktop,
+          action: act { browser.setDesktop(!desktop) })
       }
 
       VStack(spacing: Space.md) {
-        RowGroup {
-          ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, chevron: true) { browser.panel = .siteSettings }
-          RowDivider()
-          ActionRow(strings.t("pageMenu.developerTools"), testID: "page-more-tools", icon: .tools, chevron: true) { tools = true }
-        }
         RowGroup {
           ListRow(
             label: strings.t(reading ? "pageMenu.readerSettings" : "pageMenu.showReader"), testID: "page-reader", icon: .reader,
@@ -87,8 +82,6 @@ struct PageMenu: View {
             }
           }
           RowDivider()
-          ActionRow(strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, action: act { browser.startPicking(.hide) })
-          RowDivider()
           ListRow(label: strings.t("pageMenu.translatePage"), testID: "page-translate", icon: .translate, primary: act { browser.translate() }) {
             ForEach(translationLanguages, id: \.id) { language in
               Button(language.name) { act { browser.translate(to: language.id) }() }
@@ -96,6 +89,17 @@ struct PageMenu: View {
           }
           RowDivider()
           ZoomRow(zoom: zoom, onZoom: browser.setZoom)
+          RowDivider()
+          let pinned = browser.isPinned
+          ActionRow(
+            strings.t(pinned ? "pageMenu.unpin" : "pageMenu.pinToStart"), testID: "page-pin", icon: pinned ? .unpin : .pin, action: act(browser.togglePin))
+        }
+        RowGroup {
+          ActionRow(strings.t("pageMenu.siteSettings"), testID: "page-site-settings", icon: .tune, detail: blockedDetail, chevron: true) {
+            browser.panel = .siteSettings
+          }
+          RowDivider()
+          ActionRow(strings.t("pageMenu.privateTab"), testID: "page-new-private", icon: .private, action: act { browser.search(inNewTab: true, privately: true) })
         }
         RowGroup {
           ActionRow(strings.t("pageMenu.bookmarks"), testID: "page-bookmarks", icon: .bookmark, chevron: true) { browser.openDrawer() }
@@ -106,9 +110,19 @@ struct PageMenu: View {
           RowDivider()
           ActionRow(strings.t("pageMenu.settings"), testID: "page-settings", icon: .settings, chevron: true, action: act(onSettings))
         }
+        RowGroup {
+          ActionRow(strings.t("pageMenu.tools"), testID: "page-more-tools", icon: .tools, chevron: true) { tools = true }
+        }
       }
       .padding(.top, Space.md)
     }
+  }
+
+  /// What blocking did here, under the site's row: the thing its sheet is most often opened to see.
+  private var blockedDetail: String? {
+    let count = browser.blocked[app.activeTabId] ?? 0
+    guard browser.blocking == .on, count > 0 else { return nil }
+    return count == 1 ? strings.t("pageMenu.blockedOne") : strings.t("pageMenu.blockedCount", ["count": "\(count)"])
   }
 
   /// Bay's languages to translate into, the one it's in first.
@@ -118,15 +132,16 @@ struct PageMenu: View {
     return all.filter { $0.id == current } + all.filter { $0.id != current }
   }
 
+  /// The page tools a step away: hiding things, Inspect, the page as Markdown, and archiving the tab.
   private var toolsPage: some View {
-    let title = strings.t("pageMenu.developerTools")
+    let title = strings.t("pageMenu.tools")
     let hidden = browser.activeHidden.count
     return PanelSheet(title: title, testID: "page-menu", words: strings.sheetWords(title), onClose: { browser.panel = nil }, onBack: { tools = false }) {
       VStack(spacing: Space.md) {
         RowGroup {
           ActionRow(
-            strings.t("pageMenu.inspect"), testID: "page-inspect", icon: .inspect, detail: strings.t("pageMenu.inspect.detail"),
-            action: act { browser.startPicking(.inspect) })
+            strings.t("pageMenu.hideElements"), testID: "page-hide-elements", icon: .hide, detail: strings.t("pageMenu.hideElements.detail"),
+            action: act { browser.startPicking(.hide) })
           if hidden > 0 {
             RowDivider()
             ActionRow(
@@ -137,10 +152,12 @@ struct PageMenu: View {
           ActionRow(
             strings.t("pageMenu.markdown"), testID: "page-markdown", icon: .markdown, detail: strings.t("pageMenu.markdown.detail"),
             action: act(browser.copyMarkdown))
+          RowDivider()
+          ActionRow(
+            strings.t("pageMenu.inspect"), testID: "page-inspect", icon: .inspect, detail: strings.t("pageMenu.inspect.detail"),
+            action: act { browser.startPicking(.inspect) })
         }
         RowGroup {
-          ActionRow(strings.t("pageMenu.privateTab"), testID: "page-new-private", icon: .private, action: act { browser.search(inNewTab: true, privately: true) })
-          RowDivider()
           ActionRow(strings.t("pageMenu.archiveTab"), testID: "page-close-tab", icon: .archive, action: act { browser.archive(app.activeTabId) })
         }
       }

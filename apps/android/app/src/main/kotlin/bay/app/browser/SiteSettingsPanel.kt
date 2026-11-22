@@ -57,8 +57,9 @@ private const val ZOOM_STEP = 10
 private val ROW_HEIGHT = bay.design.Row.height
 
 /**
- * This site's own choices, as Settings draws its pages: its zoom, desktop page and blocking first, then how Bay behaves
- * here, what was downloaded from it, the connection, and Bay's Settings at the foot.
+ * This site's own choices, as Settings draws its pages: what blocking did here first, then how Bay behaves here (the
+ * desktop site leading), its font and zoom, which kinds of blocking run here, what was downloaded from it, the
+ * connection, and Bay's Settings at the foot.
  */
 @Composable
 fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean, onSettings: () -> Unit) {
@@ -117,6 +118,41 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
+            if (blocking != PageBlocking.OFF) {
+                BlockingCard(browser, strings, blocking) {
+                    browser.panel = null
+                    browser.restoreOriginal()
+                }
+            }
+            RowGroup(strings.t("site.bayHere")) {
+                ActionRow(strings.t("site.desktop"), "site-desktop", icon = BayIcon.DESKTOP, toggle = setting.desktopMode) {
+                    browser.setDesktop(!setting.desktopMode)
+                }
+                RowDivider()
+                ActionRow(strings.t("site.forceDark"), "site-force-dark", icon = BayIcon.DARK, toggle = setting.forceDark) {
+                    browser.changeSiteSetting { it.copy(forceDark = !setting.forceDark) }
+                }
+                RowDivider()
+                ActionRow(strings.t("site.fullscreen"), "site-fullscreen", icon = BayIcon.FULLSCREEN, toggle = setting.fullscreen) {
+                    browser.changeSiteSetting { it.copy(fullscreen = !setting.fullscreen) }
+                }
+                RowDivider()
+                // Settings keeps the whole choice, Off included; here it's anywhere or from the edges.
+                ActionRow(
+                    strings.t("site.swipeAnywhere"), "site-swipe", icon = BayIcon.SWIPE, toggle = swipe == SwipeMode.ANYWHERE,
+                ) {
+                    browser.changeSiteSetting { it.copy(swipe = if (swipe == SwipeMode.ANYWHERE) SwipeMode.EDGES else SwipeMode.ANYWHERE) }
+                }
+                RowDivider()
+                ActionRow(strings.t("site.miniPlayer"), "site-mini-player", icon = BayIcon.PIP, toggle = setting.miniPlayer) {
+                    browser.changeSiteSetting { it.copy(miniPlayer = !setting.miniPlayer) }
+                }
+                RowDivider()
+                ActionRow(strings.t("site.reader"), "site-reader", icon = BayIcon.READER, toggle = setting.reader) {
+                    browser.changeSiteSetting { it.copy(reader = !setting.reader) }
+                }
+            }
             // The page wouldn't take the font chosen: said here rather than failing without a word.
             if (app.activeTabId in browser.fontBlocked) {
                 BayText(
@@ -137,13 +173,6 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
                     browser.changeSiteSetting { it.copy(textSize = zoom?.toDouble()) }
                 }
             }
-            // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
-            if (blocking != PageBlocking.OFF) {
-                BlockingCard(browser, strings, blocking) {
-                    browser.panel = null
-                    browser.restoreOriginal()
-                }
-            }
             if (blocking == PageBlocking.ON) {
                 RowGroup(strings.t("site.blockingHere")) {
                     listOf(SiteBlockGroup.ADS, SiteBlockGroup.TRACKERS, SiteBlockGroup.COOKIES).forEachIndexed { index, group ->
@@ -154,34 +183,6 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
                             browser.changeSiteSetting { it.copy(blockOff = if (off) it.blockOff - group else it.blockOff + group) }
                         }
                     }
-                }
-            }
-            RowGroup(strings.t("site.bayHere")) {
-                ActionRow(strings.t("site.fullscreen"), "site-fullscreen", icon = BayIcon.FULLSCREEN, toggle = setting.fullscreen) {
-                    browser.changeSiteSetting { it.copy(fullscreen = !setting.fullscreen) }
-                }
-                RowDivider()
-                ActionRow(strings.t("site.desktop"), "site-desktop", icon = BayIcon.DESKTOP, toggle = setting.desktopMode) {
-                    browser.setDesktop(!setting.desktopMode)
-                }
-                RowDivider()
-                ActionRow(strings.t("site.forceDark"), "site-force-dark", icon = BayIcon.DARK, toggle = setting.forceDark) {
-                    browser.changeSiteSetting { it.copy(forceDark = !setting.forceDark) }
-                }
-                RowDivider()
-                // Settings keeps the whole choice, Off included; here it's anywhere or from the edges.
-                ActionRow(
-                    strings.t("site.swipeAnywhere"), "site-swipe", icon = BayIcon.SWIPE, toggle = swipe == SwipeMode.ANYWHERE,
-                ) {
-                    browser.changeSiteSetting { it.copy(swipe = if (swipe == SwipeMode.ANYWHERE) SwipeMode.EDGES else SwipeMode.ANYWHERE) }
-                }
-                RowDivider()
-                ActionRow(strings.t("site.miniPlayer"), "site-mini-player", icon = BayIcon.PIP, toggle = setting.miniPlayer) {
-                    browser.changeSiteSetting { it.copy(miniPlayer = !setting.miniPlayer) }
-                }
-                RowDivider()
-                ActionRow(strings.t("site.reader"), "site-reader", icon = BayIcon.READER, toggle = setting.reader) {
-                    browser.changeSiteSetting { it.copy(reader = !setting.reader) }
                 }
             }
             if (downloaded > 0u) {

@@ -10,9 +10,9 @@ private enum Zoom {
   static let step = 10
 }
 
-/// This site's own choices, titled with its host: its font, what blocking did, the switches for how Bay shows it, then
-/// its zoom and Reader, what was downloaded from it, the connection, and Bay's Settings at the foot. The font list and
-/// the blocking groups sit a step away.
+/// This site's own choices, titled with its host: what blocking did here first, then the switches for how Bay shows it
+/// (the desktop site leading), its font and zoom, which kinds of blocking run here, what was downloaded from it, the
+/// connection, and Bay's Settings at the foot. The font list and the blocking groups sit a step away.
 struct SiteSettingsPanel: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -52,9 +52,6 @@ struct SiteSettingsPanel: View {
         .environmentObject(app))
     ) {
       VStack(spacing: Space.md) {
-        RowGroup {
-          ActionRow(strings.t("site.font"), testID: "site-font", icon: .font, value: fontValue(setting.font), chevron: true) { page = .font }
-        }
         // What blocking did on this page, and a way to see it as the site made it: moved here from the page menu.
         if blocking != .off {
           BlockingCard(browser: browser, blocking: blocking) {
@@ -62,20 +59,8 @@ struct SiteSettingsPanel: View {
             browser.restoreOriginal()
           }
         }
-        if blocking == .on {
-          RowGroup {
-            ActionRow(
-              strings.t("site.blockingHere"), testID: "site-blocking-groups", icon: .shield,
-              value: "\(3 - setting.blockOff.count)/3", chevron: true
-            ) { page = .blocking }
-          }
-        }
+        // How Bay behaves here, the desktop site leading.
         RowGroup {
-          ActionRow(
-            strings.t("site.fullscreen"), testID: "site-fullscreen", icon: .fullscreen,
-            detail: setting.fullscreen ? strings.t("site.fullscreen.note") : nil, toggle: setting.fullscreen
-          ) { browser.changeSiteSetting { $0.fullscreen = !setting.fullscreen } }
-          RowDivider()
           ActionRow(strings.t("site.desktop"), testID: "site-desktop", icon: .desktop, toggle: setting.desktopMode) {
             browser.setDesktop(!setting.desktopMode)
           }
@@ -83,6 +68,11 @@ struct SiteSettingsPanel: View {
           ActionRow(strings.t("site.forceDark"), testID: "site-force-dark", icon: .dark, badge: strings.t("site.beta"), toggle: setting.forceDark) {
             browser.changeSiteSetting { $0.forceDark = !setting.forceDark }
           }
+          RowDivider()
+          ActionRow(
+            strings.t("site.fullscreen"), testID: "site-fullscreen", icon: .fullscreen,
+            detail: setting.fullscreen ? strings.t("site.fullscreen.note") : nil, toggle: setting.fullscreen
+          ) { browser.changeSiteSetting { $0.fullscreen = !setting.fullscreen } }
           RowDivider()
           // On is Anywhere, off is the edges only; Settings keeps the full choice, Off included.
           ActionRow(strings.t("site.swipeAnywhere"), testID: "site-swipe", icon: .swipe, toggle: swipe == .anywhere) {
@@ -92,14 +82,24 @@ struct SiteSettingsPanel: View {
           ActionRow(strings.t("site.miniPlayer"), testID: "site-mini-player", icon: .pip, toggle: setting.miniPlayer) {
             browser.changeSiteSetting { $0.miniPlayer = !setting.miniPlayer }
           }
+          RowDivider()
+          ActionRow(strings.t("site.reader"), testID: "site-reader", icon: .reader, toggle: setting.reader) {
+            browser.changeSiteSetting { $0.reader = !setting.reader }
+          }
         }
         RowGroup {
+          ActionRow(strings.t("site.font"), testID: "site-font", icon: .font, value: fontValue(setting.font), chevron: true) { page = .font }
+          RowDivider()
           SiteZoomRow(zoom: setting.textSize.map(Int.init), global: Int(app.preferences.textSize)) { zoom in
             browser.changeSiteSetting { $0.textSize = zoom.map(Double.init) }
           }
-          RowDivider()
-          ActionRow(strings.t("site.reader"), testID: "site-reader", icon: .reader, tint: RowTint.bookmarks, toggle: setting.reader) {
-            browser.changeSiteSetting { $0.reader = !setting.reader }
+        }
+        if blocking == .on {
+          RowGroup {
+            ActionRow(
+              strings.t("site.blockingHere"), testID: "site-blocking-groups", icon: .shield,
+              value: "\(3 - setting.blockOff.count)/3", chevron: true
+            ) { page = .blocking }
           }
         }
         if downloaded > 0 {

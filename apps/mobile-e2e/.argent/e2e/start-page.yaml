@@ -31,7 +31,7 @@ steps:
   - await: { text: { in: { id: page-menu-url }, contains: "/.argent/pages/start.html" }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
 
-  # Pin it from the page menu's tiles; the tile turns into Unpin. Archive is in Developer tools.
+  # Pin it from the page menu's row; the row turns into Unpin. Archive is in Tools.
   - await: { visible: { id: page-pin }, timeout: 10000 }
   - tap: { id: page-pin }
   - await: { text: { in: { id: toast }, contains: "Pinned" }, timeout: 10000 }

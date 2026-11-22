@@ -88,7 +88,7 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
         action()
     }
     if (tools) {
-        val title = strings.t("pageMenu.developerTools")
+        val title = strings.t("pageMenu.tools")
         PanelSheet(visible, title, "page-menu", strings.sheetWords(title), onClose = close, onBack = { tools = false }, maxFraction = MENU_FRACTION) {
             ToolsRows(browser, strings, ::act)
         }
@@ -96,6 +96,9 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
     }
     val title = strings.t("pageMenu.title")
     val app = browser.app
+    // In order of use: what's done to a page most (share, save, find, its desktop look) as tiles; then reading it
+    // (Reader, translation, zoom) and keeping it (the start page); then the site and a private tab; then Bay's own lists
+    // and Settings; the page tools nobody reaches for often, last, a step away.
     PanelSheet(
         visible,
         title,
@@ -107,23 +110,16 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             MenuTile("page-share", BayIcon.SHARE, strings.t("pageMenu.share"), onClick = act(browser::share))
-            val pinned = browser.isPinned
-            MenuTile(
-                "page-pin", if (pinned) BayIcon.UNPIN else BayIcon.PIN, strings.t("pageMenu.pin"),
-                strings.t(if (pinned) "pageMenu.unpin" else "pageMenu.pinToStart"), pinned, act(browser::togglePin),
-            )
             val bookmarked = browser.isBookmarked
             MenuTile(
                 "page-bookmark", if (bookmarked) BayIcon.BOOKMARKED else BayIcon.BOOKMARK, strings.t("pageMenu.save"),
                 strings.t("pageMenu.bookmark"), bookmarked,
             ) { browser.panel = Panel.SAVE }
             MenuTile("page-find", BayIcon.FIND, strings.t("pageMenu.find"), onClick = act(browser::startFind))
+            val desktop = browser.siteSetting.desktopMode
+            MenuTile("page-desktop", BayIcon.DESKTOP, strings.t("pageMenu.desktop"), strings.t("site.desktop"), desktop, act { browser.setDesktop(!desktop) })
         }
         Column(Modifier.padding(top = Space.md)) {
-            RowGroup {
-                ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, chevron = true) { browser.panel = Panel.SITE_SETTINGS }
-                ActionRow(strings.t("pageMenu.developerTools"), "page-more-tools", icon = BayIcon.TOOLS, chevron = true) { tools = true }
-            }
             RowGroup {
                 val reading = browser.readerTab == app.activeTabId
                 val readerHere = browser.siteSetting.reader
@@ -137,8 +133,6 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                     },
                 )
                 RowDivider()
-                ActionRow(strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, onClick = act { browser.startPicking(PickMode.HIDE) })
-                RowDivider()
                 val languages = bay.core.locales().let { all -> all.filter { it.id == strings.locale } + all.filter { it.id != strings.locale } }
                 ListRow(
                     strings.t("pageMenu.translatePage"), "page-translate", BayIcon.TRANSLATE, act(browser::translate),
@@ -146,6 +140,23 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                 )
                 RowDivider()
                 ZoomRow(strings, browser.pageZoom, browser::setZoom)
+                RowDivider()
+                val pinned = browser.isPinned
+                ActionRow(
+                    strings.t(if (pinned) "pageMenu.unpin" else "pageMenu.pinToStart"), "page-pin", icon = if (pinned) BayIcon.UNPIN else BayIcon.PIN,
+                    onClick = act(browser::togglePin),
+                )
+            }
+            RowGroup {
+                // The site's row says what blocking did here, the thing its sheet is most often opened to see.
+                val blocked = browser.blocked[app.activeTabId] ?: 0
+                val detail = when {
+                    browser.blocking != PageBlocking.ON || blocked == 0 -> null
+                    blocked == 1 -> strings.t("pageMenu.blockedOne")
+                    else -> strings.t("pageMenu.blockedCount", mapOf("count" to "$blocked"))
+                }
+                ActionRow(strings.t("pageMenu.siteSettings"), "page-site-settings", icon = BayIcon.TUNE, detail = detail, chevron = true) { browser.panel = Panel.SITE_SETTINGS }
+                ActionRow(strings.t("pageMenu.privateTab"), "page-new-private", icon = BayIcon.PRIVATE, onClick = act { browser.search(inNewTab = true, privately = true) })
             }
             RowGroup {
                 ActionRow(strings.t("pageMenu.bookmarks"), "page-bookmarks", icon = BayIcon.BOOKMARK, chevron = true) { browser.openDrawer() }
@@ -153,17 +164,21 @@ fun PageMenu(browser: BrowserModel, strings: Strings, visible: Boolean, onSettin
                 ActionRow(strings.t("pageMenu.downloads"), "page-downloads", icon = BayIcon.DOWNLOAD, chevron = true) { browser.panel = Panel.DOWNLOADS }
                 ActionRow(strings.t("pageMenu.settings"), "page-settings", icon = BayIcon.SETTINGS, chevron = true, onClick = act(onSettings))
             }
+            RowGroup {
+                ActionRow(strings.t("pageMenu.tools"), "page-more-tools", icon = BayIcon.TOOLS, chevron = true) { tools = true }
+            }
         }
     }
 }
 
+/** The page tools a step away: hiding things, Inspect, the page as Markdown, and archiving the tab. */
 @Composable
 private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit) -> () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         RowGroup {
             ActionRow(
-                strings.t("pageMenu.inspect"), "page-inspect", icon = BayIcon.INSPECT, detail = strings.t("pageMenu.inspect.detail"),
-                onClick = act { browser.startPicking(PickMode.INSPECT) },
+                strings.t("pageMenu.hideElements"), "page-hide-elements", icon = BayIcon.HIDE, detail = strings.t("pageMenu.hideElements.detail"),
+                onClick = act { browser.startPicking(PickMode.HIDE) },
             )
             val hidden = browser.activeHidden.size
             if (hidden > 0) {
@@ -180,10 +195,13 @@ private fun ToolsRows(browser: BrowserModel, strings: Strings, act: (() -> Unit)
                 strings.t("pageMenu.markdown"), "page-markdown", icon = BayIcon.MARKDOWN, detail = strings.t("pageMenu.markdown.detail"),
                 onClick = act(browser::copyMarkdown),
             )
+            RowDivider()
+            ActionRow(
+                strings.t("pageMenu.inspect"), "page-inspect", icon = BayIcon.INSPECT, detail = strings.t("pageMenu.inspect.detail"),
+                onClick = act { browser.startPicking(PickMode.INSPECT) },
+            )
         }
         RowGroup {
-            ActionRow(strings.t("pageMenu.privateTab"), "page-new-private", icon = BayIcon.PRIVATE, onClick = act { browser.search(inNewTab = true, privately = true) })
-            RowDivider()
             ActionRow(strings.t("pageMenu.archiveTab"), "page-close-tab", icon = BayIcon.ARCHIVE, onClick = act { browser.archive(browser.app.activeTabId) })
         }
     }
