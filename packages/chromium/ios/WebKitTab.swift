@@ -11,6 +11,8 @@ final class BayWKWebView: WKWebView {
   var mediaFrames: [String: WKFrameInfo] = [:]
   var playingFrames = Set<String>()
   var nowPlayingFrame: String?
+  var nowPlaying: [String: Any]?
+  var pictureInPictureFrame: String?
   var captureOrigins: [String: Set<String>] = [:]
 
   override init(frame: CGRect, configuration: WKWebViewConfiguration) {
@@ -93,9 +95,17 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   var visible = true {
     didSet {
       if !visible { leaveFullscreen() }
+      userSightChanged()
       updateHidden()
     }
   }
+  // Whether the video goes into Picture in Picture once the user leaves the page (TabPageCard: the setting, the site, and
+  // whether the page plays audio).
+  var autoPictureInPicture = false
+  private var seenByUser = true
+  private var autoPictureInPictureActive = false
+  private var inPictureInPicture = false
+  private var sightObserver: NSObjectProtocol?
   var warm = false { didSet { updateHidden() } }
   var pageBackgroundColor: NSColor? { didSet { if let color = pageBackgroundColor { webView?.underPageBackgroundColor = color } } }
   let browserId = WebKitHub.shared.nextBrowserId()
@@ -123,6 +133,14 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     get { webView?.nowPlayingFrame }
     set { webView?.nowPlayingFrame = newValue }
   }
+  private var nowPlaying: [String: Any]? {
+    get { webView?.nowPlaying }
+    set { webView?.nowPlaying = newValue }
+  }
+  private var pictureInPictureFrame: String? {
+    get { webView?.pictureInPictureFrame }
+    set { webView?.pictureInPictureFrame = newValue }
+  }
   private var muted = false
   private var errorURL: URL?
   private var showingError = false
@@ -138,6 +156,46 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     super.setFrameSize(newSize)
     // Not while the web view is in WebKit's full-screen window: the page shrank to the card's size there.
     if let view = webView, view.superview === self { view.frame = bounds }
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    stopWatchingSight()
+    guard let window else { return }
+    sightObserver = NotificationCenter.default.addObserver(forName: Notification.Name("NNCoreWindowSeenDidChange"), object: window, queue: .main) {
+      [weak self] _ in self?.userSightChanged()
+    }
+    userSightChanged()
+  }
+
+  private func stopWatchingSight() {
+    if let observer = sightObserver { NotificationCenter.default.removeObserver(observer) }
+    sightObserver = nil
+  }
+
+  // As a Chromium page's (NNCoreWebView seenByUser): the app shows the page, and the user sees its window.
+  private func userSightChanged() {
+    let seen = visible && NNChromeWindowHost.userSees(window)
+    guard seen != seenByUser else { return }
+    seenByUser = seen
+    updateAutoPictureInPicture()
+  }
+
+  // A playing video goes into Picture in Picture as the user leaves the page and back as they return, however it went
+  // in, as on a Chromium page (NNCoreWebView updateAutoPictureInPicture).
+  private func updateAutoPictureInPicture() {
+    let playingVideo = nowPlaying?["hasVideo"] as? Bool == true && nowPlaying?["playbackState"] as? String == "playing"
+    if !seenByUser, autoPictureInPicture, playingVideo, !inPictureInPicture {
+      autoPictureInPictureActive = true
+      setPictureInPicture(true) { [weak self] ok in
+        guard let self, ok, self.seenByUser else { return }
+        self.autoPictureInPictureActive = false
+        self.setPictureInPicture(false) { _ in }
+      }
+    } else if seenByUser, autoPictureInPictureActive || inPictureInPicture {
+      autoPictureInPictureActive = false
+      setPictureInPicture(false) { _ in }
+    }
   }
 
   private func emit(_ name: String, _ payload: [String: Any] = [:]) {
@@ -310,6 +368,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   func close() {
     guard !closed else { return }
     closed = true
+    stopWatchingSight()
     observations = []
     showWindowAfterFullscreen()
     WebKitHub.shared.dropPermissions(browserId: browserId)
@@ -565,11 +624,21 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     runInWorld("window.__bay && window.__bay.media(\(Self.jsString(action)), \(seconds.isFinite ? seconds : 0))", frame: frame?.isMainFrame == true ? nil : frame)
   }
 
+  // In the frame playing the video, which on many streaming sites is a player's iframe; else the page's.
   func setPictureInPicture(_ on: Bool, completion: @escaping (Bool) -> Void) {
-    runInWorld("window.__bay ? window.__bay.pictureInPicture(\(on ? "true" : "false")) : false") { value in
-      completion((value as? NSNumber)?.boolValue ?? false)
+    let code = "window.__bay ? window.__bay.pictureInPicture(\(on ? "true" : "false")) : false"
+    let frame = (on ? nowPlayingFrame : pictureInPictureFrame ?? nowPlayingFrame).flatMap { mediaFrames[$0] }
+    guard let sub = frame, !sub.isMainFrame else { return runInWorld(code) { completion(Self.isTrue($0)) } }
+    runInWorld(code, frame: sub) { [weak self] value in
+      let ok = Self.isTrue(value)
+      // Entering stops at the first frame that could; leaving goes through the page's frame too.
+      if on && ok { return completion(true) }
+      guard let self else { return completion(ok) }
+      self.runInWorld(code) { completion(ok || Self.isTrue($0)) }
     }
   }
+
+  private static func isTrue(_ value: Any?) -> Bool { (value as? NSNumber)?.boolValue ?? false }
 
   func securityInfo() -> [String: Any] {
     guard let view = webView, let url = view.url, !showingError else {
@@ -641,13 +710,20 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
       if let dict, !dict.isEmpty {
         mediaFrames[frame] = frameInfo
         nowPlayingFrame = frame
+        nowPlaying = dict
         emit("nowPlaying", ["state": dict])
       } else if nowPlayingFrame == frame || nowPlayingFrame == nil {
         nowPlayingFrame = nil
+        nowPlaying = nil
         emit("nowPlaying", ["state": NSNull()])
       }
     case "pip":
-      emit("pictureInPicture", ["kind": "video", "active": dict?["active"] as? Bool ?? false])
+      let active = dict?["active"] as? Bool ?? false
+      mediaFrames[frame] = frameInfo
+      inPictureInPicture = active
+      if active { pictureInPictureFrame = frame } else if pictureInPictureFrame == frame { pictureInPictureFrame = nil }
+      if !active { autoPictureInPictureActive = false }
+      emit("pictureInPicture", ["kind": "video", "active": active])
     case "status":
       emit("status", ["text": data as? String ?? ""])
     case "icons":
@@ -710,6 +786,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     playingFrames.removeAll()
     mediaFrames.removeAll()
     nowPlayingFrame = nil
+    nowPlaying = nil
     self.webView?.captureOrigins.removeAll()
     if !host.isEmpty {
       let zoom = WebKitHub.shared.zoom(profile: profile, host: host)
