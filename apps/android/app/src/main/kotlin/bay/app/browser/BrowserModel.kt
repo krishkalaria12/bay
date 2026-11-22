@@ -522,6 +522,28 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         showToast(strings.t("toast.tabArchived"), strings.t("toast.undo")) { restore(id) }
     }
 
+    /** Tabs closed for good whose Undo is still up: they leave the archive once it has gone. */
+    private val discarding = HashSet<String>()
+
+    /**
+     * Closes a tab for good, not into the archive, with a toast to bring it straight back. It goes through the archive
+     * for the toast's time, so Undo restores it as archiving's does, and leaves it after.
+     */
+    fun discard(id: String) {
+        val tab = app.allTabs.firstOrNull { it.id == id }
+        close(id)
+        if (tab == null || tab.url.isEmpty() || tab.private) return
+        discarding += id
+        showToast(strings.t("toast.tabClosed"), strings.t("toast.undo")) {
+            discarding -= id
+            restore(id)
+        }
+        scope.launch {
+            delay(DISCARD_UNDO_MS)
+            if (discarding.remove(id)) app.dispatch(Action.RemoveArchived(id))
+        }
+    }
+
     /** Takes a pin away, with a toast to put it back where it was. */
     fun unpin(site: PinnedSite) {
         val index = app.store.pinnedSites(site.spaceId).indexOfFirst { it.id == site.id }.coerceAtLeast(0)
@@ -577,7 +599,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         toast = message
         toastTimer?.cancel()
         toastTimer = scope.launch {
-            delay(if (message.notice) 4_000 else if (message.action == null) 2_500 else 8_000)
+            delay(if (message.notice) 4_000 else if (message.action == null) 2_500 else DISCARD_UNDO_MS)
             if (toast?.id == message.id) toast = null
         }
     }
@@ -1677,6 +1699,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
         /** A settled download's toast stays this long. */
         private const val DOWNLOAD_TOAST_MS = 6_000L
+
+        /** How long a toast with Undo stays, and so how long a tab closed for good waits in the archive. */
+        private const val DISCARD_UNDO_MS = 8_000L
 
         fun blankTab(spaceId: String, url: String = "", privately: Boolean = false): BrowserTab {
             val now = AppModel.now()

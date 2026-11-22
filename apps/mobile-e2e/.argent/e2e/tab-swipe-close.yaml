@@ -1,5 +1,5 @@
-# Swipe to close: in the tab switcher, a card swiped sideways closes its tab into the archive, and the archive restores
-# it. (tabs-roundtrip closes a tab with the card's close button.) The pages are .argent/pages/start.html and
+# Swipe to archive: in the tab switcher, a card swiped left goes to the archive, and the archive restores it. (Swiped
+# right, or with the card's close button as tabs-roundtrip does, a tab closes for good.) The pages are .argent/pages/start.html and
 # second.html, served by apps/mobile-e2e/run (which both devices reach at 127.0.0.1:8099), so their titles never change.
 steps:
   - run: ../flows/fresh-start
@@ -28,7 +28,7 @@ steps:
   - await: { text: { in: { id: tab-switcher-count }, equals: "2 tabs" }, timeout: 10000 }
   - await: { text: { in: { id: tab-card-1 }, contains: "Bay second tab test" }, timeout: 10000 }
 
-  # Swipe the card sideways: it leaves, and the switcher counts one tab.
+  # Swipe the card left: it leaves, and the switcher counts one tab.
   - swipe: { from: { id: tab-card-1 }, direction: left }
   - await: { hidden: { id: tab-card-1 }, timeout: 10000 }
   - await: { text: { in: { id: tab-switcher-count }, equals: "1 tab" }, timeout: 10000 }

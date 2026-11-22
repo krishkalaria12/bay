@@ -352,6 +352,30 @@ final class BrowserModel: ObservableObject {
     showToast(strings.t("toast.tabArchived"), actionLabel: strings.t("toast.undo")) { [weak self] in self?.restore(id) }
   }
 
+  /// Tabs closed for good whose Undo is still up: they leave the archive once it has gone.
+  private var discarding: Set<String> = []
+
+  /// Closes a tab for good, not into the archive, with a toast to bring it straight back. It goes through the archive
+  /// for the toast's time, so Undo restores it as archiving's does, and leaves it after.
+  func discard(_ id: String) {
+    let tab = app.allTabs.first { $0.id == id }
+    close(id)
+    guard let tab, !tab.url.isEmpty, !tab.private else { return }
+    discarding.insert(id)
+    showToast(strings.t("toast.tabClosed"), actionLabel: strings.t("toast.undo")) { [weak self] in
+      self?.discarding.remove(id)
+      self?.restore(id)
+    }
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: Self.undoNanoseconds)
+      guard let self, self.discarding.remove(id) != nil else { return }
+      self.app.dispatch(.removeArchived(id: id))
+    }
+  }
+
+  /// How long a toast with Undo stays, and so how long a tab closed for good waits in the archive.
+  private static let undoNanoseconds: UInt64 = 8_000_000_000
+
   /// Takes a pin away, with a toast to put it back where it was.
   func unpin(_ site: PinnedSite) {
     let index = app.store.pinnedSites(spaceId: site.spaceId).firstIndex { $0.id == site.id } ?? 0
@@ -412,7 +436,7 @@ final class BrowserModel: ObservableObject {
     UIAccessibility.post(notification: .announcement, argument: message.actionLabel.map { "\(message.text). \($0)" } ?? message.text)
     toastTimer?.cancel()
     toastTimer = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: message.notice ? 4_000_000_000 : message.action == nil ? 2_500_000_000 : 8_000_000_000)
+      try? await Task.sleep(nanoseconds: message.notice ? 4_000_000_000 : message.action == nil ? 2_500_000_000 : Self.undoNanoseconds)
       guard !Task.isCancelled, self?.toast?.id == message.id else { return }
       self?.toast = nil
     }

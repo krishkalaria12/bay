@@ -347,8 +347,8 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
 }
 
 /**
- * A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped
- * sideways it closes into the archive, as other browsers' tab grids do; up and down scroll the tabs.
+ * A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped left
+ * it goes to the archive; swiped right it closes for good, as the close button does. Up and down scroll the tabs.
  */
 @Composable
 private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, index: Int, count: Int, width: Dp, active: Boolean) {
@@ -370,13 +370,17 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
     val shape = RoundedCornerShape(Radius.tile)
     fun close() {
         Haptics.tick(view)
+        browser.discard(tab.id)
+    }
+    fun archive() {
+        Haptics.tick(view)
         browser.archive(tab.id)
     }
     Column(
         Modifier.width(width).zIndex(if (carried != null) 1f else 0f)
             // Before the layer that moves the card, so the finger is followed in screen terms, not the moving card's.
             // Started on a card, a sideways drag is the card's, not the space's (TabSwitcher's own drag): thrown far
-            // enough, or flicked, it goes off that side and the tab closes; short of that it comes back.
+            // enough, or flicked, it goes off that side, left to the archive and right closed; short of that it comes back.
             .pointerInput(tab.id) {
                 val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
                 detectHorizontalDragGestures(
@@ -386,9 +390,9 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                         val throwing = abs(swipe.value) > size.width * 0.4f || (abs(speed) > 1_200.dp.toPx() && speed * swipe.value > 0)
                         scope.launch {
                             if (throwing) {
-                                val side = if (swipe.value < 0f) -1 else 1
-                                swipe.animateTo(side * size.width * 1.6f, tween(160))
-                                close()
+                                val closing = swipe.value > 0f
+                                swipe.animateTo((if (closing) -1 else 1) * size.width * 1.6f, tween(160))
+                                if (closing) close() else archive()
                             } else {
                                 swipe.animateTo(0f, Motion.settle.spec())
                             }
@@ -409,7 +413,8 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                 scaleY = shrink
                 // While the page shrinks into this card, or grows out of it, the page is the card.
                 val morphing = browser.opening?.id == tab.id || browser.zoom?.tab?.id == tab.id
-                alpha = if (morphing) 0f else 1f - (abs(swipe.value) / size.width).coerceIn(0f, 0.8f)
+                // Solid while it's dragged; it fades only on its way out.
+                alpha = if (morphing) 0f else 1f - ((abs(swipe.value) / size.width - 0.6f) / 0.6f).coerceIn(0f, 0.8f)
             },
         verticalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
@@ -423,8 +428,10 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
                         role = Role.Button
                         selected = active
                         onClick { browser.pick(tab, frame); true }
-                        // TalkBack can't carry a card to a space, so each card offers the other spaces.
-                        customActions = app.spaces.filter { it.id != tab.spaceId }.map { space ->
+                        // TalkBack can't swipe or carry a card, so each card offers the archive and the other spaces.
+                        customActions = listOf(
+                            androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.archiveLabel", mapOf("title" to title))) { archive(); true },
+                        ) + app.spaces.filter { it.id != tab.spaceId }.map { space ->
                             androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.moveToSpace", mapOf("name" to spaceName(space, strings)))) {
                                 browser.moveTab(tab, space.id)
                                 true

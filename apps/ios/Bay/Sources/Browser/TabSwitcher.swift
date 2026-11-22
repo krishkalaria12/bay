@@ -626,8 +626,8 @@ struct FolderNameField: View {
   }
 }
 
-/// A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped
-/// sideways it closes into the archive.
+/// A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped left
+/// it goes to the archive; swiped right it closes for good, as the close button does.
 private struct TabCard: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -691,6 +691,8 @@ private struct TabCard: View {
         .accessibilityValue(
           Text(verbatim: strings.t(tab.private ? "tabs.privatePosition" : "tabs.position", ["index": "\(index + 1)", "count": "\(count)"])))
         .accessibilityAddTraits(active ? .isSelected : [])
+        // VoiceOver can't swipe a card, so each one offers the archive (and, below, the other spaces).
+        .accessibilityAction(named: Text(verbatim: strings.t("tabs.archiveLabel", ["title": title]))) { archive() }
         .modifier(MoveToSpaceActions(tab: tab, browser: browser))
         .accessibilityIdentifier("tab-card-\(index)")
         // While the page shrinks into this card, or grows out of it, the page is the card.
@@ -727,9 +729,10 @@ private struct TabCard: View {
     .scaleEffect(carried == nil ? 1 : (browser.cardDropSpace == nil ? 0.9 : 0.6), anchor: .center)
     .offset(carried ?? CGSize(width: slide, height: 0))
     .zIndex(carried == nil ? 0 : 1)
-    .opacity(1 - Double(min(0.8, abs(slide) / width)))
-    // Swiped sideways, the card goes off that side and the tab closes, as other browsers' tab grids do; short of that
-    // it comes back. Up and down scroll the tabs.
+    // Solid while it's dragged; it fades only on its way out.
+    .opacity(1 - Double(min(0.8, max(0, (abs(slide) / width - 0.6) / 0.6))))
+    // Swiped left, the card goes off that side and the tab goes to the archive; swiped right, it closes for good, as the
+    // close button does. Short of far enough it comes back. Up and down scroll the tabs.
     .simultaneousGesture(
       DragGesture(minimumDistance: 16)
         .onChanged { value in
@@ -747,8 +750,9 @@ private struct TabCard: View {
             withAnimation(Motion.settle.animation) { slide = 0 }
             return
           }
-          withAnimation(.easeOut(duration: 0.16)) { slide = (dx < 0 ? -1 : 1) * width * 1.6 }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { close() }
+          let closing = dx > 0
+          withAnimation(.easeOut(duration: 0.16)) { slide = (closing ? -1 : 1) * width * 1.6 }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { closing ? close() : archive() }
         })
   }
 
@@ -771,6 +775,11 @@ private struct TabCard: View {
   }
 
   private func close() {
+    Haptics.tick()
+    browser.discard(tab.id)
+  }
+
+  private func archive() {
     Haptics.tick()
     browser.archive(tab.id)
   }
