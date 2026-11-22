@@ -1,19 +1,29 @@
 ---
-import Layout from "../../layouts/Layout.astro";
-import Header from "../../components/Header.astro";
-import Footer from "../../components/Footer.astro";
-import Sticky from "../../components/Sticky.astro";
-import Circled from "../../components/Circled.astro";
-import Marker from "../../components/TimelineMarker.astro";
-import { counts, longDate, releases, shortDate } from "../../releases";
-import { ids, site } from "../../site";
+import Layout from "../../../layouts/Layout.astro";
+import Header from "../../../components/Header.astro";
+import Footer from "../../../components/Footer.astro";
+import Sticky from "../../../components/Sticky.astro";
+import Circled from "../../../components/Circled.astro";
+import Marker from "../../../components/TimelineMarker.astro";
+import { counts, longDate, notesPath, platformIds, platforms, releases, shortDate, type Platform } from "../../../releases";
+import { ids, site } from "../../../site";
 
-// The app's Bay › Release Notes opens this page at #<version>: each version keeps its anchor here.
-const all = releases();
+export function getStaticPaths() {
+  return platformIds.map((platform) => ({ params: { platform }, props: { platform } }));
+}
+
+interface Props {
+  platform: Platform;
+}
+
+// The app's Bay › Release Notes opens its platform's page at #<version>: each version keeps its anchor here.
+const { platform } = Astro.props;
+const { name, updates } = platforms[platform];
+const all = releases(platform);
 const [latest, ...earlier] = all;
-const url = `${site.url}/release-notes/`;
-const title = "What’s new in Bay";
-const description = "Every version of Bay, newest first: what each one added, improved and fixed.";
+const url = `${site.url}${notesPath(platform)}`;
+const title = `What’s new in Bay for ${name}`;
+const description = `Every version of Bay for ${name}, newest first: what each one added, improved and fixed.`;
 const issues = `${site.github}/issues`;
 
 const schema = [
@@ -38,14 +48,29 @@ const schema = [
       <div class="max-w-md animate-rise">
         <h1 class="text-[44px] leading-[1.02] font-bold tracking-[-0.04em] sm:text-[56px]">What’s <span class="marker">new</span></h1>
         <p class="mt-4 text-[17px] leading-relaxed text-pretty text-muted">
-          Every version of Bay, newest first. It updates itself; restart it when it says so.
+          Every version of Bay for {name}, newest first. {updates}
         </p>
+        <nav class="mt-6 flex flex-wrap gap-2" aria-label="Platforms">
+          {
+            platformIds.map((id) => (
+              <a
+                href={notesPath(id)}
+                aria-current={id === platform ? "page" : undefined}
+                class="rounded-lg px-3 py-1.5 text-[14px] font-medium text-muted shadow-[0_0_0_1px_var(--color-line)] hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-white aria-[current=page]:shadow-none"
+              >
+                {platforms[id].name}
+              </a>
+            ))
+          }
+        </nav>
       </div>
       <Sticky tilt={3} class="w-56 shrink-0 animate-rise self-end p-5 text-[24px] leading-[1.15] [animation-delay:120ms] sm:self-auto">
         Found a bug, or want something?
         <a href={issues} class="mt-2 block text-[22px] text-pen hover:underline">tell us on GitHub →</a>
       </Sticky>
     </div>
+
+    {!latest && <p class="mt-16 text-[17px] text-muted sm:pl-28">No release of Bay for {name} yet.</p>}
 
     {
       latest && (
@@ -62,7 +87,7 @@ const schema = [
               <p class="mt-1 text-[14px] text-muted">{longDate(latest.date)}</p>
               <p class="mt-5 max-w-lg text-[18px] leading-relaxed text-ink-soft text-pretty">{latest.headline}</p>
               <p class="mt-4 text-[14px] text-faint">{counts(latest)}</p>
-              <a href={`/release-notes/${latest.version}/`} class="mt-6 inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-[14px] font-semibold shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.05)] transition hover:-translate-y-px hover:shadow-[0_0_0_1px_#d3d6dc,0_10px_22px_-12px_rgba(30,32,60,0.4)]">
+              <a href={notesPath(platform, latest.version)} class="mt-6 inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-[14px] font-semibold shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.05)] transition hover:-translate-y-px hover:shadow-[0_0_0_1px_#d3d6dc,0_10px_22px_-12px_rgba(30,32,60,0.4)]">
                 Read more <span aria-hidden="true">›</span>
               </a>
             </article>
@@ -75,7 +100,7 @@ const schema = [
                 {earlier.map((r) => (
                   <li id={r.version} class="relative scroll-mt-24">
                     <Marker date={r.date} top="top-1/2 -translate-y-1/2" />
-                    <a href={`/release-notes/${r.version}/`} class="flex items-center gap-6 px-5 py-4 transition hover:bg-paper/60">
+                    <a href={notesPath(platform, r.version)} class="flex items-center gap-6 px-5 py-4 transition hover:bg-paper/60">
                       <span class="w-32 shrink-0">
                         <span transition:name={`release-title-${r.version}`} class="block w-fit text-[16px] font-semibold">Bay {r.version}</span>
                         <span class="block text-[13px] text-muted">{shortDate(r.date)}</span>

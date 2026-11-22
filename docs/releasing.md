@@ -32,13 +32,13 @@ Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updat
 - **Downloads.** Stable: `baybrowser.in/download` (`Bay.dmg` on the latest release). Nightly:
   `baybrowser.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
   each nightly replaces.
-- **Notes.** A stable's are `release-notes/<version>.md` (the site, the GitHub release and the update dialog). A
+- **Notes.** A stable's are `release-notes/mac/<version>.md` (the site, the GitHub release and the update dialog). A
   nightly's are the `feat`, `fix` and `perf` commit subjects since the previous release
-  (`scripts/release/nightly-notes.sh`), unless `release-notes/<version>.md` exists.
+  (`scripts/release/nightly-notes.sh`), unless `release-notes/mac/<version>.md` exists.
 
 ## Shipping a stable release
 
-1. Write `release-notes/<version>.md` (`date:` and `headline:` frontmatter), set `MARKETING_VERSION` to `<version>`
+1. Write `release-notes/mac/<version>.md` (`date:` and `headline:` frontmatter), set `MARKETING_VERSION` to `<version>`
    and bump `CURRENT_PROJECT_VERSION` by one in `apps/browser/macos/Bay.xcodeproj/project.pbxproj`, commit
    (`chore: prepare bay <version>`) and push to `main`.
 2. If `engine/` changed since the last published engine, publish it (below).

@@ -108,7 +108,7 @@ try {
     if (-not $Unsigned -and (Get-AuthenticodeSignature $installer).Status -ne 'Valid') { throw 'Installer signature validation failed' }
     $checksum = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
     "$checksum  $([IO.Path]::GetFileName($installer))" | Set-Content "$installer.sha256" -Encoding ascii
-    $notes = Join-Path $repo "release-notes/$Version.md"
+    $notes = Join-Path $repo "release-notes/windows/$Version.md"
     $releaseNotes = if (Test-Path $notes) { Get-Content $notes -Raw } else { '' }
     @{ version = $Version; channel = $Channel; sha256 = $checksum; signed = -not $Unsigned;
        url = if ($DownloadBaseUrl) { $DownloadBaseUrl.TrimEnd('/') + '/' + [IO.Path]::GetFileName($installer) } else { $null };

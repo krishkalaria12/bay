@@ -239,7 +239,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(members["bay-1.3.0/opt/bay/chrome-sandbox"].mode, 0o755, "a tarball never ships a setuid sandbox")
         self.assertTrue(all(member.uid == 0 and member.gid == 0 for member in members.values()))
         metainfo = tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz").extractfile("bay-1.3.0/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml").read()
-        # release-notes/1.3.0.md is the Mac's 1.3.0; with no release-notes/linux/1.3.0.md the release is dated today.
+        # With no release-notes/linux/1.3.0.md the release is dated today.
         today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d").encode()
         self.assertIn(b'<release version="1.3.0" date="' + today + b'" />', metainfo)
         self.assertIn("bay-1.3.0-linux-x64.tar.xz", (output / "SHA256SUMS").read_text())
