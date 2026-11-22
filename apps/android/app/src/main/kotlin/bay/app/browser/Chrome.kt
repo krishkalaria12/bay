@@ -516,7 +516,8 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
         Modifier.size(androidx.compose.ui.unit.lerp(MINI_WIDTH, CAPSULE_WIDTH, whole), androidx.compose.ui.unit.lerp(MINI_HEIGHT, BAR_HEIGHT, whole))
             // The ring round the bar the bar tip means, a little outside it.
             .then(if (browser.tip == bay.core.TipId.BAR) Modifier.drawWithContent { drawContent(); ring(accent) } else Modifier)
-            .shadow(14.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
+            // A shadow only: it would clip to the capsule by default, cutting off the spaces a held Tabs raises above it.
+            .shadow(14.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
             // The bar in the page's light or dark; the pill it shrinks to turns to the other one, a chip that stands
             // out on any page without a frame of its own.
             .background(androidx.compose.ui.graphics.lerp(colors.surface, colors.foreground.copy(alpha = 0.86f), ((shrink - 0.3f) / 0.7f).coerceIn(0f, 1f)), CircleShape)
