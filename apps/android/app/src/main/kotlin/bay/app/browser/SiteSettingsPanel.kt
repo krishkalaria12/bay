@@ -104,8 +104,9 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
     PanelSheet(
         visible, title, "site-settings", strings.sheetWords(title), close,
         header = {
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (url.isNotEmpty()) SiteIcon(app, url, size = 30.dp)
+            // In line with the rows below: the site's icon centred over their icons, its name over their labels.
+            Row(Modifier.weight(1f).padding(start = Space.lg - 2.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (url.isNotEmpty()) SiteIcon(app, url, size = 28.dp)
                 BayText(
                     siteName(url),
                     Modifier.weight(1f).testTag("site-settings-host").semantics { heading() },
