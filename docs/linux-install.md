@@ -38,8 +38,10 @@ flatpak install flathub in.krishkalaria.bay
 ## Snap (any distribution with snapd)
 
 ```bash
-sudo snap install bay
+sudo snap install bay-browser
 ```
+
+The store name is `bay-browser`, and so is the command.
 
 ## Arch, Manjaro, EndeavourOS
 

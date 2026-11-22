@@ -182,7 +182,7 @@ else
   git push -q origin HEAD:master
 fi
 cd "$packages"
-snap="bay_${version}_amd64.snap"
+snap="bay-browser_${version}_amd64.snap"
 if [[ -n "${SNAPCRAFT_STORE_CREDENTIALS:-}" && -f "$snap" ]]; then
   snapcraft upload --release=stable "$snap"
 elif [[ -f "$snap" ]]; then

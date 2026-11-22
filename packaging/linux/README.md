@@ -29,7 +29,7 @@ can't find. `--verify DIR` rechecks a staged app.
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
 | `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.krishkalaria.bay` repository's files for this release: the manifest (`flatpak/in.krishkalaria.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
 | `nixpkgs/package.nix` (add `nixpkgs`) | nixpkgs | `nix/package.nix` with the version and the tarball's hash, for `pkgs/by-name/ba/bay` |
-| `bay_<version>_amd64.snap` (add `snap`) | Snap Store | from `snap/snapcraft.yaml.in`; needs `snapcraft`, and `SNAPCRAFT`/`BAY_SNAPCRAFT_ARGS` to pack on the host as CI does |
+| `bay-browser_<version>_amd64.snap` (add `snap`) | Snap Store | from `snap/snapcraft.yaml.in`; needs `snapcraft`, and `SNAPCRAFT`/`BAY_SNAPCRAFT_ARGS` to pack on the host as CI does |
 | `SHA256SUMS` | | every artifact |
 
 Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures.

@@ -173,12 +173,16 @@ if want snap; then
   install -m 0755 "$packaging/snap/local/bay" "$project/snap/local/bay"
   cp "$root/usr/share/icons/hicolor/256x256/apps/bay.png" "$project/snap/gui/bay.png"
   cp "$tarball" "$project/"
-  snap="$output/bay_${version}_amd64.snap"
+  snap="bay-browser_${version}_amd64.snap"
   # CI packs on the runner itself (SNAPCRAFT="sudo snapcraft", BAY_SNAPCRAFT_ARGS=--destructive-mode), which needs
-  # Ubuntu 24.04 to match core24; elsewhere snapcraft packs in its own container.
+  # Ubuntu 24.04 to match core24; elsewhere snapcraft packs in its own container. snapcraft only writes the snap inside
+  # the project.
   # shellcheck disable=SC2086
   (cd "$project" && $snapcraft pack ${BAY_SNAPCRAFT_ARGS:-} --output "$snap")
-  artifacts+=("$snap")
+  mv "$project/$snap" "$output/$snap"
+  # sudo snapcraft leaves root-owned parts behind, which the cleanup couldn't remove.
+  [[ "$snapcraft" == "sudo "* ]] && sudo rm -rf "$project"
+  artifacts+=("$output/$snap")
 fi
 
 if want nix; then

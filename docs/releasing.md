@@ -126,7 +126,7 @@ What a release publishes:
 | Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
 | Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
 | AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
-| Snap Store `bay` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
+| Snap Store `bay-browser` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
 
 Flathub and nixpkgs build from the release's tarball, and their bots open a pull request for each new release once the
 first is in: Flathub's checks GitHub's releases every few hours and merges its own (`flathub.json`), and nixpkgs'
@@ -170,14 +170,18 @@ After the first release:
    pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
    merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at
    flathub.org and verify the domain `krishkalaria.in`, which the app ID names.
-5. **Snap Store.** Register the name and ask for the sandbox, which Chromium-based snaps need and the store grants by
-   hand (a post in forum.snapcraft.io's "store-requests" asking for `browser-support` with `allow-sandbox` for `bay`):
+5. **Snap Store.** Register the name (`bay` was taken, so it's `bay-browser`) and ask for the sandbox, which
+   Chromium-based snaps need and the store grants by hand: a post in forum.snapcraft.io's "store-requests" asking for
+   `browser-support` with `allow-sandbox` for `bay-browser`. Mention the `mpris` slot too: it's named `bay`, which isn't
+   the snap's name.
 
    ```bash
-   snapcraft register bay
-   snapcraft export-login --snaps=bay --channels=stable --acls package_access,package_push,package_release - \
+   snapcraft register bay-browser
+   snapcraft export-login --snaps=bay-browser --channels=stable --acls package_access,package_push,package_release - \
      | gh secret set SNAPCRAFT_STORE_CREDENTIALS
    ```
+
+   The credentials last a year; export them again before they run out.
 
    The next release uploads it; the first one can be uploaded by hand with `snapcraft upload --release=stable`.
 6. **nixpkgs.** Add yourself to `maintainers/maintainer-list.nix` and `bay-linux-packages/nixpkgs/package.nix` as
