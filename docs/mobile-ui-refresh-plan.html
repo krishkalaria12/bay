@@ -1610,6 +1610,14 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           The onboarding's computer step points at baybrowser.in, and its drifting site icons are named in code so Android's release resource shrinking keeps
           them.
         </li>
+        <li>
+          <b>Phone fixes from APK 25:</b> a tab's card closes with a sideways swipe on both apps (up and down now scroll the tabs from a card too; the flick up
+          is gone). Site settings key a site's <code>m.</code> and <code>mobile.</code> pages under the site itself: Desktop site moved YouTube between two
+          hosts with their own settings, which flipped the toggle (and every other one) back and forth on each redirect. The bar tip's ring sits on the capsule
+          at its size. On Android the status bar's icons follow the strip's colour, and the bar takes its look from the page's foot: both colours are read from
+          a thumbnail of what the page draws (styles miss a video), on each load, on an app-like site's moves and when the bar comes back after a scroll, and
+          the room the page leaves the bar is painted in the foot's colour. iOS's bar already floats over the page.
+        </li>
       </ul>
 
       <h2 id="verify">Testing</h2>
