@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.customActions
@@ -750,13 +751,15 @@ private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false, 
             val fill = if (inverted) colors.background else colors.foreground
             val text = if (inverted) colors.foreground else colors.background
             Box(
+                // On one line however many there are: the badge grows past the cards rather than wrapping inside them.
                 Modifier.align(Alignment.TopEnd).offset(x = 12.dp * scale, y = (-8).dp * scale)
+                    .wrapContentSize(Alignment.TopEnd, unbounded = true)
                     .sizeIn(minWidth = 16.dp * scale, minHeight = 16.dp * scale)
                     .border(1.5.dp, if (inverted) colors.foreground else colors.surface, CircleShape)
                     .background(fill, CircleShape).padding(horizontal = 4.dp * scale),
                 contentAlignment = Alignment.Center,
             ) {
-                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = text)
+                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = text, maxLines = 1)
             }
         }
     }

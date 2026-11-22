@@ -551,8 +551,11 @@ struct TabStack: View {
     .frame(width: 26 * scale, height: 30 * scale, alignment: .topLeading)
     .overlay(alignment: .topTrailing) {
       if count > 1 {
+        // On one line however many there are: the badge grows past the cards rather than wrapping inside them.
         Text(verbatim: count > 99 ? "99+" : "\(count)")
           .font(.system(size: 9.5 * scale, weight: .bold))
+          .lineLimit(1)
+          .fixedSize()
           .foregroundColor(inverted ? BayColor.foreground : BayColor.background)
           .padding(.horizontal, 4 * scale)
           .frame(minWidth: 16 * scale, minHeight: 16 * scale)
