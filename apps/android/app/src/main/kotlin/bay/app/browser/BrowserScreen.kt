@@ -76,6 +76,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val behind = browser.panel != null || browser.covered
     // The picker's card stays above the sheet it opened (Inspect's details), so it's reachable there.
     val pickerOnTop = browser.picking != null && browser.panel != null
+    // Over a page the screen takes its look from the page: the status bar's strip is the colour at its top, and the bar
+    // the colour along its foot (behind the bar, where the page leaves room for it), so the bar sits in the page rather
+    // than on it. The system's icons stay readable on either.
+    val pageShows = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
+    val topColor = if (pageShows) pageColor(browser.shownColor(browser.pageColors[app.activeTabId])) else null
+    val footColor = if (pageShows) pageColor(browser.shownColor(browser.pageBottomColors[app.activeTabId] ?: browser.pageColors[app.activeTabId])) else null
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    SystemBarIcons(lightTop = topColor?.let { it.luminance() > 0.5f } ?: !systemDark, lightBottom = footColor?.let { it.luminance() > 0.5f } ?: !systemDark)
     Box(Modifier.fillMaxSize()) {
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
@@ -84,33 +92,36 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             // The toast and the player go with it.
             val onPage = browser.overlay == Overlay.NONE
             val away by animateFloatAsState(if (onPage && browser.fullscreen) 1f else 0f, tween(200), label = "bar")
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .graphicsLayer { translationY = maxOf(away, if (onPage) browser.barGone else 0f) * size.height }
-                    .navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
-                verticalArrangement = Arrangement.spacedBy(Space.md),
-            ) {
-                browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
-                browser.downloadToast?.let { item -> DownloadToast(browser, strings, item) }
-                // Under Settings the toast shows on Settings instead (SettingsScreen).
-                if (!browser.covered) browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
-                val tip = browser.tip
-                if (tip != null) {
-                    val key = if (tip == TipId.BLOCKING) "tip.blocking" else "tip.bar"
-                    TipCard(strings.t("$key.title"), strings.t("$key.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(tip)) }
-                    // An unanswered tip goes after a while; it has been seen.
-                    LaunchedEffect(tip) {
-                        kotlinx.coroutines.delay(12_000)
-                        app.dispatch(bay.core.Action.TipSeen(tip))
+            val barDark = if (onPage && footColor != null) footColor.luminance() <= 0.4f else systemDark
+            bay.design.BayTheme(dark = barDark) {
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .graphicsLayer { translationY = maxOf(away, if (onPage) browser.barGone else 0f) * size.height }
+                        .navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
+                    verticalArrangement = Arrangement.spacedBy(Space.md),
+                ) {
+                    browser.player?.let { (tab, media) -> MiniPlayer(browser, strings, tab, media) }
+                    browser.downloadToast?.let { item -> DownloadToast(browser, strings, item) }
+                    // Under Settings the toast shows on Settings instead (SettingsScreen).
+                    if (!browser.covered) browser.toast?.let { toast -> Toast(toast, browser::dismissToast) }
+                    val tip = browser.tip
+                    if (tip != null) {
+                        val key = if (tip == TipId.BLOCKING) "tip.blocking" else "tip.bar"
+                        TipCard(strings.t("$key.title"), strings.t("$key.body"), strings.t("tip.gotIt")) { app.dispatch(bay.core.Action.TipSeen(tip)) }
+                        // An unanswered tip goes after a while; it has been seen.
+                        LaunchedEffect(tip) {
+                            kotlinx.coroutines.delay(12_000)
+                            app.dispatch(bay.core.Action.TipSeen(tip))
+                        }
                     }
-                }
-                // The picker's card sits over the bar, which stays: Settings and the page menu are still in reach.
-                val picking = browser.picking
-                if (picking != null && browser.hasPage) PickerCard(browser, strings, picking)
-                if (browser.find != null && browser.hasPage) {
-                    FindBar(browser, strings)
-                } else {
-                    BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth(), onChecks)
+                    // The picker's card sits over the bar, which stays: Settings and the page menu are still in reach.
+                    val picking = browser.picking
+                    if (picking != null && browser.hasPage) PickerCard(browser, strings, picking)
+                    if (browser.find != null && browser.hasPage) {
+                        FindBar(browser, strings)
+                    } else {
+                        BrowserBar(browser, strings, onSettings, Modifier.fillMaxWidth(), onChecks)
+                    }
                 }
             }
         }
@@ -118,7 +129,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         Wallpaper(app.preferences.wallpaper)
         // The pages stay in place under the switcher, so a page isn't torn down and reloaded on the way back.
         if (browser.hasPage || browser.mounted.isNotEmpty()) {
-            val shown = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
+            val shown = pageShows
             // The page runs under the floating bar to the screen's foot and is never resized as the bar comes and goes:
             // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. The
             // engine takes the bar as the page's bottom toolbar instead, lifting what a site pins to its bottom above it.
@@ -126,10 +137,9 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             val barCover = WindowInsets.navigationBars.getBottom(density) + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
             LaunchedEffect(barCover) { browser.barCoverChanged(barCover) }
             if (shown) {
-                // Behind the page until it draws its first frame: the colour at its top, else the engine's blank white.
-                val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
-                val behind = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Color.White
-                Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(behind).clearAndSetSemantics {})
+                // Behind the page: until it draws its first frame, and in the room it leaves the bar at its foot, the colour
+                // along its bottom edge (else the engine's blank white), so the bar sits on the page's own colour.
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(footColor ?: Color.White).clearAndSetSemantics {})
             }
             // A fullscreen site takes the status bar's place too.
             val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
@@ -154,6 +164,18 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 },
                 visible = shown,
             )
+            // The room the page leaves the bar at its foot, which the engine paints white: the colour along the page's
+            // bottom edge instead, going with the bar as it slides away.
+            if (shown && footColor != null && !browser.siteSetting.fullscreen) {
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { barCover.toDp() })
+                        .graphicsLayer {
+                            translationX = browser.tabSwipe.offset.value
+                            translationY = browser.barGone * size.height
+                        }
+                        .background(footColor).clearAndSetSemantics {},
+                )
+            }
             if (shown) {
                 TabSwipeLayer(browser, strings)
                 TabCoverLayer(browser)
@@ -206,9 +228,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 PageError(failure.message, strings, browser::retry, Modifier.statusBarsPadding())
             }
             // The strip behind the status bar, in the colour at the top of the page.
-            val rgb = browser.shownColor(browser.pageColors[app.activeTabId])
-            val strip = rgb?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) } ?: Theme.colors.background
-            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(strip).clearAndSetSemantics {})
+            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(topColor ?: Theme.colors.background).clearAndSetSemantics {})
         } else if (browser.overlay == Overlay.NONE) {
             StartScreen(browser, strings)
         }
@@ -222,10 +242,8 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         } else {
             val active = browser.activeTab
             // Search opened over a dark page is dark too, so the sheet doesn't glare over it.
-            val pageRgb = if (browser.searchKeepsPage) browser.shownColor(browser.pageColors[app.activeTabId]) else null
-            val overDark = pageRgb != null && pageRgb.size >= 3 &&
-                androidx.compose.ui.graphics.Color(pageRgb[0].toFloat() / 255, pageRgb[1].toFloat() / 255, pageRgb[2].toFloat() / 255).luminance() <= 0.4f
-            bay.design.BayTheme(dark = overDark || androidx.compose.foundation.isSystemInDarkTheme()) {
+            val overDark = browser.searchKeepsPage && (pageColor(browser.shownColor(browser.pageColors[app.activeTabId]))?.luminance() ?: 1f) <= 0.4f
+            bay.design.BayTheme(dark = overDark || systemDark) {
                 SearchCard(
                     browser, strings, if (browser.searchInNewTab) "" else active?.url.orEmpty(),
                     browser.searchPrivately || (!browser.searchInNewTab && active?.private == true), browser.searchOverPage,
@@ -298,5 +316,22 @@ private fun FullscreenWindow(on: Boolean) {
             controller?.hide(bars)
         }
         onDispose { if (on) controller?.show(bars) }
+    }
+}
+
+/** A page colour read from the page ([r, g, b], 0–255), or null when it has none. */
+private fun pageColor(rgb: List<Double>?): Color? =
+    rgb?.takeIf { it.size >= 3 }?.let { Color(it[0].toFloat() / 255, it[1].toFloat() / 255, it[2].toFloat() / 255) }
+
+/** The status bar's and navigation bar's icons: dark over a light colour behind them, light over a dark one. */
+@Composable
+private fun SystemBarIcons(lightTop: Boolean, lightBottom: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.SideEffect {
+        val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = lightTop
+            isAppearanceLightNavigationBars = lightBottom
+        }
     }
 }

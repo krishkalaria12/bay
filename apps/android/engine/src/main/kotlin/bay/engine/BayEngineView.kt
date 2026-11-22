@@ -350,6 +350,29 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     }
   }
 
+  /**
+   * The colours the page shows along its top and bottom edges, as drawn ([r, g, b] each), or null before it has drawn.
+   * Read from a thumbnail of the page rather than its styles: a video, a picture or a canvas under the edge has no
+   * background colour to read, and Shorts' white page behind a dark video read as white.
+   */
+  suspend fun edgeColors(): Pair<List<Double>, List<Double>>? = suspendCoroutine { done ->
+    val current = tab
+    if (disposed || isSuspended || current == null || current.url.isEmpty()) {
+      done.resumeWith(Result.success(null))
+      return@suspendCoroutine
+    }
+    current.captureSnapshot(EDGE_SAMPLE_WIDTH) { bitmap ->
+      val readable = bitmap?.let { if (it.config == android.graphics.Bitmap.Config.HARDWARE) it.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else it }
+      // The picture runs to the view's foot, under the room the page leaves the bar while it shows (blank there): the
+      // page's own bottom edge is that far above it.
+      val room = readable?.let { (barHeight * (1 - barHidden) * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
+      val edges = readable?.takeIf { it.height - room >= 4 }?.let { edgeColor(it, 0) to edgeColor(it, it.height - room - 2) }
+      if (readable !== bitmap) readable?.recycle()
+      bitmap?.recycle()
+      done.resumeWith(Result.success(edges))
+    }
+  }
+
   // MARK: Page scripts
 
   /** Runs a page script in Bay's isolated world and resolves with its result as JSON text (see `Tab.evaluate`). */
@@ -695,4 +718,19 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     /** The page views not yet disposed, oldest first. */
     private val live = LinkedHashSet<BayEngineView>()
   }
+}
+
+/** How wide the thumbnail is that the page's edge colours are read from, in pixels. */
+private const val EDGE_SAMPLE_WIDTH = 48
+
+/**
+ * The colour most of two rows of a picture show, from [row]: the pixels are put in coarse bins and the fullest bin's
+ * average is the answer, so a line of text or an icon along the edge doesn't tint it.
+ */
+private fun edgeColor(bitmap: android.graphics.Bitmap, row: Int): List<Double> {
+  val pixels = IntArray(bitmap.width * 2)
+  bitmap.getPixels(pixels, 0, bitmap.width, 0, row, bitmap.width, 2)
+  val bins = pixels.groupBy { (it shr 20 and 0xF shl 8) or (it shr 12 and 0xF shl 4) or (it shr 4 and 0xF) }
+  val fullest = bins.values.maxBy { it.size }
+  return listOf(16, 8, 0).map { shift -> fullest.sumOf { it shr shift and 0xFF }.toDouble() / fullest.size }
 }

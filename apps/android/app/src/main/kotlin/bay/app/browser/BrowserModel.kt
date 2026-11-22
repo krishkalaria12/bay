@@ -275,6 +275,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The colour at the top of each page, for the strip behind the status bar ([r, g, b]); absent when it has none. */
     val pageColors = mutableStateMapOf<String, List<Double>>()
 
+    /** The colour along each page's bottom edge, for the room under it behind the bar, which the bar takes its look from. */
+    val pageBottomColors = mutableStateMapOf<String, List<Double>>()
+
     /**
      * A page colour as the page shows it: on a site with Force dark, Blink draws a light page dark, which the page's own
      * styles (what the colour is read from) don't say.
@@ -361,6 +364,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             }
             navigation.remove(id)
             timing.remove(id)
+            colorJobs.remove(id)?.cancel()
             if (media.remove(id) != null) updateMediaSession()
             // An unloaded page no longer waits on its questions.
             if (pageRequests.removeAll { it.first == id } && pageRequests.isEmpty() && panelState == Panel.REQUEST) panelState = null
@@ -385,6 +389,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         visited.clear()
         media.clear()
         pageColors.clear()
+        pageBottomColors.clear()
         failure = null
         mounted = emptyList()
         Engine.setMediaSession(context, null, "", false)
@@ -1084,7 +1089,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                     }
                 }
             }
-            is EngineEvent.BarMoved -> if (tabId == app.activeTabId) barGone = event.hidden
+            is EngineEvent.BarMoved -> if (tabId == app.activeTabId) {
+                // Back after a scroll: the page has moved under the bar, so what's along its edges may have changed.
+                if (event.hidden == 0f && barGone > 0f) views[tabId]?.let { refreshPageColors(tabId, it) }
+                barGone = event.hidden
+            }
             is EngineEvent.BlockedCount -> blocked[tabId] = event.count
             is EngineEvent.LinkPress -> if (tabId == app.activeTabId) {
                 link = event
@@ -1096,6 +1105,31 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
                 panel = Panel.REQUEST
             }
             else -> {}
+        }
+    }
+
+    private val colorJobs = mutableMapOf<String, Job>()
+
+    /** The colours along a page's top and bottom edges: as it draws them, else as its styles say (before it has drawn). */
+    private suspend fun readPageColors(tabId: String, view: BayEngineView) {
+        suspend fun read(args: Map<String, Any?>?): List<Double>? {
+            val json = runCatching { view.runScript(PageScript.PAGE_COLOR, args) }.getOrNull()
+            return json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
+        }
+        val drawn = runCatching { view.edgeColors() }.getOrNull()
+        val top = drawn?.first ?: read(null)
+        if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
+        val bottom = drawn?.second ?: read(mapOf("edge" to "bottom"))
+        if (bottom != null) pageBottomColors[tabId] = bottom else pageBottomColors.remove(tabId)
+    }
+
+    /** Reads a page's edge colours now and again a moment later, once a page that fetches what it shows has drawn it. */
+    private fun refreshPageColors(tabId: String, view: BayEngineView) {
+        colorJobs[tabId]?.cancel()
+        colorJobs[tabId] = scope.launch {
+            readPageColors(tabId, view)
+            delay(1_500)
+            readPageColors(tabId, view)
         }
     }
 
@@ -1123,12 +1157,11 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
         val view = views[tabId]
         if (finished && tabId == app.activeTabId) openReaderBySite(tabId, state.url)
-        if (finished && view != null) {
-            scope.launch {
-                val json = runCatching { view.runScript(PageScript.PAGE_COLOR) }.getOrNull()
-                val top = json?.let { runCatching { JSONArray(it) }.getOrNull() }?.let { array -> List(array.length()) { array.getDouble(it) } }
-                if (top != null) pageColors[tabId] = top else pageColors.remove(tabId)
-            }
+        // Read when a load finishes, and when a site that runs as an app moves to another page without one (YouTube's
+        // Shorts are dark under a white feed).
+        val moved = before != null && before.url != state.url && !state.isLoading
+        if ((finished || moved) && view != null) {
+            refreshPageColors(tabId, view)
             // The site's icon, unless the tab is private: its icon would say what was opened privately.
             if (!isPrivate(tabId)) fetchIcon(view, state.url)
         }
