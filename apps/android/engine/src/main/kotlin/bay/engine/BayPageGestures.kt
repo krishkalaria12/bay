@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.min
 
 /**
@@ -69,6 +70,12 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
    */
   private var edgeDirection = 0
   private var edgeSwiping = false
+  /**
+   * The finger has moved far enough for the page to have its scroll, and neither the pull nor the swipe took it: the
+   * page keeps the gesture to the end. Deciding again on later moves took a diagonal scroll already under way and
+   * jerked the page sideways.
+   */
+  private var pageOwns = false
   /** Past the trigger point in the current edge swipe (one haptic tick when it's crossed). */
   private var edgeArmed = false
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
@@ -100,6 +107,7 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
         edgeStartY = event.y
         edgeSwiping = false
         edgeArmed = false
+        pageOwns = false
         // The first 24dp at each side, as iOS's edge swipe, or anywhere on the page (C5). Past the first page a
         // swipe back archives the tab, past the last one forward brings it back (C6), so the edges always swipe.
         val edgeWidth = 24 * density
@@ -112,6 +120,7 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
         }
       }
       MotionEvent.ACTION_MOVE -> {
+        if (pageOwns) return null
         // Pull to refresh and edge swipe each take the gesture once the movement is clearly theirs, and only if the
         // other hasn't started first.
         if (!pulling && !edgeSwiping && page.pullToRefreshEnabled && !page.isLoading && !refreshing) {
@@ -126,17 +135,15 @@ internal class BayPageGestures(private val host: ViewGroup, private val page: Pa
           val dx = event.x - edgeStartX
           val dy = event.y - edgeStartY
           // Anywhere on the page, a clearly sideways drag picks its way; anything else stays the page's.
-          if (edgeDirection == 2) {
-            if (abs(dx) <= touchSlop * 2 || abs(dx) <= abs(dy) * 2) return null
-            edgeDirection = if (dx > 0) -1 else 1
-          }
-          val towardHistory = if (edgeDirection == -1) dx > 0 else dx < 0
+          if (edgeDirection == 2 && abs(dx) > touchSlop * 2 && abs(dx) > abs(dy) * 2) edgeDirection = if (dx > 0) -1 else 1
+          val towardHistory = if (edgeDirection == -1) dx > 0 else edgeDirection == 1 && dx < 0
           if (towardHistory && abs(dx) > touchSlop * 2 && abs(dx) > abs(dy) * 1.5) {
             edgeSwiping = true
             host.parent?.requestDisallowInterceptTouchEvent(true)
             return true
           }
         }
+        if (!pulling && !edgeSwiping && hypot(event.x - edgeStartX, event.y - edgeStartY) > touchSlop * 2) pageOwns = true
       }
       MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
         if (pulling || edgeSwiping) return true
