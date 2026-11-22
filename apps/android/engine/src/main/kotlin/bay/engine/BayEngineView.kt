@@ -643,7 +643,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       val hidden = (offset.toFloat() / barHeight).coerceIn(0f, 1f)
       // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
       // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
-      if (hidden > barHidden && !touchedLately()) return
+      if (hidden == barHidden || (hidden > barHidden && !touchedLately())) return
       barHidden = hidden
       emit(EngineEvent.BarMoved(hidden))
     }

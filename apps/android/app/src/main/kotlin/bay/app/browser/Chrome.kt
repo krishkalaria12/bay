@@ -1,6 +1,10 @@
 package bay.app.browser
 
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
@@ -504,32 +508,61 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
     val app = browser.app
     val colors = Theme.colors
     val onPage = browser.hasPage && browser.overlay == Overlay.NONE
-    // 0 the whole bar, 1 the small pill. A spring, so the bar called back grows out of the pill rather than jumping.
-    val shrink by animateFloatAsState(
-        if (onPage) browser.barGone else 0f,
-        androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
-        label = "bar-shrink",
-    )
-    val whole = 1f - shrink
+    // 0 the whole bar, 1 the small pill: following the page as it scrolls (BrowserModel.barGone), on a spring so the bar
+    // called back grows out of the pill rather than jumping. It moves every frame of a scroll, so it's read only where
+    // layout and drawing need it, never in composition: a frame of scrolling re-measures and redraws the capsule
+    // without rebuilding it. Composition runs again only when something comes or goes.
+    val shrink = remember { Animatable(0f) }
+    LaunchedEffect(onPage) {
+        snapshotFlow { if (onPage) browser.barGone else 0f }.collectLatest { target ->
+            shrink.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f))
+        }
+    }
+    val showsWhole by remember { derivedStateOf { shrink.value < 0.99f } }
+    val showsMini by remember { derivedStateOf { shrink.value > 0.01f } }
+    val tapsBack by remember { derivedStateOf { shrink.value > 0.5f } }
     val accent = colors.accent
+    val surface = colors.surface
+    val chip = colors.foreground.copy(alpha = 0.86f)
+    val edge = colors.foreground.copy(alpha = 0.08f)
     Box(
-        Modifier.size(androidx.compose.ui.unit.lerp(MINI_WIDTH, CAPSULE_WIDTH, whole), androidx.compose.ui.unit.lerp(MINI_HEIGHT, BAR_HEIGHT, whole))
+        Modifier
+            .layout { measurable, _ ->
+                val whole = 1f - shrink.value
+                val width = androidx.compose.ui.unit.lerp(MINI_WIDTH, CAPSULE_WIDTH, whole).roundToPx()
+                val height = androidx.compose.ui.unit.lerp(MINI_HEIGHT, BAR_HEIGHT, whole).roundToPx()
+                val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(width, height))
+                layout(width, height) { placeable.place(0, 0) }
+            }
             // The ring round the bar the bar tip means, a little outside it.
             .then(if (browser.tip == bay.core.TipId.BAR) Modifier.drawWithContent { drawContent(); ring(accent) } else Modifier)
             // A shadow only: it would clip to the capsule by default, cutting off the spaces a held Tabs raises above it.
             .shadow(14.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
             // The bar in the page's light or dark; the pill it shrinks to turns to the other one, a chip that stands
-            // out on any page without a frame of its own.
-            .background(androidx.compose.ui.graphics.lerp(colors.surface, colors.foreground.copy(alpha = 0.86f), ((shrink - 0.3f) / 0.7f).coerceIn(0f, 1f)), CircleShape)
-            // A faint edge, so the bar holds its shape on a page of its own colour.
-            .border(0.5.dp, colors.foreground.copy(alpha = 0.08f * whole), CircleShape)
+            // out on any page without a frame of its own. A faint edge holds the bar's shape on a page of its own colour.
+            .drawBehind {
+                val value = shrink.value
+                val corner = androidx.compose.ui.geometry.CornerRadius(size.height / 2)
+                drawRoundRect(androidx.compose.ui.graphics.lerp(surface, chip, ((value - 0.3f) / 0.7f).coerceIn(0f, 1f)), cornerRadius = corner)
+                val stroke = 0.5.dp.toPx()
+                drawRoundRect(
+                    edge.copy(alpha = edge.alpha * (1f - value)),
+                    topLeft = Offset(stroke / 2, stroke / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = corner,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+            }
             // Clipped only while it changes size, so the spaces a held Tabs raises above it are never cut off.
-            .then(if (shrink > 0.001f) Modifier.clip(CircleShape) else Modifier),
+            .graphicsLayer {
+                clip = shrink.value > 0.001f
+                shape = CircleShape
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (whole > 0.01f) {
+        if (showsWhole) {
             Row(
-                Modifier.requiredWidth(CAPSULE_WIDTH).graphicsLayer { alpha = ((whole - 0.35f) / 0.65f).coerceIn(0f, 1f) },
+                Modifier.requiredWidth(CAPSULE_WIDTH).graphicsLayer { alpha = ((0.65f - shrink.value) / 0.65f).coerceIn(0f, 1f) },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TabsButton(browser, strings, slide)
@@ -555,9 +588,9 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
                 }
             }
         }
-        if (shrink > 0.01f) {
+        if (showsMini) {
             Row(
-                Modifier.graphicsLayer { alpha = ((shrink - 0.35f) / 0.65f).coerceIn(0f, 1f) },
+                Modifier.graphicsLayer { alpha = ((shrink.value - 0.35f) / 0.65f).coerceIn(0f, 1f) },
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -569,7 +602,7 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
         // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.
         LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, app.activeTabId, Modifier.matchParentSize())
         // Shrunk, the whole pill is one button that brings the bar back.
-        if (shrink > 0.5f) {
+        if (tapsBack) {
             Box(
                 Modifier.matchParentSize().testTag("bar-mini")
                     .clearAndSetSemantics { contentDescription = strings.t("bar.showBar"); role = Role.Button }
