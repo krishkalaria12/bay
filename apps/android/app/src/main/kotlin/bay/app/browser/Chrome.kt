@@ -472,7 +472,7 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
                 if (!slide.sliding && android.os.SystemClock.uptimeMillis() - holdEnded > 400) browser.showTabs()
             },
             width = SEGMENT_WIDTH, bare = true,
-        ) { TabsGlyph(count) }
+        ) { TabStack(browser, count) }
         // The spaces stand in a column above the button while it's held, the nearest first. It's placed without taking
         // room in the bar.
         if (slide.sliding) {
@@ -562,7 +562,7 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
             ) {
                 // The site's icon and the tabs' count: which page this is, and the way to the others.
                 browser.activeTab?.url?.takeIf { browser.hasPage }?.let { url -> SiteIcon(app, url, 18.dp) }
-                TabsGlyph(app.tabs.size, small = true, color = colors.background)
+                TabStack(browser, app.tabs.size, small = true, inverted = true)
             }
         }
         // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.
@@ -693,16 +693,56 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
 /** Each space's button in the capsule, and the new-space button: Android's smallest touch target. */
 private val SPACE_TARGET = 48.dp
 
-/** The open tabs' count in a rounded square, the Tabs button's face. The button's label says it, so TalkBack skips it. */
+/**
+ * The Tabs button's face, as Arc Search draws it: the tabs used last before the one showing, as two small fanned cards
+ * of their pictures, with the open tabs' count on a badge at their corner from two tabs on. `inverted` on the shrunk
+ * bar's chip, which is in the other of light and dark. The button's label says the count, so TalkBack skips it.
+ */
 @Composable
-private fun TabsGlyph(count: Int, small: Boolean = false, color: Color = Theme.colors.foreground) {
-    val side = if (small) 18.dp else 22.dp
+private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false, inverted: Boolean = false) {
+    val colors = Theme.colors
+    val scale = if (small) 0.8f else 1f
+    val cards = browser.recentTabs
+    Box(Modifier.size(26.dp * scale, 30.dp * scale).testTag("tab-count").clearAndSetSemantics {}) {
+        cards.reversed().forEachIndexed { index, tab ->
+            val front = index == cards.size - 1
+            TabStackCard(
+                browser.app, tab, 19.dp * scale, 26.dp * scale,
+                Modifier.offset(x = (if (front && cards.size > 1) 7.dp else 3.5.dp) * scale, y = (if (front) 1.dp else 3.dp) * scale)
+                    .graphicsLayer { rotationZ = if (cards.size == 1) 0f else if (front) 6f else -9f },
+            )
+        }
+        if (count > 1) {
+            val fill = if (inverted) colors.background else colors.foreground
+            val text = if (inverted) colors.foreground else colors.background
+            Box(
+                Modifier.align(Alignment.TopEnd).offset(x = 12.dp * scale, y = (-8).dp * scale)
+                    .sizeIn(minWidth = 16.dp * scale, minHeight = 16.dp * scale)
+                    .border(1.5.dp, if (inverted) colors.foreground else colors.surface, CircleShape)
+                    .background(fill, CircleShape).padding(horizontal = 4.dp * scale),
+                contentAlignment = Alignment.Center,
+            ) {
+                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = text)
+            }
+        }
+    }
+}
+
+/** One of the Tabs button's small cards: the tab's picture from its top, else its site's icon on the card. */
+@Composable
+private fun TabStackCard(app: bay.app.AppModel, tab: bay.core.BrowserTab, width: Dp, height: Dp, modifier: Modifier) {
+    val colors = Theme.colors
+    val shape = RoundedCornerShape(4.dp)
+    val picture = rememberFileImage(tab.snapshot, with(LocalDensity.current) { (width * 3).roundToPx() })
     Box(
-        Modifier.sizeIn(minWidth = side, minHeight = side).border(if (small) 1.5.dp else 2.dp, color, RoundedCornerShape(if (small) 5.dp else 6.dp))
-            .padding(horizontal = 3.dp).testTag("tab-count").clearAndSetSemantics {},
+        modifier.size(width, height).shadow(2.dp, shape).background(colors.surface, shape)
+            .border(1.dp, colors.foreground.copy(alpha = 0.18f), shape).clip(shape),
         contentAlignment = Alignment.Center,
     ) {
-        BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = color)
+        when {
+            picture != null -> Image(picture, null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            tab.url.isNotEmpty() -> SiteIcon(app, tab.url, width * 0.55f)
+        }
     }
 }
 

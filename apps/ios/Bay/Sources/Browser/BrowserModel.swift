@@ -576,6 +576,13 @@ final class BrowserModel: ObservableObject {
     overlay == .none && hasPage && !covered && find == nil && picking == nil && !fullscreenPeek && siteSetting.fullscreen
   }
 
+  /// What the bar's Tabs button shows, front first: the two tabs used last before the one showing, or the one showing
+  /// when it's the only one.
+  var recentTabs: [BrowserTab] {
+    let others = switcherTabs.filter { $0.id != app.activeTabId }.sorted { $0.lastVisit > $1.lastVisit }.prefix(2)
+    return others.isEmpty ? (activeTab.map { [$0] } ?? []) : Array(others)
+  }
+
   /// Scrolled down a page, the bar is shrunk to a small pill (BrowserBar); on a fullscreen site it's out of sight.
   var barShrunk: Bool {
     barHidden && overlay == .none && hasPage && !fullscreen

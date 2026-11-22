@@ -804,6 +804,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             return app.tabs.filter { it.url.isEmpty() || it.url !in pinned }
         }
 
+    /**
+     * What the bar's Tabs button shows, front first: the two tabs used last before the one showing, or the one showing
+     * when it's the only one.
+     */
+    val recentTabs: List<BrowserTab>
+        get() = switcherTabs.filter { it.id != app.activeTabId }.sortedByDescending { it.lastVisit }.take(2)
+            .ifEmpty { listOfNotNull(activeTab) }
+
     /** Where each tab's card sits in the switcher, in the window: the page shrinks into it and grows out of it. */
     val cardFrames = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>()
 

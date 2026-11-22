@@ -260,7 +260,7 @@ struct BrowserBar: View {
     Button(action: browser.bringBarBack) {
       HStack(spacing: 10) {
         if browser.hasPage, let url = browser.activeTab?.url { SiteIcon(url: url, size: 18) }
-        TabsGlyph(count: browser.app.tabs.count, small: true, color: BayColor.background)
+        TabStack(browser: browser, count: browser.app.tabs.count, small: true, inverted: true)
       }
       .frame(width: Self.miniSize.width, height: Self.miniSize.height)
       .contentShape(Capsule())
@@ -300,7 +300,7 @@ struct BrowserBar: View {
       guard !sliding, Date().timeIntervalSince(holdEnded) > 0.4 else { return }
       browser.showTabs()
     } label: {
-      TabsGlyph(count: count)
+      TabStack(browser: browser, count: count)
         .frame(width: Self.segmentWidth, height: Self.barHeight)
         .contentShape(Rectangle())
     }
@@ -528,23 +528,68 @@ struct SpacesCapsule: View {
   }
 }
 
-/// The open tabs' count in a rounded square, the Tabs button's face. The button's label says it, so VoiceOver skips it.
-struct TabsGlyph: View {
+/// The Tabs button's face, as Arc Search draws it: the tabs used last before the one showing, as two small fanned cards
+/// of their pictures, with the open tabs' count on a badge at their corner from two tabs on. `inverted` on the shrunk
+/// bar's chip, which is in the other of light and dark. The button's label says the count, so VoiceOver skips it.
+struct TabStack: View {
+  @ObservedObject var browser: BrowserModel
   let count: Int
   var small = false
-  var color = BayColor.foreground
+  var inverted = false
 
   var body: some View {
-    let side: CGFloat = small ? 18 : 22
-    Text(verbatim: count > 99 ? "99+" : "\(count)")
-      .font(.system(size: small ? 10 : 11, weight: .bold))
-      .foregroundColor(color)
-      .padding(.horizontal, 3)
-      .frame(minWidth: side, minHeight: side)
-      .overlay(RoundedRectangle(cornerRadius: small ? 5 : 6, style: .continuous).stroke(color, lineWidth: small ? 1.5 : 2))
-      .allowsHitTesting(false)
-      .accessibilityHidden(true)
-      .accessibilityIdentifier("tab-count")
+    let scale: CGFloat = small ? 0.8 : 1
+    let cards = browser.recentTabs
+    ZStack(alignment: .topLeading) {
+      ForEach(Array(cards.enumerated().reversed()), id: \.element.id) { index, tab in
+        let front = index == 0
+        TabStackCard(tab: tab, size: CGSize(width: 19 * scale, height: 26 * scale))
+          .rotationEffect(.degrees(cards.count == 1 ? 0 : front ? 6 : -9))
+          .offset(x: (front && cards.count > 1 ? 7 : 3.5) * scale, y: (front ? 1 : 3) * scale)
+      }
+    }
+    .frame(width: 26 * scale, height: 30 * scale, alignment: .topLeading)
+    .overlay(alignment: .topTrailing) {
+      if count > 1 {
+        Text(verbatim: count > 99 ? "99+" : "\(count)")
+          .font(.system(size: 9.5 * scale, weight: .bold))
+          .foregroundColor(inverted ? BayColor.foreground : BayColor.background)
+          .padding(.horizontal, 4 * scale)
+          .frame(minWidth: 16 * scale, minHeight: 16 * scale)
+          .background(inverted ? BayColor.background : BayColor.foreground, in: Capsule())
+          .overlay(Capsule().stroke(inverted ? BayColor.foreground : BayColor.surface, lineWidth: 1.5))
+          .offset(x: 12 * scale, y: -8 * scale)
+      }
+    }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+    .accessibilityIdentifier("tab-count")
+  }
+}
+
+/// One of the Tabs button's small cards: the tab's picture from its top, else its site's icon on the card.
+private struct TabStackCard: View {
+  let tab: BrowserTab
+  let size: CGSize
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+    ZStack {
+      BayColor.surface
+      if let snapshot = tab.snapshot {
+        FileImage(uri: snapshot, points: size.width * 3) { image in
+          image.resizable().scaledToFill().frame(width: size.width, height: size.height, alignment: .top).clipped()
+        } placeholder: { _ in
+          if !tab.url.isEmpty { SiteIcon(url: tab.url, size: size.width * 0.55) }
+        }
+      } else if !tab.url.isEmpty {
+        SiteIcon(url: tab.url, size: size.width * 0.55)
+      }
+    }
+    .frame(width: size.width, height: size.height)
+    .clipShape(shape)
+    .overlay(shape.stroke(BayColor.foreground.opacity(0.18), lineWidth: 1))
+    .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
   }
 }
 
