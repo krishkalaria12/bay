@@ -131,7 +131,7 @@ stdenv.mkDerivation (finalAttrs: {
   version = "@VERSION@";
 
   src = fetchurl {
-    url = "https://github.com/krishkalaria12/bay/releases/download/v${finalAttrs.version}/bay-${finalAttrs.version}-linux-x64.tar.xz";
+    url = "https://github.com/krishkalaria12/bay/releases/download/linux-v${finalAttrs.version}/bay-${finalAttrs.version}-linux-x64.tar.xz";
     hash = "@HASH@";
   };
 
@@ -212,7 +212,8 @@ stdenv.mkDerivation (finalAttrs: {
     runHook postInstallCheck
   '';
 
-  passthru.updateScript = nix-update-script { };
+  # Linux releases are tagged linux-v<version>; v<version> is the Mac's.
+  passthru.updateScript = nix-update-script { extraArgs = [ "--version-regex" "^linux-v(.*)$" ]; };
 
   meta = {
     description = "Fast browser with your tabs in a sidebar";

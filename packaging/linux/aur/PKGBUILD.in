@@ -12,7 +12,7 @@ optdepends=('kwallet: keep saved passwords in KWallet')
 provides=(bay-browser)
 conflicts=(bay-browser)
 options=(!strip !debug)
-source=("https://github.com/krishkalaria12/bay/releases/download/v${pkgver}/bay-${pkgver}-linux-x64.tar.xz")
+source=("https://github.com/krishkalaria12/bay/releases/download/linux-v${pkgver}/bay-${pkgver}-linux-x64.tar.xz")
 sha256sums=('@SHA256@')
 
 package() {

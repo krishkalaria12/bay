@@ -107,23 +107,25 @@ changed fail in **plan**, saying so; `engine/` must be committed and pushed firs
 
 ## Linux
 
-Linux ships beside a Mac release, with the same version: its packages go on the release `v<version>`, so publish that
-first. One run of `.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage,
-then its **publish** job runs `scripts/linux/publish.sh`:
+Linux has its own versions, starting at 1.0.0, apart from the Mac's: its packages go on the release `linux-v<version>`,
+which `publish.sh` creates and never marks latest (the site's `/download` and the Mac appcast follow the latest release).
+Notes for it can go in `release-notes/linux/<version>.md`, whose `date:` also dates the AppStream release. One run of
+`.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage, then its
+**publish** job runs `scripts/linux/publish.sh`:
 
 ```bash
-gh workflow run linux-build.yml --ref feat/linux -f version=<version> -f publish=true
+gh workflow run linux-build.yml -f version=<version> -f publish=true
 ```
 
-Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or a
-secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would upload
-without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, `linux-v<version>` already has its
+packages or a secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would
+upload without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
 
 What a release publishes:
 
 | Where | What |
 |---|---|
-| Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
+| Release `linux-v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
 | Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
 | AUR `bay-browser-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
 | Snap Store `bay-browser` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |

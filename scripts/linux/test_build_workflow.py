@@ -83,7 +83,12 @@ class LinuxBuildWorkflowTests(unittest.TestCase):
     def test_a_release_is_checked_before_the_engine_and_published_apart_from_the_build(self):
         source = WORKFLOW.read_text()
         plan = step("Plan")
-        self.assertIn('gh release view "v$VERSION"', plan)
+        self.assertIn('gh release view "linux-v$VERSION"', plan)
+        self.assertNotIn('"v$VERSION"', plan, "Linux versions aren't the Mac's")
+        publish_script = (Path(__file__).resolve().parent / "publish.sh").read_text()
+        self.assertIn('tag="linux-v$version"', publish_script)
+        self.assertIn('gh release create "$tag" -R "$github" --latest=false', publish_script,
+                      "the site's /download and the Mac appcast follow the latest release")
         for secret in ("LINUX_GPG_PRIVATE_KEY", "AUR_SSH_PRIVATE_KEY"):
             self.assertIn(f"secrets.{secret} != ''", plan)
         self.assertIn("  engine:\n    needs: plan\n", source)

@@ -76,16 +76,16 @@ modules:
         usr/share/metainfo/in.krishkalaria.bay.metainfo.xml | install -Dm 644 /dev/stdin /app/share/metainfo/in.krishkalaria.bay.metainfo.xml
     sources:
       - type: archive
-        url: https://github.com/krishkalaria12/bay/releases/download/v@VERSION@/bay-@VERSION@-linux-x64.tar.xz
+        url: https://github.com/krishkalaria12/bay/releases/download/linux-v@VERSION@/bay-@VERSION@-linux-x64.tar.xz
         sha256: "@SHA256@"
         only-arches: [x86_64]
         x-checker-data:
           type: json
           url: https://api.github.com/repos/krishkalaria12/bay/releases
           version-query: >-
-            [.[] | select(.prerelease | not) | select(any(.assets[]; .name | endswith("-linux-x64.tar.xz")))][0].tag_name
-            | sub("^v"; "")
-          url-query: '"https://github.com/krishkalaria12/bay/releases/download/v\($version)/bay-\($version)-linux-x64.tar.xz"'
+            [.[] | select(.prerelease | not) | select(.tag_name | startswith("linux-v"))][0].tag_name
+            | sub("^linux-v"; "")
+          url-query: '"https://github.com/krishkalaria12/bay/releases/download/linux-v\($version)/bay-\($version)-linux-x64.tar.xz"'
       - type: file
         path: bay.sh
       - type: file

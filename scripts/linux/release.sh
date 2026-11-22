@@ -67,8 +67,8 @@ chmod 0755 "$root/opt/bay/bay-wrapper" "$root/opt/bay/chrome-sandbox"
 ln -s /opt/bay/bay-wrapper "$root/usr/bin/bay"
 install -m 0644 "$packaging/bay.desktop" "$root/usr/share/applications/bay.desktop"
 install -m 0644 "$packaging/apparmor/bay" "$root/etc/apparmor.d/bay"
-# The release date is the release notes' when they have one.
-notes="$repo/release-notes/$version.md"
+# The release date is the Linux release notes' when they have one (release-notes/ itself is the Mac's).
+notes="$repo/release-notes/linux/$version.md"
 date=$( { [[ -f "$notes" ]] && sed -n 's/^date: *\([0-9-]*\)$/\1/p' "$notes"; } || true)
 date=${date:-$(date -u +%Y-%m-%d)}
 sed "s|</component>|  <releases>\n    <release version=\"$version\" date=\"$date\" />\n  </releases>\n</component>|" \
