@@ -124,6 +124,10 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var mounted: [String] = []
   /// The colour at the top of each page, for the strip behind the status bar ([r, g, b]); nil when it has none.
   @Published private(set) var pageColors: [String: [Double]] = [:]
+  /// The colour along each page's bottom edge, under the bar, which the bar takes its light or dark from.
+  @Published private(set) var pageBottomColors: [String: [Double]] = [:]
+  /// The reads of each page's edge colours under way (refreshPageColors).
+  private var colorReads: [String: Task<Void, Never>] = [:]
   /// Find on page, while it is open over the page showing.
   @Published private(set) var find: FindState?
   /// What the blocker stopped on each page, where the engine counts it.
@@ -227,6 +231,7 @@ final class BrowserModel: ObservableObject {
       views[id] = nil
       navigation[id] = nil
       timing[id] = nil
+      colorReads.removeValue(forKey: id)?.cancel()
       // An unloaded page no longer waits on its questions.
       if pageRequests.contains(where: { $0.tabId == id }) {
         pageRequests.removeAll { $0.tabId == id }
@@ -251,6 +256,7 @@ final class BrowserModel: ObservableObject {
     visited = [:]
     media = [:]
     pageColors = [:]
+    pageBottomColors = [:]
     failure = nil
     mounted = []
     Engine.setMediaSession(title: nil, site: "", playing: false)
@@ -615,7 +621,7 @@ final class BrowserModel: ObservableObject {
     guard tabId == app.activeTabId else { return }
     if offsetY < 24 {
       scrollRun = 0
-      if barHidden { barHidden = false }
+      if barHidden { barCameBack(tabId) }
       return
     }
     guard deltaY != 0 else { return }
@@ -623,8 +629,14 @@ final class BrowserModel: ObservableObject {
     if scrollRun > 48, !barHidden {
       barHidden = true
     } else if scrollRun < -24, barHidden {
-      barHidden = false
+      barCameBack(tabId)
     }
+  }
+
+  /// Back after a scroll: the page has moved under the bar, so what's along its edges may have changed.
+  private func barCameBack(_ tabId: String) {
+    barHidden = false
+    if let view = views[tabId] { refreshPageColors(tabId, view) }
   }
 
   // MARK: Media
@@ -1236,7 +1248,28 @@ final class BrowserModel: ObservableObject {
     }
   }
 
+  /// The colours along a page's top and bottom edges, as its styles say.
+  private func readPageColors(_ tabId: String, _ view: EngineView) async {
+    func read(_ args: [String: Any]?) async -> [Double]? {
+      (try? await view.runScript(.pageColor, args: args)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
+    }
+    pageColors[tabId] = await read(nil)
+    pageBottomColors[tabId] = await read(["edge": "bottom"])
+  }
+
+  /// Reads a page's edge colours now and again a moment later, once a page that fetches what it shows has drawn it.
+  private func refreshPageColors(_ tabId: String, _ view: EngineView) {
+    colorReads[tabId]?.cancel()
+    colorReads[tabId] = Task { [weak self] in
+      await self?.readPageColors(tabId, view)
+      try? await Task.sleep(nanoseconds: 1_500_000_000)
+      guard !Task.isCancelled else { return }
+      await self?.readPageColors(tabId, view)
+    }
+  }
+
   private func navigated(_ tabId: String, _ state: NavigationState) {
+    let before = navigation[tabId]
     let started = state.isLoading && !(navigation[tabId]?.isLoading ?? false)
     let finished = !state.isLoading && (navigation[tabId]?.isLoading ?? true)
     let moved = navigation[tabId]?.url != state.url
@@ -1261,11 +1294,13 @@ final class BrowserModel: ObservableObject {
       }
     }
     if finished, tabId == app.activeTabId { openReaderBySite(tabId, url: state.url) }
+    // Read when a load finishes, and when a site that runs as an app moves to another page without one (YouTube's Shorts
+    // are dark under a white feed).
+    let movedWithin = before != nil && moved && !state.isLoading
+    if finished || movedWithin, let view = views[tabId] {
+      refreshPageColors(tabId, view)
+    }
     if finished, let view = views[tabId] {
-      Task { [weak self] in
-        let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
-        self?.pageColors[tabId] = color
-      }
       // The site's icon, unless the tab is private: its icon would say what was opened privately.
       if !isPrivate(tabId) { fetchIcon(view, pageUrl: state.url) }
     }
@@ -1648,8 +1683,7 @@ extension BrowserModel {
       let dark = try? await view.runScript(.forceDark, args: ["on": forceDark])
       // Darkened or put back: the strip behind the status bar takes the page's new colour.
       if dark != "\"off\"" || self?.pageColors[tabId] != nil {
-        let color = (try? await view.runScript(.pageColor)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
-        self?.pageColors[tabId] = color
+        await self?.readPageColors(tabId, view)
       }
     }
   }
