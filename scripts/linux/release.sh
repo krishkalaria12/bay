@@ -1,6 +1,6 @@
 #!/bin/bash
 # Packs a staged Linux app (scripts/linux/build-app.py) for release: the /opt/bay tree with its desktop integration, as
-# a .tar.xz, .deb, .rpm, AppImage (with zsync updates) and the AUR bay-bin PKGBUILD, plus SHA256SUMS.
+# a .tar.xz, .deb, .rpm, AppImage (with zsync updates) and the AUR bay-browser-bin PKGBUILD, plus SHA256SUMS.
 #
 #   scripts/linux/release.sh --app dist/linux-app --version 1.4.0 [--output dist/linux-release] [--formats tar,deb,...]
 #
@@ -99,7 +99,7 @@ if want deb; then
   echo /etc/apparmor.d/bay >"$deb/DEBIAN/conffiles"
   # Chrome's own .deb dependencies, unversioned until the engine's glibc floor is measured (engine-lock.json).
   cat >"$deb/DEBIAN/control" <<EOF
-Package: bay
+Package: bay-browser
 Version: $version
 Architecture: amd64
 Maintainer: Krish Kalaria <https://github.com/krishkalaria12>
@@ -113,16 +113,16 @@ Description: A fast browser with your tabs in a sidebar
  Bay is a browser built around a sidebar, on Chromium: spaces, pinned tabs and
  folders, Peek and Split View, a command bar, and built-in ad blocking.
 EOF
-  dpkg-deb --root-owner-group -Zxz --build "$deb" "$output/bay_${version}_amd64.deb" >/dev/null
-  artifacts+=("$output/bay_${version}_amd64.deb")
+  dpkg-deb --root-owner-group -Zxz --build "$deb" "$output/bay-browser_${version}_amd64.deb" >/dev/null
+  artifacts+=("$output/bay-browser_${version}_amd64.deb")
 fi
 
 if want rpm; then
   sed "s/@VERSION@/$version/" "$packaging/rpm/bay.spec.in" >"$work/bay.spec"
   rpmbuild -bb --quiet --define "_topdir $work/rpmbuild" --define "_rpmdir $work/rpms" --define "bay_root $root" \
     --define "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm" "$work/bay.spec"
-  cp "$work/rpms/bay-$version-1.x86_64.rpm" "$output/"
-  artifacts+=("$output/bay-$version-1.x86_64.rpm")
+  cp "$work/rpms/bay-browser-$version-1.x86_64.rpm" "$output/"
+  artifacts+=("$output/bay-browser-$version-1.x86_64.rpm")
 fi
 
 if want appimage; then
@@ -159,7 +159,7 @@ if want flatpak; then
 fi
 
 if want nixpkgs; then
-  # pkgs/by-name/ba/bay/package.nix, with the release tarball's SRI hash.
+  # pkgs/by-name/ba/bay-browser/package.nix, with the release tarball's SRI hash.
   mkdir -p "$output/nixpkgs"
   hash=$(python3 -c 'import base64, hashlib, sys; print("sha256-" + base64.b64encode(hashlib.sha256(open(sys.argv[1], "rb").read()).digest()).decode())' "$tarball")
   sed -e "s/@VERSION@/$version/" -e "s|@HASH@|$hash|" "$packaging/nix/package.nix" >"$output/nixpkgs/package.nix"
@@ -187,7 +187,7 @@ fi
 
 if want nix; then
   store=$(nix-build "$packaging/nix" --arg tarball "$tarball" --out-link "$work/nix-result")
-  [[ "$store" =~ ^/nix/store/[a-z0-9]{32}-bay-[0-9]+\.[0-9]+\.[0-9]+$ && "$store" == *-bay-"$version" ]] || {
+  [[ "$store" =~ ^/nix/store/[a-z0-9]{32}-bay-browser-[0-9]+\.[0-9]+\.[0-9]+$ && "$store" == *-bay-browser-"$version" ]] || {
     echo "unexpected Nix output: $store" >&2; exit 1;
   }
   # Export every referenced store path, including runtime libraries, for an offline import on NixOS.

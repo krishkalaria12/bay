@@ -6,7 +6,7 @@
 %global __provides_exclude_from ^/opt/bay/.*$
 %global __requires_exclude ^lib(EGL|GLESv2|vk_swiftshader|vulkan|qt5_shim|qt6_shim)\\.so.*$
 
-Name:           bay
+Name:           bay-browser
 Version:        @VERSION@
 Release:        1
 Summary:        A fast browser with your tabs in a sidebar

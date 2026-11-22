@@ -269,7 +269,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("pkgver = 1.3.0", (aur / ".SRCINFO").read_text())
         shutil.copy2(output / "bay-1.3.0-linux-x64.tar.xz", aur)
         subprocess.run(["makepkg", "-f", "--nodeps", "--noconfirm"], cwd=aur, check=True, capture_output=True)
-        members = self.listing(next(aur.glob("bay-bin-1.3.0-1-x86_64.pkg.tar.*")))
+        members = self.listing(next(aur.glob("bay-browser-bin-1.3.0-1-x86_64.pkg.tar.*")))
         self.assertNotIn("opt/bay/chrome_sandbox", members)
         sandbox = members["opt/bay/chrome-sandbox"]
         self.assertEqual((sandbox.mode & 0o7777, sandbox.uid, sandbox.gid), (0o4755, 0, 0))
@@ -279,14 +279,14 @@ class ReleaseTests(unittest.TestCase):
         self.release("tar,aur", output)
         checksum = engine.sha256(output / "bay-1.3.0-linux-x64.tar.xz")
         lines = (output / "aur/.SRCINFO").read_text().splitlines()
-        self.assertEqual(lines[:5], ["pkgbase = bay-bin", "\tpkgdesc = A fast browser with your tabs in a sidebar, on Chromium",
+        self.assertEqual(lines[:5], ["pkgbase = bay-browser-bin", "\tpkgdesc = A fast browser with your tabs in a sidebar, on Chromium",
                                      "\tpkgver = 1.3.0", "\tpkgrel = 1", "\turl = https://baybrowser.in"])
         for line in ("\tarch = x86_64", "\tdepends = gtk3", "\tdepends = xdg-utils",
                      "\toptdepends = kwallet: keep saved passwords in KWallet", "\toptions = !strip", "\toptions = !debug",
                      "\tsource = https://github.com/krishkalaria12/bay/releases/download/v1.3.0/bay-1.3.0-linux-x64.tar.xz",
                      f"\tsha256sums = {checksum}"):
             self.assertIn(line, lines)
-        self.assertEqual(lines[-2:], ["", "pkgname = bay-bin"])
+        self.assertEqual(lines[-2:], ["", "pkgname = bay-browser-bin"])
 
     def test_flathub_and_nixpkgs_files_name_this_release(self):
         output = self.root / "stores"
@@ -308,7 +308,7 @@ class ReleaseTests(unittest.TestCase):
     def test_deb_installs_a_setuid_sandbox_and_its_scripts(self):
         output = self.root / "deb"
         self.release("deb", output)
-        deb = output / "bay_1.3.0_amd64.deb"
+        deb = output / "bay-browser_1.3.0_amd64.deb"
         contents = subprocess.run(["dpkg-deb", "--contents", deb], check=True, capture_output=True, text=True).stdout
         self.assertRegex(contents, r"-rwsr-xr-x root/root .* \./opt/bay/chrome-sandbox")
         self.assertNotIn("./opt/bay/chrome_sandbox", contents)
@@ -316,12 +316,13 @@ class ReleaseTests(unittest.TestCase):
         subprocess.run(["dpkg-deb", "--extract", deb, unpacked], check=True)
         assert_sandbox_metadata(self, unpacked / "opt/bay")
         self.assertEqual(subprocess.run(["dpkg-deb", "--field", deb, "Version"], capture_output=True, text=True).stdout.strip(), "1.3.0")
+        self.assertEqual(subprocess.run(["dpkg-deb", "--field", deb, "Package"], capture_output=True, text=True).stdout.strip(), "bay-browser")
 
     @unittest.skipUnless(shutil.which("rpmbuild") and shutil.which("rpm"), "needs rpmbuild")
     def test_rpm_installs_a_setuid_sandbox(self):
         output = self.root / "rpm"
         self.release("rpm", output)
-        listing = subprocess.run(["rpm", "-qlvp", output / "bay-1.3.0-1.x86_64.rpm"], check=True, capture_output=True, text=True).stdout
+        listing = subprocess.run(["rpm", "-qlvp", output / "bay-browser-1.3.0-1.x86_64.rpm"], check=True, capture_output=True, text=True).stdout
         self.assertRegex(listing, r"-rwsr-xr-x .* root +root .* /opt/bay/chrome-sandbox")
         self.assertNotIn("/opt/bay/chrome_sandbox", listing)
 
@@ -415,12 +416,12 @@ class PublishTests(unittest.TestCase):
             names.append(name)
             self.assertEqual(engine.sha256(release / name), checksum)
             self.verify(release / f"{name}.asc", release / name)
-        self.assertEqual(set(names), {"bay-1.3.0-linux-x64.tar.xz", "bay_1.3.0_amd64.deb", "bay-1.3.0-1.x86_64.rpm",
+        self.assertEqual(set(names), {"bay-1.3.0-linux-x64.tar.xz", "bay-browser_1.3.0_amd64.deb", "bay-browser-1.3.0-1.x86_64.rpm",
                                       "Bay-1.3.0-x86_64.AppImage", "Bay-1.3.0-x86_64.AppImage.zsync"})
         database = self.root / "rpmdb"
         database.mkdir(exist_ok=True)
         subprocess.run(["rpmkeys", "--dbpath", database, "--import", self.out / "repo/bay.asc"], check=True)
-        checked = subprocess.run(["rpmkeys", "--dbpath", database, "--checksig", release / "bay-1.3.0-1.x86_64.rpm"],
+        checked = subprocess.run(["rpmkeys", "--dbpath", database, "--checksig", release / "bay-browser-1.3.0-1.x86_64.rpm"],
                                  check=True, capture_output=True, text=True).stdout
         self.assertIn("signatures OK", checked)
 
@@ -429,8 +430,8 @@ class PublishTests(unittest.TestCase):
         subprocess.run(["gpg", "--verify", repo / "InRelease"], check=True, capture_output=True, env=self.env)
         self.verify(repo / "Release.gpg", repo / "Release")
         packages = (repo / "Packages").read_text()
-        self.assertIn("Filename: pool/v1.3.0/bay_1.3.0_amd64.deb\n", packages)
-        self.assertIn("SHA256: " + engine.sha256(self.out / "release/bay_1.3.0_amd64.deb"), packages)
+        self.assertIn("Filename: pool/v1.3.0/bay-browser_1.3.0_amd64.deb\n", packages)
+        self.assertIn("SHA256: " + engine.sha256(self.out / "release/bay-browser_1.3.0_amd64.deb"), packages)
         release = (repo / "Release").read_text()
         self.assertIn(engine.sha256(repo / "Packages"), release)
         self.assertIn(engine.sha256(repo / "Packages.gz"), release)
@@ -442,8 +443,8 @@ class PublishTests(unittest.TestCase):
         primary = next(repo.glob("*-primary.xml.gz"))
         self.assertIn(primary.name, (repo / "repomd.xml").read_text())
         listing = gzip.decompress(primary.read_bytes()).decode()
-        self.assertIn('<location href="pool/v1.3.0/bay-1.3.0-1.x86_64.rpm"/>', listing)
-        self.assertIn(engine.sha256(self.out / "release/bay-1.3.0-1.x86_64.rpm"), listing)
+        self.assertIn('<location href="pool/v1.3.0/bay-browser-1.3.0-1.x86_64.rpm"/>', listing)
+        self.assertIn(engine.sha256(self.out / "release/bay-browser-1.3.0-1.x86_64.rpm"), listing)
         config = (repo / "bay.repo").read_text()
         self.assertIn("baseurl=https://baybrowser.in/linux/rpm\n", config)
         self.assertIn("repo_gpgcheck=1\n", config)

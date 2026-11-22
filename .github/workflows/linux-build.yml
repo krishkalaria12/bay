@@ -284,12 +284,12 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay_${{ needs.plan.outputs.version }}_amd64.deb
+          path: dist/linux-release/bay-browser_${{ needs.plan.outputs.version }}_amd64.deb
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-1.x86_64.rpm
+          path: dist/linux-release/bay-browser-${{ needs.plan.outputs.version }}-1.x86_64.rpm
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7

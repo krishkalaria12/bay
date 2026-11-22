@@ -125,7 +125,7 @@ What a release publishes:
 |---|---|
 | Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
 | Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
-| AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
+| AUR `bay-browser-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
 | Snap Store `bay-browser` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
 
 Flathub and nixpkgs build from the release's tarball, and their bots open a pull request for each new release once the
@@ -146,19 +146,19 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
    ```bash
    gpg --batch --passphrase '' --quick-gen-key 'Bay Linux packages' rsa4096 sign 0
    key=$(gpg --list-secret-keys --with-colons 'Bay Linux packages' | awk -F: '$1 == "fpr" { print $10; exit }')
-   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-signing-key.asc
-   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-signing-key.asc
+   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-keys/bay-linux-signing-key.asc
+   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-keys/bay-linux-signing-key.asc
    ```
 
-2. **AUR.** Make an account at aur.archlinux.org, then give it a key of its own:
+2. **AUR.** Make an account at aur.archlinux.org, then give CI a key of its own (the account takes several, one per line):
 
    ```bash
-   ssh-keygen -t ed25519 -N '' -C bay-aur -f ~/.ssh/aur
-   # aur.archlinux.org › My Account › SSH Public Key: paste ~/.ssh/aur.pub
-   gh secret set AUR_SSH_PRIVATE_KEY <~/.ssh/aur
+   ssh-keygen -t ed25519 -N '' -C bay-aur-ci -f ~/Documents/bay-linux-keys/aur-ci
+   # aur.archlinux.org › My Account › SSH Public Key: add ~/Documents/bay-linux-keys/aur-ci.pub
+   gh secret set AUR_SSH_PRIVATE_KEY <~/Documents/bay-linux-keys/aur-ci
    ```
 
-   The first publish creates `bay-bin`. `publish.sh` checks the AUR's published host key.
+   The first publish creates `bay-browser-bin`. `publish.sh` checks the AUR's published host key.
 
 3. **Site.** Get the `/linux/` lines of `apps/web/public/_redirects` onto `main` and deployed.
 
@@ -185,7 +185,7 @@ After the first release:
 
    The next release uploads it; the first one can be uploaded by hand with `snapcraft upload --release=stable`.
 6. **nixpkgs.** Add yourself to `maintainers/maintainer-list.nix` and `bay-linux-packages/nixpkgs/package.nix` as
-   `pkgs/by-name/ba/bay/package.nix` (filling in `maintainers`), check it with `nix-build -A bay`, and open the pull
+   `pkgs/by-name/ba/bay-browser/package.nix` (filling in `maintainers`), check it with `nix-build -A bay-browser`, and open the pull
    request.
 
 The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.

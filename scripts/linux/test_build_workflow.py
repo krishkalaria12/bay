@@ -104,7 +104,7 @@ class NixExportTests(unittest.TestCase):
         body = source[source.index("if want nix; then\n"):]
         tools = root / "bin"
         tools.mkdir()
-        store = "/nix/store/" + "a" * 32 + "-bay-1.3.0"
+        store = "/nix/store/" + "a" * 32 + "-bay-browser-1.3.0"
         dependency = "/nix/store/" + "b" * 32 + "-runtime"
         (tools / "nix-build").write_text(f"#!{sys.executable}\n" + '''import os, pathlib, sys
 args = sys.argv[1:]

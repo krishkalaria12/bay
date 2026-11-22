@@ -10,21 +10,21 @@ the rest of the system. Every package and repository is signed with Bay's key,
 curl -fsSL https://baybrowser.in/linux/bay.gpg | sudo tee /usr/share/keyrings/bay.gpg >/dev/null
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bay.gpg] https://baybrowser.in/linux/apt ./" \
   | sudo tee /etc/apt/sources.list.d/bay.list
-sudo apt update && sudo apt install bay
+sudo apt update && sudo apt install bay-browser
 ```
 
 ## Fedora, RHEL, CentOS Stream
 
 ```bash
 sudo curl -fsSL -o /etc/yum.repos.d/bay.repo https://baybrowser.in/linux/bay.repo
-sudo dnf install bay
+sudo dnf install bay-browser
 ```
 
 ## openSUSE
 
 ```bash
 sudo zypper addrepo https://baybrowser.in/linux/bay.repo
-sudo zypper install bay
+sudo zypper install bay-browser
 ```
 
 ## Flatpak (any distribution)
@@ -45,15 +45,16 @@ The store name is `bay-browser`, and so is the command.
 
 ## Arch, Manjaro, EndeavourOS
 
-Bay is `bay-bin` in the AUR:
+Bay is `bay-browser-bin` in the AUR:
 
 ```bash
-yay -S bay-bin
+yay -S bay-browser-bin
 ```
 
 ## NixOS
 
-Bay is `bay` in nixpkgs: add `pkgs.bay` to `environment.systemPackages`, or try it with `nix run nixpkgs#bay`. Each
+Bay is `bay-browser` in nixpkgs: add `pkgs.bay-browser` to `environment.systemPackages`, or try it with
+`nix run nixpkgs#bay-browser`. Each
 release also has `bay-<version>-nixos-x64.nar.zst`, with a README showing how to import it, for a version nixpkgs
 doesn't have yet.
 

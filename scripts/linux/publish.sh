@@ -5,7 +5,7 @@
 #      Mac release has already published;
 #   2. rebuilds the signed APT and RPM repositories and the AppImage update file on the prerelease linux-repo. The
 #      packages stay on v<version>: apps/web/public/_redirects serves both at https://baybrowser.in/linux/;
-#   3. pushes bay-bin to the AUR;
+#   3. pushes bay-browser-bin to the AUR;
 #   4. uploads the snap to the Snap Store's stable channel, when SNAPCRAFT_STORE_CREDENTIALS is set and there's a snap.
 #
 # Flathub and nixpkgs update through pull requests: after the first, by hand, their bots open one for each release
@@ -44,7 +44,7 @@ fi
 
 tag="v$version"
 packages=$(cd "$packages" && pwd)
-deb="bay_${version}_amd64.deb" rpm="bay-$version-1.x86_64.rpm" image="Bay-$version-x86_64.AppImage"
+deb="bay-browser_${version}_amd64.deb" rpm="bay-browser-$version-1.x86_64.rpm" image="Bay-$version-x86_64.AppImage"
 for file in SHA256SUMS "$deb" "$rpm" "bay-$version-linux-x64.tar.xz" "$image" "$image.zsync" aur/PKGBUILD aur/.SRCINFO; do
   [[ -f "$packages/$file" ]] || die "$packages has no $file: build it with release.sh --version $version"
 done
@@ -137,7 +137,7 @@ if [[ $dry == true ]]; then
   ls "$out/release"
   echo "For linux-repo:"
   ls "$out/repo"
-  echo "For the AUR (bay-bin):"
+  echo "For the AUR (bay-browser-bin):"
   ls -A "$packages/aur"
   exit 0
 fi
@@ -171,14 +171,14 @@ aur=$(mktemp -d)
 trap 'rm -rf "$aur"' EXIT
 echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" >"$aur/known_hosts"
 export GIT_SSH_COMMAND="ssh -i $AUR_SSH_KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$aur/known_hosts -o StrictHostKeyChecking=yes"
-git clone -q ssh://aur@aur.archlinux.org/bay-bin.git "$aur/bay-bin"
-cp "$packages/aur/PKGBUILD" "$packages/aur/.SRCINFO" "$aur/bay-bin/"
-cd "$aur/bay-bin"
+git clone -q ssh://aur@aur.archlinux.org/bay-browser-bin.git "$aur/bay-browser-bin"
+cp "$packages/aur/PKGBUILD" "$packages/aur/.SRCINFO" "$aur/bay-browser-bin/"
+cd "$aur/bay-browser-bin"
 git add PKGBUILD .SRCINFO
 if git diff --cached --quiet; then
-  echo "The AUR already has bay-bin $version"
+  echo "The AUR already has bay-browser-bin $version"
 else
-  git -c user.name="Krish Kalaria" -c user.email="krishkalaria12@users.noreply.github.com" commit -q -m "bay-bin $version"
+  git -c user.name="Krish Kalaria" -c user.email="krishkalaria12@users.noreply.github.com" commit -q -m "bay-browser-bin $version"
   git push -q origin HEAD:master
 fi
 cd "$packages"

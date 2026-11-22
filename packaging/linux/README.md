@@ -22,19 +22,19 @@ can't find. `--verify DIR` rechecks a staged app.
 | Artifact | For | Notes |
 |---|---|---|
 | `bay-<version>-linux-x64.tar.xz` | any distro, and the AUR package's source | unpacks to `bay-<version>/` with `opt/`, `usr/`, `etc/`; the sandbox isn't setuid |
-| `bay_<version>_amd64.deb` | Debian, Ubuntu | browser alternatives and the AppArmor profile in `postinst` |
-| `bay-<version>-1.x86_64.rpm` | Fedora, openSUSE | bundled libraries are neither provided nor required |
+| `bay-browser_<version>_amd64.deb` | Debian, Ubuntu | browser alternatives and the AppArmor profile in `postinst` |
+| `bay-browser-<version>-1.x86_64.rpm` | Fedora, openSUSE | bundled libraries are neither provided nor required |
 | `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from `baybrowser.in/linux/Bay-x86_64.AppImage.zsync`, which each release points at its image |
-| `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
+| `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-browser-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum; `.SRCINFO` is written in `makepkg --printsrcinfo`'s layout without makepkg |
 | `bay-<version>-nixos-x64.nar.zst` and `.README` | NixOS | add `nix` to `--formats`; contains the patched package and every Nix runtime dependency, with import/install commands |
 | `flatpak/` (add `flatpak`) | Flathub | the `flathub/in.krishkalaria.bay` repository's files for this release: the manifest (`flatpak/in.krishkalaria.bay.yaml.in`) with the tarball's URL and checksum, its launcher, cobalt's config and `flathub.json` |
-| `nixpkgs/package.nix` (add `nixpkgs`) | nixpkgs | `nix/package.nix` with the version and the tarball's hash, for `pkgs/by-name/ba/bay` |
+| `nixpkgs/package.nix` (add `nixpkgs`) | nixpkgs | `nix/package.nix` with the version and the tarball's hash, for `pkgs/by-name/ba/bay-browser` |
 | `bay-browser_<version>_amd64.snap` (add `snap`) | Snap Store | from `snap/snapcraft.yaml.in`; needs `snapcraft`, and `SNAPCRAFT`/`BAY_SNAPCRAFT_ARGS` to pack on the host as CI does |
 | `SHA256SUMS` | | every artifact |
 
 Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures.
 `scripts/linux/publish.sh` publishes them: it signs the `.rpm` and every file, adds them to the GitHub release, rebuilds
-the APT and RPM repositories and pushes `bay-bin` to the AUR (`docs/releasing.md` › Linux). Users install with
+the APT and RPM repositories and pushes `bay-browser-bin` to the AUR (`docs/releasing.md` › Linux). Users install with
 `docs/linux-install.md`.
 
 Each format needs its tool: `dpkg-deb` (Arch: `dpkg`), `rpmbuild` (`rpm-tools`), `appimagetool` and `zsyncmake`

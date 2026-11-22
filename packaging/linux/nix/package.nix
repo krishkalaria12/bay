@@ -1,5 +1,5 @@
 # Bay from its release tarball, patched to run on NixOS without an FHS layer. This is the nixpkgs package
-# (pkgs/by-name/ba/bay/package.nix): scripts/linux/release.sh --formats nixpkgs writes it with the release's version and
+# (pkgs/by-name/ba/bay-browser/package.nix): scripts/linux/release.sh --formats nixpkgs writes it with the release's version and
 # hash. default.nix builds the same package from a local tarball instead.
 #
 # The executables get the Nix loader and every library path, and the wrapper adds the same paths for libraries Chromium
@@ -127,7 +127,7 @@ let
   libraryPath = "${app}:${lib.makeLibraryPath libraries}:${addDriverRunpath.driverLink}/lib";
 in
 stdenv.mkDerivation (finalAttrs: {
-  pname = "bay";
+  pname = "bay-browser";
   version = "@VERSION@";
 
   src = fetchurl {
