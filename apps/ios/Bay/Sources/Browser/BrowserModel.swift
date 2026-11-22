@@ -1248,10 +1248,15 @@ final class BrowserModel: ObservableObject {
     }
   }
 
-  /// The colours along a page's top and bottom edges, as its styles say.
+  /// The colours along a page's top and bottom edges: as it draws them, else as its styles say (before it has drawn).
   private func readPageColors(_ tabId: String, _ view: EngineView) async {
     func read(_ args: [String: Any]?) async -> [Double]? {
       (try? await view.runScript(.pageColor, args: args)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
+    }
+    if let drawn = await view.edgeColors() {
+      pageColors[tabId] = drawn.top
+      pageBottomColors[tabId] = drawn.bottom
+      return
     }
     pageColors[tabId] = await read(nil)
     pageBottomColors[tabId] = await read(["edge": "bottom"])

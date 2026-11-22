@@ -384,6 +384,56 @@ public final class EngineView: UIView, WKNavigationDelegate, WKUIDelegate, UIScr
     }
   }
 
+  /// The colours the page shows along its top and bottom edges, as drawn ([r, g, b] each), or nil before it has drawn.
+  /// Read from a thumbnail of the page rather than its styles: a video, a picture or a canvas under the edge has no
+  /// background colour to read, and Shorts' white page behind a dark video read as white. The page runs on under the
+  /// bar, so the bottom edge is what the bar sits on.
+  public func edgeColors() async -> (top: [Double], bottom: [Double])? {
+    guard !isSuspended, bounds.width > 0, bounds.height > 0, webView.url != nil else { return nil }
+    let configuration = WKSnapshotConfiguration()
+    configuration.rect = webView.bounds
+    configuration.snapshotWidth = NSNumber(value: Self.edgeSampleWidth)
+    let image: UIImage? = await withCheckedContinuation { continuation in
+      webView.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
+    }
+    guard let picture = image?.cgImage else { return nil }
+    let width = Int(Self.edgeSampleWidth)
+    let height = max(4, Int((Double(picture.height) * Double(width) / Double(max(1, picture.width))).rounded()))
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+      guard
+        let context = CGContext(
+          data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+      else { return false }
+      context.draw(picture, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard drawn else { return nil }
+    return (Self.edgeColor(pixels, width: width, row: 0), Self.edgeColor(pixels, width: width, row: height - 2))
+  }
+
+  /// How wide the thumbnail is that the page's edge colours are read from, in points.
+  private static let edgeSampleWidth: CGFloat = 48
+
+  /// The colour most of two rows of RGBX pixels show, from `row` (the top row first): the pixels are put in coarse bins
+  /// and the fullest bin's average is the answer, so a line of text or an icon along the edge doesn't tint it.
+  private static func edgeColor(_ pixels: [UInt8], width: Int, row: Int) -> [Double] {
+    var bins: [Int: (count: Int, red: Int, green: Int, blue: Int)] = [:]
+    for y in row..<(row + 2) {
+      for x in 0..<width {
+        let at = (y * width + x) * 4
+        let (red, green, blue) = (Int(pixels[at]), Int(pixels[at + 1]), Int(pixels[at + 2]))
+        let key = (red >> 4) << 8 | (green >> 4) << 4 | blue >> 4
+        let bin = bins[key] ?? (0, 0, 0, 0)
+        bins[key] = (bin.count + 1, bin.red + red, bin.green + green, bin.blue + blue)
+      }
+    }
+    guard let fullest = bins.values.max(by: { $0.count < $1.count }) else { return [255, 255, 255] }
+    let count = Double(fullest.count)
+    return [Double(fullest.red) / count, Double(fullest.green) / count, Double(fullest.blue) / count]
+  }
+
   /// WebKit draws on the main thread; the resize, JPEG encoding and file write run in the background. A suspended
   /// (hidden) page resolves nil: WebKit may not have drawn it.
   public func snapshot() async throws -> String? {
