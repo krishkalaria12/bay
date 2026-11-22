@@ -225,6 +225,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         for ((id, view) in views) configure(view, pageUrl(id))
     }
 
+    /** The small pill tapped: the bar grows back out of it, and the page makes room for it again. */
+    fun bringBarBack() {
+        views[app.activeTabId]?.showBar()
+        barGone = 0f
+    }
+
     fun peekBar() {
         peeking = true
         barGone = 0f

@@ -185,32 +185,105 @@ struct BrowserBar: View {
         SpacesCapsule(browser: browser)
         GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
           .accessibilityIdentifier("bar-search")
-      } else if browser.hasPage {
-        tabsButton
-        capsule
-        GlassIconButton(.more, label: strings.t("bar.more")) {
-          browser.app.dispatch(.tipSeen(id: .blocking))
-          browser.panel = .page
-        }
-        .accessibilityIdentifier("bar-more")
-        // The ring round the button the blocking tip means.
-        .overlay {
-          if browser.tip == .blocking {
-            Circle().stroke(BayColor.accent, lineWidth: 2.5).padding(-4).allowsHitTesting(false)
-          }
-        }
       } else {
-        // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
-        tabsButton
-        capsule
-        GlassIconButton(.settings, label: strings.t("bar.settings"), action: onSettings)
-          .simultaneousGesture(LongPressGesture(minimumDuration: 0.8).onEnded { _ in onChecks() })
-          .accessibilityIdentifier("bar-settings")
+        barCapsule
       }
     }
     // Above the buttons' own taps: a tap never travels the drag's 16 points, so taps still reach them. Off while a held
     // Tabs slides across the spaces.
     .highPriorityGesture(browser.hasPage && browser.overlay == .none && !sliding ? tabSwipe : nil)
+  }
+
+  private static let barHeight: CGFloat = 52
+  private static let segmentWidth: CGFloat = 64
+  private static let searchWidth: CGFloat = 136
+  private static let capsuleWidth = segmentWidth * 2 + searchWidth + 2
+  private static let miniSize = CGSize(width: 92, height: 36)
+
+  /// Over a page or the start page the bar is one capsule: tabs, search, and more (settings on the start page), split
+  /// by thin lines. Scrolled down a page it shrinks to a small pill with the site's icon and the tabs' count, and grows
+  /// back out of it, on a spring, as the page scrolls up or the pill is tapped.
+  private var barCapsule: some View {
+    let shrunk = browser.barShrunk
+    return ZStack {
+      HStack(spacing: 0) {
+        tabsButton
+        segmentLine
+        capsule
+        segmentLine
+        if browser.hasPage {
+          segment(.more, label: strings.t("bar.more")) {
+            browser.app.dispatch(.tipSeen(id: .blocking))
+            browser.panel = .page
+          }
+          .accessibilityIdentifier("bar-more")
+          // The ring round the button the blocking tip means.
+          .overlay {
+            if browser.tip == .blocking {
+              Circle().stroke(BayColor.accent, lineWidth: 2.5).padding(4).allowsHitTesting(false)
+            }
+          }
+        } else {
+          // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
+          segment(.settings, label: strings.t("bar.settings"), action: onSettings)
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.8).onEnded { _ in onChecks() })
+            .accessibilityIdentifier("bar-settings")
+        }
+      }
+      .frame(width: Self.capsuleWidth, height: Self.barHeight)
+      .opacity(shrunk ? 0 : 1)
+      .allowsHitTesting(!shrunk)
+      .accessibilityHidden(shrunk)
+      if shrunk {
+        mini.transition(.opacity)
+      }
+    }
+    .frame(width: shrunk ? Self.miniSize.width : Self.capsuleWidth, height: shrunk ? Self.miniSize.height : Self.barHeight)
+    // The pill turns to the other of light and dark from the bar, a chip that stands out on any page.
+    .background(BayColor.foreground.opacity(shrunk ? 0.86 : 0), in: Capsule())
+    .bayCapsule()
+    .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    .overlay(alignment: .bottom) {
+      LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty).id(browser.app.activeTabId)
+    }
+    // The ring round the bar the bar tip means, a little outside it.
+    .overlay {
+      if browser.tip == .bar {
+        Capsule().stroke(BayColor.accent, lineWidth: 2.5).padding(-4).allowsHitTesting(false)
+      }
+    }
+    .animation(.spring(response: 0.38, dampingFraction: 0.78), value: shrunk)
+  }
+
+  /// The shrunk bar: the site's icon and the tabs' count; tapped, the bar grows back.
+  private var mini: some View {
+    Button(action: browser.bringBarBack) {
+      HStack(spacing: 10) {
+        if browser.hasPage, let url = browser.activeTab?.url { SiteIcon(url: url, size: 18) }
+        TabsGlyph(count: browser.app.tabs.count, small: true, color: BayColor.background)
+      }
+      .frame(width: Self.miniSize.width, height: Self.miniSize.height)
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.pressFeedback)
+    .accessibilityLabel(Text(verbatim: strings.t("bar.showBar")))
+    .accessibilityIdentifier("bar-mini")
+  }
+
+  /// One of the capsule's buttons: its icon on the capsule's glass, the whole segment its target.
+  private func segment(_ icon: BayIcon, label: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      BayIconView(icon, size: 20, color: BayColor.foreground)
+        .frame(width: Self.segmentWidth, height: Self.barHeight)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.pressFeedback)
+    .accessibilityLabel(Text(verbatim: label))
+  }
+
+  /// The thin line between the capsule's segments.
+  private var segmentLine: some View {
+    BayColor.foreground.opacity(0.12).frame(width: 1, height: 22)
   }
 
   /// Tabs, with the open tabs' count. Holding it brings the column of spaces, the one showing on a soft grey circle: slide
@@ -222,13 +295,18 @@ struct BrowserBar: View {
     let space = browser.activeSpace
     let tabsLabel = count > 1 ? strings.t("bar.tabsOpen", ["count": "\(count)"]) : strings.t("bar.tabs")
     let label = spaced && space != nil ? strings.t("bar.inSpace", ["label": tabsLabel, "space": spaceName(space!, strings)]) : tabsLabel
-    return GlassIconButton(.tabs, label: label) {
+    return Button {
       // A hold's lift comes as a tap too, before or just after the hold ends.
       guard !sliding, Date().timeIntervalSince(holdEnded) > 0.4 else { return }
       browser.showTabs()
+    } label: {
+      TabsGlyph(count: count)
+        .frame(width: Self.segmentWidth, height: Self.barHeight)
+        .contentShape(Rectangle())
     }
+    .buttonStyle(.pressFeedback)
+    .accessibilityLabel(Text(verbatim: label))
     .simultaneousGesture(spaceSlide)
-    .overlay(alignment: .topTrailing) { TabCount(count: count) }
     // The spaces stand in a column above the button while it's held, the nearest first.
     .overlay(alignment: .bottom) {
       if sliding {
@@ -331,19 +409,8 @@ struct BrowserBar: View {
         Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium))
       }
       .foregroundColor(BayColor.foreground)
-      .frame(width: 92, height: 20)
-      .padding(.vertical, 14)
-      .padding(.horizontal, Space.lg)
-      .bayCapsule()
-      .overlay(alignment: .bottom) {
-        LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty).id(browser.app.activeTabId)
-      }
-      // The ring round the capsule the bar tip means, a little outside it whatever its width.
-      .overlay {
-        if browser.tip == .bar {
-          Capsule().stroke(BayColor.accent, lineWidth: 2.5).padding(-4).allowsHitTesting(false)
-        }
-      }
+      .frame(width: Self.searchWidth, height: Self.barHeight)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.pressFeedback)
     .accessibilityLabel(Text(verbatim: label))
@@ -461,23 +528,23 @@ struct SpacesCapsule: View {
   }
 }
 
-/// The number of open tabs on the corner of the Tabs button. The button's label says it, so VoiceOver skips it.
-struct TabCount: View {
+/// The open tabs' count in a rounded square, the Tabs button's face. The button's label says it, so VoiceOver skips it.
+struct TabsGlyph: View {
   let count: Int
+  var small = false
+  var color = BayColor.foreground
 
   var body: some View {
-    if count > 1 {
-      Text(verbatim: count > 99 ? "99+" : "\(count)")
-        .font(.system(size: 11, weight: .bold))
-        .foregroundColor(BayColor.background)
-        .padding(.horizontal, 4)
-        .frame(minWidth: 20, minHeight: 20)
-        .background(BayColor.foreground, in: Capsule())
-        .offset(x: 4, y: -4)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .accessibilityIdentifier("tab-count")
-    }
+    let side: CGFloat = small ? 18 : 22
+    Text(verbatim: count > 99 ? "99+" : "\(count)")
+      .font(.system(size: small ? 10 : 11, weight: .bold))
+      .foregroundColor(color)
+      .padding(.horizontal, 3)
+      .frame(minWidth: side, minHeight: side)
+      .overlay(RoundedRectangle(cornerRadius: small ? 5 : 6, style: .continuous).stroke(color, lineWidth: small ? 1.5 : 2))
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+      .accessibilityIdentifier("tab-count")
   }
 }
 

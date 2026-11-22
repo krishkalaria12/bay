@@ -1,6 +1,8 @@
 package bay.app.browser
 
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.layout.positionInWindow
@@ -38,7 +40,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
@@ -225,20 +226,24 @@ fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-/** One of the bar's round buttons, or its capsule: flat and translucent with a hairline edge, as Arc Search draws them. */
+/**
+ * One of the bar's round buttons: flat and translucent with a hairline edge, as Arc Search draws them. `bare`, it's a
+ * segment of the bar's capsule instead, which draws the surface itself.
+ */
 @Composable
-private fun BarButton(id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+private fun BarButton(
+    id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, bare: Boolean = false,
+    onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit,
+) {
     val colors = Theme.colors
+    val button = modifier
+        .testTag(id)
+        .let { if (onLongClick == null) it.pressFeedback(onClick = onClick) else it.combinedClickable(onLongClick = onLongClick, onClick = onClick) }
+        // The label says what the button does; the icon or text inside it isn't read again.
+        .clearAndSetSemantics { contentDescription = label; role = Role.Button }
+        .size(width, BAR_HEIGHT)
     Box(
-        modifier = modifier
-            .testTag(id)
-            .let { if (onLongClick == null) it.pressFeedback(onClick = onClick) else it.combinedClickable(onLongClick = onLongClick, onClick = onClick) }
-            // The label says what the button does; the icon or text inside it isn't read again.
-            .clearAndSetSemantics { contentDescription = label; role = Role.Button }
-            .size(width, 52.dp)
-            .clip(CircleShape)
-            .background(colors.flatSurface, CircleShape)
-            .border(1.dp, colors.hairline, CircleShape),
+        if (bare) button else button.clip(CircleShape).background(colors.flatSurface, CircleShape).border(1.dp, colors.hairline, CircleShape),
         contentAlignment = Alignment.Center,
     ) { content() }
 }
@@ -380,22 +385,8 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
             BarButton("bar-archive", strings.t("bar.archive"), { browser.openDrawer(archive = true) }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             SpacesCapsule(browser, strings)
             BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
-        } else if (browser.hasPage) {
-            TabsButton(browser, strings, slide)
-            Capsule(browser, strings)
-            Box(contentAlignment = Alignment.Center) {
-                BarButton("bar-more", strings.t("bar.more"), {
-                    app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BLOCKING))
-                    browser.panel = Panel.PAGE
-                }) { BayIconView(BayIcon.MORE, size = IconSize.control) }
-                // The ring round the button the blocking tip means.
-                if (browser.tip == bay.core.TipId.BLOCKING) Box(Modifier.size(60.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
-            }
         } else {
-            // A new tab keeps Tabs where a page has it, the way back to the others; the archive is in the drawer.
-            TabsButton(browser, strings, slide)
-            Capsule(browser, strings)
-            BarButton("bar-settings", strings.t("bar.settings"), onSettings, onLongClick = onChecks) { BayIconView(BayIcon.SETTINGS, size = IconSize.control) }
+            BarCapsule(browser, strings, onSettings, onChecks, slide)
         }
     }
 }
@@ -480,8 +471,8 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
                 // A hold's lift comes as a click too.
                 if (!slide.sliding && android.os.SystemClock.uptimeMillis() - holdEnded > 400) browser.showTabs()
             },
-        ) { BayIconView(BayIcon.TABS, size = IconSize.control) }
-        TabCount(count, Modifier.align(Alignment.TopEnd))
+            width = SEGMENT_WIDTH, bare = true,
+        ) { TabsGlyph(count) }
         // The spaces stand in a column above the button while it's held, the nearest first. It's placed without taking
         // room in the bar.
         if (slide.sliding) {
@@ -496,28 +487,126 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
     }
 }
 
-private val CAPSULE_WIDTH = 128.dp
+private val BAR_HEIGHT = 52.dp
+private val SEGMENT_WIDTH = 64.dp
+private val SEARCH_WIDTH = 136.dp
+private val CAPSULE_WIDTH = SEGMENT_WIDTH * 2 + SEARCH_WIDTH + 2.dp
+private val MINI_WIDTH = 84.dp
+private val MINI_HEIGHT = 34.dp
 
+/**
+ * Over a page or the start page, the bar is one capsule: tabs, search, and more (settings on the start page), split by
+ * thin lines. As a page scrolls down it shrinks, in step with the page (BrowserModel.barGone), to a small pill with the
+ * site's icon and the tabs' count, and grows back out of it as the page scrolls up or the pill is tapped.
+ */
 @Composable
-private fun Capsule(browser: BrowserModel, strings: Strings) {
+private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit, slide: SpaceSlide) {
+    val app = browser.app
+    val colors = Theme.colors
+    val onPage = browser.hasPage && browser.overlay == Overlay.NONE
+    // 0 the whole bar, 1 the small pill. A spring, so the bar called back grows out of the pill rather than jumping.
+    val shrink by animateFloatAsState(
+        if (onPage) browser.barGone else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "bar-shrink",
+    )
+    val whole = 1f - shrink
+    val accent = colors.accent
+    Box(
+        Modifier.size(androidx.compose.ui.unit.lerp(MINI_WIDTH, CAPSULE_WIDTH, whole), androidx.compose.ui.unit.lerp(MINI_HEIGHT, BAR_HEIGHT, whole))
+            // The ring round the bar the bar tip means, a little outside it.
+            .then(if (browser.tip == bay.core.TipId.BAR) Modifier.drawWithContent { drawContent(); ring(accent) } else Modifier)
+            .shadow(14.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
+            // The bar in the page's light or dark; the pill it shrinks to turns to the other one, a chip that stands
+            // out on any page without a frame of its own.
+            .background(androidx.compose.ui.graphics.lerp(colors.surface, colors.foreground.copy(alpha = 0.86f), ((shrink - 0.3f) / 0.7f).coerceIn(0f, 1f)), CircleShape)
+            // A faint edge, so the bar holds its shape on a page of its own colour.
+            .border(0.5.dp, colors.foreground.copy(alpha = 0.08f * whole), CircleShape)
+            // Clipped only while it changes size, so the spaces a held Tabs raises above it are never cut off.
+            .then(if (shrink > 0.001f) Modifier.clip(CircleShape) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (whole > 0.01f) {
+            Row(
+                Modifier.requiredWidth(CAPSULE_WIDTH).graphicsLayer { alpha = ((whole - 0.35f) / 0.65f).coerceIn(0f, 1f) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TabsButton(browser, strings, slide)
+                SegmentLine()
+                SearchSegment(browser, strings)
+                SegmentLine()
+                if (browser.hasPage) {
+                    val blockingRing = browser.tip == bay.core.TipId.BLOCKING
+                    BarButton(
+                        "bar-more", strings.t("bar.more"),
+                        {
+                            app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BLOCKING))
+                            browser.panel = Panel.PAGE
+                        },
+                        // The ring round the button the blocking tip means.
+                        if (blockingRing) Modifier.drawWithContent { drawContent(); ring(accent, inset = 6.dp.toPx()) } else Modifier,
+                        width = SEGMENT_WIDTH, bare = true,
+                    ) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+                } else {
+                    BarButton("bar-settings", strings.t("bar.settings"), onSettings, width = SEGMENT_WIDTH, bare = true, onLongClick = onChecks) {
+                        BayIconView(BayIcon.SETTINGS, size = IconSize.control)
+                    }
+                }
+            }
+        }
+        if (shrink > 0.01f) {
+            Row(
+                Modifier.graphicsLayer { alpha = ((shrink - 0.35f) / 0.65f).coerceIn(0f, 1f) },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The site's icon and the tabs' count: which page this is, and the way to the others.
+                browser.activeTab?.url?.takeIf { browser.hasPage }?.let { url -> SiteIcon(app, url, 18.dp) }
+                TabsGlyph(app.tabs.size, small = true, color = colors.background)
+            }
+        }
+        // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, app.activeTabId, Modifier.matchParentSize())
+        // Shrunk, the whole pill is one button that brings the bar back.
+        if (shrink > 0.5f) {
+            Box(
+                Modifier.matchParentSize().testTag("bar-mini")
+                    .clearAndSetSemantics { contentDescription = strings.t("bar.showBar"); role = Role.Button }
+                    .pressFeedback(onClick = browser::bringBarBack),
+            )
+        }
+    }
+}
+
+/** The thin line between the capsule's segments. */
+@Composable
+private fun SegmentLine() {
+    Box(Modifier.size(1.dp, 22.dp).background(Theme.colors.foreground.copy(alpha = 0.12f)))
+}
+
+/** The accent ring a tip draws round what it means, `inset` inside the bounds (a little outside them by default). */
+private fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.ring(color: Color, inset: Float = -4.dp.toPx()) {
+    val stroke = 2.5.dp.toPx()
+    drawRoundRect(
+        color,
+        topLeft = Offset(inset, inset),
+        size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius((size.height - inset * 2) / 2),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+    )
+}
+
+/** The capsule's search: just the magnifying glass, with a mark beside it on a page that isn't sent encrypted. */
+@Composable
+private fun SearchSegment(browser: BrowserModel, strings: Strings) {
     val url = browser.activeTab?.url.orEmpty()
     val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
     val insecure = url.startsWith("http:")
     val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
-    Box {
-        // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
-        // says so with a mark beside it.
-        BarButton("bar-search", label, browser::searchFromBar, width = CAPSULE_WIDTH) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
-                if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
-                BayIconView(BayIcon.SEARCH, size = IconSize.control)
-            }
-        }
-        // Drawn over the pill and sized by it, so loading never widens the pill.
-        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, browser.app.activeTabId, Modifier.matchParentSize())
-        // The ring round the capsule the bar tip means, a little outside it and centred on it whatever its width.
-        if (browser.tip == bay.core.TipId.BAR) {
-            Box(Modifier.align(Alignment.Center).requiredSize(CAPSULE_WIDTH + 8.dp, 52.dp + 8.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
+    BarButton("bar-search", label, browser::searchFromBar, width = SEARCH_WIDTH, bare = true) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
+            if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
+            BayIconView(BayIcon.SEARCH, size = IconSize.control)
         }
     }
 }
@@ -604,17 +693,16 @@ private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
 /** Each space's button in the capsule, and the new-space button: Android's smallest touch target. */
 private val SPACE_TARGET = 48.dp
 
-/** The number of open tabs on the corner of the Tabs button. The button's label says it, so TalkBack skips it. */
+/** The open tabs' count in a rounded square, the Tabs button's face. The button's label says it, so TalkBack skips it. */
 @Composable
-fun TabCount(count: Int, modifier: Modifier = Modifier) {
-    if (count < 2) return
-    val colors = Theme.colors
+private fun TabsGlyph(count: Int, small: Boolean = false, color: Color = Theme.colors.foreground) {
+    val side = if (small) 18.dp else 22.dp
     Box(
-        modifier.offset(4.dp, (-4).dp).sizeIn(minWidth = 20.dp, minHeight = 20.dp).background(colors.foreground, CircleShape).padding(horizontal = 4.dp)
-            .testTag("tab-count").clearAndSetSemantics {},
+        Modifier.sizeIn(minWidth = side, minHeight = side).border(if (small) 1.5.dp else 2.dp, color, RoundedCornerShape(if (small) 5.dp else 6.dp))
+            .padding(horizontal = 3.dp).testTag("tab-count").clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
-        BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = colors.background)
+        BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = color)
     }
 }
 

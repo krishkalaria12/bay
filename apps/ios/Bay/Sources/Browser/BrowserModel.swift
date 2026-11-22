@@ -576,9 +576,15 @@ final class BrowserModel: ObservableObject {
     overlay == .none && hasPage && !covered && find == nil && picking == nil && !fullscreenPeek && siteSetting.fullscreen
   }
 
-  /// The bar is out of sight: scrolled away, or on a fullscreen site.
-  var barAway: Bool {
-    (barHidden && overlay == .none) || fullscreen
+  /// Scrolled down a page, the bar is shrunk to a small pill (BrowserBar); on a fullscreen site it's out of sight.
+  var barShrunk: Bool {
+    barHidden && overlay == .none && hasPage && !fullscreen
+  }
+
+  /// The small pill tapped: the bar grows back out of it.
+  func bringBarBack() {
+    scrollRun = 0
+    barHidden = false
   }
 
   /// A tap on the bottom edge of a fullscreen site: the bar for a few seconds.

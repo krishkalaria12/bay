@@ -108,9 +108,10 @@ struct BrowserScreen: View {
         }
         .padding(.horizontal, Space.edge)
         .padding(.bottom, Space.xs)
-        // Scrolled away while the page scrolls down; the toast and player go with it.
-        .offset(y: browser.barAway ? 140 : 0)
-        .animation(.easeOut(duration: 0.2), value: browser.barAway)
+        // Out of sight on a fullscreen site, with the toast and the player. Over a page scrolling down the bar shrinks
+        // instead (BrowserBar).
+        .offset(y: browser.fullscreen ? 140 : 0)
+        .animation(.easeOut(duration: 0.2), value: browser.fullscreen)
         .animation(.easeOut(duration: 0.2), value: browser.toast?.id)
       }
       if browser.fullscreen {

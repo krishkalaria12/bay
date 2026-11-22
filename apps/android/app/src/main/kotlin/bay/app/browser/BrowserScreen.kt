@@ -77,8 +77,8 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     // The picker's card stays above the sheet it opened (Inspect's details), so it's reachable there.
     val pickerOnTop = browser.picking != null && browser.panel != null
     // Over a page the screen takes its look from the page: the status bar's strip is the colour at its top, and the bar
-    // the colour along its foot (behind the bar, where the page leaves room for it), so the bar sits in the page rather
-    // than on it. The system's icons stay readable on either.
+    // is light or dark as the page is along its foot, where the page runs on under it. The system's icons stay readable
+    // on either.
     val pageShows = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
     val topColor = if (pageShows) pageColor(browser.shownColor(browser.pageColors[app.activeTabId])) else null
     val footColor = if (pageShows) pageColor(browser.shownColor(browser.pageBottomColors[app.activeTabId] ?: browser.pageColors[app.activeTabId])) else null
@@ -88,15 +88,14 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
         val bottom: @Composable BoxScope.() -> Unit = {
-            // Off a fullscreen site; and, over a page, slid away in step with it as it scrolls down (BrowserModel.barGone).
-            // The toast and the player go with it.
+            // Off a fullscreen site, with the toast and the player. Over a page scrolling down the bar shrinks instead (BarRow).
             val onPage = browser.overlay == Overlay.NONE
             val away by animateFloatAsState(if (onPage && browser.fullscreen) 1f else 0f, tween(200), label = "bar")
             val barDark = if (onPage && footColor != null) footColor.luminance() <= 0.4f else systemDark
             bay.design.BayTheme(dark = barDark) {
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .graphicsLayer { translationY = maxOf(away, if (onPage) browser.barGone else 0f) * size.height }
+                        .graphicsLayer { translationY = away * size.height }
                         .navigationBarsPadding().padding(horizontal = Space.edge).padding(bottom = Space.xs),
                     verticalArrangement = Arrangement.spacedBy(Space.md),
                 ) {
@@ -137,8 +136,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             val barCover = WindowInsets.navigationBars.getBottom(density) + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
             LaunchedEffect(barCover) { browser.barCoverChanged(barCover) }
             if (shown) {
-                // Behind the page: until it draws its first frame, and in the room it leaves the bar at its foot, the colour
-                // along its bottom edge (else the engine's blank white), so the bar sits on the page's own colour.
+                // Behind the page until it draws its first frame: the colour along its bottom edge, else the engine's blank white.
                 Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(footColor ?: Color.White).clearAndSetSemantics {})
             }
             // A fullscreen site takes the status bar's place too.
@@ -164,18 +162,6 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
                 },
                 visible = shown,
             )
-            // The room the page leaves the bar at its foot, which the engine paints white: the colour along the page's
-            // bottom edge instead, going with the bar as it slides away.
-            if (shown && footColor != null && !browser.siteSetting.fullscreen) {
-                Box(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { barCover.toDp() })
-                        .graphicsLayer {
-                            translationX = browser.tabSwipe.offset.value
-                            translationY = browser.barGone * size.height
-                        }
-                        .background(footColor).clearAndSetSemantics {},
-                )
-            }
             if (shown) {
                 TabSwipeLayer(browser, strings)
                 TabCoverLayer(browser)
