@@ -230,11 +230,18 @@ private fun RowScope.AddressRow(browser: BrowserModel, strings: Strings, act: ((
                     role = androidx.compose.ui.semantics.Role.Button
                 }
                 .pressFeedback(onClick = act { browser.search(inNewTab = false) }),
-            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BayIconView(if (insecure) BayIcon.ERROR else BayIcon.LOCK, size = IconSize.inline, color = if (insecure) colors.danger else colors.muted)
-            BayText(displayUrl(url), variant = TextVariant.CALLOUT, maxLines = 1)
+            // As Arc Search writes it: the words searched on a results page, else just the site, with its lock. The
+            // whole address is what's read out, copied, and edited on a tap.
+            val prefs = browser.app.preferences
+            val label = bay.core.addressLabel(url, prefs.customSearchUrl.takeIf { prefs.searchEngineId == "custom" })
+            val searched = label != siteName(url)
+            if (!searched || insecure) {
+                BayIconView(if (insecure) BayIcon.ERROR else BayIcon.LOCK, size = IconSize.inline, color = if (insecure) colors.danger else colors.muted)
+            }
+            BayText(label, variant = TextVariant.CALLOUT, maxLines = 1)
         }
         AddressIcon("page-copy", BayIcon.LINK, strings.t("pageMenu.copyLink"), true, act(browser::copyLink))
         if (navigation.isLoading) {

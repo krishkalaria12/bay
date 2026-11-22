@@ -176,21 +176,26 @@ private struct AddressRow: View {
     let navigation = browser.activeNavigation
     let url = browser.activeUrl
     let insecure = url.hasPrefix("http:")
+    let preferences = browser.app.preferences
+    let label = addressLabel(url: url, customUrl: preferences.searchEngineId == "custom" ? preferences.customSearchUrl : nil)
     HStack(spacing: 0) {
       icon(.back, id: "page-back", label: strings.t("pageMenu.back"), disabled: !navigation.canGoBack, action: act(browser.goBack))
       icon(.forward, id: "page-forward", label: strings.t("pageMenu.forward"), disabled: !navigation.canGoForward, action: act(browser.goForward))
       Button(action: act { browser.search(inNewTab: false) }) {
+        // As Arc Search writes it: the words searched on a results page, else just the site, with its lock. The whole
+        // address is what's read out, copied, and edited on a tap.
         HStack(spacing: Space.xs) {
-          BayIconView(insecure ? .error : .lock, size: IconSize.inline, color: insecure ? BayColor.danger : BayColor.muted)
-          BayText(displayUrl(url: url), variant: .callout).lineLimit(1).truncationMode(.tail)
-            .accessibilityIdentifier("page-menu-url")
-          Spacer(minLength: 0)
+          if label == siteName(url: url) || insecure {
+            BayIconView(insecure ? .error : .lock, size: IconSize.inline, color: insecure ? BayColor.danger : BayColor.muted)
+          }
+          BayText(label, variant: .callout).lineLimit(1).truncationMode(.tail)
         }
         .frame(maxWidth: .infinity, minHeight: MenuLayout.addressHeight)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .accessibilityLabel(Text(verbatim: "\(strings.t(insecure ? "pageMenu.notSecure" : "pageMenu.secure")), \(url)"))
+      .accessibilityIdentifier("page-menu-url")
       icon(.link, id: "page-copy", label: strings.t("pageMenu.copyLink"), action: act(browser.copyLink))
       if navigation.isLoading {
         icon(.close, id: "page-stop", label: strings.t("pageMenu.stop"), action: act(browser.stop))
