@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
@@ -495,6 +496,8 @@ private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlid
     }
 }
 
+private val CAPSULE_WIDTH = 128.dp
+
 @Composable
 private fun Capsule(browser: BrowserModel, strings: Strings) {
     val url = browser.activeTab?.url.orEmpty()
@@ -504,7 +507,7 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
     Box {
         // Just the magnifying glass: the page's address is at the top of the page menu. A page that isn't sent encrypted
         // says so with a mark beside it.
-        BarButton("bar-search", label, browser::searchFromBar, width = 128.dp) {
+        BarButton("bar-search", label, browser::searchFromBar, width = CAPSULE_WIDTH) {
             Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
                 if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
                 BayIconView(BayIcon.SEARCH, size = IconSize.control)
@@ -512,6 +515,10 @@ private fun Capsule(browser: BrowserModel, strings: Strings) {
         }
         // Drawn over the pill and sized by it, so loading never widens the pill.
         LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, browser.app.activeTabId, Modifier.matchParentSize())
+        // The ring round the capsule the bar tip means, a little outside it and centred on it whatever its width.
+        if (browser.tip == bay.core.TipId.BAR) {
+            Box(Modifier.align(Alignment.Center).requiredSize(CAPSULE_WIDTH + 8.dp, 52.dp + 8.dp).border(2.5.dp, Theme.colors.accent, CircleShape).clearAndSetSemantics {})
+        }
     }
 }
 

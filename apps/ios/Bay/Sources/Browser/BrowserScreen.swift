@@ -104,14 +104,6 @@ struct BrowserScreen: View {
             FindBar(browser: browser)
           } else {
             BrowserBar(browser: browser, onSettings: onSettings, onChecks: onChecks)
-              // The ring round the capsule the tip means.
-              .overlay {
-                if browser.tip == .bar {
-                  // The capsule is narrower over the start page, where it holds only the magnifier.
-                  Capsule().stroke(BayColor.accent, lineWidth: 2.5).frame(width: browser.hasPage ? 184 : 140, height: 62)
-                    .allowsHitTesting(false)
-                }
-              }
           }
         }
         .padding(.horizontal, Space.edge)

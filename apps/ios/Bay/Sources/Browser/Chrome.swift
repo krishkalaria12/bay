@@ -338,6 +338,12 @@ struct BrowserBar: View {
       .overlay(alignment: .bottom) {
         LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty).id(browser.app.activeTabId)
       }
+      // The ring round the capsule the bar tip means, a little outside it whatever its width.
+      .overlay {
+        if browser.tip == .bar {
+          Capsule().stroke(BayColor.accent, lineWidth: 2.5).padding(-4).allowsHitTesting(false)
+        }
+      }
     }
     .buttonStyle(.pressFeedback)
     .accessibilityLabel(Text(verbatim: label))
