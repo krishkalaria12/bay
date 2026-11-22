@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -336,7 +335,10 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(GAP), verticalArrangement = Arrangement.spacedBy(Space.lg), maxItemsInEachRow = COLUMNS) {
                     tabs.forEachIndexed { index, tab ->
-                        TabCard(browser, strings, tab, index, tabs.size, cardWidth, tab.id == app.activeTabId)
+                        // Keyed by tab, so a swiped card's place (and how far it went) never passes to the tab after it.
+                        androidx.compose.runtime.key(tab.id) {
+                            TabCard(browser, strings, tab, index, tabs.size, cardWidth, tab.id == app.activeTabId)
+                        }
                     }
                 }
             }
@@ -344,13 +346,17 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     }
 }
 
-/** A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. A flick up closes it into the archive. */
+/**
+ * A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped
+ * sideways it closes into the archive, as other browsers' tab grids do; up and down scroll the tabs.
+ */
 @Composable
 private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, index: Int, count: Int, width: Dp, active: Boolean) {
     val app = browser.app
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    val lift = remember { Animatable(0f) }
+    // How far the card has been swiped sideways, following the finger.
+    val swipe = remember { Animatable(0f) }
     // Where the card sits on screen, so the page can grow out of it.
     var frame by remember { mutableStateOf(Rect.Zero) }
     // Held and moved: the card follows the finger, to a space in the bar below.
@@ -368,24 +374,42 @@ private fun TabCard(browser: BrowserModel, strings: Strings, tab: BrowserTab, in
     }
     Column(
         Modifier.width(width).zIndex(if (carried != null) 1f else 0f)
+            // Before the layer that moves the card, so the finger is followed in screen terms, not the moving card's.
+            // Started on a card, a sideways drag is the card's, not the space's (TabSwitcher's own drag): thrown far
+            // enough, or flicked, it goes off that side and the tab closes; short of that it comes back.
+            .pointerInput(tab.id) {
+                val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                detectHorizontalDragGestures(
+                    onDragStart = { tracker.resetTracking() },
+                    onDragEnd = {
+                        val speed = tracker.calculateVelocity().x
+                        val throwing = abs(swipe.value) > size.width * 0.4f || (abs(speed) > 1_200.dp.toPx() && speed * swipe.value > 0)
+                        scope.launch {
+                            if (throwing) {
+                                val side = if (swipe.value < 0f) -1 else 1
+                                swipe.animateTo(side * size.width * 1.6f, tween(160))
+                                close()
+                            } else {
+                                swipe.animateTo(0f, Motion.settle.spec())
+                            }
+                        }
+                    },
+                    onDragCancel = { scope.launch { swipe.animateTo(0f) } },
+                    onHorizontalDrag = { change, amount ->
+                        change.consume()
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        scope.launch { swipe.snapTo(swipe.value + amount) }
+                    },
+                )
+            }
             .graphicsLayer {
-                translationX = carried?.x ?: 0f
-                translationY = carried?.y ?: lift.value
+                translationX = carried?.x ?: swipe.value
+                translationY = carried?.y ?: 0f
                 scaleX = shrink
                 scaleY = shrink
                 // While the page shrinks into this card, or grows out of it, the page is the card.
                 val morphing = browser.opening?.id == tab.id || browser.zoom?.tab?.id == tab.id
-                alpha = if (morphing) 0f else 1f - minOf(1f, -lift.value / 600f)
-            }
-            .pointerInput(tab.id) {
-                detectVerticalDragGestures(
-                    onDragEnd = {
-                        // Thrown away when dragged far enough up.
-                        if (lift.value < -120.dp.toPx()) close() else scope.launch { lift.animateTo(0f, Motion.settle.spec()) }
-                    },
-                    onDragCancel = { scope.launch { lift.animateTo(0f) } },
-                    onVerticalDrag = { _, amount -> scope.launch { lift.snapTo(minOf(0f, lift.value + amount)) } },
-                )
+                alpha = if (morphing) 0f else 1f - (abs(swipe.value) / size.width).coerceIn(0f, 0.8f)
             },
         verticalArrangement = Arrangement.spacedBy(Space.xs),
     ) {

@@ -162,10 +162,11 @@ struct TabSwitcher: View {
   /// A sideways swipe follows the finger to the next space or the one before, and goes there once it's far or quick
   /// enough; with no space that way the page stretches and springs back.
   private var spaceSwipe: some Gesture {
-    DragGesture(minimumDistance: 24)
+    DragGesture(minimumDistance: 24, coordinateSpace: .global)
       .onChanged { value in
         let dx = value.translation.width
-        guard abs(dx) > abs(value.translation.height) else { return }
+        // Started on a card, a sideways swipe is the card's: it closes the tab (TabCard).
+        guard abs(dx) > abs(value.translation.height), !startsOnCard(value) else { return }
         let index = app.spaces.firstIndex { $0.id == app.activeSpaceId }
         shift = neighbour(index, toward: dx) == nil ? stretch(dx) : dx
       }
@@ -174,7 +175,7 @@ struct TabSwitcher: View {
         let width = Self.pageWidth
         let index = app.spaces.firstIndex { $0.id == app.activeSpaceId }
         let far = abs(dx) > width * 0.3 || abs(value.predictedEndTranslation.width) > width * 0.6
-        guard abs(dx) > abs(value.translation.height), far, let next = neighbour(index, toward: dx) else {
+        guard abs(dx) > abs(value.translation.height), !startsOnCard(value), far, let next = neighbour(index, toward: dx) else {
           withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { shift = 0 }
           return
         }
@@ -190,6 +191,10 @@ struct TabSwitcher: View {
           }
         }
       }
+  }
+
+  private func startsOnCard(_ value: DragGesture.Value) -> Bool {
+    browser.cardFrames.values.contains { $0.contains(value.startLocation) }
   }
 
   /// How far a page moves when pulled past the last space: less the further it goes, as a scroll view's edge does.
@@ -621,8 +626,8 @@ struct FolderNameField: View {
   }
 }
 
-/// A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. A flick
-/// up closes it into the archive.
+/// A tab's card: its picture (or icon, or the wallpaper for a new tab), a close button, and its site below. Swiped
+/// sideways it closes into the archive.
 private struct TabCard: View {
   @EnvironmentObject private var strings: Strings
   @EnvironmentObject private var app: AppModel
@@ -634,7 +639,10 @@ private struct TabCard: View {
   let height: CGFloat
   let active: Bool
   @ObservedObject var browser: BrowserModel
-  @State private var lift: CGFloat = 0
+  /// How far the card has been swiped sideways, following the finger.
+  @State private var slide: CGFloat = 0
+  /// A sideways swipe is under way: its lift, which lands on the card that moved with the finger, isn't a tap.
+  @State private var swiping = false
   @State private var held = false
   /// Held and moved: the card follows the finger, to a space in the bar below.
   @State private var carried: CGSize?
@@ -647,10 +655,10 @@ private struct TabCard: View {
     VStack(alignment: .leading, spacing: Space.xs) {
       ZStack(alignment: .topTrailing) {
         Button {
-          // Held, the card opened the pin sheet instead.
+          // Held, the card opened the pin sheet instead; swiped, it closed or came back.
           if held {
             held = false
-          } else {
+          } else if !swiping {
             browser.pick(tab, frame: frame)
           }
         } label: {
@@ -717,25 +725,30 @@ private struct TabCard: View {
     }
     // Shrunk where it sits, then moved, so the card stays under the finger.
     .scaleEffect(carried == nil ? 1 : (browser.cardDropSpace == nil ? 0.9 : 0.6), anchor: .center)
-    .offset(carried ?? CGSize(width: 0, height: lift))
+    .offset(carried ?? CGSize(width: slide, height: 0))
     .zIndex(carried == nil ? 0 : 1)
-    .opacity(1 - Double(min(1, -lift / 240)))
+    .opacity(1 - Double(min(0.8, abs(slide) / width)))
+    // Swiped sideways, the card goes off that side and the tab closes, as other browsers' tab grids do; short of that
+    // it comes back. Up and down scroll the tabs.
     .simultaneousGesture(
       DragGesture(minimumDistance: 16)
         .onChanged { value in
-          guard !held, abs(value.translation.height) > abs(value.translation.width) else { return }
-          lift = min(0, value.translation.height)
+          guard !held, abs(value.translation.width) > abs(value.translation.height) else { return }
+          swiping = true
+          slide = value.translation.width
         }
         .onEnded { value in
-          guard !held else { return }
-          let velocity = value.predictedEndTranslation.height - value.translation.height
-          // Thrown away when dragged far enough up, or flicked up.
-          if value.translation.height < -120 || (value.translation.height < -30 && velocity < -200) {
-            withAnimation(.easeOut(duration: 0.18)) { lift = -height }
-            close()
-          } else {
-            withAnimation(Motion.settle.animation) { lift = 0 }
+          guard !held, slide != 0 else { return }
+          // After the lift's tap has gone by.
+          DispatchQueue.main.async { swiping = false }
+          let dx = value.translation.width
+          let flung = value.predictedEndTranslation.width
+          guard abs(dx) > width * 0.4 || (abs(flung) > width && flung * dx > 0) else {
+            withAnimation(Motion.settle.animation) { slide = 0 }
+            return
           }
+          withAnimation(.easeOut(duration: 0.16)) { slide = (dx < 0 ? -1 : 1) * width * 1.6 }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { close() }
         })
   }
 
