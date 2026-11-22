@@ -67,6 +67,35 @@ pub fn site_name(url: &str) -> String {
     }
 }
 
+/// How the page menu writes a page's address, as Arc Search does: on a search engine's results page the words that
+/// were searched, else just the site. `custom_url` is the custom engine's address, when that's the one chosen.
+#[uniffi::export]
+pub fn address_label(url: &str, custom_url: Option<String>) -> String {
+    let templates = built_in_engines()
+        .into_iter()
+        .map(|engine| engine.url)
+        .chain(custom_url);
+    templates
+        .filter_map(|template| searched_words(url, &template))
+        .next()
+        .unwrap_or_else(|| site_name(url))
+}
+
+/// The words a results page was searched for, when `url` is one of `template`'s (same host and path, the query in the
+/// parameter that takes `%s`).
+fn searched_words(url: &str, template: &str) -> Option<String> {
+    let page = url::Url::parse(url).ok()?;
+    let engine = url::Url::parse(template).ok()?;
+    let bare = |host: Option<&str>| host.map(|host| host.trim_start_matches("www.").to_owned());
+    if bare(page.host_str()) != bare(engine.host_str()) || page.path() != engine.path() {
+        return None;
+    }
+    let (param, _) = engine.query_pairs().find(|(_, value)| value == "%s")?;
+    let (_, words) = page.query_pairs().find(|(name, _)| *name == param)?;
+    let words = js::trim(&words).to_owned();
+    (!words.is_empty()).then_some(words)
+}
+
 /// A page's title for a list row: its own, or its site's name when it has none or the title is only an address.
 #[uniffi::export]
 pub fn page_title(title: &str, url: &str) -> String {
@@ -85,6 +114,34 @@ pub fn page_title(title: &str, url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn address_label_shows_the_words_searched_or_the_site() {
+        use super::address_label;
+        assert_eq!(
+            address_label("https://www.google.com/search?q=cats&sca_esv=1", None),
+            "cats"
+        );
+        assert_eq!(
+            address_label("https://duckduckgo.com/?q=red+pandas&ia=web", None),
+            "red pandas"
+        );
+        assert_eq!(
+            address_label("https://www.theverge.com/2026/11/22/pixel-review", None),
+            "theverge.com"
+        );
+        assert_eq!(
+            address_label("https://www.google.com/maps", None),
+            "google.com"
+        );
+        assert_eq!(
+            address_label(
+                "https://search.example/find?term=tea",
+                Some("https://search.example/find?term=%s".into())
+            ),
+            "tea"
+        );
+    }
+
     use super::page_title;
 
     #[test]
