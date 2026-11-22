@@ -497,8 +497,8 @@ private val BAR_HEIGHT = 52.dp
 private val SEGMENT_WIDTH = 64.dp
 private val SEARCH_WIDTH = 136.dp
 private val CAPSULE_WIDTH = SEGMENT_WIDTH * 2 + SEARCH_WIDTH + 2.dp
-private val MINI_WIDTH = 84.dp
-private val MINI_HEIGHT = 34.dp
+private val MINI_WIDTH = 88.dp
+private val MINI_HEIGHT = 36.dp
 
 /**
  * Over a page or the start page, the bar is one capsule: tabs, search, and more (settings on the start page), split by
@@ -525,8 +525,7 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
     val tapsBack by remember { derivedStateOf { shrink.value > 0.5f } }
     val accent = colors.accent
     val surface = colors.surface
-    val chip = colors.foreground.copy(alpha = 0.86f)
-    val edge = colors.foreground.copy(alpha = 0.08f)
+    val edge = colors.foreground
     Box(
         Modifier
             .layout { measurable, _ ->
@@ -540,15 +539,15 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
             .then(if (browser.tip == bay.core.TipId.BAR) Modifier.drawWithContent { drawContent(); ring(accent) } else Modifier)
             // A shadow only: it would clip to the capsule by default, cutting off the spaces a held Tabs raises above it.
             .shadow(14.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
-            // The bar in the page's light or dark; the pill it shrinks to turns to the other one, a chip that stands
-            // out on any page without a frame of its own. A faint edge holds the bar's shape on a page of its own colour.
+            // The bar, and the pill it shrinks to, in the page's light or dark: one thing getting smaller, quiet over what's
+            // being read. A faint edge, a touch firmer on the small pill, holds the shape on a page of the same colour.
             .drawBehind {
                 val value = shrink.value
                 val corner = androidx.compose.ui.geometry.CornerRadius(size.height / 2)
-                drawRoundRect(androidx.compose.ui.graphics.lerp(surface, chip, ((value - 0.3f) / 0.7f).coerceIn(0f, 1f)), cornerRadius = corner)
+                drawRoundRect(surface, cornerRadius = corner)
                 val stroke = 0.5.dp.toPx()
                 drawRoundRect(
-                    edge.copy(alpha = edge.alpha * (1f - value)),
+                    edge.copy(alpha = 0.08f + 0.06f * value),
                     topLeft = Offset(stroke / 2, stroke / 2),
                     size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
                     cornerRadius = corner,
@@ -598,7 +597,7 @@ private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -
             ) {
                 // The site's icon and the tabs' count: which page this is, and the way to the others.
                 browser.activeTab?.url?.takeIf { browser.hasPage }?.let { url -> SiteIcon(app, url, 18.dp) }
-                TabStack(browser, browser.switcherTabs.size, small = true, inverted = true)
+                TabStack(browser, browser.switcherTabs.size, small = true)
             }
         }
         // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.
@@ -731,11 +730,11 @@ private val SPACE_TARGET = 48.dp
 
 /**
  * The Tabs button's face, as Arc Search draws it: the tabs used last before the one showing, as two small fanned cards
- * of their pictures, with the open tabs' count on a badge at their corner from two tabs on. `inverted` on the shrunk
- * bar's chip, which is in the other of light and dark. The button's label says the count, so TalkBack skips it.
+ * of their pictures, with the open tabs' count on a badge at their corner from two tabs on. The button's label says the
+ * count, so TalkBack skips it.
  */
 @Composable
-private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false, inverted: Boolean = false) {
+private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false) {
     val colors = Theme.colors
     val scale = if (small) 0.8f else 1f
     val cards = browser.recentTabs
@@ -749,18 +748,16 @@ private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false, 
             )
         }
         if (count > 1) {
-            val fill = if (inverted) colors.background else colors.foreground
-            val text = if (inverted) colors.foreground else colors.background
             Box(
                 // On one line however many there are: the badge grows past the cards rather than wrapping inside them.
                 Modifier.align(Alignment.TopEnd).offset(x = 12.dp * scale, y = (-8).dp * scale)
                     .wrapContentSize(Alignment.TopEnd, unbounded = true)
                     .sizeIn(minWidth = 16.dp * scale, minHeight = 16.dp * scale)
-                    .border(1.5.dp, if (inverted) colors.foreground else colors.surface, CircleShape)
-                    .background(fill, CircleShape).padding(horizontal = 4.dp * scale),
+                    .border(1.5.dp, colors.surface, CircleShape)
+                    .background(colors.foreground, CircleShape).padding(horizontal = 4.dp * scale),
                 contentAlignment = Alignment.Center,
             ) {
-                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = text, maxLines = 1)
+                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = colors.background, maxLines = 1)
             }
         }
     }

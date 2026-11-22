@@ -198,7 +198,7 @@ struct BrowserBar: View {
   private static let segmentWidth: CGFloat = 64
   private static let searchWidth: CGFloat = 136
   private static let capsuleWidth = segmentWidth * 2 + searchWidth + 2
-  private static let miniSize = CGSize(width: 92, height: 36)
+  private static let miniSize = CGSize(width: 96, height: 38)
 
   /// Over a page or the start page the bar is one capsule: tabs, search, and more (settings on the start page), split
   /// by thin lines. Scrolled down a page it shrinks to a small pill with the site's icon and the tabs' count, and grows
@@ -239,10 +239,11 @@ struct BrowserBar: View {
       }
     }
     .frame(width: shrunk ? Self.miniSize.width : Self.capsuleWidth, height: shrunk ? Self.miniSize.height : Self.barHeight)
-    // The pill turns to the other of light and dark from the bar, a chip that stands out on any page.
-    .background(BayColor.foreground.opacity(shrunk ? 0.86 : 0), in: Capsule())
+    // The bar, and the pill it shrinks to, in the page's light or dark: one thing getting smaller, quiet over what's
+    // being read. The small pill gets a faint edge and a firmer shadow to hold its shape on a page of the same colour.
     .bayCapsule()
-    .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    .overlay(Capsule().stroke(BayColor.foreground.opacity(shrunk ? 0.12 : 0), lineWidth: 0.5).allowsHitTesting(false))
+    .shadow(color: .black.opacity(shrunk ? 0.2 : 0.12), radius: shrunk ? 10 : 12, y: 4)
     .overlay(alignment: .bottom) {
       LoadProgress(state: browser.hasPage ? browser.activeNavigation : .empty).id(browser.app.activeTabId)
     }
@@ -260,7 +261,7 @@ struct BrowserBar: View {
     Button(action: browser.bringBarBack) {
       HStack(spacing: 10) {
         if browser.hasPage, let url = browser.activeTab?.url { SiteIcon(url: url, size: 18) }
-        TabStack(browser: browser, count: browser.switcherTabs.count, small: true, inverted: true)
+        TabStack(browser: browser, count: browser.switcherTabs.count, small: true)
       }
       .frame(width: Self.miniSize.width, height: Self.miniSize.height)
       .contentShape(Capsule())
@@ -530,13 +531,12 @@ struct SpacesCapsule: View {
 }
 
 /// The Tabs button's face, as Arc Search draws it: the tabs used last before the one showing, as two small fanned cards
-/// of their pictures, with the open tabs' count on a badge at their corner from two tabs on. `inverted` on the shrunk
-/// bar's chip, which is in the other of light and dark. The button's label says the count, so VoiceOver skips it.
+/// of their pictures, with the open tabs' count on a badge at their corner from two tabs on. The button's label says the
+/// count, so VoiceOver skips it.
 struct TabStack: View {
   @ObservedObject var browser: BrowserModel
   let count: Int
   var small = false
-  var inverted = false
 
   var body: some View {
     let scale: CGFloat = small ? 0.8 : 1
@@ -557,11 +557,11 @@ struct TabStack: View {
           .font(.system(size: 9.5 * scale, weight: .bold))
           .lineLimit(1)
           .fixedSize()
-          .foregroundColor(inverted ? BayColor.foreground : BayColor.background)
+          .foregroundColor(BayColor.background)
           .padding(.horizontal, 4 * scale)
           .frame(minWidth: 16 * scale, minHeight: 16 * scale)
-          .background(inverted ? BayColor.background : BayColor.foreground, in: Capsule())
-          .overlay(Capsule().stroke(inverted ? BayColor.foreground : BayColor.surface, lineWidth: 1.5))
+          .background(BayColor.foreground, in: Capsule())
+          .overlay(Capsule().stroke(BayColor.surface, lineWidth: 1.5))
           .offset(x: 12 * scale, y: -8 * scale)
       }
     }
