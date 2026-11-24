@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version, X.Y.Z (default 0.1.0.<run number>)"
+        description: "Version, X.Y.Z (default 0.1.<run number>)"
         required: false
         default: ""
       publish:
@@ -58,8 +58,9 @@ jobs:
           HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
         run: |
           # Checked here, before hours of engine build, rather than in publish.
-          version=${VERSION:-0.1.0.$GITHUB_RUN_NUMBER}
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::version must be X.Y.Z: $version"; exit 1; }
+          # Three parts, so the Store package (X.Y.Z.0, whose last part the Store keeps for itself) is one it accepts.
+          version=${VERSION:-0.1.$GITHUB_RUN_NUMBER}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z: $version"; exit 1; }
           if [[ "$PUBLISH" == true ]]; then
             [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::publishing needs an X.Y.Z version"; exit 1; }
             # Windows versions are its own (windows-v<version>), and a published one is never replaced: winget pins
