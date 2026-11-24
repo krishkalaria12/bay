@@ -1496,8 +1496,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
 
     // This site's own settings
 
-    /** What the page showing follows: its site's own setting, else every global choice. */
-    val siteSetting: SiteSetting get() = app.store.siteSetting(activeUrl)
+    /**
+     * What the page showing follows: its site's own setting, else every global choice. Read through the preferences,
+     * which views observe, before the store: read from the store alone, a sheet showing it never heard it change, so
+     * a toggle or the zoom kept its old value until the sheet was opened again.
+     */
+    val siteSetting: SiteSetting
+        get() {
+            app.preferences.siteSettings
+            return app.store.siteSetting(activeUrl)
+        }
 
     /** The page's zoom in percent: its site's own, else Bay's. */
     val pageZoom: Int get() = (siteSetting.textSize ?: app.preferences.textSize).toInt()
