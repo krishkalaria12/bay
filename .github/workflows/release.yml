@@ -181,7 +181,7 @@ jobs:
             ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('apps/browser/macos/Podfile', 'apps/browser/macos/Podfile.lock', 'pnpm-lock.yaml', 'patches/**') }}
           restore-keys: pods-${{ runner.os }}-
-      - name: Rust (the content blocker, packages/adblock)
+      - name: Rust (the desktop library, packages/rust)
         run: rustup target add aarch64-apple-darwin
       - name: Pods
         run: pnpm pods

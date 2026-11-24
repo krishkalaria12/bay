@@ -321,36 +321,38 @@ class BuildTests(unittest.TestCase):
                 self.assertIn("gclient sync --jobs=1 %s", (root / "automate/automate-git.py").read_text())
                 self.assertEqual(commands[-1][1], root / "automate/automate-git.py")
 
-    def test_the_content_blocker_builds_for_each_desktop_where_gn_links_it(self):
-        for platform, target, library in (("win", "x86_64-pc-windows-msvc", "bay_adblock.lib"),
-                                          ("linux", "x86_64-unknown-linux-gnu", "libbay_adblock.a")):
+    def test_the_desktop_rust_library_builds_for_each_desktop_where_gn_links_it(self):
+        for platform, target, library in (("win", "x86_64-pc-windows-msvc", "bay_desktop.lib"),
+                                          ("linux", "x86_64-unknown-linux-gnu", "libbay_desktop.a")):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
                  mock.patch.object(engine, "REPO", Path(directory) / "repo"), \
                  mock.patch.object(engine, "rename_personality") as rename, \
                  mock.patch.object(engine, "run") as run:
-                built = Path(directory) / "repo/packages/adblock/target" / target / "release" / library
+                built = Path(directory) / "repo/packages/rust/target" / target / "release" / library
                 built.parent.mkdir(parents=True)
                 built.write_text("library")
                 src = Path(directory) / "src"
                 env = {"PATH": "x"}
-                engine.build_adblock(src, "out/Release", env, platform)
+                engine.build_rust(src, "out/Release", env, platform)
                 command = run.call_args.args[0]
                 self.assertEqual(command[:2], ["cargo", "rustc"])
+                self.assertEqual(command[command.index("--package") + 1], "bay-desktop")
+                self.assertEqual(run.call_args.kwargs["cwd"], Path(directory) / "repo/packages/rust")
                 self.assertIn(target, command)
                 self.assertIn("--locked", command)
                 self.assertEqual("RUSTFLAGS" in run.call_args.kwargs["env"], platform == "win")
-                self.assertEqual((src / "out/Release/bay_adblock" / library).read_text(), "library")
-                rename.assert_called_once_with(src, src / "out/Release/bay_adblock", library, env)
+                self.assertEqual((src / "out/Release/bay_desktop" / library).read_text(), "library")
+                rename.assert_called_once_with(src, src / "out/Release/bay_desktop", library, env)
 
     def test_the_personality_is_renamed_only_in_the_members_that_define_or_use_it(self):
         tools = {name: name for name in engine.LLVM_TOOLS}
         defines, uses = "bay_adblock-1.bay_adblock.2-cgu.0.rcgu.o", "compiler_builtins-3.compiler_builtins.4-cgu.034.rcgu.o"
         # A Windows staticlib also holds raw-dylib import members, which llvm-objcopy can't read.
-        listing = ("bay_adblock.lib:kernel32.dll: 00000000 T __imp_GetLastError\n"
-                   f"bay_adblock.lib:{defines}: 00000000 T bay_blocker_new\n"
-                   f"bay_adblock.lib:{defines}: 00000010 T rust_eh_personality\n"
-                   f"bay_adblock.lib:{uses}:                  U rust_eh_personality\n"
-                   "bay_adblock.lib:other.o: 00000000 T rust_eh_personality_helper\n")
+        listing = ("bay_desktop.lib:kernel32.dll: 00000000 T __imp_GetLastError\n"
+                   f"bay_desktop.lib:{defines}: 00000000 T bay_blocker_new\n"
+                   f"bay_desktop.lib:{defines}: 00000010 T rust_eh_personality\n"
+                   f"bay_desktop.lib:{uses}:                  U rust_eh_personality\n"
+                   "bay_desktop.lib:other.o: 00000000 T rust_eh_personality_helper\n")
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "llvm_tools", return_value=tools), \
              mock.patch.object(engine.subprocess, "run",
@@ -359,15 +361,15 @@ class BuildTests(unittest.TestCase):
             directory = Path(directory)
             for member in (defines, uses):
                 (directory / member).write_text("extracted")
-            engine.rename_personality(Path("src"), directory, "bay_adblock.lib", {})
-            self.assertEqual(nm.call_args.args[0], ["llvm-nm", "-A", "bay_adblock.lib"])
+            engine.rename_personality(Path("src"), directory, "bay_desktop.lib", {})
+            self.assertEqual(nm.call_args.args[0], ["llvm-nm", "-A", "bay_desktop.lib"])
             self.assertEqual([call.args[0] for call in run.call_args_list], [
                 command
                 for member in (defines, uses)
-                for command in (["llvm-ar", "x", "bay_adblock.lib", member],
+                for command in (["llvm-ar", "x", "bay_desktop.lib", member],
                                 ["llvm-objcopy", "--redefine-sym",
                                  "rust_eh_personality=bay_adblock_rust_eh_personality", member],
-                                ["llvm-ar", "r", "bay_adblock.lib", member])
+                                ["llvm-ar", "r", "bay_desktop.lib", member])
             ])
             self.assertTrue(all(call.kwargs["cwd"] == directory for call in run.call_args_list))
             self.assertFalse((directory / defines).exists() or (directory / uses).exists())
@@ -516,7 +518,7 @@ class BuildTests(unittest.TestCase):
                  mock.patch.object(engine.time, "monotonic", side_effect=[212.18, 212.18 + elapsed]), \
                  mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
                  mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-                 mock.patch.object(engine, "build_adblock"), \
+                 mock.patch.object(engine, "build_rust"), \
                  mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
                  mock.patch.object(engine, "run_until", return_value=False) as run_until:
                 root = Path(directory)
@@ -535,7 +537,7 @@ class BuildTests(unittest.TestCase):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory, \
                  mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
                  mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-                 mock.patch.object(engine, "build_adblock"), \
+                 mock.patch.object(engine, "build_rust"), \
                  mock.patch.object(engine, "compile_changes_first", side_effect=[outcome]), \
                  mock.patch.object(engine, "run_until") as run_until:
                 root = Path(directory)
@@ -596,7 +598,7 @@ class BuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-             mock.patch.object(engine, "build_adblock"), \
+             mock.patch.object(engine, "build_rust"), \
              mock.patch.object(engine, "compile_changes_first", return_value=True), \
              mock.patch.object(engine, "run_until", side_effect=subprocess.CalledProcessError(1, ["autoninja"])):
             root = Path(directory)
@@ -700,7 +702,7 @@ class BuildTests(unittest.TestCase):
                  mock.patch.object(engine, "require_tools"), mock.patch.object(engine, "verify_checkout"), \
                  mock.patch.object(engine, "series") as series, mock.patch.object(engine, "generate_gn"), \
                  mock.patch.object(engine, "source_digest", return_value="digest"), \
-                 mock.patch.object(engine, "build_adblock"), mock.patch.object(engine, "run") as run:
+                 mock.patch.object(engine, "build_rust"), mock.patch.object(engine, "run") as run:
                 root = Path(directory)
                 env = engine.environment(root, platform)
                 engine.build(root, env, [], 4, platform)

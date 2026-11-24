@@ -84,3 +84,4 @@ __pycache__/
 
 # Rust build output
 packages/adblock/target/
+packages/rust/target/

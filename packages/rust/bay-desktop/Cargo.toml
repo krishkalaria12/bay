@@ -1,0 +1,15 @@
+[package]
+name = "bay-desktop"
+version = "0.1.0"
+description = "The one static library Bay's desktop hosts link: every shared crate's C ABI."
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+name = "bay_desktop"
+# One archive per binary: two Rust static libraries would each carry Rust's std, and their symbols would clash.
+crate-type = ["staticlib"]
+
+[dependencies]
+bay-adblock.workspace = true

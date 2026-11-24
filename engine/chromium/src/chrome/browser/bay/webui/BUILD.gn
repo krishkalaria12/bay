@@ -219,17 +219,19 @@ source_set("impl") {
       "shell_ui_options.cc",
     ]
     deps += [ "//third_party/re2" ]
-    # packages/adblock, which scripts/engine.py builds with cargo first.
+    # Bay's desktop Rust library (packages/rust, bay-desktop: the content
+    # blocker and every other shared crate), which scripts/engine.py builds
+    # with cargo first.
     if (is_win) {
       libs = [
-        "$root_out_dir/bay_adblock/bay_adblock.lib",
+        "$root_out_dir/bay_desktop/bay_desktop.lib",
         "bcrypt.lib",
         "ntdll.lib",
         "userenv.lib",
         "ws2_32.lib",
       ]
     } else {
-      libs = [ "$root_out_dir/bay_adblock/libbay_adblock.a" ]
+      libs = [ "$root_out_dir/bay_desktop/libbay_desktop.a" ]
     }
     deps += [
       ":keychain",

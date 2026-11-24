@@ -1,0 +1,24 @@
+# Bay's desktop Rust: the crates macOS, Windows and Linux share, linked as one static library (bay-desktop).
+# docs/shared-desktop-core-plan.html, Phase 0.
+[workspace]
+resolver = "3"
+members = ["bay-desktop"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[workspace.dependencies]
+bay-adblock = { path = "../adblock" }
+
+# The blocker's adblock-rust carries one change (packages/adblock/vendor/README.md); patches apply from the root.
+[patch.crates-io]
+adblock = { path = "../adblock/vendor/adblock" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
