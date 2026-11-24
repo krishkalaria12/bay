@@ -83,7 +83,12 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val topColor = if (pageShows) pageColor(browser.shownColor(browser.pageColors[app.activeTabId])) else null
     val footColor = if (pageShows) pageColor(browser.shownColor(browser.pageBottomColors[app.activeTabId] ?: browser.pageColors[app.activeTabId])) else null
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-    SystemBarIcons(lightTop = topColor?.let { it.luminance() > 0.5f } ?: !systemDark, lightBottom = footColor?.let { it.luminance() > 0.5f } ?: !systemDark)
+    // The bookmarks drawer is always dark, and reaches up under the status bar: light icons over it in any theme.
+    val drawer = browser.drawerOpen
+    SystemBarIcons(
+        lightTop = !drawer && (topColor?.let { it.luminance() > 0.5f } ?: !systemDark),
+        lightBottom = !drawer && (footColor?.let { it.luminance() > 0.5f } ?: !systemDark),
+    )
     Box(Modifier.fillMaxSize()) {
         // The bar's column: the player, toasts and the bar, or the picker's card in its place. While the picker has a
         // sheet open (Inspect's details), the card and its notices stay above the sheet, as they did before it opened.
