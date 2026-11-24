@@ -46,18 +46,24 @@ pub fn is_file_uri(value: &str) -> bool {
     value.starts_with("file://")
 }
 
-/// The key icons and site settings are kept under: a URL's host, lowercased, without "www.", "m." or "mobile.", so a
-/// site's mobile pages share its settings. Desktop site moves YouTube between m.youtube.com and youtube.com, and two
-/// keys there flipped the setting back on every redirect. Mirrors the store's pattern
+/// The key icons and site settings are kept under: a URL's host, lowercased, without a "www", "m" or "mobile" label in
+/// front of the site's own name, so a site's mobile pages share its settings. Desktop site moves YouTube between
+/// m.youtube.com and youtube.com (and Wikipedia between en.m.wikipedia.org and en.wikipedia.org), and two keys there
+/// flipped the setting back on every redirect. Mirrors the store's pattern
 /// `^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)` (case-insensitive), so odd addresses key the same way.
 #[uniffi::export]
 pub fn site_host(url: &str) -> String {
     let host = match_host(url).unwrap_or_default().to_lowercase();
-    ["www.", "m.", "mobile."]
+    let labels: Vec<&str> = host.split('.').collect();
+    // The site's own name and its suffix are the last two labels; only what comes before them can be dropped.
+    let named = labels.len().saturating_sub(2);
+    labels
         .iter()
-        .find_map(|prefix| host.strip_prefix(prefix).filter(|rest| rest.contains('.')))
-        .map(str::to_owned)
-        .unwrap_or(host)
+        .enumerate()
+        .filter(|(index, label)| *index >= named || !matches!(**label, "www" | "m" | "mobile"))
+        .map(|(_, label)| *label)
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 fn match_host(url: &str) -> Option<&str> {
@@ -293,6 +299,11 @@ mod tests {
         assert_eq!(site_host("https://m.youtube.com/shorts"), "youtube.com");
         assert_eq!(site_host("https://mobile.twitter.com"), "twitter.com");
         assert_eq!(site_host("https://m.com"), "m.com");
+        assert_eq!(
+            site_host("https://en.m.wikipedia.org/wiki/Cat"),
+            "en.wikipedia.org"
+        );
+        assert_eq!(site_host("https://www.m.example.co"), "example.co");
         assert_eq!(site_host("about:blank"), "");
         assert_eq!(site_host("1http://x"), "");
     }
