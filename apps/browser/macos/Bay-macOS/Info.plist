@@ -82,7 +82,7 @@
 	<key>NNFeedbackURL</key>
 	<string>https://github.com/krishkalaria12/bay/issues/new?body=%s</string>
 	<key>NNReleaseNotesURL</key>
-	<string>https://baybrowser.in/release-notes/</string>
+	<string>https://baybrowser.in/mac/release-notes/</string>
 	<key>NNVideoTourURL</key>
 	<string></string>
 	<key>NSAppTransportSecurity</key>

@@ -201,10 +201,20 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     config.mediaTypesRequiringUserActionForPlayback = []
     config.allowsAirPlayForMediaPlayback = true
     config.preferences.isElementFullscreenEnabled = !Self.background
+    Self.allowPictureInPicture(config.preferences)
     config.preferences.javaScriptCanOpenWindowsAutomatically = false
     config.preferences.isFraudulentWebsiteWarningEnabled = false
     config.defaultWebpagePreferences.preferredContentMode = .desktop
     return config
+  }
+
+  // Off by default in a Mac app's WKWebView (Safari turns it on): every video then says it can't go into Picture in
+  // Picture, so neither the app's PiP nor the player's own button worked.
+  private static func allowPictureInPicture(_ preferences: WKPreferences) {
+    let setter = NSSelectorFromString("_setAllowsPictureInPictureMediaPlayback:")
+    guard preferences.responds(to: setter) else { return NSLog("[webkit] Picture in Picture can't be turned on") }
+    typealias SetFlag = @convention(c) (AnyObject, Selector, Bool) -> Void
+    unsafeBitCast(preferences.method(for: setter), to: SetFlag.self)(preferences, setter, true)
   }
 
   func register(_ webView: WKWebView, tab: WebKitTab) { owners[ObjectIdentifier(webView)] = WeakTab(tab) }
