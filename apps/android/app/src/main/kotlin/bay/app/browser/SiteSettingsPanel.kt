@@ -142,7 +142,9 @@ fun SiteSettingsPanel(browser: BrowserModel, strings: Strings, visible: Boolean,
                 ActionRow(
                     strings.t("site.swipeAnywhere"), "site-swipe", icon = BayIcon.SWIPE, toggle = swipe == SwipeMode.ANYWHERE,
                 ) {
-                    browser.changeSiteSetting { it.copy(swipe = if (swipe == SwipeMode.ANYWHERE) SwipeMode.EDGES else SwipeMode.ANYWHERE) }
+                    // Back on the global choice, the site keeps none of its own (and has nothing to reset).
+                    val next = if (swipe == SwipeMode.ANYWHERE) SwipeMode.EDGES else SwipeMode.ANYWHERE
+                    browser.changeSiteSetting { it.copy(swipe = next.takeIf { mode -> mode != app.preferences.swipeToNavigate }) }
                 }
                 RowDivider()
                 ActionRow(strings.t("site.miniPlayer"), "site-mini-player", icon = BayIcon.PIP, toggle = setting.miniPlayer) {

@@ -76,7 +76,9 @@ struct SiteSettingsPanel: View {
           RowDivider()
           // On is Anywhere, off is the edges only; Settings keeps the full choice, Off included.
           ActionRow(strings.t("site.swipeAnywhere"), testID: "site-swipe", icon: .swipe, toggle: swipe == .anywhere) {
-            browser.changeSiteSetting { $0.swipe = swipe == .anywhere ? .edges : .anywhere }
+            // Back on the global choice, the site keeps none of its own (and has nothing to reset).
+            let next: SwipeMode = swipe == .anywhere ? .edges : .anywhere
+            browser.changeSiteSetting { $0.swipe = next == app.preferences.swipeToNavigate ? nil : next }
           }
           RowDivider()
           ActionRow(strings.t("site.miniPlayer"), testID: "site-mini-player", icon: .pip, toggle: setting.miniPlayer) {
