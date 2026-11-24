@@ -47,6 +47,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
@@ -181,8 +184,29 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
         shift.value > 0 -> app.spaces.getOrNull(index - 1)
         else -> null
     }
+    // Let go towards the next space: the space left is held as a picture of itself, sliding out as the new one slides
+    // in beside it (`leaving`, which way it goes; `leftColor`, its wash). The new space is chosen as soon as the finger
+    // lifts, so it comes in with its own cards rather than appearing all at once after the old one has gone.
+    val outgoing = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    var leaving by remember { mutableStateOf<Int?>(null) }
+    // The space left, as a bitmap: a recorded layer still draws its cards' own layers live, which show the new space.
+    var held by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var leftColor by remember { mutableStateOf(color) }
+    // The cards' width in pixels, so the next space's pictures can be read ahead of it at the size they're drawn.
+    var cardPixels by remember { mutableStateOf(0) }
     val progress = (abs(shift.value) / width).coerceIn(0f, 1f)
-    val wash = if (incoming != null) androidx.compose.ui.graphics.lerp(color, spaceColor(incoming.color), progress) else color
+    val wash = when {
+        leaving != null -> androidx.compose.ui.graphics.lerp(leftColor, color, progress)
+        incoming != null -> androidx.compose.ui.graphics.lerp(color, spaceColor(incoming.color), progress)
+        else -> color
+    }
+    // While a space is pulled in, its tabs' pictures are read ahead, so its cards never come in blank.
+    val pulling = incoming?.id
+    LaunchedEffect(pulling, cardPixels) {
+        if (pulling == null || cardPixels == 0) return@LaunchedEffect
+        val pinned = app.store.pinnedSites(pulling).mapTo(HashSet()) { it.url }
+        app.store.spaceTabs(pulling).filter { it.url.isEmpty() || it.url !in pinned }.forEach { preloadFileImage(it.snapshot, cardPixels) }
+    }
     Box(
         Modifier.fillMaxSize().testTag("tab-switcher").onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
             .pointerInput(app.spaces.size, app.activeSpaceId) {
@@ -194,11 +218,15 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                     scope.launch {
                         if (next != null && abs(shift.value) > width * 0.25f) {
                             Haptics.tick(view)
-                            // Out the rest of the way, then the new space slides in from the side it came from.
-                            shift.animateTo(-step * width, tween(160))
+                            // The old space, held as it was, slides out as the new one comes in beside it.
+                            leftColor = color
+                            held = runCatching { outgoing.toImageBitmap() }.getOrNull()
+                            leaving = step
                             browser.selectSpace(next.id)
-                            shift.snapTo(step * width * 0.35f)
-                            shift.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f))
+                            shift.animateTo(-step * width, tween(220))
+                            leaving = null
+                            held = null
+                            shift.snapTo(0f)
                         } else {
                             shift.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
                         }
@@ -217,7 +245,7 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
     ) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to wash.copy(alpha = 0.34f), 0.55f to wash.copy(alpha = 0.08f), 1f to Color.Transparent)))
         // The space coming in: its name at the top, a page's width beyond the edge it's pulled from.
-        if (incoming != null) {
+        if (incoming != null && leaving == null) {
             val name = spaceName(incoming, strings)
             Row(
                 Modifier.statusBarsPadding().padding(horizontal = Space.gutter).padding(top = Space.sm).heightIn(min = 44.dp)
@@ -230,10 +258,24 @@ fun TabSwitcher(browser: BrowserModel, strings: Strings, onSettings: () -> Unit)
                 BayText(name, variant = TextVariant.TITLE, maxLines = 1)
             }
         }
-        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().graphicsLayer { translationX = shift.value }) {
+        BoxWithConstraints(
+            Modifier.fillMaxSize().statusBarsPadding()
+                .drawWithContent {
+                    val step = leaving
+                    if (step == null) {
+                        // Kept as it's drawn, ready to be held as the space left.
+                        outgoing.record { this@drawWithContent.drawContent() }
+                        translate(left = shift.value) { drawLayer(outgoing) }
+                    } else {
+                        held?.let { picture -> translate(left = shift.value) { drawImage(picture) } }
+                        translate(left = shift.value + step * size.width) { this@drawWithContent.drawContent() }
+                    }
+                },
+        ) {
             val inner = maxWidth - Space.gutter * 2
             // Half a point narrower than an exact fit, so rounding never wraps the last card onto a row of its own.
             val cardWidth = (inner - GAP * (COLUMNS - 1)) / COLUMNS - 0.5.dp
+            cardPixels = with(LocalDensity.current) { cardWidth.roundToPx() }
             val essentialWidth = (inner - GAP * (ESSENTIAL_COLUMNS - 1)) / ESSENTIAL_COLUMNS - 0.5.dp
             // Opens on the tab showing: scrolled, as it comes up, just far enough for that tab's card to sit clear of the
             // bar, so the page has its card to shrink into.
