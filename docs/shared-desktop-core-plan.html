@@ -427,21 +427,21 @@
           <li><a href="#accept">6. Acceptance</a></li>
           <li><a href="#risks">7. Risks</a></li>
           <li><a href="#stays">8. Stays per platform</a></li>
-          <li><a href="#decisions">9. Open decisions</a></li>
+          <li><a href="#decisions">9. Decisions</a></li>
         </ol>
       </nav>
       <main>
         <header>
           <h1>One desktop core for macOS, Windows and Linux</h1>
           <p class="lede">
-            Write each piece of Bay's desktop logic once. Chromium glue moves into the portable C++ target both hosts already link. Platform-neutral data
-            work (filter lists, sync crypto, browser import) moves into Rust crates that the phone apps share. Parity checks keep the copies from coming back.
-            A last phase decides whether macOS moves onto the WebUI host as well.
+            Write each piece of Bay's desktop logic once. Chromium glue moves into the portable C++ target both hosts already link. Platform-neutral data work
+            (filter lists, sync crypto, browser import) moves into Rust crates that the phone apps share. Parity checks keep the copies from coming back. A last
+            phase decides whether macOS moves onto the WebUI host as well.
           </p>
           <p class="meta">
-            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Windows and Linux are built and pass runtime acceptance. Work happens
-            on <code>refactor/shared-desktop-core</code>; <a href="#progress">Progress</a> says what is built. Line counts are tracked files without
-            fixtures or vendored code, rounded.
+            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Windows and Linux are built and pass runtime acceptance. Work happens on
+            <code>refactor/shared-desktop-core</code>; <a href="#progress">Progress</a> says what is built. Line counts are tracked files without fixtures or
+            vendored code, rounded.
           </p>
         </header>
 
@@ -465,8 +465,8 @@
                     <code>packages/sync/fixtures/golden.json</code>, Rust checks in <code>ci.yml</code>. Open: see Known gaps.
                   </td>
                   <td>
-                    The Release app built and linked; <code>bay-desktop</code> exports the same 363 symbols as the old adblock archive; Python build tests;
-                    the Linux sync, service and import checks run on macOS; Windows and Linux Rust targets type-check. No Windows or Linux engine build yet.
+                    The Release app built and linked; <code>bay-desktop</code> exports the same 363 symbols as the old adblock archive; Python build tests; the
+                    Linux sync, service and import checks run on macOS; Windows and Linux Rust targets type-check. No Windows or Linux engine build yet.
                   </td>
                 </tr>
                 <tr>
@@ -477,9 +477,9 @@
                     <code>bay-adblock 6</code> everywhere; Windows and Linux had drifted to 5, so their engine rebuilds once.
                   </td>
                   <td>
-                    19 Rust tests; the native blocker harness (9 checks); the Release app blocks an ad request on a new data folder and loads its engine
-                    from the cache on the next launch (300 → 27 ms). The Windows and Linux sources pass a Chromium syntax check with the macOS tree's
-                    flags, not a Windows or Linux build.
+                    19 Rust tests; the native blocker harness (9 checks); the Release app blocks an ad request on a new data folder and loads its engine from
+                    the cache on the next launch (300 → 27 ms). The Windows and Linux sources pass a Chromium syntax check with the macOS tree's flags, not a
+                    Windows or Linux build.
                   </td>
                 </tr>
                 <tr>
@@ -497,27 +497,27 @@
               <code>linux-build-N</code> run, then check the blocker on both: first launch offline, a list turning on, a paused site, Settings › Privacy.
             </li>
             <li>
-              <strong>Contract coverage</strong> isn't built. Reading the methods out of the sources doesn't work: the WebUI host registers them at run
-              time across many files, and the Swift modules don't all use one pattern. It needs a runtime report instead: each host lists what it
-              registered (the web host's <code>getNativeHostInfo</code>, the Expo modules' exports), checked by the acceptance scripts.
+              <strong>Contract coverage</strong> isn't built. Reading the methods out of the sources doesn't work: the WebUI host registers them at run time
+              across many files, and the Swift modules don't all use one pattern. It needs a runtime report instead: each host lists what it registered (the web
+              host's <code>getNativeHostInfo</code>, the Expo modules' exports), checked by the acceptance scripts.
             </li>
             <li>
-              <strong>Recorded outputs.</strong> Only the sync vector is in place. The import Wire JSON per fixture profile still has to be recorded
-              from both readers before Phase 3.
+              <strong>Recorded outputs.</strong> Only the sync vector is in place. The import Wire JSON per fixture profile still has to be recorded from both
+              readers before Phase 3.
             </li>
             <li><strong>SQLite link spike</strong> for <code>bay-import</code> isn't done (decision 1).</li>
             <li>
-              <strong>The request filter's hot path</strong> (<code>Filter</code>, <code>Response</code>, the body and header filters,
-              <code>HostOf</code>, <code>Covers</code>) is still written twice, in <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code>.
-              It needs only the C ABI and the standard library, so one shared C++ header could serve both.
+              <strong>The request filter's hot path</strong> (<code>Filter</code>, <code>Response</code>, the body and header filters, <code>HostOf</code>,
+              <code>Covers</code>) is still written twice, in <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code>. It needs only the C ABI
+              and the standard library, so one shared C++ header could serve both.
             </li>
             <li>
-              <strong>Two catalogue copies.</strong> <code>filter_lists.json</code> still ships from <code>packages/chromium/ios</code> and the phones
-              keep their own in <code>bay-core</code>; one file in <code>bay-lists</code> remains to do.
+              <strong>Two catalogue copies.</strong> <code>filter_lists.json</code> still ships from <code>packages/chromium/ios</code> and the phones keep
+              their own in <code>bay-core</code>; one file in <code>bay-lists</code> remains to do.
             </li>
             <li>
-              <strong>Dependency builds.</strong> Cargo builds every crate type a dependency lists, so <code>bay-adblock</code>'s <code>cdylib</code> is
-              linked whenever <code>bay-desktop</code> builds. The runners have linkers, so this costs time, not correctness.
+              <strong>Dependency builds.</strong> Cargo builds every crate type a dependency lists, so <code>bay-adblock</code>'s <code>cdylib</code> is linked
+              whenever <code>bay-desktop</code> builds. The runners have linkers, so this costs time, not correctness.
             </li>
           </ul>
         </section>
@@ -567,9 +567,7 @@
                 </tr>
                 <tr>
                   <td>Native contract</td>
-                  <td colspan="2">
-                    <code>packages/platform/src/nativeContracts.ts</code>: 24 modules, 321 methods; <code>NativeContracts.g.h</code> for C++
-                  </td>
+                  <td colspan="2"><code>packages/platform/src/nativeContracts.ts</code>: 24 modules, 321 methods; <code>NativeContracts.g.h</code> for C++</td>
                   <td>One definition, <strong>two implementations</strong></td>
                 </tr>
                 <tr>
@@ -589,7 +587,9 @@
           </div>
 
           <h3 id="copies">Where the copies are</h3>
-          <p class="prose">The same logic, written two or three times. The phone column is the native rewrite on <code>refactor/remove-expo-app</code> (PR #31).</p>
+          <p class="prose">
+            The same logic, written two or three times. The phone column is the native rewrite on <code>refactor/remove-expo-app</code> (PR #31).
+          </p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -680,8 +680,8 @@
                   <td>runs per keystroke or render, or is UI logic</td>
                   <td>TypeScript (<code>@bay/core</code>, <code>apps/browser</code>)</td>
                   <td>
-                    It's already shared by every desktop. A native hop would put it behind an async bridge (Mojo on Windows and Linux, Expo calls on macOS)
-                    for no gain.
+                    It's already shared by every desktop. A native hop would put it behind an async bridge (Mojo on Windows and Linux, Expo calls on macOS) for
+                    no gain.
                   </td>
                 </tr>
                 <tr>
@@ -694,17 +694,21 @@
           </div>
           <div class="callout">
             <p>
-              <strong>Rust crates don't do networking, threads or timers.</strong> They don't open sockets, start threads, keep timers or read OS
-              settings. The host fetches, schedules and stores secrets, then hands bytes and the current time in. That keeps each host's networking
-              (<code>SimpleURLLoader</code>, <code>NSURLSession</code>), threading and sandbox rules as they are. They may read and write their own files
-              in a folder the host names, off the host's main thread: that's where most of the duplicated code was.
+              <strong>Rust crates don't do networking, threads or timers.</strong> They don't open sockets, start threads, keep timers or read OS settings. The
+              host fetches, schedules and stores secrets, then hands bytes and the current time in. That keeps each host's networking
+              (<code>SimpleURLLoader</code>, <code>NSURLSession</code>), threading and sandbox rules as they are. They may read and write their own files in a
+              folder the host names, off the host's main thread: that's where most of the duplicated code was.
             </p>
           </div>
         </section>
 
         <section id="layout" aria-labelledby="layout-h">
           <h2 id="layout-h">3. Target layout</h2>
-          <div class="layers" role="img" aria-label="Layers after phases 0 to 5: shared TypeScript on top, then two thin hosts, then shared C++, Rust and OS adapters">
+          <div
+            class="layers"
+            role="img"
+            aria-label="Layers after phases 0 to 5: shared TypeScript on top, then two thin hosts, then shared C++, Rust and OS adapters"
+          >
             <div class="layer">
               <div class="tag">TypeScript</div>
               <div class="cells">
@@ -747,20 +751,14 @@
           <p class="legend"><i class="shared"></i>shared today or after this plan <i class="new"></i>new crate <i></i>per host or per OS</p>
 
           <h3>Files</h3>
-          <div class="mock" role="img" aria-label="Proposed directory layout">packages/
-  adblock/                     bay-adblock, its own crate as today (matcher, C ABI, JNI)
-  rust/
-    Cargo.toml                 desktop workspace: one Cargo.lock, one target/, one release profile
-    bay-lists/                 filter-list catalogue, selection, updates, engine cache
-    bay-sync/                  key derivation, file sealing, vault, phrase, recovery-kit data
-    bay-import/                Chromium, Firefox, Arc, Zen, HTML, CSV and Safari-export readers
-    bay-desktop/               staticlib: the one C ABI both desktop hosts link
-      include/                 one hand-written header per crate, like bay_adblock.h
-  mobile-core/                 its own workspace (PR #31); uses bay-sync, bay-lists by path
-  sync/portable/               renamed from sync/windows (it builds on Linux too)
-  sync/fixtures/golden.json    moved from sync/windows/tests/golden.json
-  import/portable/             renamed from import/windows
-  import/fixtures/             unchanged; every reader's tests use it</div>
+          <div class="mock" role="img" aria-label="Proposed directory layout">
+            packages/ adblock/ bay-adblock, its own crate as today (matcher, C ABI, JNI) rust/ Cargo.toml desktop workspace: one Cargo.lock, one target/, one
+            release profile bay-lists/ filter-list catalogue, selection, updates, engine cache bay-sync/ key derivation, file sealing, vault, phrase,
+            recovery-kit data bay-import/ Chromium, Firefox, Arc, Zen, HTML, CSV and Safari-export readers bay-desktop/ staticlib: the one C ABI both desktop
+            hosts link include/ one hand-written header per crate, like bay_adblock.h mobile-core/ its own workspace (PR #31); uses bay-sync, bay-lists by path
+            sync/portable/ renamed from sync/windows (it builds on Linux too) sync/fixtures/golden.json moved from sync/windows/tests/golden.json
+            import/portable/ renamed from import/windows import/fixtures/ unchanged; every reader's tests use it
+          </div>
         </section>
 
         <section id="phases" aria-labelledby="phases-h">
@@ -785,43 +783,44 @@
           </div>
           <ol class="prose">
             <li>
-              <strong>A desktop Cargo workspace.</strong> Add <code>packages/rust/Cargo.toml</code>, with the new
-              crates as members and <code>bay-adblock</code> as a path dependency. This follows mobile-core, which has its own workspace and takes
-              <code>../adblock</code> by path. A single root workspace would need every crate as a member, would move <code>packages/adblock/target</code>
+              <strong>A desktop Cargo workspace.</strong> Add <code>packages/rust/Cargo.toml</code>, with the new crates as members and
+              <code>bay-adblock</code> as a path dependency. This follows mobile-core, which has its own workspace and takes <code>../adblock</code> by path. A
+              single root workspace would need every crate as a member, would move <code>packages/adblock/target</code>
               (which the mobile and Android scripts read), and would clash with mobile-core's workspace. Each workspace repeats adblock's
-              <code>[patch.crates-io]</code> and release profile (<code>opt-level = "s"</code>, LTO, one codegen unit, <code>panic = "abort"</code>,
-              stripped debug info), because Cargo applies both only from the root. <code>bay-adblock</code> gains the <code>lib</code> crate type and a
-              public <code>ffi</code> module, the same change PR #31 makes.
+              <code>[patch.crates-io]</code> and release profile (<code>opt-level = "s"</code>, LTO, one codegen unit, <code>panic = "abort"</code>, stripped
+              debug info), because Cargo applies both only from the root. <code>bay-adblock</code> gains the <code>lib</code> crate type and a public
+              <code>ffi</code> module, the same change PR #31 makes.
             </li>
             <li>
-              <strong>One static library per desktop.</strong> Add <code>bay-desktop</code>, a <code>staticlib</code> that re-exports bay-adblock's C
-              functions and will carry each new crate. Headers stay hand-written, one per crate, as <code>bay_adblock.h</code> is today. Two Rust static libraries in one binary each bring their own copy of Rust's standard library, and
-              their symbols clash. Mobile avoids this the same way, linking the blocker into <code>bay-core</code> through its <code>adblock</code> feature.
+              <strong>One static library per desktop.</strong> Add <code>bay-desktop</code>, a <code>staticlib</code> that re-exports bay-adblock's C functions
+              and will carry each new crate. Headers stay hand-written, one per crate, as <code>bay_adblock.h</code> is today. Two Rust static libraries in one
+              binary each bring their own copy of Rust's standard library, and their symbols clash. Mobile avoids this the same way, linking the blocker into
+              <code>bay-core</code> through its <code>adblock</code> feature.
             </li>
             <li>
               <strong>Point both hosts at it.</strong> <code>scripts/engine.py</code> builds <code>bay-desktop</code> instead of the adblock crate (same
-              <code>cargo rustc --locked --release --lib --crate-type staticlib</code>, <code>+crt-static</code> on Windows).
-              <code>webui/BUILD.gn</code> links <code>bay_desktop.lib</code> / <code>libbay_desktop.a</code>. <code>engine/chromium/apply.py</code> copies
-              <code>bay_desktop.h</code> instead of <code>bay_adblock.h</code>. On macOS, <code>packages/chromium/scripts/adblock.sh</code> and
-              <code>BayNNCore.podspec</code> build and link the same crate.
+              <code>cargo rustc --locked --release --lib --crate-type staticlib</code>, <code>+crt-static</code> on Windows). <code>webui/BUILD.gn</code> links
+              <code>bay_desktop.lib</code> / <code>libbay_desktop.a</code>. <code>engine/chromium/apply.py</code> copies <code>bay_desktop.h</code> instead of
+              <code>bay_adblock.h</code>. On macOS, <code>packages/chromium/scripts/adblock.sh</code> and <code>BayNNCore.podspec</code> build and link the same
+              crate.
             </li>
             <li>
-              <strong>Rename the shared C++.</strong> <code>packages/sync/windows</code> → <code>sync/portable</code> and
-              <code>packages/import/windows</code> → <code>import/portable</code>. <code>bay/data/BUILD.gn</code> already builds both on Linux.
+              <strong>Rename the shared C++.</strong> <code>packages/sync/windows</code> → <code>sync/portable</code> and <code>packages/import/windows</code> →
+              <code>import/portable</code>. <code>bay/data/BUILD.gn</code> already builds both on Linux.
             </li>
             <li>
               <strong>Contract coverage.</strong> Extend <code>packages/platform/scripts/native-contracts.mjs</code> to list, for each of the 321 methods,
-              whether the macOS host and the WebUI host implement it, from what each host registers at run time (Known gaps says why not from the
-              sources). CI fails when a method has no implementation on a platform and no capability saying it's unsupported there. Today
+              whether the macOS host and the WebUI host implement it, from what each host registers at run time (Known gaps says why not from the sources). CI
+              fails when a method has no implementation on a platform and no capability saying it's unsupported there. Today
               <code>nativeContracts.test.mjs</code> only checks that every module has a contract.
             </li>
             <li>
               <strong>Record today's answers before moving anything.</strong> Save as golden files: the import Wire JSON for every profile in
               <code>packages/import/fixtures</code>, from both the Swift and the C++ readers; the filter-list state after a scripted series of events (first
-              launch, toggles, an update, a failed fetch); and the sync vector, moved to <code>packages/sync/fixtures/golden.json</code>, the path
-              mobile-core's README already names. Where the Swift and C++ outputs differ, record which one is right before Phase 3.
+              launch, toggles, an update, a failed fetch); and the sync vector, moved to <code>packages/sync/fixtures/golden.json</code>, the path mobile-core's
+              README already names. Where the Swift and C++ outputs differ, record which one is right before Phase 3.
             </li>
-            <li><strong>SQLite link spike</strong> for <code>bay-import</code>. See open decision 1.</li>
+            <li><strong>SQLite link spike</strong> for <code>bay-import</code>. See decision 1.</li>
           </ol>
           <dl class="kv">
             <dt>Done when</dt>
@@ -862,11 +861,17 @@
                 </tr>
                 <tr>
                   <td>Updates</td>
-                  <td>First check 60 s after launch, then every 3 h (<code>kFirstUpdate</code>, <code>kUpdateEvery</code>); <code>UpdateLists</code>, <code>Fetch</code>, <code>Fetched</code> validation and retry</td>
+                  <td>
+                    First check 60 s after launch, then every 3 h (<code>kFirstUpdate</code>, <code>kUpdateEvery</code>); <code>UpdateLists</code>,
+                    <code>Fetch</code>, <code>Fetched</code> validation and retry
+                  </td>
                 </tr>
                 <tr>
                   <td>Rebuilds</td>
-                  <td>Generations and the compiled-engine cache: <code>Rebuild</code>, <code>Seeded</code>, <code>BuildAndPublish</code>, <code>Apply</code>; cache keyed by engine format (<code>bay-adblock 6</code>) and version</td>
+                  <td>
+                    Generations and the compiled-engine cache: <code>Rebuild</code>, <code>Seeded</code>, <code>BuildAndPublish</code>, <code>Apply</code>;
+                    cache keyed by engine format (<code>bay-adblock 6</code>) and version
+                  </td>
                 </tr>
                 <tr>
                   <td>Reporting</td>
@@ -875,13 +880,13 @@
               </tbody>
             </table>
           </div>
-          <div class="mock" role="img" aria-label="The bay-lists C API as built">bay_lists_open(directory, catalogue, languages)   -> handle (catalogue + settings.json)
-bay_lists_selected / _selected_ids / _urls / _live -> JSON for builds, downloads, the request filter
-bay_lists_set_enabled / _set_list / _set_allowed / _set_page_allowed, bay_lists_save
-bay_lists_state / _stats(handle, timing)           -> Settings › Privacy
-bay_lists_seed / _absent / _due(directory, ids)    -> list files (blocking)
-bay_lists_store(directory, id, body, now)          -> 1 changed · 0 same · -1 not a list · -2 not written
-bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_apply hands it over</div>
+          <div class="mock" role="img" aria-label="The bay-lists C API as built">
+            bay_lists_open(directory, catalogue, languages) -> handle (catalogue + settings.json) bay_lists_selected / _selected_ids / _urls / _live -> JSON for
+            builds, downloads, the request filter bay_lists_set_enabled / _set_list / _set_allowed / _set_page_allowed, bay_lists_save bay_lists_state /
+            _stats(handle, timing) -> Settings › Privacy bay_lists_seed / _absent / _due(directory, ids) -> list files (blocking) bay_lists_store(directory, id,
+            body, now) -> 1 changed · 0 same · -1 not a list · -2 not written bay_lists_build(directory, lists, resources, cache) -> built engine;
+            bay_lists_apply hands it over
+          </div>
           <dl class="kv">
             <dt>Host keeps</dt>
             <dd>
@@ -892,9 +897,9 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
             <dd><code>bay-core/src/browser/filter_lists.rs</code> becomes a caller of <code>bay-lists</code>.</dd>
             <dt>Done when</dt>
             <dd>
-              <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code> hold no list logic. The Phase 0 event script gives the recorded state
-              in <code>cargo test</code> and through each host. On each OS: ads are blocked on a first launch offline, a list turns on and downloads, pausing
-              a site works, Settings › Privacy shows counts.
+              <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code> hold no list logic. The Phase 0 event script gives the recorded state in
+              <code>cargo test</code> and through each host. On each OS: ads are blocked on a first launch offline, a list turns on and downloads, pausing a
+              site works, Settings › Privacy shows counts.
             </dd>
           </dl>
 
@@ -933,7 +938,10 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
                 </tr>
                 <tr>
                   <td>Vault</td>
-                  <td><code>write</code>, <code>read</code>, <code>remove</code>, <code>createChain</code>, <code>deleteChain</code>, <code>chainStatus</code>, <code>sealLocal</code>, <code>openLocal</code></td>
+                  <td>
+                    <code>write</code>, <code>read</code>, <code>remove</code>, <code>createChain</code>, <code>deleteChain</code>, <code>chainStatus</code>,
+                    <code>sealLocal</code>, <code>openLocal</code>
+                  </td>
                   <td><code>SyncVault.swift</code>, <code>SyncVault.cpp</code></td>
                 </tr>
                 <tr>
@@ -985,7 +993,10 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
               <tbody>
                 <tr>
                   <td>Chromium data</td>
-                  <td><code>ChromiumBookmarks</code>, <code>HistoryReader</code>, <code>ChromiumAutofill</code>, <code>ChromiumSessions</code>, <code>ChromiumExtensions</code></td>
+                  <td>
+                    <code>ChromiumBookmarks</code>, <code>HistoryReader</code>, <code>ChromiumAutofill</code>, <code>ChromiumSessions</code>,
+                    <code>ChromiumExtensions</code>
+                  </td>
                   <td><code>Readers.cpp</code>, <code>Sessions.cpp</code></td>
                   <td><code>chromium</code></td>
                 </tr>
@@ -997,7 +1008,10 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
                 </tr>
                 <tr>
                   <td>Firefox</td>
-                  <td><code>Firefox</code>, <code>FirefoxLogins</code>, <code>FirefoxExtensions</code>, <code>FirefoxExtensionAdapter</code>, <code>FirefoxExtensionCounterparts</code></td>
+                  <td>
+                    <code>Firefox</code>, <code>FirefoxLogins</code>, <code>FirefoxExtensions</code>, <code>FirefoxExtensionAdapter</code>,
+                    <code>FirefoxExtensionCounterparts</code>
+                  </td>
                   <td><code>Readers.cpp</code>, <code>linux/FirefoxNSS.cpp</code></td>
                   <td><code>firefox</code>, including the key4.db primary password</td>
                 </tr>
@@ -1031,16 +1045,17 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
           <dl class="kv">
             <dt>Host keeps</dt>
             <dd>
-              Unlocking secrets (Keychain “Safe Storage”, DPAPI and app-bound keys, Secret Service and KWallet via <code>SecretService.cpp</code>), installed-app
-              listing, file choosers, writing into the profile through the engine services (<code>ImportWriter.swift</code> and its WebUI counterpart), and the
-              macOS-only paths: <code>SafariDirect</code>, <code>SafariCookies</code>, Full Disk Access, <code>DiaAppleEvents</code>, <code>DiaTabs</code>.
+              Unlocking secrets (Keychain “Safe Storage”, DPAPI and app-bound keys, Secret Service and KWallet via <code>SecretService.cpp</code>),
+              installed-app listing, file choosers, writing into the profile through the engine services (<code>ImportWriter.swift</code> and its WebUI
+              counterpart), and the macOS-only paths: <code>SafariDirect</code>, <code>SafariCookies</code>, Full Disk Access, <code>DiaAppleEvents</code>,
+              <code>DiaTabs</code>.
             </dd>
             <dt>Secrets</dt>
             <dd>Only the unlocked key crosses into Rust. It lives in <code>zeroize</code> buffers, which mobile-core already uses.</dd>
             <dt>Done when</dt>
             <dd>
-              Every fixture profile produces the Phase 0 Wire JSON on all three desktops, the Swift <code>Core/</code> readers and the C++ readers are
-              deleted, and each host's tests cover only its adapter.
+              Every fixture profile produces the Phase 0 Wire JSON on all three desktops, the Swift <code>Core/</code> readers and the C++ readers are deleted,
+              and each host's tests cover only its adapter.
             </dd>
           </dl>
 
@@ -1137,9 +1152,9 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
               TypeScript tests in CI, so a TypeScript change shows up as a failing Rust test until the port matches.
             </li>
             <li>
-              <strong>Rust in every check job.</strong> <code>cargo fmt --check</code>, <code>cargo clippy -- -D warnings</code> and <code>cargo test</code>
-              for the workspace in <code>ci.yml</code>, <code>windows-checks.yml</code> and <code>linux-checks.yml</code>, and in the pre-push hook next to
-              lint, typecheck and slop.
+              <strong>Rust in every check job.</strong> <code>cargo fmt --check</code>, <code>cargo clippy -- -D warnings</code> and <code>cargo test</code> for
+              the workspace in <code>ci.yml</code>, <code>windows-checks.yml</code> and <code>linux-checks.yml</code>, and in the pre-push hook next to lint,
+              typecheck and slop.
             </li>
             <li>
               <strong>Write the rule down.</strong> Add the section 2 table to <code>AGENTS.md</code>: new platform-neutral native logic goes in a crate, new
@@ -1152,8 +1167,8 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
             <span class="pri">decision after 1–4</span>
           </div>
           <p class="prose">
-            Windows and Linux are built and pass runtime acceptance on the WebUI host. The last split is the host itself. Running macOS on it would write each contract method once and
-            leave a single JS runtime model. This phase is a spike and a decision, not a commitment.
+            Windows and Linux are built and pass runtime acceptance on the WebUI host. The last split is the host itself. Running macOS on it would write each
+            contract method once and leave a single JS runtime model. This phase is a spike and a decision, not a commitment.
           </p>
           <div class="table-wrap">
             <table>
@@ -1198,16 +1213,16 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
                 <tr>
                   <td>Spike</td>
                   <td>
-                    Add a macOS entry with <code>"runtime": "chrome-webui"</code> to <code>engine-lock.json</code>'s platforms, port the Aura files far enough to
-                    launch, and run Bay Dev on a copied <code>BAY_DATA_DIR</code>. Compare against the current Mac release: cold start, memory with 30 tabs, tab
-                    switch, typing latency in the address bar, scrolling over WebGL backdrops, idle energy, and a Netflix tab in WebKit.
+                    Add a macOS entry with <code>"runtime": "chrome-webui"</code> to <code>engine-lock.json</code>'s platforms, port the Aura files far enough
+                    to launch, and run Bay Dev on a copied <code>BAY_DATA_DIR</code>. Compare against the current Mac release: cold start, memory with 30 tabs,
+                    tab switch, typing latency in the address bar, scrolling over WebGL backdrops, idle energy, and a Netflix tab in WebKit.
                   </td>
                 </tr>
                 <tr>
                   <td>Go if</td>
                   <td>
-                    Every measure is no worse than today's Mac build and the WebKit tab works. Otherwise keep two hosts. After Phases 1–4 the remaining split
-                    is presentation only.
+                    Every measure is no worse than today's Mac build and the WebKit tab works. Otherwise keep two hosts. After Phases 1–4 the remaining split is
+                    presentation only.
                   </td>
                 </tr>
               </tbody>
@@ -1260,13 +1275,15 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
           <ul class="prose">
             <li>Every golden file from Phase 0 still matches, from <code>cargo test</code> and from each host.</li>
             <li>A sync chain made on any of the three desktops or a phone opens on every other one. Existing chains survive the update on each OS.</li>
-            <li>Imports from every fixture profile and from a real Chrome, Firefox, Arc and Zen install give the same result as the current release on each OS.</li>
+            <li>
+              Imports from every fixture profile and from a real Chrome, Firefox, Arc and Zen install give the same result as the current release on each OS.
+            </li>
             <li>The blocker passes its first-launch, list, pause and cosmetic checks on each OS.</li>
             <li>Each moved prompt works on each OS: permissions, choosers, cast, autofill and passwords, extension installs, screen sharing, context menu.</li>
             <li>The contract coverage report shows no unexplained gaps.</li>
             <li>
-              The signed macOS candidate and its Sparkle update pass as <code>docs/releasing.md</code> describes. App and engine size changes are measured
-              and noted in each phase's commit.
+              The signed macOS candidate and its Sparkle update pass as <code>docs/releasing.md</code> describes. App and engine size changes are measured and
+              noted in each phase's commit.
             </li>
             <li><code>pnpm lint</code>, <code>pnpm typecheck</code>, <code>pnpm slop</code>, <code>pnpm test</code> and the cargo checks pass.</li>
           </ul>
@@ -1285,7 +1302,10 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
               <tbody>
                 <tr>
                   <td>Saved data stops opening</td>
-                  <td>No format changes in this plan. Golden files are recorded before each move, and each phase keeps the old reader's tests until the new one matches.</td>
+                  <td>
+                    No format changes in this plan. Golden files are recorded before each move, and each phase keeps the old reader's tests until the new one
+                    matches.
+                  </td>
                 </tr>
                 <tr>
                   <td>Rust symbols clash</td>
@@ -1318,9 +1338,7 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
                 </tr>
                 <tr>
                   <td>Hosts drift during the move</td>
-                  <td>
-                    Each phase lands per area, both hosts in the same commit, so main never has one host on the new code and the other on the old.
-                  </td>
+                  <td>Each phase lands per area, both hosts in the same commit, so main never has one host on the new code and the other on the old.</td>
                 </tr>
                 <tr>
                   <td>One host loses Mac polish</td>
@@ -1343,29 +1361,21 @@ bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_a
         </section>
 
         <section id="decisions" aria-labelledby="decisions-h">
-          <h2 id="decisions-h">9. Open decisions</h2>
+          <h2 id="decisions-h">9. Decisions</h2>
+          <p class="prose">Decided 24 Nov 2026; each takes the recommendation this plan made.</p>
           <ol class="prose">
             <li>
-              <strong>SQLite for <code>bay-import</code>.</strong> Bundle SQLite in the crate (<code>rusqlite</code> with <code>bundled</code>), or have the
-              host open a read-only snapshot and pass rows in through a callback? Bundling is simpler. Keep it if the Phase 0 link spike shows no clash with
-              Chromium's renamed copy or the system library on macOS.
+              <strong>SQLite for <code>bay-import</code>:</strong> bundled in the crate (<code>rusqlite</code> with <code>bundled</code>), provided the Phase 0
+              link spike shows no clash with Chromium's renamed copy or the system library on macOS. If it clashes, the host opens a read-only snapshot and
+              passes rows in.
             </li>
+            <li><strong>Recovery kit drawing:</strong> stays native per OS, as today. Rust gives the kit's words and QR matrix.</li>
             <li>
-              <strong>Recovery kit drawing.</strong> Keep a native drawer per OS, as today, or have Rust produce one SVG or HTML kit that each host prints?
-              This plan keeps the native drawers.
+              <strong>Desktop input:</strong> address input and suggestions stay in TypeScript on desktop. The phones' Rust port is held to it with shared
+              fixtures (Phase 5).
             </li>
-            <li>
-              <strong>Desktop input in Rust.</strong> This plan keeps address input and suggestions in TypeScript on desktop and holds the phones' Rust port
-              to it with fixtures. Confirm that's the intent rather than one Rust implementation for both.
-            </li>
-            <li>
-              <strong>Phase 6 measures.</strong> Are “no worse than today's Mac build” and a working WebKit tab the right bar, or do some measures (memory,
-              idle energy) need a margin?
-            </li>
-            <li>
-              <strong>Crate boundaries.</strong> One <code>bay-desktop</code> archive re-exporting separate crates (this plan), or fold the new code into
-              <code>bay-adblock</code>'s crate and rename it?
-            </li>
+            <li><strong>Phase 6 bar:</strong> every measure no worse than today's Mac build, and a Netflix tab working in WebKit. No margins.</li>
+            <li><strong>Crate boundaries:</strong> separate crates, one per area, re-exported by the single <code>bay-desktop</code> archive.</li>
           </ol>
         </section>
       </main>
