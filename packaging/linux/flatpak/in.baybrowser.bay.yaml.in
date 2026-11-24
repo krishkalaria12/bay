@@ -1,0 +1,92 @@
+# Bay for Flathub, from the release tarball. scripts/linux/release.sh --formats flatpak fills in the version and
+# checksum and writes this with the files beside it: that folder is the flathub/in.baybrowser.bay repository.
+# Chromium's own sandbox can't run in Flatpak, so zypak runs it through Flatpak's sandbox instead, and cobalt (from the
+# Chromium base app) starts Bay with it, as Flathub's other Chromium browsers do.
+app-id: in.baybrowser.bay
+runtime: org.freedesktop.Platform
+runtime-version: "26.08"
+sdk: org.freedesktop.Sdk
+base: org.chromium.Chromium.BaseApp
+base-version: "26.08"
+command: bay
+separate-locales: false
+build-options:
+  no-debuginfo: true
+finish-args:
+  - --require-version=1.8.2
+  - --device=all
+  - --share=ipc
+  - --share=network
+  - --socket=cups
+  - --socket=pcsc
+  - --socket=pulseaudio
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --allow=bluetooth
+  - --system-talk-name=org.bluez
+  - --system-talk-name=org.freedesktop.Avahi
+  - --system-talk-name=org.freedesktop.UPower
+  - --talk-name=com.canonical.AppMenu.Registrar
+  - --talk-name=org.freedesktop.FileManager1
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.kde.kwalletd5
+  - --talk-name=org.kde.kwalletd6
+  - --talk-name=org.gnome.SessionManager
+  - --own-name=org.mpris.MediaPlayer2.bay.*
+  - --filesystem=xdg-run/pipewire-0
+  # Installing web apps and desktop shortcuts.
+  - --filesystem=home/.local/share/applications:create
+  - --filesystem=home/.local/share/icons:create
+  - --filesystem=xdg-desktop
+  - --filesystem=xdg-download
+  # Media artwork for MPRIS.
+  - --filesystem=/tmp
+  # Imported CA certificates.
+  - --persist=.pki
+modules:
+  - name: zypak
+    sources:
+      - type: git
+        url: https://github.com/refi64/zypak
+        tag: v2025.09
+        commit: 693a71c5ffa80ec9c9ce2ae03b1ccc493c698e53
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$
+
+  - name: bay
+    buildsystem: simple
+    build-commands:
+      - cp -a opt/bay /app/bay
+      # zypak takes the setuid sandbox's place, and cobalt the wrapper's.
+      - rm /app/bay/bay-wrapper /app/bay/chrome-sandbox
+      - install -Dm 755 bay.sh /app/bin/bay
+      - install -Dm 644 -t /app/etc cobalt.ini
+      - >-
+        sed -e 's|^Exec=/usr/bin/bay|Exec=bay|' -e '/^TryExec=/d' -e 's|^Icon=bay$|Icon=in.baybrowser.bay|'
+        usr/share/applications/bay.desktop | install -Dm 644 /dev/stdin /app/share/applications/in.baybrowser.bay.desktop
+      - >-
+        for icon in usr/share/icons/hicolor/*/apps/bay.*; do
+        install -Dm 644 "$icon" "/app/${icon#usr/}"; mv "/app/${icon#usr/}" "$(dirname "/app/${icon#usr/}")/in.baybrowser.bay.${icon##*.}";
+        done
+      - >-
+        sed 's|<launchable type="desktop-id">bay.desktop</launchable>|<launchable type="desktop-id">in.baybrowser.bay.desktop</launchable>|'
+        usr/share/metainfo/in.baybrowser.bay.metainfo.xml | install -Dm 644 /dev/stdin /app/share/metainfo/in.baybrowser.bay.metainfo.xml
+    sources:
+      - type: archive
+        url: https://github.com/krishkalaria12/bay/releases/download/linux-v@VERSION@/bay-@VERSION@-linux-x64.tar.xz
+        sha256: "@SHA256@"
+        only-arches: [x86_64]
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/krishkalaria12/bay/releases
+          version-query: >-
+            [.[] | select(.prerelease | not) | select(.tag_name | startswith("linux-v"))][0].tag_name
+            | sub("^linux-v"; "")
+          url-query: '"https://github.com/krishkalaria12/bay/releases/download/linux-v\($version)/bay-\($version)-linux-x64.tar.xz"'
+      - type: file
+        path: bay.sh
+      - type: file
+        path: cobalt.ini

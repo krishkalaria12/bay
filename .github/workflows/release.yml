@@ -84,7 +84,7 @@ jobs:
             [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "a stable version is <major>.<minor>.<patch>, not '$VERSION'"
             project="$(sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' apps/browser/macos/Bay.xcodeproj/project.pbxproj | sort -u)"
             [ "$project" = "$VERSION" ] || check "MARKETING_VERSION is $project: commit the bump to $VERSION first"
-            [ -f "release-notes/$VERSION.md" ] || check "no release-notes/$VERSION.md: write and commit the notes first"
+            [ -f "release-notes/mac/$VERSION.md" ] || check "no release-notes/mac/$VERSION.md: write and commit the notes first"
           fi
           if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then check "v$VERSION is already published"; fi
           tree="$(git rev-parse HEAD:engine)"

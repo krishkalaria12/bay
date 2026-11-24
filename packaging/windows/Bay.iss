@@ -12,6 +12,8 @@ AppId={{C345791D-67B8-4C97-AB2B-D6DDE1F93B72}
 AppName=Bay
 AppVersion={#AppVersion}
 AppPublisher=Bay
+; Apps & features shows "Bay" rather than Inno's "Bay version X.Y.Z"; winget matches it.
+UninstallDisplayName=Bay
 DefaultDirName={localappdata}\Programs\Bay
 DefaultGroupName=Bay
 PrivilegesRequired=lowest

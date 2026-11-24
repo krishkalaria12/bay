@@ -62,6 +62,7 @@ public class WebKitModule: Module {
       Prop("transferKey") { (view: WebKitTabView, key: String?) in view.tab.transferKey = key }
       Prop("visible") { (view: WebKitTabView, visible: Bool?) in view.tab.visible = visible ?? true }
       Prop("warm") { (view: WebKitTabView, warm: Bool?) in view.tab.warm = warm ?? false }
+      Prop("autoPictureInPicture") { (view: WebKitTabView, enabled: Bool?) in view.tab.autoPictureInPicture = enabled ?? false }
       Prop("pageBackgroundColor") { (view: WebKitTabView, color: NSColor?) in view.tab.pageBackgroundColor = color }
 
       AsyncFunction("loadUrl") { (view: WebKitTabView, url: String, userInitiated: Bool?) in
