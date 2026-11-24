@@ -1643,6 +1643,15 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           when a site moves to another page without a load and when the bar comes back after a scroll, and the bar (with what stands on it) is light or dark as
           the foot is. Its status bar already keeps its icons readable over the strip by itself, and its pill never clipped the spaces column.
         </li>
+        <li>
+          <b>Sheet pass after APK 26:</b> every item of the page menu, Tools and Site settings was tried on both apps against a page that reports its identity,
+          width and font. Fixed on the way: the page menu and Site settings read the site's setting from the store alone on Android, so once a site had a zoom
+          (or for the Reader tick, always) the open sheet never heard a change and showed the old value; a mobile label inside a host
+          (<code>en.m.wikipedia.org</code>) now keys the site's settings like a leading one; the iOS row value is capped at two fifths of the width (a long font
+          value squeezed "Font" into a letter a line); and Swipe anywhere switched back to the global choice keeps no override, so Reset no longer shows for
+          nothing. Desktop site on YouTube stays on through the move to www.youtube.com and off through the move back. Translate can't reach a localhost page
+          (Google says so), as expected.
+        </li>
       </ul>
 
       <h2 id="verify">Testing</h2>
