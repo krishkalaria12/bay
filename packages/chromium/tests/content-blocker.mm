@@ -94,6 +94,16 @@ static void Respond(NSString *path, NSString *text) {
 static BOOL Blocks(const char *url, const char *top = "https://site.example/") {
   return Filter(url, "https://site.example/", top, "image", "GET", nullptr, nullptr);
 }
+static BOOL Ready() { return CurrentLive()->engine != nullptr; }
+static BOOL Selected(NSString *listId) { return [JSONFrom(bay_lists_selected_ids(Lists())) containsObject:listId]; }
+static NSDictionary *SavedSettings() {
+  NSData *data = [NSData dataWithContentsOfFile:[Directory() stringByAppendingPathComponent:@"settings.json"]];
+  return data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+}
+static BOOL StoresAsList(NSData *data) {
+  NSString *probe = [testRoot stringByAppendingPathComponent:@"probe"];
+  return bay_lists_store(probe.fileSystemRepresentation, "probe", (const uint8_t *)data.bytes, data.length, 0) != -1;
+}
 static void Setup() {
   NSString *resources = [testRoot stringByAppendingPathComponent:@"Fixture.bundle/Contents/Resources"];
   [NSFileManager.defaultManager createDirectoryAtPath:[resources stringByAppendingPathComponent:@"FilterLists"] withIntermediateDirectories:YES attributes:nil error:nil];
@@ -113,8 +123,9 @@ static void Setup() {
   method_setImplementation(class_getClassMethod(NSBundle.class, @selector(bundleForClass:)), (IMP)BundleForTest);
   method_exchangeImplementations(class_getClassMethod(NSURLSessionConfiguration.class, @selector(ephemeralSessionConfiguration)), class_getClassMethod(NSURLSessionConfiguration.class, @selector(blockerTestConfiguration)));
   pending = [NSMutableArray array];
-  LoadSettings();
-  gSelected = [NSMutableOrderedSet orderedSetWithArray:@[@"easylist", @"FRA-0"]];
+  // easylist is on by default; the regional lists follow the machine's languages, so pick them here.
+  Require(bay_lists_set_list(Lists(), "FRA-0", true) >= 0 && bay_lists_set_list(Lists(), "DEU-0", false) >= 0,
+          "the fixture catalogue loads");
 }
 int main(int argc, char **argv) {
   @autoreleasepool {
@@ -123,7 +134,7 @@ int main(int argc, char **argv) {
     Setup();
     __block BOOL initialDone = NO;
     Rebuild(YES, ^(NSArray *missing) { Require(missing.count == 0, "downloaded list is available"); initialDone = YES; });
-    Until(^BOOL { return gReady && Request(@"/french", NO) != nil; }, "bundled rules ready while regional download stalls");
+    Until(^BOOL { return Ready() && Request(@"/french", NO) != nil; }, "bundled rules ready while regional download stalls");
     Require(!initialDone && Blocks("https://ads.example/pixel"), "bundled list blocks before regional download completes");
     Respond(@"/french", @"||regional.example^\n! Expires: 4 days\n");
     Until(^BOOL { return initialDone && Blocks("https://regional.example/pixel"); }, "downloaded regional rules apply");
@@ -148,7 +159,7 @@ int main(int argc, char **argv) {
     Until(^BOOL { return RequestCount(@"/german") == 2; }, "replacement download pending");
     Respond(@"/german", nil);
     Until(^BOOL { return oldDone; }, "stale failed selection completes");
-    Require([gSelected containsObject:@"DEU-0"], "stale failure cannot disable a newer selection");
+    Require(Selected(@"DEU-0"), "stale failure cannot disable a newer selection");
     Until(^BOOL { return Request(@"/german", NO) != nil; }, "replacement download remains pending");
     Respond(@"/german", @"||german.example^\n! Expires: 4 days\n");
     Until(^BOOL { return newDone && Blocks("https://german.example/pixel"); }, "newer download applies after stale failure");
@@ -159,8 +170,8 @@ int main(int argc, char **argv) {
     NSMutableData *list = [[@"! Title: " dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
     while (list.length < 511) [list appendBytes:"a" length:1];
     [list appendData:[@"Lọc quảng cáo\n||ads.example^\n" dataUsingEncoding:NSUTF8StringEncoding]];
-    Require(LooksLikeList(list), "a list whose first 512 bytes end inside a character is a list");
-    Require(!LooksLikeList([@"\xef\xbb\xbf  <!doctype html><p>error page</p>" dataUsingEncoding:NSUTF8StringEncoding]),
+    Require(StoresAsList(list), "a list whose first 512 bytes end inside a character is a list");
+    Require(!StoresAsList([@"\xef\xbb\xbf  <!doctype html><p>error page</p>" dataUsingEncoding:NSUTF8StringEncoding]),
             "an HTML error page isn't a list");
     puts("PASS: downloads are recognised as lists by their bytes");
 
@@ -316,11 +327,11 @@ int main(int argc, char **argv) {
             "and a subdomain of a hostname's rule");
     [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:NO completion:^(NSString *error) { Require(!error, "visit anyway succeeds"); }];
     Require(!nncore_host::ContentBlockerBlocksPage(@"https://www.visit.example/"), "Visit Anyway covers the site");
-    Require(![ReadJSON(SettingsPath())[@"allowedPages"] containsObject:@"visit.example"], "Visit Anyway isn't saved");
+    Require(![SavedSettings()[@"allowedPages"] containsObject:@"visit.example"], "Visit Anyway isn't saved");
     [NNCoreContentBlocker setPageAllowed:NO onHost:@"www.visit.example" remember:NO completion:^(NSString *error) { Require(!error, "ending it succeeds"); }];
     Require(nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "blocking again ends what covers the host");
     [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:YES completion:^(NSString *error) { Require(!error, "always allow succeeds"); }];
-    Require([ReadJSON(SettingsPath())[@"allowedPages"] containsObject:@"visit.example"], "Always Allow is saved");
+    Require([SavedSettings()[@"allowedPages"] containsObject:@"visit.example"], "Always Allow is saved");
     Require(!nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "and lifts the block");
     Require(!Filter("https://visit.example/a.js", "https://visit.example/", "https://visit.example/", "document", "GET", nullptr, nullptr), "for documents");
     puts("PASS: visits to blocked pages stop, and Visit Anyway and Always Allow lift only that");

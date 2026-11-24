@@ -2,15 +2,14 @@
 #ifndef CHROME_BROWSER_BAY_WEBUI_CONTENT_BLOCKER_H_
 #define CHROME_BROWSER_BAY_WEBUI_CONTENT_BLOCKER_H_
 
-#include <map>
 #include <memory>
 #include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
@@ -22,12 +21,26 @@ namespace network {
 class SimpleURLLoader;
 }
 
+// bay-lists (packages/rust/bay-lists/include/bay_lists.h).
+struct BayLists;
+struct BayListsBuilt;
+
 namespace bay {
 
+namespace content_blocker {
+// A built engine on its way from the blocker's sequence to the UI sequence.
+struct BuiltEngineFree {
+  void operator()(BayListsBuilt* built) const;
+};
+using BuiltEngine = std::unique_ptr<BayListsBuilt, BuiltEngineFree>;
+}  // namespace content_blocker
+
 // Bay's content blocker on the desktop host: packages/adblock's engine, which
-// nn_request_filter asks about every request. The same lists, cache, settings
-// and answers as NNCoreContentBlocker.mm on macOS, kept in
-// <user data>/Content Blocker. UI sequence, unless a method says not.
+// nn_request_filter asks about every request. Its lists, settings and cached
+// engine are bay-lists' (packages/rust/bay-lists), shared with
+// NNCoreContentBlocker.mm on macOS and kept in <user data>/Content Blocker;
+// this class downloads, schedules and serves the engine. UI sequence, unless a
+// method says not.
 class ContentBlocker {
  public:
   using Done = base::OnceCallback<void(std::optional<std::string> error)>;
@@ -55,8 +68,6 @@ class ContentBlocker {
                       bool remember,
                       Done done);
 
-  struct Built;
-
   // Whether the blocker refuses this page itself ($doc, a listed hostname).
   // Any thread.
   static bool BlocksPage(const std::string& url);
@@ -83,24 +94,22 @@ class ContentBlocker {
   ContentBlocker();
   ~ContentBlocker();
 
-  void SettingsRead(std::optional<base::Value> catalogue,
-                    std::optional<base::Value> saved);
-  bool OnByDefault(const base::DictValue& list) const;
+  void Opened(BayLists* lists);
   void SaveSettings();
   void PublishLive();
   void Changed();
   void Emit();
   base::DictValue Stats() const;
-  std::vector<std::string> SelectedInOrder() const;
-  const base::DictValue* List(const std::string& id) const;
   void Rebuild(bool use_cache, Rebuilt done);
+  // `ids` and `lists`: bay_lists_selected_ids and bay_lists_selected, as JSON.
   void Seeded(uint64_t generation,
-              std::vector<std::string> ids,
+              std::string ids,
+              std::string lists,
               bool use_cache,
               Rebuilt done,
               std::vector<std::string> absent);
   void BuildAndPublish(uint64_t generation,
-                       const std::vector<std::string>& ids,
+                       const std::string& lists,
                        bool use_cache,
                        bool finished,
                        std::vector<std::string> missing,
@@ -109,7 +118,7 @@ class ContentBlocker {
              bool finished,
              std::vector<std::string> missing,
              Rebuilt done,
-             std::unique_ptr<Built> built);
+             content_blocker::BuiltEngine built);
   void UpdateLists();
   void Fetch(std::vector<std::string> ids,
              size_t next,
@@ -132,17 +141,12 @@ class ContentBlocker {
   base::FilePath directory_;
   base::FilePath resources_;
   scoped_refptr<base::SequencedTaskRunner> work_;
-  base::ListValue catalogue_;
+  // The catalogue and settings, set once they're read and never freed (the
+  // blocker lives as long as the browser). Any sequence may use it. Allocated
+  // by the Rust library, outside PartitionAlloc.
+  RAW_PTR_EXCLUSION BayLists* lists_ = nullptr;
   bool loaded_ = false;
   std::vector<base::OnceClosure> waiting_;
-  bool enabled_ = true;
-  std::vector<std::string> selected_;
-  std::vector<std::string> allowed_;
-  std::vector<std::string> allowed_pages_;
-  std::vector<std::string> session_pages_;
-  bool ready_ = false;
-  double parse_ms_ = 0;
-  std::map<std::string, std::pair<double, double>> counts_;
   uint64_t generation_ = 0;
   std::shared_ptr<void> engine_;
   Sink sink_;

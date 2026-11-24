@@ -14,7 +14,8 @@
 // (Resources/FilterLists, packages/chromium/scripts/filter-lists.sh), so a new install blocks from its first page. The
 // compiled engine is cached (engine.dat), loads in milliseconds at launch and reads its rules from the mapped file, so
 // they aren't dirty memory; it's rebuilt when a list or the selection changes. Settings (on/off, the lists, the hosts
-// it's paused on) live in settings.json and apply to every profile, private ones included.
+// it's paused on) live in settings.json and apply to every profile, private ones included. All of that is bay-lists'
+// (packages/rust/bay-lists), which Windows and Linux share; this file downloads, schedules and serves the engine.
 
 #import "NNCoreServices.h"
 #import "NNCoreInternal.h"
@@ -28,6 +29,7 @@
 #include <vector>
 
 #include "bay_adblock.h"
+#include "bay_lists.h"
 
 namespace {
 
@@ -235,79 +237,18 @@ char *Scriptlets(const char *frameURL, const char *topOrigin) {
 // with the frame's cosmetic filters, once its page script says hello.
 BOOL gEngineRunsScriptlets = NO;
 
-// MARK: The catalogue
+// MARK: The lists
 
-NSString *const kVersion = @"adblock-rust 0.13.5";
-// Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 6";
-
-NSArray<NSDictionary *> *Catalogue() {
-  static NSArray<NSDictionary *> *lists;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    NSBundle *bundle = [NSBundle bundleForClass:NNCoreContentBlocker.class];
-    NSString *path = [bundle pathForResource:@"filter_lists" ofType:@"json"];
-    NSData *data = path ? [NSData dataWithContentsOfFile:path] : nil;
-    NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSMutableArray *valid = [NSMutableArray array];
-    for (NSDictionary *list in [json isKindOfClass:NSDictionary.class] ? json[@"lists"] : nil)
-      if ([list isKindOfClass:NSDictionary.class] && [list[@"id"] isKindOfClass:NSString.class] &&
-          [list[@"urls"] isKindOfClass:NSArray.class])
-        [valid addObject:list];
-    if (!valid.count) NSLog(@"[blocker] no filter list catalogue (filter_lists.json)");
-    lists = valid;
-  });
-  return lists;
-}
-
-NSDictionary *_Nullable CatalogueList(NSString *listId) {
-  for (NSDictionary *list in Catalogue())
-    if ([list[@"id"] isEqualToString:listId]) return list;
-  return nil;
-}
-
-// On by default: the catalogue's default lists, and the regional ones for the user's languages (as uBO chose).
-BOOL OnByDefault(NSDictionary *list) {
-  if ([list[@"defaultOn"] boolValue]) return YES;
-  NSString *lang = [list[@"lang"] isKindOfClass:NSString.class] ? list[@"lang"] : nil;
-  if (!lang.length) return NO;
-  NSSet *codes = [NSSet setWithArray:[lang componentsSeparatedByString:@" "]];
-  for (NSString *preferred in NSLocale.preferredLanguages) {
-    NSString *code = [[preferred componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"-_"]]
-                         .firstObject lowercaseString];
-    if ([codes containsObject:code]) return YES;
-  }
-  return NO;
-}
-
-// MARK: Files
+// The catalogue, the settings, the list files and the cached engine are bay-lists' (packages/rust/bay-lists), shared
+// with Windows and Linux. This side keeps the work queue, the downloads, the update timer and the live engine.
 
 NSString *Directory() {
   static NSString *directory;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     directory = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Content Blocker"];
-    [NSFileManager.defaultManager createDirectoryAtPath:[directory stringByAppendingPathComponent:@"lists"]
-                            withIntermediateDirectories:YES
-                                             attributes:nil
-                                                  error:nil];
   });
   return directory;
-}
-
-NSString *ListPath(NSString *listId) {
-  return [[Directory() stringByAppendingPathComponent:@"lists"] stringByAppendingPathComponent:[listId stringByAppendingPathExtension:@"txt"]];
-}
-
-NSString *BundledListPath(NSString *listId) {
-  NSString *path = [[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"FilterLists"]
-      stringByAppendingPathComponent:[listId stringByAppendingPathExtension:@"txt"]];
-  return [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
-}
-
-id ReadJSON(NSString *path) {
-  NSData *data = [NSData dataWithContentsOfFile:path];
-  return data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
 }
 
 // JSON the Rust library returned, which it then frees.
@@ -318,78 +259,54 @@ id JSONFrom(char *text) {
   return value;
 }
 
-void WriteJSON(NSString *path, id value) {
-  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys error:nil];
-  if (data) [data writeToFile:path atomically:YES];
+// A string the Rust library returned, which it then frees.
+NSString *_Nullable StringFrom(char *text) {
+  NSString *string = text ? @(text) : nil;
+  bay_string_free(text);
+  return string;
 }
 
-// MARK: Settings (main thread)
+NSString *JSONText(id value) {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
+}
 
-BOOL gEnabled = YES;
-NSMutableOrderedSet<NSString *> *gSelected;
-NSMutableOrderedSet<NSString *> *gAllowed;
-// Visit Anyway: gAllowedPages is saved (Always Allow), gSessionPages goes with the app.
-NSMutableOrderedSet<NSString *> *gAllowedPages;
-NSMutableOrderedSet<NSString *> *gSessionPages;
-bool gFailNext = false;
-double gDelayNextLoadMs = 0;
-
-NSString *SettingsPath() { return [Directory() stringByAppendingPathComponent:@"settings.json"]; }
-
-void LoadSettings() {
-  if (gSelected) return;
-  NSDictionary *saved = ReadJSON(SettingsPath());
-  if (![saved isKindOfClass:NSDictionary.class]) saved = nil;
-  gEnabled = [saved[@"enabled"] isKindOfClass:NSNumber.class] ? [saved[@"enabled"] boolValue] : YES;
-  gSelected = [NSMutableOrderedSet orderedSet];
-  if ([saved[@"lists"] isKindOfClass:NSArray.class]) {
-    for (NSString *listId in saved[@"lists"])
-      if ([listId isKindOfClass:NSString.class] && CatalogueList(listId)) [gSelected addObject:listId];
-  } else {
-    for (NSDictionary *list in Catalogue())
-      if (OnByDefault(list)) [gSelected addObject:list[@"id"]];
-  }
-  gAllowed = [NSMutableOrderedSet orderedSet];
-  for (NSString *host in [saved[@"allowedHosts"] isKindOfClass:NSArray.class] ? saved[@"allowedHosts"] : @[])
-    if ([host isKindOfClass:NSString.class] && host.length) [gAllowed addObject:host.lowercaseString];
-  gAllowedPages = [NSMutableOrderedSet orderedSet];
-  gSessionPages = [NSMutableOrderedSet orderedSet];
-  for (NSString *host in [saved[@"allowedPages"] isKindOfClass:NSArray.class] ? saved[@"allowedPages"] : @[])
-    if ([host isKindOfClass:NSString.class] && host.length) [gAllowedPages addObject:host.lowercaseString];
+// Opened on first use; any thread may use it after that.
+BayLists *Lists() {
+  static BayLists *lists;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    NSString *catalogue = [[NSBundle bundleForClass:NNCoreContentBlocker.class] pathForResource:@"filter_lists" ofType:@"json"];
+    lists = bay_lists_open(Directory().fileSystemRepresentation, catalogue.fileSystemRepresentation,
+                           JSONText(NSLocale.preferredLanguages).UTF8String);
+    if (!bay_lists_catalogue_size(lists)) NSLog(@"[blocker] no filter list catalogue (filter_lists.json)");
+  });
+  return lists;
 }
 
 void SaveSettings() {
-  WriteJSON(SettingsPath(), @{
-    @"enabled" : @(gEnabled),
-    @"lists" : gSelected.array,
-    @"allowedHosts" : gAllowed.array,
-    @"allowedPages" : gAllowedPages.array,
-  });
+  if (!bay_lists_save(Lists())) NSLog(@"[blocker] couldn't save settings.json");
 }
 
-// The selection in catalogue order, so the engine (and its cache key) doesn't depend on the order lists were picked.
-NSArray<NSString *> *SelectedInOrder() {
-  NSMutableArray *ids = [NSMutableArray array];
-  for (NSDictionary *list in Catalogue())
-    if ([gSelected containsObject:list[@"id"]]) [ids addObject:list[@"id"]];
-  return ids;
+NSArray<NSString *> *URLs(NSString *listId) {
+  NSArray *urls = JSONFrom(bay_lists_urls(Lists(), listId.UTF8String));
+  return [urls isKindOfClass:NSArray.class] ? urls : @[];
 }
 
 // MARK: State the main thread keeps about the engine
 
-BOOL gReady = NO;
-double gParseMs = 0;
-NSDictionary<NSString *, NSDictionary *> *gCounts = @{};
 std::atomic<NSUInteger> gGeneration{0};
 std::shared_ptr<Engine> gEngine;
+bool gFailNext = false;
+double gDelayNextLoadMs = 0;
 
 void PublishLive() {
   auto live = std::make_shared<Live>();
   live->engine = gEngine;
-  live->enabled = gEnabled;
-  for (NSString *host in gAllowed) live->allowed.emplace_back(host.UTF8String);
-  for (NSString *host in gAllowedPages) live->pages.emplace_back(host.UTF8String);
-  for (NSString *host in gSessionPages) live->pages.emplace_back(host.UTF8String);
+  NSDictionary *settings = JSONFrom(bay_lists_live(Lists()));
+  live->enabled = [settings[@"enabled"] boolValue];
+  for (NSString *host in settings[@"allowed"]) live->allowed.emplace_back(host.UTF8String);
+  for (NSString *host in settings[@"pages"]) live->pages.emplace_back(host.UTF8String);
   // Only engines with response rules need every response's headers marshalled to the host.
   if ([NNCoreEngine respondsToSelector:@selector(setResponseFilter:)])
     [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker)
@@ -420,43 +337,25 @@ dispatch_queue_t Work() {
   return queue;
 }
 
-NSDictionary *StatsDictionary();
+// The request filter's timing, for the stats.
+NSString *Timing() {
+  const uint64_t lookups = gLookups.load(std::memory_order_relaxed);
+  const double averageMicros = lookups ? gLookupNanos.load(std::memory_order_relaxed) / 1000.0 / lookups : 0;
+  return JSONText(@{
+    @"lookups" : @(lookups),
+    @"averageLookupMicros" : @(round(averageMicros * 100) / 100),
+    @"maxLookupMicros" : @(round(gMaxLookupNanos.load(std::memory_order_relaxed) / 10.0) / 100),
+  });
+}
+
+NSDictionary *StatsDictionary() { return JSONFrom(bay_lists_stats(Lists(), Timing().UTF8String)); }
+NSDictionary *StateDictionary() { return JSONFrom(bay_lists_state(Lists(), Timing().UTF8String)); }
+
 void Emit() {
   if (NNCoreHost.eventHandler) NNCoreHost.eventHandler(@"contentBlocker", StatsDictionary());
 }
 
-// MARK: Lists on disk and on the network
-
-NSDictionary *ListInfo() {
-  NSDictionary *info = ReadJSON([Directory() stringByAppendingPathComponent:@"lists.json"]);
-  return [info isKindOfClass:NSDictionary.class] ? info : @{};
-}
-
-// How long a list stays fresh, from its `! Expires: 4 days (update frequency)` header: 12 hours to a week, else 4 days.
-NSTimeInterval ExpiresAfter(NSString *text) {
-  NSString *head = [text substringToIndex:MIN(text.length, (NSUInteger)4096)];
-  NSRegularExpression *expires = [NSRegularExpression regularExpressionWithPattern:@"^[!#]\\s*Expires:\\s*(\\d+)\\s*(h|d)"
-                                                                           options:NSRegularExpressionCaseInsensitive |
-                                                                                   NSRegularExpressionAnchorsMatchLines
-                                                                             error:nil];
-  NSTextCheckingResult *match = [expires firstMatchInString:head options:0 range:NSMakeRange(0, head.length)];
-  if (!match) return 4 * 86400;
-  const double n = [head substringWithRange:[match rangeAtIndex:1]].doubleValue;
-  const BOOL hours = [[head substringWithRange:[match rangeAtIndex:2]].lowercaseString isEqualToString:@"h"];
-  return MIN(MAX(n * (hours ? 3600 : 86400), 12 * 3600), 7 * 86400);
-}
-
-// A filter list, not an error page: text that doesn't start like HTML. Bytes, not a decoded prefix: a prefix can end
-// inside a multibyte character (as Croatian and Vietnamese lists' do at 512 bytes), which wouldn't decode.
-BOOL LooksLikeList(NSData *data) {
-  if (data.length < 16 || data.length > 32 * 1024 * 1024) return NO;
-  const unsigned char *bytes = (const unsigned char *)data.bytes;
-  NSUInteger at = 0;
-  // A UTF-8 byte order mark, then whitespace.
-  if (data.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) at = 3;
-  while (at < data.length && isspace(bytes[at])) at++;
-  return at < data.length && bytes[at] != '<';
-}
+// MARK: Lists on the network
 
 NSURLSession *Session() {
   static NSURLSession *session;
@@ -470,149 +369,45 @@ NSURLSession *Session() {
   return session;
 }
 
-// Downloads a list from its first URL that answers; completion(changed) on Work(): whether its file changed.
-void Download(NSDictionary *list, NSUInteger urlIndex, void (^completion)(BOOL changed)) {
-  NSArray<NSString *> *urls = list[@"urls"];
+// Downloads a list from its first URL that answers with a list; completion(changed) on Work(): whether its file changed.
+void Download(NSString *listId, NSArray<NSString *> *urls, NSUInteger urlIndex, void (^completion)(BOOL changed)) {
   if (urlIndex >= urls.count) return dispatch_async(Work(), ^{ completion(NO); });
   NSURL *url = [NSURL URLWithString:urls[urlIndex]];
-  if (!url) return Download(list, urlIndex + 1, completion);
+  if (!url) return Download(listId, urls, urlIndex + 1, completion);
   [[Session() dataTaskWithURL:url
             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
               const NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
-              if (error || status != 200 || !LooksLikeList(data)) {
-                NSLog(@"[blocker] %@ from %@: %@", list[@"id"], url.host, error.localizedDescription ?: [NSString stringWithFormat:@"HTTP %ld", (long)status]);
-                return Download(list, urlIndex + 1, completion);
+              if (error || status != 200) {
+                NSLog(@"[blocker] %@ from %@: %@", listId, url.host, error.localizedDescription ?: [NSString stringWithFormat:@"HTTP %ld", (long)status]);
+                return Download(listId, urls, urlIndex + 1, completion);
               }
               dispatch_async(Work(), ^{
-                NSString *path = ListPath(list[@"id"]);
-                NSData *old = [NSData dataWithContentsOfFile:path];
-                const BOOL changed = ![old isEqualToData:data];
-                if (changed) [data writeToFile:path atomically:YES];
-                NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
-                NSMutableDictionary *info = [ListInfo() mutableCopy];
-                info[list[@"id"]] = @{@"fetched" : @(NSDate.date.timeIntervalSince1970), @"expires" : @(ExpiresAfter(text))};
-                WriteJSON([Directory() stringByAppendingPathComponent:@"lists.json"], info);
-                completion(changed);
+                const int32_t stored = bay_lists_store(Directory().fileSystemRepresentation, listId.UTF8String, (const uint8_t *)data.bytes,
+                                                       data.length, NSDate.date.timeIntervalSince1970);
+                if (stored == -1) {
+                  NSLog(@"[blocker] %@ from %@: not a filter list", listId, url.host);
+                  return Download(listId, urls, urlIndex + 1, completion);
+                }
+                completion(stored == 1);
               });
             }] resume];
 }
 
-// On Work(): copies a bundled list in when there's none on disk yet (it counts as fetched long ago: it updates soon).
-void SeedFromBundle(NSString *listId) {
-  NSString *path = ListPath(listId);
-  if ([NSFileManager.defaultManager fileExistsAtPath:path]) return;
-  if (NSString *bundled = BundledListPath(listId)) [NSFileManager.defaultManager copyItemAtPath:bundled toPath:path error:nil];
-}
-
-// MARK: Building the engine (Work())
-
-NSString *EngineKey(NSArray<NSString *> *ids) {
-  NSMutableArray *parts = [NSMutableArray arrayWithObject:kEngineFormat];
-  for (NSString *listId in ids) {
-    NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:ListPath(listId) error:nil];
-    if (!attributes) continue;
-    [parts addObject:[NSString stringWithFormat:@"%@ %llu %.0f", listId, attributes.fileSize,
-                                                attributes.fileModificationDate.timeIntervalSince1970]];
-  }
-  return [parts componentsJoinedByString:@"\n"];
-}
-
-struct Built {
-  std::shared_ptr<Engine> engine;
-  double ms = 0;
-  NSDictionary<NSString *, NSDictionary *> *counts = @{};
-};
-
-NSDictionary *CountsFor(BayBlocker *blocker, NSArray<NSString *> *ids) {
-  NSArray *counts = JSONFrom(bay_blocker_list_counts(blocker));
-  NSMutableDictionary *byId = [NSMutableDictionary dictionary];
-  if (![counts isKindOfClass:NSArray.class] || counts.count != ids.count) return byId;
-  for (NSUInteger i = 0; i < ids.count; i++) {
-    NSDictionary *c = counts[i];
-    byId[ids[i]] = @{@"network" : c[@"networkFilters"] ?: @0, @"cosmetic" : c[@"cosmeticFilters"] ?: @0};
-  }
-  return byId;
-}
-
-// A new engine from the lists' files, in order.
-BayBlocker *Compile(NSArray<NSString *> *ids) {
-  std::vector<std::string> texts;
-  std::unique_ptr<bool[]> hosts(new bool[ids.count + 1]);
-  std::vector<uint8_t> permissions;
-  for (NSUInteger i = 0; i < ids.count; i++) {
-    NSData *data = [NSData dataWithContentsOfFile:ListPath(ids[i])];
-    texts.emplace_back((const char *)data.bytes, data.length);
-    hosts[i] = [CatalogueList(ids[i])[@"hosts"] boolValue];
-    // As in uBO, only its own uAssets lists may invoke privileged scriptlets.
-    permissions.push_back([ids[i] hasPrefix:@"ublock-"] ? 1 : 0);
-  }
-  std::vector<const char *> pointers;
-  for (const std::string &text : texts) pointers.push_back(text.c_str());
-  return bay_blocker_new_with_permissions(pointers.data(), hosts.get(), permissions.data(), pointers.size());
-}
-
-void ReleaseEngineData(void *data) { CFRelease(data); }
-
-// The engine cached at `path`, reading its rules from the mapped file. Writes replace the file (atomically), so the
-// blocker's mapping stays whole until it's freed.
-BayBlocker *LoadEngine(NSString *path) {
-  NSData *data = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-  if (!data) return nullptr;
-  return bay_blocker_deserialize((const uint8_t *)data.bytes, data.length, (void *)CFBridgingRetain(data), ReleaseEngineData);
-}
-
-Built Build(NSArray<NSString *> *ids, BOOL useCache) {
-  Built built;
-  const CFTimeInterval start = CACurrentMediaTime();
-  NSMutableArray<NSString *> *present = [NSMutableArray array];
-  for (NSString *listId in ids)
-    if ([NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [present addObject:listId];
-  NSString *key = EngineKey(present);
-  NSString *enginePath = [Directory() stringByAppendingPathComponent:@"engine.dat"];
-  NSString *keyPath = [Directory() stringByAppendingPathComponent:@"engine.key"];
-  NSString *metaPath = [Directory() stringByAppendingPathComponent:@"engine.lists.json"];
-  BayBlocker *blocker = nullptr;
-  if (useCache && [[NSString stringWithContentsOfFile:keyPath encoding:NSUTF8StringEncoding error:nil] isEqualToString:key]) {
-    if ([ReadJSON(metaPath) isEqual:present]) blocker = LoadEngine(enginePath);
-  }
-  if (!blocker) {
-    blocker = Compile(present);
-    size_t length = 0;
-    uint8_t *bytes = bay_blocker_serialize(blocker, &length);
-    const BOOL written = [[NSData dataWithBytesNoCopy:bytes length:length freeWhenDone:NO] writeToFile:enginePath atomically:YES];
-    bay_bytes_free(bytes, length);
-    if (written) {
-      WriteJSON(metaPath, present);
-      [key writeToFile:keyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-      // From the file, as at the next launch: this one's rules are on the heap, the file's cost no dirty memory.
-      if (BayBlocker *cached = LoadEngine(enginePath)) {
-        bay_blocker_free(blocker);
-        blocker = cached;
-      }
-    }
-  }
-  // Resource storage is separate from adblock-rust's serialized filter engine. Load the pinned resources for both
-  // new and cached engines, so scriptlets and redirect stand-ins work on every launch.
-  NSString *resourcesPath =
-      [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"ContentBlocker/blocker-resources.json"];
-  NSString *resources = [NSString stringWithContentsOfFile:resourcesPath encoding:NSUTF8StringEncoding error:nil];
-  if (!resources || !bay_blocker_use_resources(blocker, resources.UTF8String))
-    NSLog(@"[blocker] missing or invalid bundled scriptlet/redirect resources");
-  built.engine = std::make_shared<Engine>(blocker);
-  built.ms = (CACurrentMediaTime() - start) * 1000;
-  built.counts = CountsFor(blocker, present);
-  return built;
-}
+// MARK: Building the engine
 
 // Builds from the available files first, then rebuilds once missing lists have downloaded. Bundled rules must
 // already block while an optional regional list is downloading. completion(missing) runs on the main thread.
 void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *missing)) {
   completion = [completion copy];
   const NSUInteger generation = ++gGeneration;
-  NSArray<NSString *> *ids = SelectedInOrder();
+  NSString *ids = StringFrom(bay_lists_selected_ids(Lists()));
+  NSString *lists = StringFrom(bay_lists_selected(Lists()));
   const double delayMs = std::exchange(gDelayNextLoadMs, 0);
   dispatch_async(Work(), ^{
-    for (NSString *listId in ids) SeedFromBundle(listId);
+    NSString *resourcePath = NSBundle.mainBundle.resourcePath;
+    NSString *bundled = [resourcePath stringByAppendingPathComponent:@"FilterLists"];
+    NSString *resources = [resourcePath stringByAppendingPathComponent:@"ContentBlocker/blocker-resources.json"];
+    NSArray<NSString *> *absent = JSONFrom(bay_lists_seed(Directory().fileSystemRepresentation, bundled.fileSystemRepresentation, ids.UTF8String)) ?: @[];
     void (^buildAndPublish)(BOOL, NSArray<NSString *> *) = ^(BOOL finished, NSArray<NSString *> *missing) {
       // A newer selection is on its way: this one would be replaced at once. Nothing counts as missing, so a stale
       // failure can't turn off a list a newer selection has on.
@@ -620,17 +415,18 @@ void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *mi
         if (finished && completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(@[]); });
         return;
       }
-      auto built = std::make_shared<Built>(Build(ids, useCache));
-      NSLog(@"[blocker] %lu lists in %.0f ms", (unsigned long)built->counts.count, built->ms);
+      BayListsBuilt *built = bay_lists_build(Directory().fileSystemRepresentation, lists.UTF8String, resources.fileSystemRepresentation, useCache);
+      NSDictionary *report = JSONFrom(bay_lists_built_report(built));
+      NSLog(@"[blocker] %@ lists in %.0f ms", report[@"lists"], [report[@"ms"] doubleValue]);
+      if (![report[@"resources"] boolValue]) NSLog(@"[blocker] missing or invalid bundled scriptlet/redirect resources");
       void (^apply)(void) = ^{
         const BOOL current = generation == gGeneration.load();
         if (current) {
-          gEngine = built->engine;
-          gParseMs = built->ms;
-          gCounts = built->counts;
-          gReady = YES;
+          gEngine = std::make_shared<Engine>(bay_lists_apply(Lists(), built));
           PublishLive();
           Emit();
+        } else {
+          bay_lists_built_free(built);
         }
         if (finished && completion) completion(current ? missing : @[]);
       };
@@ -639,41 +435,30 @@ void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *mi
       else
         dispatch_async(dispatch_get_main_queue(), apply);
     };
-    NSMutableArray<NSString *> *absent = [NSMutableArray array];
-    for (NSString *listId in ids)
-      if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [absent addObject:listId];
     buildAndPublish(absent.count == 0, @[]);
     if (!absent.count) return;
     dispatch_group_t group = dispatch_group_create();
     for (NSString *listId in absent) {
       dispatch_group_enter(group);
-      Download(CatalogueList(listId), 0, ^(BOOL) { dispatch_group_leave(group); });
+      Download(listId, URLs(listId), 0, ^(BOOL) { dispatch_group_leave(group); });
     }
     dispatch_group_notify(group, Work(), ^{
-      NSMutableArray<NSString *> *missing = [NSMutableArray array];
-      for (NSString *listId in ids)
-        if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [missing addObject:listId];
-      buildAndPublish(YES, missing);
+      buildAndPublish(YES, JSONFrom(bay_lists_absent(Directory().fileSystemRepresentation, ids.UTF8String)) ?: @[]);
     });
   });
 }
 
-// Lists past their expiry are fetched again; the engine is rebuilt if any changed. force: every selected list.
-void UpdateLists(BOOL force) {
-  NSArray<NSString *> *ids = SelectedInOrder();
+// Lists past their expiry are fetched again; the engine is rebuilt if any changed.
+void UpdateLists() {
+  NSString *ids = StringFrom(bay_lists_selected_ids(Lists()));
   dispatch_async(Work(), ^{
-    NSDictionary *info = ListInfo();
-    const NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    NSArray<NSString *> *due =
+        JSONFrom(bay_lists_due(Directory().fileSystemRepresentation, ids.UTF8String, NSDate.date.timeIntervalSince1970));
     dispatch_group_t group = dispatch_group_create();
     __block BOOL changed = NO;
-    for (NSString *listId in ids) {
-      NSDictionary *entry = [info[listId] isKindOfClass:NSDictionary.class] ? info[listId] : nil;
-      const NSTimeInterval fetched = [entry[@"fetched"] doubleValue], expires = entry[@"expires"] ? [entry[@"expires"] doubleValue] : 0;
-      if (!force && fetched + expires > now) continue;
-      NSDictionary *list = CatalogueList(listId);
-      if (!list) continue;
+    for (NSString *listId in [due isKindOfClass:NSArray.class] ? due : @[]) {
       dispatch_group_enter(group);
-      Download(list, 0, ^(BOOL listChanged) {
+      Download(listId, URLs(listId), 0, ^(BOOL listChanged) {
         changed = changed || listChanged;
         dispatch_group_leave(group);
       });
@@ -684,60 +469,14 @@ void UpdateLists(BOOL force) {
   });
 }
 
-constexpr double kFirstUpdateSeconds = 60;
-constexpr double kUpdateEverySeconds = 3 * 3600;
-
 void ScheduleUpdates(double after) {
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(after * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    if (gEnabled) UpdateLists(NO);
-    ScheduleUpdates(kUpdateEverySeconds);
+    if (bay_lists_enabled(Lists())) UpdateLists();
+    ScheduleUpdates(bay_lists_update_every_seconds());
   });
 }
 
 // MARK: State for the app
-
-NSDictionary *StatsDictionary() {
-  double network = 0, cosmetic = 0;
-  for (NSString *listId in gCounts) {
-    network += [gCounts[listId][@"network"] doubleValue];
-    cosmetic += [gCounts[listId][@"cosmetic"] doubleValue];
-  }
-  const uint64_t lookups = gLookups.load(std::memory_order_relaxed);
-  const double averageMicros = lookups ? gLookupNanos.load(std::memory_order_relaxed) / 1000.0 / lookups : 0;
-  return @{
-    @"ready" : @(gReady),
-    @"enabled" : @(gEnabled),
-    @"networkFilters" : @(network),
-    @"cosmeticFilters" : @(cosmetic),
-    @"parseMs" : @(round(gParseMs)),
-    @"lookups" : @(lookups),
-    @"averageLookupMicros" : @(round(averageMicros * 100) / 100),
-    @"maxLookupMicros" : @(round(gMaxLookupNanos.load(std::memory_order_relaxed) / 10.0) / 100),
-  };
-}
-
-NSDictionary *StateDictionary() {
-  NSMutableArray *lists = [NSMutableArray array];
-  for (NSDictionary *list in Catalogue()) {
-    NSDictionary *counts = gCounts[list[@"id"]];
-    [lists addObject:@{
-      @"id" : list[@"id"],
-      @"title" : [list[@"title"] isKindOfClass:NSString.class] ? list[@"title"] : list[@"id"],
-      @"category" : [list[@"category"] isKindOfClass:NSString.class] ? list[@"category"] : @"ads",
-      @"enabled" : @([gSelected containsObject:list[@"id"]]),
-      @"defaultOn" : @(OnByDefault(list)),
-      @"filters" : @([counts[@"network"] doubleValue] + [counts[@"cosmetic"] doubleValue]),
-    }];
-  }
-  return @{
-    @"enabled" : @(gEnabled),
-    @"version" : kVersion,
-    @"lists" : lists,
-    @"allowedHosts" : gAllowed.array,
-    @"allowedPages" : gAllowedPages.array,
-    @"stats" : StatsDictionary(),
-  };
-}
 
 // Tests (devFailNextMessage): the next change fails and changes nothing.
 NSString *_Nullable FailedForTest() {
@@ -784,7 +523,7 @@ namespace nncore_host {
 void PrepareContentBlocker() {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    LoadSettings();
+    Lists();
     PublishLive();
     if ([NNCoreEngine respondsToSelector:@selector(setRequestFilter:)]) [NNCoreEngine setRequestFilter:Filter];
     else NSLog(@"[blocker] this engine has no request filter: nothing is blocked");
@@ -795,7 +534,7 @@ void PrepareContentBlocker() {
       gEngineRunsScriptlets = YES;
     }
     Rebuild(YES, nil);
-    ScheduleUpdates(kFirstUpdateSeconds);
+    ScheduleUpdates(bay_lists_first_update_seconds());
     // Copies of uBlock Origin, the blocker before this one, from before 0.1.1.
     NSString *oldCopies = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Built-in Extensions"];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
@@ -839,35 +578,29 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
 @implementation NNCoreContentBlocker
 
 + (void)state:(void (^)(NSDictionary<NSString *, id> *))completion {
-  LoadSettings();
   completion(StateDictionary());
 }
 
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  LoadSettings();
   if (NSString *error = FailedForTest()) return completion(error);
-  const BOOL wasEnabled = gEnabled;
-  gEnabled = enabled;
+  const bool turnedOn = bay_lists_set_enabled(Lists(), enabled);
   Changed();
   // Back on after a while off: its lists may have gone stale meanwhile.
-  if (enabled && !wasEnabled) UpdateLists(NO);
+  if (turnedOn) UpdateLists();
   completion(nil);
 }
 
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  LoadSettings();
-  if (!CatalogueList(listId)) return completion([@"no list " stringByAppendingString:listId ?: @""]);
+  if (!bay_lists_known(Lists(), listId.UTF8String)) return completion([@"no list " stringByAppendingString:listId ?: @""]);
   if (NSString *error = FailedForTest()) return completion(error);
-  if (enabled == [gSelected containsObject:listId]) return completion(nil);
-  if (enabled) [gSelected addObject:listId];
-  else [gSelected removeObject:listId];
+  if (bay_lists_set_list(Lists(), listId.UTF8String, enabled) == 0) return completion(nil);
   SaveSettings();
   // Done when the engine has it (a new list downloads first), as uBO answered once its lists had reloaded. A list that
   // couldn't be downloaded isn't turned on.
   completion = [completion copy];
   Rebuild(YES, ^(NSArray<NSString *> *missing) {
     if (!enabled || ![missing containsObject:listId]) return completion(nil);
-    [gSelected removeObject:listId];
+    bay_lists_set_list(Lists(), listId.UTF8String, NO);
     SaveSettings();
     Rebuild(YES, nil);
     completion([@"couldn't download " stringByAppendingString:listId]);
@@ -875,25 +608,13 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
 }
 
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL))completion {
-  LoadSettings();
-  const std::string name = HostOf(host.lowercaseString.UTF8String);
-  for (NSString *allowed in gAllowed)
-    if (Covers(allowed.UTF8String, name)) return completion(YES);
-  completion(NO);
+  completion(bay_lists_is_allowed(Lists(), host.UTF8String));
 }
 
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *))completion {
-  LoadSettings();
   if (NSString *error = FailedForTest()) return completion(error);
-  NSString *name = [NSString stringWithUTF8String:HostOf(host.lowercaseString.UTF8String).c_str()];
-  if (!name.length) return completion(@"no host");
-  if (allowed) {
-    [gAllowed addObject:name];
-  } else {
-    // Blocking again on a host ends every pause that covers it ("example.com" for "www.example.com").
-    for (NSString *entry in gAllowed.array)
-      if (Covers(entry.UTF8String, name.UTF8String)) [gAllowed removeObject:entry];
-  }
+  // Blocking again on a host ends every pause that covers it ("example.com" for "www.example.com").
+  if (!bay_lists_set_allowed(Lists(), host.UTF8String, allowed)) return completion(@"no host");
   Changed();
   completion(nil);
 }
@@ -902,17 +623,8 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
                 onHost:(NSString *)host
               remember:(BOOL)remember
             completion:(void (^)(NSString *))completion {
-  LoadSettings();
   if (NSString *error = FailedForTest()) return completion(error);
-  NSString *name = [NSString stringWithUTF8String:HostOf(host.lowercaseString.UTF8String).c_str()];
-  if (!name.length) return completion(@"no host");
-  if (allowed) {
-    [remember ? gAllowedPages : gSessionPages addObject:name];
-  } else {
-    for (NSMutableOrderedSet<NSString *> *pages in @[ gAllowedPages, gSessionPages ])
-      for (NSString *entry in pages.array)
-        if (Covers(entry.UTF8String, name.UTF8String)) [pages removeObject:entry];
-  }
+  if (!bay_lists_set_page_allowed(Lists(), host.UTF8String, allowed, remember)) return completion(@"no host");
   Changed();
   completion(nil);
 }

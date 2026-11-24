@@ -47,6 +47,9 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -108,6 +111,9 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
             command = [sys.executable, str(here / "apply.py")]
@@ -144,6 +150,9 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]

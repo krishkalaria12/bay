@@ -77,8 +77,9 @@ def layer_source(here: Path, owned: str):
             "#pragma once\nnamespace bay {\n"
             f'inline constexpr char kPageScript[] = R"{delimiter}({script}){delimiter}";\n'
             "}  // namespace bay\n", encoding="utf-8")
-        # The blocker's C ABI; scripts/engine.py builds the library behind it.
+        # The blocker's and its lists' C ABI; scripts/engine.py builds the library behind them.
         shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
+        shutil.copy2(repository / "packages/rust/bay-lists/include/bay_lists.h", staged / "webui/bay_lists.h")
         # portable/ builds on Windows and Linux; linux/ holds the Linux-only adapters.
         for package in ("import", "sync"):
             for folder in ("portable", "linux"):

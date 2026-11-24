@@ -14,8 +14,6 @@
 
 #include "base/base_paths.h"
 #include "base/check.h"
-#include "base/files/file_util.h"
-#include "base/files/important_file_writer.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -23,12 +21,11 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/path_service.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "bay/core/nn_request_filter.h"
 #include "chrome/browser/bay/webui/bay_adblock.h"
+#include "chrome/browser/bay/webui/bay_lists.h"
 #include "chrome/browser/bay/webui/content_blocker_rules.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -47,12 +44,7 @@ namespace {
 using content_blocker::Covers;
 using content_blocker::HostOf;
 
-constexpr char kVersion[] = "adblock-rust 0.13.5";
-// Bump with a change to how lists compile (the crate, its features): the cached
-// engine is rebuilt. As kEngineFormat in NNCoreContentBlocker.mm.
-constexpr char kEngineFormat[] = "bay-adblock 5";
-constexpr base::TimeDelta kFirstUpdate = base::Seconds(60);
-constexpr base::TimeDelta kUpdateEvery = base::Hours(3);
+// The longest list downloaded. bay-lists refuses longer ones too.
 constexpr size_t kMaxList = 32 * 1024 * 1024;
 
 constexpr net::NetworkTrafficAnnotationTag kListsAnnotation =
@@ -298,21 +290,9 @@ char* Scriptlets(const char* frame_url, const char* top_origin) {
   return CopyOf(bay_blocker_scriptlets(live->engine->blocker, frame_url));
 }
 
-// Files, on the blocker's sequence.
-base::FilePath ListPath(const base::FilePath& directory, const std::string& id) {
-  return directory.AppendASCII("lists").AppendASCII(id + ".txt");
-}
-std::optional<base::Value> ReadJson(const base::FilePath& path) {
-  std::string text;
-  if (!base::ReadFileToString(path, &text))
-    return std::nullopt;
-  return base::JSONReader::Read(text, base::JSON_PARSE_RFC);
-}
-void WriteJson(const base::FilePath& path, const base::Value& value) {
-  const auto text = base::WriteJsonWithOptions(
-      value, base::JSONWriter::OPTIONS_PRETTY_PRINT);
-  if (text && !base::ImportantFileWriter::WriteFileAtomically(path, *text))
-    LOG(WARNING) << "[blocker] couldn't write " << path;
+// bay-lists answers and their files, off the UI sequence where they touch the disk.
+std::string Utf8(const base::FilePath& path) {
+  return path.AsUTF8Unsafe();
 }
 std::optional<base::Value> JsonFrom(char* text) {
   if (!text)
@@ -320,6 +300,11 @@ std::optional<base::Value> JsonFrom(char* text) {
   auto value = base::JSONReader::Read(text, base::JSON_PARSE_RFC);
   bay_string_free(text);
   return value;
+}
+std::string TextFrom(char* text) {
+  std::string copy = text ? text : "";
+  bay_string_free(text);
+  return copy;
 }
 std::vector<std::string> Strings(const base::ListValue* list) {
   std::vector<std::string> result;
@@ -331,100 +316,64 @@ std::vector<std::string> Strings(const base::ListValue* list) {
   }
   return result;
 }
+std::vector<std::string> StringsFrom(char* text) {
+  auto value = JsonFrom(text);
+  return value && value->is_list() ? Strings(&value->GetList())
+                                   : std::vector<std::string>();
+}
 base::ListValue ListOf(const std::vector<std::string>& values) {
   base::ListValue list;
   for (const auto& value : values)
     list.Append(value);
   return list;
 }
-void Add(std::vector<std::string>& values, const std::string& value) {
-  if (!std::ranges::contains(values, value))
-    values.push_back(value);
+double Now() {
+  return base::Time::Now().InSecondsFSinceUnixEpoch();
 }
-void RemoveCovering(std::vector<std::string>& values, const std::string& host) {
-  std::erase_if(values, [&](const std::string& entry) {
-    return Covers(entry, host);
-  });
+// The request filter's timing, for the stats.
+std::string Timing() {
+  const uint64_t lookups = g_lookups.load(std::memory_order_relaxed);
+  const double average =
+      lookups ? g_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0 /
+                    lookups
+              : 0;
+  const double max =
+      g_max_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0;
+  return base::WriteJson(
+             base::DictValue()
+                 .Set("lookups", static_cast<double>(lookups))
+                 .Set("averageLookupMicros", std::round(average * 100) / 100)
+                 .Set("maxLookupMicros", std::round(max * 100) / 100))
+      .value_or("null");
 }
 
-// On the blocker's sequence: copies bundled lists in when none is on disk yet.
-// They count as fetched long ago, so they update soon. Answers those still gone.
-std::vector<std::string> Seed(const base::FilePath& directory,
-                              const base::FilePath& resources,
-                              const std::vector<std::string>& ids) {
-  base::CreateDirectory(directory.AppendASCII("lists"));
-  std::vector<std::string> absent;
-  for (const auto& id : ids) {
-    const auto path = ListPath(directory, id);
-    if (base::PathExists(path))
-      continue;
-    const auto bundled =
-        resources.AppendASCII("FilterLists").AppendASCII(id + ".txt");
-    if (!base::PathExists(bundled) || !base::CopyFile(bundled, path))
-      absent.push_back(id);
+content_blocker::BuiltEngine BuildEngine(base::FilePath directory,
+                                         base::FilePath resources,
+                                         std::string lists,
+                                         bool use_cache) {
+  content_blocker::BuiltEngine built(bay_lists_build(
+      Utf8(directory).c_str(), lists.c_str(),
+      Utf8(resources.AppendASCII("blocker-resources.json")).c_str(),
+      use_cache));
+  if (!built)
+    return built;
+  if (auto report = JsonFrom(bay_lists_built_report(built.get()));
+      report && report->is_dict()) {
+    LOG(INFO) << "[blocker] " << report->GetDict().FindInt("lists").value_or(0)
+              << " lists in " << report->GetDict().FindDouble("ms").value_or(0)
+              << " ms";
+    if (!report->GetDict().FindBool("resources").value_or(false))
+      LOG(ERROR) << "[blocker] missing or invalid scriptlet resources";
   }
-  return absent;
-}
-std::vector<std::string> Absent(const base::FilePath& directory,
-                                const std::vector<std::string>& ids) {
-  std::vector<std::string> absent;
-  for (const auto& id : ids) {
-    if (!base::PathExists(ListPath(directory, id)))
-      absent.push_back(id);
-  }
-  return absent;
-}
-std::string EngineKey(const base::FilePath& directory,
-                      const std::vector<std::string>& ids) {
-  std::string key = kEngineFormat;
-  for (const auto& id : ids) {
-    base::File::Info info;
-    if (!base::GetFileInfo(ListPath(directory, id), &info))
-      continue;
-    key += base::StringPrintf(
-        "\n%s %lld %.0f", id.c_str(), static_cast<long long>(info.size),
-        info.last_modified.InSecondsFSinceUnixEpoch());
-  }
-  return key;
-}
-struct ListSource {
-  std::string id;
-  bool hosts = false;
-};
-BayBlocker* Compile(const base::FilePath& directory,
-                    const std::vector<ListSource>& lists) {
-  std::vector<std::string> texts;
-  std::vector<const char*> pointers;
-  auto hosts = std::make_unique<bool[]>(lists.size() + 1);
-  std::vector<uint8_t> permissions;
-  texts.reserve(lists.size());
-  for (size_t i = 0; i < lists.size(); ++i) {
-    std::string text;
-    base::ReadFileToString(ListPath(directory, lists[i].id), &text);
-    texts.push_back(std::move(text));
-    pointers.push_back(texts.back().c_str());
-    hosts[i] = lists[i].hosts;
-    // As in uBO, only its own uAssets lists may invoke privileged scriptlets.
-    permissions.push_back(lists[i].id.starts_with("ublock-") ? 1 : 0);
-  }
-  return bay_blocker_new_with_permissions(pointers.data(), hosts.get(),
-                                          permissions.data(), pointers.size());
+  return built;
 }
 }  // namespace
 
-struct ContentBlocker::Built {
-  std::shared_ptr<Engine> engine;
-  double ms = 0;
-  std::map<std::string, std::pair<double, double>> counts;
-};
-
-namespace {
-std::unique_ptr<ContentBlocker::Built> BuildEngine(
-    base::FilePath directory,
-    base::FilePath resources,
-    std::vector<ListSource> wanted,
-    bool use_cache);
-}  // namespace
+namespace content_blocker {
+void BuiltEngineFree::operator()(BayListsBuilt* built) const {
+  bay_lists_built_free(built);
+}
+}  // namespace content_blocker
 
 // static
 ContentBlocker& ContentBlocker::Get() {
@@ -440,15 +389,6 @@ ContentBlocker::~ContentBlocker() = default;
 void ContentBlocker::SetSink(Sink sink) {
   sink_ = std::move(sink);
 }
-const base::DictValue* ContentBlocker::List(const std::string& id) const {
-  for (const auto& item : catalogue_) {
-    const auto* list = item.GetIfDict();
-    const auto* found = list ? list->FindString("id") : nullptr;
-    if (found && *found == id)
-      return list;
-  }
-  return nullptr;
-}
 void ContentBlocker::Prepare() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!directory_.empty())
@@ -458,24 +398,25 @@ void ContentBlocker::Prepare() {
   base::FilePath module;
   base::PathService::Get(base::DIR_MODULE, &module);
   resources_ = module.AppendASCII("ContentBlocker");
+  // The regional lists on by default follow the application's language.
+  const std::string languages =
+      base::WriteJson(base::ListValue().Append(
+                          g_browser_process->GetApplicationLocale()))
+          .value_or("[]");
   // Settings are read off this sequence, so nothing is filtered until then;
   // the engine isn't built yet anyway. Requests start ahead of it on macOS too.
   work_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(
-          [](base::FilePath directory, base::FilePath resources) {
-            return std::make_pair(
-                ReadJson(resources.AppendASCII("filter_lists.json")),
-                ReadJson(directory.AppendASCII("settings.json")));
+          [](base::FilePath directory, base::FilePath resources,
+             std::string languages) {
+            return bay_lists_open(
+                Utf8(directory).c_str(),
+                Utf8(resources.AppendASCII("filter_lists.json")).c_str(),
+                languages.c_str());
           },
-          directory_, resources_),
-      base::BindOnce(
-          [](ContentBlocker* self,
-             std::pair<std::optional<base::Value>, std::optional<base::Value>>
-                 files) {
-            self->SettingsRead(std::move(files.first), std::move(files.second));
-          },
-          base::Unretained(this)));
+          directory_, resources_, languages),
+      base::BindOnce(&ContentBlocker::Opened, base::Unretained(this)));
 }
 void ContentBlocker::WhenLoaded(base::OnceClosure ready) {
   if (loaded_)
@@ -483,90 +424,39 @@ void ContentBlocker::WhenLoaded(base::OnceClosure ready) {
   else
     waiting_.push_back(std::move(ready));
 }
-void ContentBlocker::SettingsRead(std::optional<base::Value> catalogue,
-                                  std::optional<base::Value> saved) {
+void ContentBlocker::Opened(BayLists* lists) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const auto* lists =
-      catalogue && catalogue->is_dict() ? catalogue->GetDict().FindList("lists")
-                                        : nullptr;
-  if (lists) {
-    for (const auto& item : *lists) {
-      const auto* list = item.GetIfDict();
-      if (list && list->FindString("id") && list->FindList("urls"))
-        catalogue_.Append(list->Clone());
-    }
-  }
-  if (catalogue_.empty())
+  lists_ = lists;
+  if (!bay_lists_catalogue_size(lists_))
     LOG(ERROR) << "[blocker] no filter list catalogue (filter_lists.json)";
-  const auto* settings = saved ? saved->GetIfDict() : nullptr;
-  enabled_ = !settings || settings->FindBool("enabled").value_or(true);
-  const auto* chosen = settings ? settings->FindList("lists") : nullptr;
-  if (chosen) {
-    for (const auto& id : Strings(chosen)) {
-      if (List(id))
-        Add(selected_, id);
-    }
-  } else {
-    for (const auto& item : catalogue_) {
-      if (OnByDefault(item.GetDict()))
-        selected_.push_back(*item.GetDict().FindString("id"));
-    }
-  }
-  for (const auto& host :
-       Strings(settings ? settings->FindList("allowedHosts") : nullptr))
-    Add(allowed_, base::ToLowerASCII(host));
-  for (const auto& host :
-       Strings(settings ? settings->FindList("allowedPages") : nullptr))
-    Add(allowed_pages_, base::ToLowerASCII(host));
   loaded_ = true;
   PublishLive();
   nncore::SetRequestFilter(&Filter);
   nncore::SetContentSecurityPolicySource(&ContentSecurityPolicy);
   nncore::SetScriptletSource(&Scriptlets);
   Rebuild(true, base::DoNothing());
-  ScheduleUpdates(kFirstUpdate);
+  ScheduleUpdates(base::Seconds(bay_lists_first_update_seconds()));
   for (auto& ready : std::exchange(waiting_, {}))
     std::move(ready).Run();
 }
-// The catalogue's default lists, and the regional ones for the user's language.
-bool ContentBlocker::OnByDefault(const base::DictValue& list) const {
-  const auto* lang = list.FindString("lang");
-  return list.FindBool("defaultOn").value_or(false) ||
-         (lang && content_blocker::LanguageMatches(
-                      *lang, g_browser_process->GetApplicationLocale()));
-}
 void ContentBlocker::SaveSettings() {
-  auto settings = base::DictValue()
-                      .Set("enabled", enabled_)
-                      .Set("lists", ListOf(selected_))
-                      .Set("allowedHosts", ListOf(allowed_))
-                      .Set("allowedPages", ListOf(allowed_pages_));
-  work_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::FilePath directory, base::Value value) {
-            base::CreateDirectory(directory);
-            WriteJson(directory.AppendASCII("settings.json"), value);
-          },
-          directory_, base::Value(std::move(settings))));
-}
-std::vector<std::string> ContentBlocker::SelectedInOrder() const {
-  std::vector<std::string> ids;
-  for (const auto& item : catalogue_) {
-    const auto* id = item.GetDict().FindString("id");
-    if (std::ranges::contains(selected_, *id))
-      ids.push_back(*id);
-  }
-  return ids;
+  work_->PostTask(FROM_HERE, base::BindOnce(
+                                 [](ContentBlocker* self) {
+                                   if (!bay_lists_save(self->lists_))
+                                     LOG(WARNING)
+                                         << "[blocker] couldn't write settings";
+                                 },
+                                 base::Unretained(this)));
 }
 void ContentBlocker::PublishLive() {
   auto live = std::make_shared<Live>();
   live->engine = std::static_pointer_cast<Engine>(engine_);
-  live->enabled = enabled_;
-  live->allowed = allowed_;
-  live->pages = allowed_pages_;
-  live->pages.insert(live->pages.end(), session_pages_.begin(),
-                     session_pages_.end());
+  if (auto settings = JsonFrom(bay_lists_live(lists_));
+      settings && settings->is_dict()) {
+    live->enabled = settings->GetDict().FindBool("enabled").value_or(true);
+    live->allowed = Strings(settings->GetDict().FindList("allowed"));
+    live->pages = Strings(settings->GetDict().FindList("pages"));
+  }
   // Only engines with such rules need every response marshalled to the host.
   const bool filtering = live->enabled && live->engine;
   BayBlocker* blocker = filtering ? live->engine->blocker : nullptr;
@@ -593,100 +483,81 @@ void ContentBlocker::Changed() {
   Emit();
 }
 base::DictValue ContentBlocker::Stats() const {
-  double network = 0;
-  double cosmetic = 0;
-  for (const auto& [id, count] : counts_) {
-    network += count.first;
-    cosmetic += count.second;
-  }
-  const uint64_t lookups = g_lookups.load(std::memory_order_relaxed);
-  const double average =
-      lookups ? g_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0 /
-                    lookups
-              : 0;
-  const double max =
-      g_max_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0;
-  return base::DictValue()
-      .Set("ready", ready_)
-      .Set("enabled", enabled_)
-      .Set("networkFilters", network)
-      .Set("cosmeticFilters", cosmetic)
-      .Set("parseMs", std::round(parse_ms_))
-      .Set("lookups", static_cast<double>(lookups))
-      .Set("averageLookupMicros", std::round(average * 100) / 100)
-      .Set("maxLookupMicros", std::round(max * 100) / 100);
+  if (!lists_)
+    return base::DictValue();
+  auto stats = JsonFrom(bay_lists_stats(lists_, Timing().c_str()));
+  return stats && stats->is_dict() ? std::move(stats->GetDict())
+                                   : base::DictValue();
 }
 base::DictValue ContentBlocker::State() {
-  base::ListValue lists;
-  for (const auto& item : catalogue_) {
-    const auto& list = item.GetDict();
-    const std::string id = *list.FindString("id");
-    const auto* title = list.FindString("title");
-    const auto* category = list.FindString("category");
-    const auto count = counts_.find(id);
-    lists.Append(
-        base::DictValue()
-            .Set("id", id)
-            .Set("title", title ? *title : id)
-            .Set("category", category ? *category : "ads")
-            .Set("enabled", std::ranges::contains(selected_, id))
-            .Set("defaultOn", OnByDefault(list))
-            .Set("filters", count == counts_.end()
-                                ? 0.0
-                                : count->second.first + count->second.second));
-  }
-  return base::DictValue()
-      .Set("enabled", enabled_)
-      .Set("version", kVersion)
-      .Set("lists", std::move(lists))
-      .Set("allowedHosts", ListOf(allowed_))
-      .Set("allowedPages", ListOf(allowed_pages_))
-      .Set("stats", Stats());
+  if (!lists_)
+    return base::DictValue();
+  auto state = JsonFrom(bay_lists_state(lists_, Timing().c_str()));
+  return state && state->is_dict() ? std::move(state->GetDict())
+                                   : base::DictValue();
 }
 void ContentBlocker::Rebuild(bool use_cache, Rebuilt done) {
   const uint64_t generation = ++generation_;
-  auto ids = SelectedInOrder();
+  std::string ids = TextFrom(bay_lists_selected_ids(lists_));
+  std::string lists = TextFrom(bay_lists_selected(lists_));
+  // Copies bundled lists in when none is on disk yet. They count as fetched
+  // long ago, so they update soon. Answers those still gone.
   work_->PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&Seed, directory_, resources_, ids),
+      FROM_HERE,
+      base::BindOnce(
+          [](base::FilePath directory, base::FilePath resources,
+             std::string ids) {
+            return StringsFrom(bay_lists_seed(
+                Utf8(directory).c_str(),
+                Utf8(resources.AppendASCII("FilterLists")).c_str(),
+                ids.c_str()));
+          },
+          directory_, resources_, ids),
       base::BindOnce(&ContentBlocker::Seeded, base::Unretained(this),
-                     generation, ids, use_cache, std::move(done)));
+                     generation, std::move(ids), std::move(lists), use_cache,
+                     std::move(done)));
 }
 // Builds from the available files first, then again once missing lists have
 // downloaded: bundled rules must already block meanwhile.
 void ContentBlocker::Seeded(uint64_t generation,
-                            std::vector<std::string> ids,
+                            std::string ids,
+                            std::string lists,
                             bool use_cache,
                             Rebuilt done,
                             std::vector<std::string> absent) {
   if (absent.empty()) {
-    BuildAndPublish(generation, ids, use_cache, true, {}, std::move(done));
+    BuildAndPublish(generation, lists, use_cache, true, {}, std::move(done));
     return;
   }
-  BuildAndPublish(generation, ids, use_cache, false, {}, base::DoNothing());
+  BuildAndPublish(generation, lists, use_cache, false, {}, base::DoNothing());
   Fetch(absent, 0, false,
         base::BindOnce(
-            [](ContentBlocker* self, uint64_t generation,
-               std::vector<std::string> ids, bool use_cache, Rebuilt done,
-               bool) {
+            [](ContentBlocker* self, uint64_t generation, std::string ids,
+               std::string lists, bool use_cache, Rebuilt done, bool) {
               self->work_->PostTaskAndReplyWithResult(
                   FROM_HERE,
-                  base::BindOnce(&Absent, self->directory_, ids),
+                  base::BindOnce(
+                      [](base::FilePath directory, std::string ids) {
+                        return StringsFrom(bay_lists_absent(
+                            Utf8(directory).c_str(), ids.c_str()));
+                      },
+                      self->directory_, std::move(ids)),
                   base::BindOnce(
                       [](ContentBlocker* self, uint64_t generation,
-                         std::vector<std::string> ids, bool use_cache,
-                         Rebuilt done, std::vector<std::string> missing) {
-                        self->BuildAndPublish(generation, ids, use_cache, true,
-                                              std::move(missing),
+                         std::string lists, bool use_cache, Rebuilt done,
+                         std::vector<std::string> missing) {
+                        self->BuildAndPublish(generation, lists, use_cache,
+                                              true, std::move(missing),
                                               std::move(done));
                       },
-                      base::Unretained(self), generation, ids, use_cache,
-                      std::move(done)));
+                      base::Unretained(self), generation, std::move(lists),
+                      use_cache, std::move(done)));
             },
-            base::Unretained(this), generation, std::move(ids), use_cache,
-            std::move(done)));
+            base::Unretained(this), generation, std::move(ids),
+            std::move(lists), use_cache, std::move(done)));
 }
 void ContentBlocker::BuildAndPublish(uint64_t generation,
-                                     const std::vector<std::string>& ids,
+                                     const std::string& lists,
                                      bool use_cache,
                                      bool finished,
                                      std::vector<std::string> missing,
@@ -698,16 +569,9 @@ void ContentBlocker::BuildAndPublish(uint64_t generation,
       std::move(done).Run({});
     return;
   }
-  std::vector<ListSource> wanted;
-  for (const auto& id : ids) {
-    const auto* list = List(id);
-    wanted.push_back(
-        {id, list && list->FindBool("hosts").value_or(false)});
-  }
   work_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&BuildEngine, directory_, resources_, std::move(wanted),
-                     use_cache),
+      base::BindOnce(&BuildEngine, directory_, resources_, lists, use_cache),
       base::BindOnce(&ContentBlocker::Apply, base::Unretained(this), generation,
                      finished, std::move(missing), std::move(done)));
 }
@@ -715,15 +579,10 @@ void ContentBlocker::Apply(uint64_t generation,
                            bool finished,
                            std::vector<std::string> missing,
                            Rebuilt done,
-                           std::unique_ptr<Built> built) {
-  const bool current = generation == generation_;
+                           content_blocker::BuiltEngine built) {
+  const bool current = generation == generation_ && built;
   if (current) {
-    LOG(INFO) << "[blocker] " << built->counts.size() << " lists in "
-              << built->ms << " ms";
-    engine_ = std::move(built->engine);
-    parse_ms_ = built->ms;
-    counts_ = std::move(built->counts);
-    ready_ = true;
+    engine_ = std::make_shared<Engine>(bay_lists_apply(lists_, built.release()));
     PublishLive();
     Emit();
   }
@@ -735,23 +594,11 @@ void ContentBlocker::UpdateLists() {
   work_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(
-          [](base::FilePath directory, std::vector<std::string> ids) {
-            auto info = ReadJson(directory.AppendASCII("lists.json"));
-            const auto* entries = info ? info->GetIfDict() : nullptr;
-            const double now = base::Time::Now().InSecondsFSinceUnixEpoch();
-            std::vector<std::string> due;
-            for (const auto& id : ids) {
-              const auto* entry = entries ? entries->FindDict(id) : nullptr;
-              const double fetched =
-                  entry ? entry->FindDouble("fetched").value_or(0) : 0;
-              const double expires =
-                  entry ? entry->FindDouble("expires").value_or(0) : 0;
-              if (fetched + expires <= now)
-                due.push_back(id);
-            }
-            return due;
+          [](base::FilePath directory, std::string ids) {
+            return StringsFrom(
+                bay_lists_due(Utf8(directory).c_str(), ids.c_str(), Now()));
           },
-          directory_, SelectedInOrder()),
+          directory_, TextFrom(bay_lists_selected_ids(lists_))),
       base::BindOnce(
           [](ContentBlocker* self, std::vector<std::string> due) {
             self->Fetch(std::move(due), 0, false,
@@ -774,20 +621,19 @@ void ContentBlocker::Fetch(std::vector<std::string> ids,
   }
   FetchFrom(std::move(ids), next, changed, 0, std::move(done));
 }
-// A list from its first URL that answers, one list at a time.
+// A list from its first URL that answers with a list, one list at a time.
 void ContentBlocker::FetchFrom(std::vector<std::string> ids,
                                size_t next,
                                bool changed,
                                size_t url,
                                base::OnceCallback<void(bool changed)> done) {
-  const auto* list = List(ids[next]);
-  const auto* urls = list ? list->FindList("urls") : nullptr;
-  if (!urls || url >= urls->size() || !(*urls)[url].is_string()) {
+  const auto urls = StringsFrom(bay_lists_urls(lists_, ids[next].c_str()));
+  if (url >= urls.size()) {
     Fetch(std::move(ids), next + 1, changed, std::move(done));
     return;
   }
   auto request = std::make_unique<network::ResourceRequest>();
-  request->url = GURL((*urls)[url].GetString());
+  request->url = GURL(urls[url]);
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
   auto loader = network::SimpleURLLoader::Create(std::move(request),
@@ -810,7 +656,7 @@ void ContentBlocker::Fetched(std::vector<std::string> ids,
                              base::OnceCallback<void(bool changed)> done,
                              std::unique_ptr<network::SimpleURLLoader> loader,
                              std::optional<std::string> body) {
-  if (!body || !content_blocker::LooksLikeList(*body)) {
+  if (!body) {
     LOG(WARNING) << "[blocker] " << ids[next] << ": " << loader->NetError();
     FetchFrom(std::move(ids), next, changed, url + 1, std::move(done));
     return;
@@ -820,69 +666,59 @@ void ContentBlocker::Fetched(std::vector<std::string> ids,
       FROM_HERE,
       base::BindOnce(
           [](base::FilePath directory, std::string id, std::string body) {
-            const auto path = ListPath(directory, id);
-            std::string old;
-            const bool differs =
-                !base::ReadFileToString(path, &old) || old != body;
-            if (differs)
-              base::ImportantFileWriter::WriteFileAtomically(path, body);
-            const auto index = directory.AppendASCII("lists.json");
-            auto info = ReadJson(index);
-            base::DictValue entries;
-            if (info && info->is_dict())
-              entries = std::move(info->GetDict());
-            entries.Set(
-                id, base::DictValue()
-                        .Set("fetched",
-                             base::Time::Now().InSecondsFSinceUnixEpoch())
-                        .Set("expires", content_blocker::ExpiresAfter(body)
-                                            .InSecondsF()));
-            WriteJson(index, base::Value(std::move(entries)));
-            return differs;
+            return bay_lists_store(Utf8(directory).c_str(), id.c_str(),
+                                   reinterpret_cast<const uint8_t*>(body.data()),
+                                   body.size(), Now());
           },
           directory_, id, std::move(*body)),
       base::BindOnce(
           [](ContentBlocker* self, std::vector<std::string> ids, size_t next,
-             bool changed, base::OnceCallback<void(bool)> done, bool differs) {
-            self->Fetch(std::move(ids), next + 1, changed || differs,
+             bool changed, size_t url, base::OnceCallback<void(bool)> done,
+             int32_t stored) {
+            // An error page, not a list: the list's next URL.
+            if (stored == -1) {
+              LOG(WARNING) << "[blocker] " << ids[next] << ": not a list";
+              self->FetchFrom(std::move(ids), next, changed, url + 1,
+                              std::move(done));
+              return;
+            }
+            self->Fetch(std::move(ids), next + 1, changed || stored == 1,
                         std::move(done));
           },
-          base::Unretained(this), std::move(ids), next, changed,
+          base::Unretained(this), std::move(ids), next, changed, url,
           std::move(done)));
 }
 void ContentBlocker::ScheduleUpdates(base::TimeDelta after) {
-  updates_.Start(FROM_HERE, after, base::BindOnce(
-                                       [](ContentBlocker* self) {
-                                         if (self->enabled_)
-                                           self->UpdateLists();
-                                         self->ScheduleUpdates(kUpdateEvery);
-                                       },
-                                       base::Unretained(this)));
+  updates_.Start(
+      FROM_HERE, after, base::BindOnce(
+                            [](ContentBlocker* self) {
+                              if (bay_lists_enabled(self->lists_))
+                                self->UpdateLists();
+                              self->ScheduleUpdates(base::Seconds(
+                                  bay_lists_update_every_seconds()));
+                            },
+                            base::Unretained(this)));
 }
 void ContentBlocker::SetEnabled(bool enabled, Done done) {
-  const bool was_enabled = enabled_;
-  enabled_ = enabled;
+  const bool turned_on = bay_lists_set_enabled(lists_, enabled);
   Changed();
   // Back on after a while off: its lists may have gone stale meanwhile.
-  if (enabled && !was_enabled)
+  if (turned_on)
     UpdateLists();
   std::move(done).Run(std::nullopt);
 }
 void ContentBlocker::SetListEnabled(const std::string& id,
                                     bool enabled,
                                     Done done) {
-  if (!List(id)) {
+  const int32_t changed = bay_lists_set_list(lists_, id.c_str(), enabled);
+  if (changed < 0) {
     std::move(done).Run("no list " + id);
     return;
   }
-  if (enabled == std::ranges::contains(selected_, id)) {
+  if (!changed) {
     std::move(done).Run(std::nullopt);
     return;
   }
-  if (enabled)
-    selected_.push_back(id);
-  else
-    std::erase(selected_, id);
   SaveSettings();
   // Done when the engine has it (a new list downloads first). A list that
   // couldn't be downloaded isn't turned on.
@@ -893,7 +729,7 @@ void ContentBlocker::SetListEnabled(const std::string& id,
                         std::move(done).Run(std::nullopt);
                         return;
                       }
-                      std::erase(self->selected_, id);
+                      bay_lists_set_list(self->lists_, id.c_str(), false);
                       self->SaveSettings();
                       self->Rebuild(true, base::DoNothing());
                       std::move(done).Run("couldn't download " + id);
@@ -901,23 +737,16 @@ void ContentBlocker::SetListEnabled(const std::string& id,
                     base::Unretained(this), id, enabled, std::move(done)));
 }
 bool ContentBlocker::IsAllowed(const std::string& host) {
-  const std::string name = HostOf(host);
-  return std::ranges::any_of(allowed_, [&](const std::string& allowed) {
-    return Covers(allowed, name);
-  });
+  return bay_lists_is_allowed(lists_, host.c_str());
 }
 void ContentBlocker::SetAllowed(const std::string& host,
                                 bool allowed,
                                 Done done) {
-  const std::string name = HostOf(host);
-  if (name.empty()) {
+  // Blocking again ends every pause that covers the host.
+  if (!bay_lists_set_allowed(lists_, host.c_str(), allowed)) {
     std::move(done).Run("no host");
     return;
   }
-  if (allowed)
-    Add(allowed_, name);
-  else
-    RemoveCovering(allowed_, name);
   Changed();
   std::move(done).Run(std::nullopt);
 }
@@ -925,16 +754,9 @@ void ContentBlocker::SetPageAllowed(const std::string& host,
                                     bool allowed,
                                     bool remember,
                                     Done done) {
-  const std::string name = HostOf(host);
-  if (name.empty()) {
+  if (!bay_lists_set_page_allowed(lists_, host.c_str(), allowed, remember)) {
     std::move(done).Run("no host");
     return;
-  }
-  if (allowed) {
-    Add(remember ? allowed_pages_ : session_pages_, name);
-  } else {
-    RemoveCovering(allowed_pages_, name);
-    RemoveCovering(session_pages_, name);
   }
   Changed();
   std::move(done).Run(std::nullopt);
@@ -1007,77 +829,5 @@ std::optional<std::string> ContentBlocker::GenericStyle(
     return std::nullopt;
   return content_blocker::StyleFor(Strings(&selectors->GetList()));
 }
-
-namespace {
-std::unique_ptr<ContentBlocker::Built> BuildEngine(
-    base::FilePath directory,
-    base::FilePath resources,
-    std::vector<ListSource> wanted,
-    bool use_cache) {
-  auto built = std::make_unique<ContentBlocker::Built>();
-  const base::TimeTicks start = base::TimeTicks::Now();
-  std::vector<ListSource> present;
-  std::vector<std::string> ids;
-  for (auto& list : wanted) {
-    if (base::PathExists(ListPath(directory, list.id))) {
-      ids.push_back(list.id);
-      present.push_back(std::move(list));
-    }
-  }
-  const std::string key = EngineKey(directory, ids);
-  const auto engine_path = directory.AppendASCII("engine.dat");
-  const auto key_path = directory.AppendASCII("engine.key");
-  const auto meta_path = directory.AppendASCII("engine.lists.json");
-  BayBlocker* blocker = nullptr;
-  std::string cached_key;
-  if (use_cache && base::ReadFileToString(key_path, &cached_key) &&
-      cached_key == key) {
-    auto data = std::make_unique<std::string>();
-    auto cached_ids = ReadJson(meta_path);
-    if (base::ReadFileToString(engine_path, data.get()) && cached_ids &&
-        cached_ids->is_list() && Strings(&cached_ids->GetList()) == ids) {
-      // Rust keeps the bytes until the engine is freed, or releases them on failure.
-      auto* owner = data.release();
-      blocker = bay_blocker_deserialize(
-          reinterpret_cast<const uint8_t*>(owner->data()), owner->size(), owner,
-          [](void* bytes) { delete static_cast<std::string*>(bytes); });
-    }
-  }
-  if (!blocker) {
-    blocker = Compile(directory, present);
-    size_t length = 0;
-    uint8_t* bytes = bay_blocker_serialize(blocker, &length);
-    if (base::ImportantFileWriter::WriteFileAtomically(
-            engine_path,
-            std::string_view(reinterpret_cast<const char*>(bytes), length))) {
-      WriteJson(meta_path, base::Value(ListOf(ids)));
-      base::ImportantFileWriter::WriteFileAtomically(key_path, key);
-    }
-    bay_bytes_free(bytes, length);
-  }
-  // Resources aren't in the serialized engine: load them for new and cached
-  // engines alike, so scriptlets and stand-ins work on every launch.
-  std::string scriptlets;
-  if (!base::ReadFileToString(resources.AppendASCII("blocker-resources.json"),
-                              &scriptlets) ||
-      !bay_blocker_use_resources(blocker, scriptlets.c_str())) {
-    LOG(ERROR) << "[blocker] missing or invalid scriptlet resources";
-  }
-  auto counts = JsonFrom(bay_blocker_list_counts(blocker));
-  if (counts && counts->is_list() && counts->GetList().size() == ids.size()) {
-    for (size_t i = 0; i < ids.size(); ++i) {
-      const auto* count = counts->GetList()[i].GetIfDict();
-      if (!count)
-        continue;
-      built->counts[ids[i]] = {
-          count->FindDouble("networkFilters").value_or(0),
-          count->FindDouble("cosmeticFilters").value_or(0)};
-    }
-  }
-  built->engine = std::make_shared<Engine>(blocker);
-  built->ms = (base::TimeTicks::Now() - start).InMillisecondsF();
-  return built;
-}
-}  // namespace
 
 }  // namespace bay

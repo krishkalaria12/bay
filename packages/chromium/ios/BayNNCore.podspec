@@ -30,7 +30,7 @@ Pod::Spec.new do |s|
   s.resources      = 'page_script.js', 'filter_lists.json'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => "\"#{engine_public}\" \"#{adblock}/include\"",
+    'HEADER_SEARCH_PATHS' => "\"#{engine_public}\" \"#{adblock}/include\" \"#{rust}/bay-lists/include\"",
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
   }
   # A search path and -l, not the archive's path in OTHER_LDFLAGS: CocoaPods drops the quotes when it merges that, and the
