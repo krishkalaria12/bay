@@ -2,7 +2,7 @@
 # docs/shared-desktop-core-plan.html, Phase 0.
 [workspace]
 resolver = "3"
-members = ["bay-desktop", "bay-lists"]
+members = ["bay-desktop", "bay-lists", "bay-sync"]
 
 [workspace.package]
 edition = "2024"
@@ -12,6 +12,7 @@ license = "Apache-2.0"
 [workspace.dependencies]
 bay-adblock = { path = "../adblock" }
 bay-lists = { path = "bay-lists" }
+bay-sync = { path = "bay-sync" }
 memmap2 = "0.9"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
