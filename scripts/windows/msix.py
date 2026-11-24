@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn package.ps1's staged app into an MSIX layout: AppxManifest.xml, the logos, and no self-updater.
 
-    python scripts/windows/msix.py --stage <folder> --version X.Y.Z[.N]
+    python scripts/windows/msix.py --stage <folder> --version X.Y.Z
 
 The Microsoft Store signs and updates the package, so the in-app updater's script is left out. The identity comes from
 Partner Center (Product identity): --name, --publisher (CN=...) and --publisher-display-name, or BAY_MSIX_NAME,
@@ -36,11 +36,13 @@ ALIAS = 'baybrowser.exe'
 
 
 def package_version(version):
-    """MSIX versions have four parts; the Store wants the last to be 0, so X.Y.Z becomes X.Y.Z.0."""
+    """MSIX versions have four parts and the Store rejects a package whose last isn't 0, so X.Y.Z becomes X.Y.Z.0."""
     parts = version.split('.')
-    if len(parts) not in (3, 4) or not all(re.fullmatch(r'\d+', part) and int(part) <= 65535 for part in parts):
-        raise ValueError(f'version must be X.Y.Z or X.Y.Z.N, each part at most 65535: {version}')
-    return '.'.join(str(int(part)) for part in parts + ['0'] * (4 - len(parts)))
+    if parts[3:] == ['0']:
+        parts = parts[:3]
+    if len(parts) != 3 or not all(re.fullmatch(r'\d+', part) and int(part) <= 65535 for part in parts):
+        raise ValueError(f'version must be X.Y.Z (or X.Y.Z.0), each part at most 65535: {version}')
+    return '.'.join(str(int(part)) for part in parts) + '.0'
 
 
 def toast_activator():

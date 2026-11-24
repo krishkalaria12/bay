@@ -43,8 +43,9 @@ def make_assets():
 class ManifestTests(unittest.TestCase):
     def test_store_versions_end_in_zero(self):
         self.assertEqual(msix.package_version('1.7.0'), '1.7.0.0')
-        self.assertEqual(msix.package_version('0.1.0.42'), '0.1.0.42')
-        for version in ('1.7', '1.7.0.0.1', '1.7.x', '1.70000.0'):
+        self.assertEqual(msix.package_version('1.0.0.0'), '1.0.0.0')
+        # The Store keeps the last part for itself and rejects a package that sets it.
+        for version in ('1.7', '0.1.0.42', '1.7.0.0.1', '1.7.x', '1.70000.0'):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 msix.package_version(version)
 
@@ -160,6 +161,12 @@ class EnginePatchTests(unittest.TestCase):
 
 
 class BuildTests(unittest.TestCase):
+    def test_test_builds_get_a_version_the_store_accepts(self):
+        workflow = WORKFLOW.read_text()
+        default = re.search(r'version=\$\{VERSION:-(.+?)\}', workflow)[1]
+        self.assertEqual(default, '0.1.$GITHUB_RUN_NUMBER')
+        self.assertEqual(msix.package_version(default.replace('$GITHUB_RUN_NUMBER', '38')), '0.1.38.0')
+
     def test_package_script_has_an_msix_mode_that_the_store_signs(self):
         script = (REPO / 'scripts/windows/package.ps1').read_text()
         self.assertIn('[switch]$Msix', script)
