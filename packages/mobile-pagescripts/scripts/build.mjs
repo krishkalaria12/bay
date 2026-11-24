@@ -22,7 +22,8 @@ for (const file of readdirSync(sources)
 
   // Every `*_SCRIPT` export is a script's text.
   for (const [name, source] of Object.entries(module).filter(([name]) => name.endsWith("_SCRIPT"))) {
-    scripts[name.slice(0, -"_SCRIPT".length).toLowerCase().replaceAll("_", "-")] = source.trim() + "\n";
+    // A Windows checkout has CRLF sources, but the scripts are the same either way.
+    scripts[name.slice(0, -"_SCRIPT".length).toLowerCase().replaceAll("_", "-")] = source.replaceAll("\r\n", "\n").trim() + "\n";
   }
 }
 
@@ -33,7 +34,7 @@ if (process.argv.includes("--check")) {
   let current = "";
 
   try {
-    current = readFileSync(output, "utf8");
+    current = readFileSync(output, "utf8").replaceAll("\r\n", "\n");
   } catch {
     // Missing: out of date.
   }
