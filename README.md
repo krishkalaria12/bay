@@ -246,10 +246,10 @@ if the selected Command Line Tools lack XCTest. Set `DEVELOPER_DIR` to use anoth
 the runner leaves the global `xcode-select` setting unchanged.
 
 Signed releases (DMG, Sparkle zip and appcast): `scripts/release.sh <version>`, which reads its
-notes from `release-notes/<version>.md` and needs a Developer ID certificate, notarytool credentials
+notes from `release-notes/mac/<version>.md` and needs a Developer ID certificate, notarytool credentials
 (`scripts/.notary.env` or the `bay` keychain profile) and the Sparkle key in the login keychain
 (account `bay`). The app checks `baybrowser.in/appcast.xml` for updates and links to
-`baybrowser.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
+`baybrowser.in/mac/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
 channel (`baybrowser.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
 [docs/releasing.md](docs/releasing.md).
 

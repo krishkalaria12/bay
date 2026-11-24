@@ -10,9 +10,9 @@ name: Linux build from source
 # Start a run: git tag linux-build-N && git push origin linux-build-N
 #
 # A release is the same run with a version and publish: the packages job's AppImage check must pass, then publish
-# (scripts/linux/publish.sh) signs them, adds them to the release v<version> and refreshes the APT and RPM
+# (scripts/linux/publish.sh) signs them, adds them to the release linux-v<version> and refreshes the APT and RPM
 # repositories and the AUR. docs/releasing.md › Linux:
-#   gh workflow run linux-build.yml --ref feat/linux -f version=X.Y.Z -f publish=true
+#   gh workflow run linux-build.yml -f version=X.Y.Z -f publish=true
 on:
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ on:
         required: false
         default: ""
       publish:
-        description: "Publish the packages to the release v<version>, the repositories and the AUR"
+        description: "Publish the packages to the release linux-v<version>, the repositories and the AUR"
         type: boolean
         default: false
   push:
@@ -62,8 +62,12 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z: $version"; exit 1; }
           if [[ "$PUBLISH" == true ]]; then
             [[ -n "$VERSION" ]] || { echo "::error::publishing needs a version"; exit 1; }
-            gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null || {
-              echo "::error::there is no release v$VERSION: Linux adds its packages to the Mac release, so publish that first"; exit 1; }
+            # Linux versions are its own (linux-v<version>), and a published one is never replaced: the AUR and Flathub
+            # pin its tarball's checksum.
+            if gh release view "linux-v$VERSION" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -qxF "bay-$VERSION-linux-x64.tar.xz"; then
+              echo "::error::Bay $VERSION for Linux is already published (linux-v$VERSION)"; exit 1
+            fi
             [[ "$HAS_GPG_KEY" == true ]] || { echo "::error::the LINUX_GPG_PRIVATE_KEY secret isn't set (docs/releasing.md › Linux)"; exit 1; }
             [[ "$HAS_AUR_KEY" == true ]] || { echo "::error::the AUR_SSH_PRIVATE_KEY secret isn't set (docs/releasing.md › Linux)"; exit 1; }
           fi
@@ -274,7 +278,7 @@ jobs:
           sudo snap install snapcraft --classic
           SNAPCRAFT="sudo snapcraft" BAY_SNAPCRAFT_ARGS=--destructive-mode scripts/linux/release.sh --app dist/linux-app \
             --version "$VERSION" --output dist/linux-snap --formats tar,snap
-          cp "dist/linux-snap/bay_${VERSION}_amd64.snap" dist/linux-release/
+          cp "dist/linux-snap/bay-browser_${VERSION}_amd64.snap" dist/linux-release/
       # Each package is its own unzipped download (archive: false takes one file, named after it). Everything,
       # with the checksums, zsync, PKGBUILD and NixOS README, stays in one zip for publishing.
       - uses: actions/upload-artifact@v7
@@ -284,12 +288,12 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay_${{ needs.plan.outputs.version }}_amd64.deb
+          path: dist/linux-release/bay-browser_${{ needs.plan.outputs.version }}_amd64.deb
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay-${{ needs.plan.outputs.version }}-1.x86_64.rpm
+          path: dist/linux-release/bay-browser-${{ needs.plan.outputs.version }}-1.x86_64.rpm
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
@@ -304,7 +308,7 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/linux-release/bay_${{ needs.plan.outputs.version }}_amd64.snap
+          path: dist/linux-release/bay-browser_${{ needs.plan.outputs.version }}_amd64.snap
           archive: false
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4

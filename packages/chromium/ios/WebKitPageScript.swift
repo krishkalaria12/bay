@@ -268,6 +268,8 @@ enum WebKitPageScript {
       const videos = Array.from(document.querySelectorAll("video"));
       const v = videos.find((x) => !x.paused) || videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
       if (!v) return false;
+      // Streaming players opt out of Picture in Picture (Netflix's video has disablePictureInPicture); the user asked.
+      if (v.disablePictureInPicture) v.disablePictureInPicture = false;
       if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode("picture-in-picture")) v.webkitSetPresentationMode("picture-in-picture");
       else if (v.requestPictureInPicture) v.requestPictureInPicture();
       else return false;

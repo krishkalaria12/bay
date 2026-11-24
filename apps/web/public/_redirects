@@ -7,6 +7,13 @@
 # The update feed in the app's Info.plist (SUFeedURL): the latest release's.
 /appcast.xml https://github.com/krishkalaria12/bay/releases/latest/download/appcast.xml 302
 
+# Release notes are per platform (/mac, /linux and /windows/release-notes/). Mac apps up to 1.7.0 open
+# /release-notes/#<version>, and a redirect keeps the fragment.
+/release-notes /mac/release-notes/ 301
+/release-notes/ /mac/release-notes/ 301
+/release-notes/:version /mac/release-notes/:version/ 301
+/release-notes/:version/ /mac/release-notes/:version/ 301
+
 # The newest nightly (scripts/release/publish.sh re-uploads it each night).
 /nightly https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
 /nightly/ https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
@@ -19,4 +26,8 @@
 /linux/apt/./:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
 /linux/apt/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
 /linux/rpm/repodata/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
-/linux/:file https://github.com/krishkalaria12/bay/releases/download/linux-repo/:file 302
+# The files at /linux/ itself, by name: /linux/release-notes/ is one of the site's pages.
+/linux/bay.asc https://github.com/krishkalaria12/bay/releases/download/linux-repo/bay.asc 302
+/linux/bay.gpg https://github.com/krishkalaria12/bay/releases/download/linux-repo/bay.gpg 302
+/linux/bay.repo https://github.com/krishkalaria12/bay/releases/download/linux-repo/bay.repo 302
+/linux/Bay-x86_64.AppImage.zsync https://github.com/krishkalaria12/bay/releases/download/linux-repo/Bay-x86_64.AppImage.zsync 302

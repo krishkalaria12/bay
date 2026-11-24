@@ -6,7 +6,7 @@
 %global __provides_exclude_from ^/opt/bay/.*$
 %global __requires_exclude ^lib(EGL|GLESv2|vk_swiftshader|vulkan|qt5_shim|qt6_shim)\\.so.*$
 
-Name:           bay
+Name:           bay-browser
 Version:        @VERSION@
 Release:        1
 Summary:        A fast browser with your tabs in a sidebar
@@ -39,7 +39,7 @@ fi
 /opt/bay
 /usr/bin/bay
 /usr/share/applications/bay.desktop
-/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml
+/usr/share/metainfo/in.baybrowser.bay.metainfo.xml
 /usr/share/icons/hicolor/*/apps/bay.*
 %config(noreplace) /etc/apparmor.d/bay
 %dir /etc/bay

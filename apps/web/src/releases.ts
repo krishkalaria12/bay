@@ -1,7 +1,7 @@
-// Bay's versions, from the repo's release-notes/<version>.md: the files scripts/release.sh turns into the GitHub
-// release and the update window's notes. Each has `date:` and `headline:` frontmatter, then either `## Added`,
-// `## Improved`… sections of "- **Title.** What changed." items, or (1.0.0) one list of them.
-import { readdirSync, readFileSync } from "node:fs";
+// Bay's versions, from the repo's release-notes/<platform>/<version>.md: each platform has its own versions and notes
+// (release-notes/README.md). Each has `date:` and `headline:` frontmatter, then either `## Added`, `## Improved`…
+// sections of "- **Title.** What changed." items, or (Mac 1.0.0) one list of them.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export type Item = { title: string; body: string };
@@ -11,7 +11,20 @@ export type Section = { title: string; items: Item[] };
 export type Release = { version: string; date: string; headline: string; sections: Section[] };
 
 // Astro builds from apps/web.
-const dir = resolve(process.cwd(), "../../release-notes");
+const root = resolve(process.cwd(), "../../release-notes");
+
+export const platformIds = ["mac", "linux", "windows"] as const;
+
+export type Platform = (typeof platformIds)[number];
+
+/** Each platform's release notes live at /<platform>/release-notes/. */
+export const platforms: Record<Platform, { name: string; updates: string }> = {
+  mac: { name: "Mac", updates: "It updates itself; restart it when it says so." },
+  linux: { name: "Linux", updates: "Your package manager keeps it up to date." },
+  windows: { name: "Windows", updates: "It updates itself." },
+};
+
+export const notesPath = (platform: Platform, version?: string) => `/${platform}/release-notes/${version ? `${version}/` : ""}`;
 
 const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -74,8 +87,12 @@ const newer = (a: string, b: string) => {
   return 0;
 };
 
-/** Every version, newest first. */
-export function releases(): Release[] {
+/** Every version for the platform, newest first. */
+export function releases(platform: Platform): Release[] {
+  const dir = join(root, platform);
+
+  if (!existsSync(dir)) return [];
+
   return readdirSync(dir)
     .filter((f) => /^\d+(\.\d+)*\.md$/.test(f))
     .map((f) => parse(f.slice(0, -3), readFileSync(join(dir, f), "utf8")))

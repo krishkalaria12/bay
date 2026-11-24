@@ -53,6 +53,24 @@ jobs:
           $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
           & $compiler /DAppVersion=0.0.0 "/DStageDir=$stage" "/DOutputDir=$env:RUNNER_TEMP/bay-installer-result" packaging/windows/Bay.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Pack the Store package template
+        shell: pwsh
+        run: |
+          # makeappx checks the manifest against the schema and finds every logo through resources.pri.
+          $stage = Join-Path $env:RUNNER_TEMP 'bay-msix-template'
+          New-Item $stage -ItemType Directory -Force | Out-Null
+          foreach ($name in 'Bay.exe', 'notification_helper.exe') { Set-Content (Join-Path $stage $name) 'msix template fixture' }
+          python scripts/windows/msix.py --stage $stage --version 1.0.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $sdk = Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/bin' -Directory | Sort-Object Name -Descending | Where-Object { Test-Path (Join-Path $_.FullName 'x64/makeappx.exe') } | Select-Object -First 1
+          $tools = Join-Path $sdk.FullName 'x64'
+          $config = Join-Path $env:RUNNER_TEMP 'priconfig.xml'
+          & "$tools/makepri.exe" createconfig /cf $config /dq en-US /pv 10.0.0 /o
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$tools/makepri.exe" new /pr $stage /cf $config /mn "$stage/AppxManifest.xml" /of "$stage/resources.pri" /o
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$tools/makeappx.exe" pack /d $stage /p "$env:RUNNER_TEMP/bay-template.msix" /o
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Verify updater security and version handling
         run: pwsh -File scripts/windows/test-updater.ps1
       - name: Validate Windows patch selection
