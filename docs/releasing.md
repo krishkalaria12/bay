@@ -32,13 +32,13 @@ Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updat
 - **Downloads.** Stable: `baybrowser.in/download` (`Bay.dmg` on the latest release). Nightly:
   `baybrowser.in/nightly` (`apps/web/public/_redirects`), `Bay-Nightly.dmg` on the prerelease `nightly`, which
   each nightly replaces.
-- **Notes.** A stable's are `release-notes/<version>.md` (the site, the GitHub release and the update dialog). A
+- **Notes.** A stable's are `release-notes/mac/<version>.md` (the site, the GitHub release and the update dialog). A
   nightly's are the `feat`, `fix` and `perf` commit subjects since the previous release
-  (`scripts/release/nightly-notes.sh`), unless `release-notes/<version>.md` exists.
+  (`scripts/release/nightly-notes.sh`), unless `release-notes/mac/<version>.md` exists.
 
 ## Shipping a stable release
 
-1. Write `release-notes/<version>.md` (`date:` and `headline:` frontmatter), set `MARKETING_VERSION` to `<version>`
+1. Write `release-notes/mac/<version>.md` (`date:` and `headline:` frontmatter), set `MARKETING_VERSION` to `<version>`
    and bump `CURRENT_PROJECT_VERSION` by one in `apps/browser/macos/Bay.xcodeproj/project.pbxproj`, commit
    (`chore: prepare bay <version>`) and push to `main`.
 2. If `engine/` changed since the last published engine, publish it (below).
@@ -107,26 +107,28 @@ changed fail in **plan**, saying so; `engine/` must be committed and pushed firs
 
 ## Linux
 
-Linux ships beside a Mac release, with the same version: its packages go on the release `v<version>`, so publish that
-first. One run of `.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage,
-then its **publish** job runs `scripts/linux/publish.sh`:
+Linux has its own versions, starting at 1.0.0, apart from the Mac's: its packages go on the release `linux-v<version>`,
+which `publish.sh` creates and never marks latest (the site's `/download` and the Mac appcast follow the latest release).
+Notes for it can go in `release-notes/linux/<version>.md`, whose `date:` also dates the AppStream release. One run of
+`.github/workflows/linux-build.yml` builds (or reuses) the engine, packages and checks the AppImage, then its
+**publish** job runs `scripts/linux/publish.sh`:
 
 ```bash
-gh workflow run linux-build.yml --ref feat/linux -f version=<version> -f publish=true
+gh workflow run linux-build.yml -f version=<version> -f publish=true
 ```
 
-Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or a
-secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would upload
-without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, `linux-v<version>` already has its
+packages or a secret below is missing. Without `publish` the run is an ordinary test build. To see what a release would
+upload without uploading it, run `publish.sh --dry-run` on a run's `bay-linux-packages` with any key in `BAY_GPG_KEY`.
 
 What a release publishes:
 
 | Where | What |
 |---|---|
-| Release `v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
+| Release `linux-v<version>` | the `.deb`, signed `.rpm`, tarball, AppImage and its `.zsync`, NixOS closure, `bay-<version>-linux-SHA256SUMS`, and an `.asc` signature for each |
 | Prerelease `linux-repo` | the APT repository (`InRelease`, `Release`, `Packages`), the RPM repository (`repomd.xml` and its metadata), the keys `bay.gpg` and `bay.asc`, `bay.repo`, and `Bay-x86_64.AppImage.zsync`, which points at this release's AppImage. Each release replaces them |
-| AUR `bay-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
-| Snap Store `bay` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
+| AUR `bay-browser-bin` | `PKGBUILD` and `.SRCINFO`; the package downloads the release's tarball |
+| Snap Store `bay-browser` | the snap, on stable, when `SNAPCRAFT_STORE_CREDENTIALS` is set |
 
 Flathub and nixpkgs build from the release's tarball, and their bots open a pull request for each new release once the
 first is in: Flathub's checks GitHub's releases every few hours and merges its own (`flathub.json`), and nixpkgs'
@@ -146,19 +148,19 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
    ```bash
    gpg --batch --passphrase '' --quick-gen-key 'Bay Linux packages' rsa4096 sign 0
    key=$(gpg --list-secret-keys --with-colons 'Bay Linux packages' | awk -F: '$1 == "fpr" { print $10; exit }')
-   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-signing-key.asc
-   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-signing-key.asc
+   gpg --armor --export-secret-keys "$key" >~/Documents/bay-linux-keys/bay-linux-signing-key.asc
+   gh secret set LINUX_GPG_PRIVATE_KEY <~/Documents/bay-linux-keys/bay-linux-signing-key.asc
    ```
 
-2. **AUR.** Make an account at aur.archlinux.org, then give it a key of its own:
+2. **AUR.** Make an account at aur.archlinux.org, then give CI a key of its own (the account takes several, one per line):
 
    ```bash
-   ssh-keygen -t ed25519 -N '' -C bay-aur -f ~/.ssh/aur
-   # aur.archlinux.org › My Account › SSH Public Key: paste ~/.ssh/aur.pub
-   gh secret set AUR_SSH_PRIVATE_KEY <~/.ssh/aur
+   ssh-keygen -t ed25519 -N '' -C bay-aur-ci -f ~/Documents/bay-linux-keys/aur-ci
+   # aur.archlinux.org › My Account › SSH Public Key: add ~/Documents/bay-linux-keys/aur-ci.pub
+   gh secret set AUR_SSH_PRIVATE_KEY <~/Documents/bay-linux-keys/aur-ci
    ```
 
-   The first publish creates `bay-bin`. `publish.sh` checks the AUR's published host key.
+   The first publish creates `bay-browser-bin`. `publish.sh` checks the AUR's published host key.
 
 3. **Site.** Get the `/linux/` lines of `apps/web/public/_redirects` onto `main` and deployed.
 
@@ -170,18 +172,22 @@ After the first release:
    pull request into `new-pr` titled "Add in.baybrowser.bay". Reviewers build it and may ask for changes; once it's
    merged, Flathub makes `flathub/in.baybrowser.bay` and you're its maintainer. For the verified badge, sign in at
    flathub.org and verify the domain `baybrowser.in`, which the app ID names.
-5. **Snap Store.** Register the name and ask for the sandbox, which Chromium-based snaps need and the store grants by
-   hand (a post in forum.snapcraft.io's "store-requests" asking for `browser-support` with `allow-sandbox` for `bay`):
+5. **Snap Store.** Register the name (`bay` was taken, so it's `bay-browser`) and ask for the sandbox, which
+   Chromium-based snaps need and the store grants by hand: a post in forum.snapcraft.io's "store-requests" asking for
+   `browser-support` with `allow-sandbox` for `bay-browser`. Mention the `mpris` slot too: it's named `bay`, which isn't
+   the snap's name.
 
    ```bash
-   snapcraft register bay
-   snapcraft export-login --snaps=bay --channels=stable --acls package_access,package_push,package_release - \
+   snapcraft register bay-browser
+   snapcraft export-login --snaps=bay-browser --channels=stable --acls package_access,package_push,package_release - \
      | gh secret set SNAPCRAFT_STORE_CREDENTIALS
    ```
 
+   The credentials last a year; export them again before they run out.
+
    The next release uploads it; the first one can be uploaded by hand with `snapcraft upload --release=stable`.
 6. **nixpkgs.** Add yourself to `maintainers/maintainer-list.nix` and `bay-linux-packages/nixpkgs/package.nix` as
-   `pkgs/by-name/ba/bay/package.nix` (filling in `maintainers`), check it with `nix-build -A bay`, and open the pull
+   `pkgs/by-name/ba/bay-browser/package.nix` (filling in `maintainers`), check it with `nix-build -A bay-browser`, and open the pull
    request.
 
 The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.

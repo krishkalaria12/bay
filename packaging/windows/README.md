@@ -84,7 +84,7 @@ Set `BAY_WINDOWS_UPDATE_FEED` to the HTTPS channel JSON URL and
 `BAY_WINDOWS_DOWNLOAD_BASE` to the HTTPS installer directory, then omit
 `-Unsigned`. Every executable/DLL, the installer and uninstaller are signed.
 The package command writes the installer, checksum, channel JSON and app PDB ZIP.
-It reads release notes from `release-notes/<version>.md` when present. Publishing
+It reads release notes from `release-notes/windows/<version>.md` when present. Publishing
 is a separate step: `scripts/windows/publish.py` adds the installer to the GitHub
 release and submits it to winget (`docs/releasing.md` › Windows). The winget
 manifests come from `scripts/windows/winget.py`; the package is

@@ -1,6 +1,7 @@
 # Bay for the Snap Store, from the release tarball. scripts/linux/release.sh --formats snap fills in the version, puts
 # the tarball beside this file as the project's snap/snapcraft.yaml and packs it with snapcraft.
-name: bay
+# Bay's store name; bay was taken. Its app shares the name, so the command is bay-browser.
+name: bay-browser
 title: Bay
 base: core24
 version: "@VERSION@"
@@ -26,7 +27,7 @@ platforms:
   amd64:
 
 apps:
-  bay:
+  bay-browser:
     command: bin/bay
     desktop: usr/share/applications/bay.desktop
     common-id: in.baybrowser.bay
@@ -34,7 +35,7 @@ apps:
     environment:
       # The profile outlives a revision instead of being copied into each one.
       CHROME_CONFIG_HOME: $SNAP_USER_COMMON
-      CHROME_DESKTOP: bay_bay.desktop
+      CHROME_DESKTOP: bay-browser_bay-browser.desktop
       GTK_USE_PORTAL: "1"
     plugs:
       - audio-playback
@@ -69,6 +70,7 @@ plugs:
 slots:
   mpris:
     interface: mpris
+    # Bay's player is org.mpris.MediaPlayer2.bay, whatever the snap is called.
     name: bay
 
 parts:
@@ -80,6 +82,6 @@ parts:
       cd "$CRAFT_PART_INSTALL"
       rm -rf usr/bin etc/apparmor.d opt/bay/bay-wrapper
       # snapd points Exec at the app; the icon has to be a path in the snap.
-      sed -i -e 's|^Exec=/usr/bin/bay|Exec=bay|' -e '/^TryExec=/d' \
+      sed -i -e 's|^Exec=/usr/bin/bay|Exec=bay-browser|' -e '/^TryExec=/d' \
         -e 's|^Icon=bay$|Icon=${SNAP}/usr/share/icons/hicolor/256x256/apps/bay.png|' usr/share/applications/bay.desktop
       install -Dm 755 "$CRAFT_PROJECT_DIR/snap/local/bay" bin/bay
