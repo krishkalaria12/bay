@@ -247,9 +247,9 @@ private fun NewTabPicture(browser: BrowserModel, strings: Strings, modifier: Mod
 
 /** The tab just swiped or zoomed to, as its picture, over its page until the page draws. */
 @Composable
-fun TabCoverLayer(browser: BrowserModel) {
+fun TabCoverLayer(browser: BrowserModel, modifier: Modifier = Modifier) {
     val swipe = browser.tabSwipe
-    swipe.cover?.let { tab -> TabPicture(browser, tab, Modifier.graphicsLayer { alpha = swipe.coverAlpha.value }) }
+    swipe.cover?.let { tab -> TabPicture(browser, tab, modifier.graphicsLayer { alpha = swipe.coverAlpha.value }) }
 }
 
 /** The gap between the page and the tab coming in. */

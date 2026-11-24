@@ -118,7 +118,8 @@ fun PagesHost(browser: BrowserModel, reachable: Boolean, modifier: Modifier = Mo
     // `visible`: the page shows (not under the switcher or Settings); `reachable`: TalkBack can reach it (no sheet over it).
     val shown = visible
     val mounted = browser.mounted
-    val tabs = browser.app.tabs
+    // Every space's: a page kept loaded from the space switched away from still gets hidden here.
+    val tabs = browser.app.allTabs
     AndroidView(
         factory = { context -> FrameLayout(context) },
         modifier = modifier,

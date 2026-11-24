@@ -353,9 +353,12 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
     }
 
-    /** Keeps the tab showing loaded, with the most recently shown others, up to MAX_LIVE. */
+    /**
+     * Keeps the tab showing loaded, with the most recently shown others, up to MAX_LIVE, whichever space they're in: a
+     * space switched away from and back to shows its page at once, rather than loading it again from nothing.
+     */
     fun refreshMounted() {
-        val existing = app.tabs.mapTo(HashSet()) { it.id }
+        val existing = app.allTabs.mapTo(HashSet()) { it.id }
         val next = if (hasPage) mutableListOf(app.activeTabId) else mutableListOf()
         // A tab playing media stays loaded, so its sound doesn't stop when others open.
         val playing = media.filterValues { it.report.playing }.keys.filter { it in existing }
@@ -853,7 +856,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** The tab's picture as it comes in (its file's address), or null when it keeps none. */
     private fun captureAsync(tabId: String): kotlinx.coroutines.Deferred<String?>? {
         val view = views[tabId] ?: return null
-        if (tabId in failed || app.tabs.firstOrNull { it.id == tabId }?.private != false) return null
+        if (tabId in failed || app.allTabs.firstOrNull { it.id == tabId }?.private != false) return null
         return scope.async {
             val uri = runCatching { view.snapshot() }.getOrNull() ?: return@async null
             app.dispatch(Action.UpdateTab(tabId, TabUpdate(null, null, null, null, uri)))
@@ -879,9 +882,16 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     /** Switches to a space: the tab it was last on (or a fresh one) becomes current. */
     fun selectSpace(id: String) {
         if (id == app.activeSpaceId) return
+        // The page left keeps its latest picture, for the switcher and for coming back to it.
+        if (hasPage) capture(app.activeTabId)
         val hasTab = app.allTabs.any { it.spaceId == id }
         app.dispatch(Action.SelectSpace(id, if (hasTab) null else blankTab(id)))
         refreshMounted()
+        // Switched from a page to a tab that wasn't kept loaded: its picture shows until its page has drawn, as a
+        // swiped-to tab's does; started from nothing, it showed white for a moment before its page came. A loaded page
+        // shows at once, so it needs none.
+        val tab = activeTab
+        if (overlay == Overlay.NONE && tab != null && tab.url.isNotEmpty() && tab.id !in views) tabSwipe.cover(tab) else tabSwipe.reset()
     }
 
     fun createSpace(name: String) {
@@ -1012,7 +1022,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         }
     }
 
-    private fun isPrivate(tabId: String): Boolean = app.tabs.firstOrNull { it.id == tabId }?.private == true
+    private fun isPrivate(tabId: String): Boolean = app.allTabs.firstOrNull { it.id == tabId }?.private == true
 
     /** A pin's page: its tab in the space when one is open there, else a new one. */
     fun openPin(site: PinnedSite) {

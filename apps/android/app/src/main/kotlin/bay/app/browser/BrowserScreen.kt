@@ -146,30 +146,33 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             }
             // A fullscreen site takes the status bar's place too.
             val top = if (browser.fullscreen) Modifier else Modifier.statusBarsPadding()
-            // After a switch from a page, the new space's page comes in from the side its space sits on.
-            val slide = remember { androidx.compose.animation.core.Animatable(0f) }
+            // After a switch from a page, the new space's page comes in from the side its space sits on. Its starting place
+            // is set in the frame the switch lands in: set a frame later, the new page first showed where the old one was
+            // and then jumped aside.
             val spaceIndex = app.spaces.indexOfFirst { it.id == app.activeSpaceId }
-            var lastSpace by remember { androidx.compose.runtime.mutableIntStateOf(spaceIndex) }
+            val lastSpace = remember { intArrayOf(spaceIndex) }
             val pageWidth = with(LocalDensity.current) { androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx() }
             browser.tabSwipe.width = pageWidth
-            LaunchedEffect(spaceIndex) {
-                val from = lastSpace
-                lastSpace = spaceIndex
-                if (from < 0 || spaceIndex < 0 || from == spaceIndex || browser.overlay != Overlay.NONE) return@LaunchedEffect
-                slide.snapTo((if (spaceIndex > from) 1 else -1) * pageWidth * 0.5f)
+            val slide = remember(spaceIndex) {
+                val from = lastSpace[0]
+                lastSpace[0] = spaceIndex
+                val slides = from >= 0 && spaceIndex >= 0 && from != spaceIndex && browser.overlay == Overlay.NONE
+                androidx.compose.animation.core.Animatable(if (slides) (if (spaceIndex > from) 1 else -1) * pageWidth * 0.5f else 0f)
+            }
+            LaunchedEffect(slide) {
                 slide.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 380f))
             }
             PagesHost(
                 browser, shown && !behind,
                 Modifier.fillMaxSize().then(top).graphicsLayer {
                     translationX = slide.value + browser.tabSwipe.offset.value
-                    alpha = 1f - (kotlin.math.abs(slide.value) / pageWidth).coerceIn(0f, 0.6f)
                 },
                 visible = shown,
             )
             if (shown) {
                 TabSwipeLayer(browser, strings)
-                TabCoverLayer(browser)
+                // The tab's picture over its page until the page draws, moving with it as a space's page slides in.
+                TabCoverLayer(browser, Modifier.graphicsLayer { translationX = slide.value })
             }
             // On a fullscreen site, a tap along the bottom edge brings the bar back for a moment.
             if (browser.fullscreen) {
