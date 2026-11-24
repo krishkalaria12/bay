@@ -217,8 +217,10 @@ final class BrowserModel: ObservableObject {
   }
 
   /// Keeps the tab showing loaded, with the most recently shown others, up to `maxLive`.
+  /// Keeps the tab showing loaded, with the most recently shown others, whichever space they're in: a space switched
+  /// away from and back to shows its page at once, rather than loading it again.
   func refreshMounted() {
-    let existing = Set(app.tabs.map(\.id))
+    let existing = Set(app.allTabs.map(\.id))
     var next = hasPage ? [app.activeTabId] : []
     // A tab playing media stays loaded, so its sound doesn't stop when others open.
     let playing = media.filter { $0.value.report.playing }.map(\.key).filter { existing.contains($0) }
@@ -881,7 +883,7 @@ final class BrowserModel: ObservableObject {
 
   private func captureTask(_ tabId: String) -> Task<Void, Never>? {
     guard let view = views[tabId], !failed.contains(tabId),
-          app.tabs.first(where: { $0.id == tabId })?.private == false
+          app.allTabs.first(where: { $0.id == tabId })?.private == false
     else { return nil }
     return Task { [weak self] in
       guard let uri = try? await view.snapshot() else { return }
@@ -907,11 +909,30 @@ final class BrowserModel: ObservableObject {
   }
 
   /// Switches to a space: the tab it was last on (or a fresh one) becomes current.
+  /// Where a space switched to from a page starts, beside the screen on the side its space sits; slid to 0 at once.
+  @Published private(set) var spaceSlide: CGFloat = 0
+
   func selectSpace(_ id: String) {
     guard id != app.activeSpaceId else { return }
+    // The page left keeps its latest picture, for the switcher and for coming back to it.
+    if hasPage { capture(app.activeTabId) }
+    // Set in the same update as the switch, so the new space's page is first drawn where it starts: set after it, the
+    // page showed in place for a frame and then jumped aside to slide in.
+    let from = app.spaces.firstIndex { $0.id == app.activeSpaceId }
+    let to = app.spaces.firstIndex { $0.id == id }
+    if overlay == .none, !UIAccessibility.isReduceMotionEnabled, let from, let to {
+      spaceSlide = (to > from ? 1 : -1) * UIScreen.main.bounds.width
+    }
     let hasTab = app.allTabs.contains { $0.spaceId == id }
     app.dispatch(.selectSpace(id: id, blankTab: hasTab ? nil : Self.blankTab(spaceId: id)))
     refreshMounted()
+    // A tab that wasn't kept loaded shows its picture until its page has drawn, rather than white.
+    if overlay == .none, let tab = activeTab, !tab.url.isEmpty { cover(tab) }
+    if spaceSlide != 0 {
+      DispatchQueue.main.async { [weak self] in
+        withAnimation(Motion.settle.animation) { self?.spaceSlide = 0 }
+      }
+    }
   }
 
   func createSpace(name: String) {
@@ -1102,7 +1123,7 @@ final class BrowserModel: ObservableObject {
   }
 
   private func isPrivate(_ tabId: String) -> Bool {
-    app.tabs.first { $0.id == tabId }?.private ?? false
+    app.allTabs.first { $0.id == tabId }?.private ?? false
   }
 
   /// Opens a page from history or bookmarks: a page on screen stays, and the listed one opens beside it.

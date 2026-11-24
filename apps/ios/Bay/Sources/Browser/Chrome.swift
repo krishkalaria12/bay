@@ -47,7 +47,8 @@ struct PagesHost: UIViewRepresentable {
 
   @MainActor private static func sync(_ container: Container, _ browser: BrowserModel, shown: Bool, covered: CGFloat) {
     guard container.window != nil else { return }
-    let tabs = browser.app.tabs
+    // Every space's: a page kept loaded from the space switched away from still gets hidden here.
+    let tabs = browser.app.allTabs
     for (index, id) in browser.mounted.enumerated() {
       guard let tab = tabs.first(where: { $0.id == id }) else { continue }
       let view = browser.view(for: tab)

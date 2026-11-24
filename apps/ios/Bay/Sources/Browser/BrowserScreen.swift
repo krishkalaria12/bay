@@ -16,9 +16,6 @@ struct BrowserScreen: View {
   private static let barHeight: CGFloat = 52
   /// The screen's bottom safe area (the home indicator), which the bar sits above.
   @State private var safeBottom: CGFloat = 0
-  /// The space whose page shows, and how far the page is still to slide in after a switch to another.
-  @State private var shownSpace = ""
-  @State private var pageSlide: CGFloat = 0
   /// The switcher has come up: from a page it fades in behind the page shrinking into its card.
   @State private var switcherRevealed = true
 
@@ -40,13 +37,14 @@ struct BrowserScreen: View {
         let shown = browser.hasPage && browser.overlay != .tabs && !browser.covered
         PagesHost(browser: browser, shown: shown, coveredBottom: coveredBottom)
           .ignoresSafeArea(edges: .bottom)
-          .offset(x: pageSlide + browser.swipeOffset)
+          .offset(x: browser.spaceSlide + browser.swipeOffset)
           .opacity(shown ? 1 : 0)
           .allowsHitTesting(shown)
         if shown { swipePictures }
       }
       if let tab = browser.swipeCover, browser.overlay == .none {
         TabPicture(tab: tab, color: browser.pageColors[tab.id]).opacity(browser.swipeCoverShown ? 1 : 0)
+          .offset(x: browser.spaceSlide)
       }
       if browser.overlay == .tabs {
         // In from a page, the page shrinks into its card as the switcher comes up behind it; back to a page, the card
@@ -70,7 +68,7 @@ struct BrowserScreen: View {
         }
         statusStrip
       } else if browser.overlay == .none {
-        startScreen.offset(x: pageSlide)
+        startScreen.offset(x: browser.spaceSlide)
       }
       if let zoom = browser.zoom {
         TabMorph(
@@ -199,10 +197,8 @@ struct BrowserScreen: View {
     .onChange(of: app.preferences) { _ in browser.preferencesChanged() }
     .onChange(of: browser.tip) { browser.tipShown($0) }
     .onAppear {
-      shownSpace = app.activeSpaceId
       browser.refreshMounted()
     }
-    .onChange(of: app.activeSpaceId, perform: spaceSwitched)
     .onChange(of: app.activeTabId) { _ in
       browser.refreshMounted()
       browser.pauseMediaLeft()
@@ -224,18 +220,7 @@ struct BrowserScreen: View {
     }
   }
 
-  /// Another space from a page: its page slides in from the side the space sits on, the next one from the right.
-  private func spaceSwitched(_ id: String) {
-    defer { shownSpace = id }
-    guard browser.overlay == .none, !UIAccessibility.isReduceMotionEnabled,
-      let from = app.spaces.firstIndex(where: { $0.id == shownSpace }), let to = app.spaces.firstIndex(where: { $0.id == id })
-    else { return }
-    pageSlide = (to > from ? 1 : -1) * UIScreen.main.bounds.width
-    // A turn later, so the page is drawn at its start before it moves.
-    DispatchQueue.main.async {
-      withAnimation(Motion.settle.animation) { pageSlide = 0 }
-    }
-  }
+
 
   /// A swipe along the bar: the tab coming in beside the moving page.
   @ViewBuilder private var swipePictures: some View {
