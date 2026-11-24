@@ -1,0 +1,1295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay: shared desktop core</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfaf8;
+        --surface: #fff;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --sunken: #f3f1ed;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --radius: 10px;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --sunken: #232321;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      code {
+        font: 0.86em var(--mono);
+        background: var(--sunken);
+        padding: 0.06em 0.34em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.4rem;
+        margin-bottom: 0.8rem;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 1.6rem 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 1rem;
+        padding-left: 1.3rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      .page {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 2.5rem;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 5rem;
+      }
+      nav {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        font-size: 0.88rem;
+      }
+      nav strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        color: var(--muted);
+      }
+      nav ol {
+        list-style: none;
+        padding: 0;
+      }
+      nav li {
+        margin: 0;
+      }
+      nav a {
+        display: block;
+        padding: 0.3rem 0.5rem;
+        border-left: 2px solid var(--line);
+        text-decoration: none;
+        color: var(--muted);
+      }
+      nav a:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+      nav .sub a {
+        padding-left: 1.2rem;
+        font-size: 0.84rem;
+      }
+      main {
+        min-width: 0;
+      }
+      section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+        scroll-margin-top: 1rem;
+      }
+      .lede,
+      .prose {
+        max-width: 76ch;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.05rem;
+        margin-top: 0.8rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin: 0 0 1.2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        padding: 0.7rem 0.85rem;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-size: 0.8rem;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        white-space: nowrap;
+        font-weight: 600;
+      }
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0;
+        max-width: 76ch;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .callout p:last-child {
+        margin: 0;
+      }
+      .order {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+        max-width: 76ch;
+      }
+      .order li {
+        counter-increment: step;
+        position: relative;
+        padding: 0.55rem 0.8rem 0.55rem 2.8rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 0.45rem 0;
+      }
+      .order li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0.8rem;
+        top: 0.55rem;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+      }
+      .pri {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--sunken);
+        white-space: nowrap;
+      }
+      .pri.p0 {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .mock {
+        font: 0.82rem/1.5 var(--mono);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        overflow-x: auto;
+        white-space: pre;
+        max-width: 100%;
+        width: fit-content;
+      }
+      @media (max-width: 800px) {
+        .page {
+          grid-template-columns: 1fr;
+          gap: 1.5rem;
+          padding: 1.5rem 1rem 3rem;
+        }
+        nav {
+          position: static;
+        }
+        nav ol {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        nav a,
+        nav .sub a {
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          padding: 0.2rem 0.65rem;
+        }
+        td:first-child {
+          white-space: normal;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        nav {
+          display: none;
+        }
+        .page {
+          display: block;
+          padding: 0;
+        }
+      }
+      .layers {
+        display: grid;
+        gap: 0.5rem;
+        max-width: 920px;
+        margin: 1rem 0 1.4rem;
+      }
+      .layer {
+        display: grid;
+        grid-template-columns: 9.5rem minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: stretch;
+      }
+      .layer > .tag {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+        padding-top: 0.6rem;
+      }
+      .layer .cells {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.5rem;
+      }
+      .cell {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.86rem;
+      }
+      .cell strong {
+        display: block;
+        font-size: 0.9rem;
+      }
+      .cell span {
+        color: var(--muted);
+      }
+      .cell.shared {
+        border-color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .cell.new {
+        border-style: dashed;
+        border-color: var(--accent);
+      }
+      .legend {
+        font-size: 0.82rem;
+        color: var(--muted);
+        max-width: 76ch;
+      }
+      .legend i {
+        display: inline-block;
+        width: 0.9rem;
+        height: 0.9rem;
+        vertical-align: -0.15rem;
+        border-radius: 3px;
+        border: 1px solid var(--line);
+        margin: 0 0.3rem 0 0.8rem;
+      }
+      .legend i.shared {
+        border-color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .legend i.new {
+        border: 1px dashed var(--accent);
+      }
+      .legend i:first-child {
+        margin-left: 0;
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin: 2rem 0 0.4rem;
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 8.5rem minmax(0, 1fr);
+        gap: 0.35rem 1rem;
+        max-width: 76ch;
+        margin: 0.4rem 0 1rem;
+        font-size: 0.92rem;
+      }
+      .kv dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .kv dd {
+        margin: 0;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      @media (max-width: 800px) {
+        .layer {
+          grid-template-columns: 1fr;
+          gap: 0.3rem;
+        }
+        .layer > .tag {
+          padding-top: 0;
+        }
+        .kv {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav aria-label="Contents">
+        <strong>Plan</strong>
+        <ol>
+          <li><a href="#today">1. Where Bay stands</a></li>
+          <li class="sub"><a href="#copies">Where the copies are</a></li>
+          <li><a href="#rules">2. What goes where</a></li>
+          <li><a href="#layout">3. Target layout</a></li>
+          <li><a href="#phases">4. Phases</a></li>
+          <li class="sub"><a href="#p0">0. Groundwork</a></li>
+          <li class="sub"><a href="#p1">1. Filter lists</a></li>
+          <li class="sub"><a href="#p2">2. Sync</a></li>
+          <li class="sub"><a href="#p3">3. Browser import</a></li>
+          <li class="sub"><a href="#p4">4. Chromium glue</a></li>
+          <li class="sub"><a href="#p5">5. Parity guards</a></li>
+          <li class="sub"><a href="#p6">6. One host?</a></li>
+          <li><a href="#build">5. Build and linking</a></li>
+          <li><a href="#accept">6. Acceptance</a></li>
+          <li><a href="#risks">7. Risks</a></li>
+          <li><a href="#stays">8. Stays per platform</a></li>
+          <li><a href="#decisions">9. Open decisions</a></li>
+        </ol>
+      </nav>
+      <main>
+        <header>
+          <h1>One desktop core for macOS, Windows and Linux</h1>
+          <p class="lede">
+            Write each piece of Bay's desktop logic once. Chromium glue moves into the portable C++ target both hosts already link. Platform-neutral data
+            work (filter lists, sync crypto, browser import) moves into Rust crates that the phone apps share. Parity checks keep the copies from coming back.
+            A last phase decides whether macOS moves onto the WebUI host as well.
+          </p>
+          <p class="meta">
+            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Windows and Linux are built and pass runtime acceptance. Nothing in this
+            plan is built yet. Line counts are tracked files without fixtures or vendored code, rounded.
+          </p>
+        </header>
+
+        <section id="today" aria-labelledby="today-h">
+          <h2 id="today-h">1. Where Bay stands</h2>
+          <p class="prose">
+            Most of Bay is already shared. The app is one React codebase, the engine is one pin with one patch series, and the engine services and the content
+            blocker's matcher build on all three platforms. Windows and Linux differ in about 3.5k lines of <code>_win</code> and <code>_linux</code> files.
+            Everything left over sits between macOS on one side and Windows and Linux on the other.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Layer</th>
+                  <th scope="col">macOS</th>
+                  <th scope="col">Windows and Linux</th>
+                  <th scope="col">Shared?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UI and app logic</td>
+                  <td>React Native macOS in Hermes</td>
+                  <td>react-native-web in <code>chrome://bay</code></td>
+                  <td>Yes: <code>apps/browser/src</code> (~143k), <code>@bay/core</code> (~19k), a <code>capabilities</code> object for differences</td>
+                </tr>
+                <tr>
+                  <td>Engine</td>
+                  <td>CEF + Chromium 154.0.8037.58</td>
+                  <td>Chromium 154.0.8037.58, <code>chrome-webui</code> runtime</td>
+                  <td>
+                    Yes: <code>engine/patches/build/engine-lock.json</code>, one <code>series</code> (25 all-platform steps, 28 macOS, 26 Windows+Linux, 4
+                    Windows, 11 Linux)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Engine services</td>
+                  <td colspan="2"><code>chrome/browser/bay/nn_*.cc</code>, <code>//bay/core:portable</code></td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <td>Blocker matcher</td>
+                  <td colspan="2"><code>packages/adblock</code> (Rust, C ABI, also JNI for Android)</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <td>Native contract</td>
+                  <td colspan="2">
+                    <code>packages/platform/src/nativeContracts.ts</code>: 24 modules, 321 methods; <code>NativeContracts.g.h</code> for C++
+                  </td>
+                  <td>One definition, <strong>two implementations</strong></td>
+                </tr>
+                <tr>
+                  <td>Host native code</td>
+                  <td>Swift Expo modules in <code>packages/*/ios</code> (~34k), NNCore ObjC++ in <code>engine/nncore</code> (~17.7k)</td>
+                  <td>WebUI services in <code>chrome/browser/bay/webui</code> (~57k)</td>
+                  <td>No</td>
+                </tr>
+                <tr>
+                  <td>JS runtime model</td>
+                  <td>One Hermes runtime serves every window</td>
+                  <td>A coordinator document plus read-only window clients (<code>apps/browser/src/runtime</code>)</td>
+                  <td>Two models behind <code>hasServiceClient()</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="copies">Where the copies are</h3>
+          <p class="prose">The same logic, written two or three times. The phone column is the native rewrite on <code>refactor/remove-expo-app</code> (PR #31).</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Area</th>
+                  <th scope="col">macOS</th>
+                  <th scope="col">Windows and Linux</th>
+                  <th scope="col">Phones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Filter-list management</td>
+                  <td><code>NNCoreContentBlocker.mm</code> (928) and <code>packages/chromium/ios/filter_lists.json</code></td>
+                  <td><code>webui/content_blocker.cc</code> (1083), <code>content_blocker_rules.cc</code></td>
+                  <td><code>bay-core/src/browser/filter_lists.rs</code></td>
+                </tr>
+                <tr>
+                  <td>Sync crypto, vault, recovery</td>
+                  <td><code>packages/sync/ios</code> (~1.0k Swift)</td>
+                  <td><code>packages/sync/windows</code> (~2.5k) and <code>packages/sync/linux</code> (~0.9k)</td>
+                  <td><code>bay-core/src/sync/keys.rs</code>, <code>phrase.rs</code>, <code>bytes.rs</code></td>
+                </tr>
+                <tr>
+                  <td>Browser import</td>
+                  <td><code>packages/import/ios</code> (~5.5k Swift)</td>
+                  <td><code>packages/import/windows</code> (~4.3k) and <code>packages/import/linux</code> (~1.6k)</td>
+                  <td><code>bay-core/src/imports</code> (export files only)</td>
+                </tr>
+                <tr>
+                  <td>Chromium prompts and choosers</td>
+                  <td>
+                    <code>nn_permissions.mm</code> (498), <code>nn_device_chooser.mm</code> (372), <code>nn_cast_dialog.mm</code> (334),
+                    <code>nn_autofill_prompt.mm</code> (464), <code>nn_password_prompt.mm</code> (130), <code>nn_context_menu.mm</code> (420)
+                  </td>
+                  <td>
+                    <code>permission_prompts.cc</code> (484), <code>device_choosers.cc</code> (274), <code>cast_dialogs.cc</code> (262),
+                    <code>form_prompts.cc</code> (507), <code>page_menu.cc</code> (58)
+                  </td>
+                  <td>None</td>
+                </tr>
+                <tr>
+                  <td>Address input, suggestions, bangs, calculator</td>
+                  <td colspan="2"><code>@bay/core</code> in TypeScript, shared by all three desktops</td>
+                  <td><code>bay-core/src/input</code> (Rust port)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>Example.</strong> <code>nn_permissions.mm</code> and <code>permission_prompts.cc</code> both define <code>StepOf</code>, the
+              <code>Variant</code> alias and the FileSystemAccess request helper, line for line. A fix in one doesn't reach the other.
+            </p>
+          </div>
+        </section>
+
+        <section id="rules" aria-labelledby="rules-h">
+          <h2 id="rules-h">2. What goes where</h2>
+          <p class="prose">One rule for every piece of code that moves, and for new code from now on.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Code that…</th>
+                  <th scope="col">Goes in</th>
+                  <th scope="col">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>calls Chromium's C++ API</td>
+                  <td><code>//bay/core:portable</code> (C++)</td>
+                  <td>
+                    Rust can't call Chromium's C++ classes (<code>permissions::PermissionPrompt</code>, chooser controllers, <code>extensions::</code>). Both
+                    hosts already link this target: <code>webui/BUILD.gn</code> depends on it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>does platform-neutral data work in native code</td>
+                  <td>A Rust crate</td>
+                  <td>
+                    Parsing, crypto, file formats and list bookkeeping get one implementation for three desktops and two phone apps, tested against shared
+                    fixtures.
+                  </td>
+                </tr>
+                <tr>
+                  <td>runs per keystroke or render, or is UI logic</td>
+                  <td>TypeScript (<code>@bay/core</code>, <code>apps/browser</code>)</td>
+                  <td>
+                    It's already shared by every desktop. A native hop would put it behind an async bridge (Mojo on Windows and Linux, Expo calls on macOS)
+                    for no gain.
+                  </td>
+                </tr>
+                <tr>
+                  <td>calls an OS API</td>
+                  <td>A platform adapter (Swift, <code>_win.cc</code>, <code>_linux.cc</code>)</td>
+                  <td>Keychain, DPAPI, Secret Service, file pickers, EventKit and the like. Kept thin.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Rust crates are sans-IO.</strong> They don't open sockets, start threads, keep timers or read OS settings. The host fetches, schedules
+              and stores secrets, then hands bytes and the current time in. That keeps each host's networking (<code>SimpleURLLoader</code>,
+              <code>NSURLSession</code>), threading and sandbox rules as they are.
+            </p>
+          </div>
+        </section>
+
+        <section id="layout" aria-labelledby="layout-h">
+          <h2 id="layout-h">3. Target layout</h2>
+          <div class="layers" role="img" aria-label="Layers after phases 0 to 5: shared TypeScript on top, then two thin hosts, then shared C++, Rust and OS adapters">
+            <div class="layer">
+              <div class="tag">TypeScript</div>
+              <div class="cells">
+                <div class="cell shared"><strong>apps/browser, @bay/core</strong><span>UI, stores, input, suggestions</span></div>
+                <div class="cell shared"><strong>@bay/platform contract</strong><span>321 methods, coverage checked</span></div>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">Host (thin)</div>
+              <div class="cells">
+                <div class="cell"><strong>macOS</strong><span>Swift modules → NNCore presenters</span></div>
+                <div class="cell"><strong>Windows and Linux</strong><span>WebUI services over Mojo</span></div>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">Shared C++</div>
+              <div class="cells">
+                <div class="cell shared"><strong>//bay/core:portable</strong><span>prompt, chooser and menu models</span></div>
+                <div class="cell shared"><strong>chrome/browser/bay</strong><span>nn_* engine services</span></div>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">Rust</div>
+              <div class="cells">
+                <div class="cell shared"><strong>bay-adblock</strong><span>matcher (exists)</span></div>
+                <div class="cell new"><strong>bay-lists</strong><span>filter-list state</span></div>
+                <div class="cell new"><strong>bay-sync</strong><span>keys, vault, recovery</span></div>
+                <div class="cell new"><strong>bay-import</strong><span>profile readers</span></div>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">OS adapters</div>
+              <div class="cells">
+                <div class="cell"><strong>Secrets</strong><span>Keychain · DPAPI · Secret Service</span></div>
+                <div class="cell"><strong>Files and paths</strong><span>pickers, discovery roots</span></div>
+                <div class="cell"><strong>macOS only</strong><span>WebKit, Dia, Safari direct, Tidy</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="legend"><i class="shared"></i>shared today or after this plan <i class="new"></i>new crate <i></i>per host or per OS</p>
+
+          <h3>Files</h3>
+          <div class="mock" role="img" aria-label="Proposed directory layout">packages/
+  adblock/                     bay-adblock, its own crate as today (matcher, C ABI, JNI)
+  rust/
+    Cargo.toml                 desktop workspace: one Cargo.lock, one target/, one release profile
+    rust-toolchain.toml        pinned toolchain for every host and CI
+    bay-lists/                 filter-list catalogue, selection, updates, engine cache
+    bay-sync/                  key derivation, file sealing, vault, phrase, recovery-kit data
+    bay-import/                Chromium, Firefox, Arc, Zen, HTML, CSV and Safari-export readers
+    bay-desktop/               staticlib: the one C ABI both desktop hosts link
+      include/                 one hand-written header per crate, like bay_adblock.h
+  mobile-core/                 its own workspace (PR #31); uses bay-sync, bay-lists by path
+  sync/portable/               renamed from sync/windows (it builds on Linux too)
+  sync/fixtures/golden.json    moved from sync/windows/tests/golden.json
+  import/portable/             renamed from import/windows
+  import/fixtures/             unchanged; every reader's tests use it</div>
+        </section>
+
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">4. Phases</h2>
+          <p class="prose">
+            Phase 0 comes first. Phases 1 to 3 each need it and are independent of each other. Phase 4 doesn't touch Rust and can run alongside them. Phase 5
+            begins in Phase 0 and grows with each phase. Phase 6 is a decision made after 1 to 4, which shrink its work whichever way it goes.
+          </p>
+          <ol class="order">
+            <li><strong>Groundwork</strong>: workspace, one static library, renames, contract coverage, recorded outputs</li>
+            <li><strong>Filter lists</strong> into <code>bay-lists</code>: smallest move, the crate is already linked everywhere</li>
+            <li><strong>Sync</strong> into <code>bay-sync</code>, with no format change</li>
+            <li><strong>Browser import</strong> into <code>bay-import</code></li>
+            <li><strong>Chromium glue</strong> into <code>//bay/core:portable</code></li>
+            <li><strong>Parity guards</strong> in CI and in AGENTS.md</li>
+            <li><strong>One host?</strong> A spike, then go or no-go on macOS running the WebUI host</li>
+          </ol>
+
+          <div class="phase-head" id="p0">
+            <h3>Phase 0 · Groundwork</h3>
+            <span class="pri p0">first</span>
+          </div>
+          <ol class="prose">
+            <li>
+              <strong>A desktop Cargo workspace.</strong> Add <code>packages/rust/Cargo.toml</code> and <code>rust-toolchain.toml</code>, with the new
+              crates as members and <code>bay-adblock</code> as a path dependency. This follows mobile-core, which has its own workspace and takes
+              <code>../adblock</code> by path. A single root workspace would need every crate as a member, would move <code>packages/adblock/target</code>
+              (which the mobile and Android scripts read), and would clash with mobile-core's workspace. Each workspace repeats adblock's
+              <code>[patch.crates-io]</code> and release profile (<code>opt-level = "s"</code>, LTO, one codegen unit, <code>panic = "abort"</code>,
+              stripped debug info), because Cargo applies both only from the root. <code>bay-adblock</code> gains the <code>lib</code> crate type and a
+              public <code>ffi</code> module, the same change PR #31 makes.
+            </li>
+            <li>
+              <strong>One static library per desktop.</strong> Add <code>bay-desktop</code>, a <code>staticlib</code> that re-exports bay-adblock's C
+              functions and will carry each new crate. Headers stay hand-written, one per crate, as <code>bay_adblock.h</code> is today. Two Rust static libraries in one binary each bring their own copy of Rust's standard library, and
+              their symbols clash. Mobile avoids this the same way, linking the blocker into <code>bay-core</code> through its <code>adblock</code> feature.
+            </li>
+            <li>
+              <strong>Point both hosts at it.</strong> <code>scripts/engine.py</code> builds <code>bay-desktop</code> instead of the adblock crate (same
+              <code>cargo rustc --locked --release --lib --crate-type staticlib</code>, <code>+crt-static</code> on Windows).
+              <code>webui/BUILD.gn</code> links <code>bay_desktop.lib</code> / <code>libbay_desktop.a</code>. <code>engine/chromium/apply.py</code> copies
+              <code>bay_desktop.h</code> instead of <code>bay_adblock.h</code>. On macOS, <code>packages/chromium/scripts/adblock.sh</code> and
+              <code>BayNNCore.podspec</code> build and link the same crate.
+            </li>
+            <li>
+              <strong>Rename the shared C++.</strong> <code>packages/sync/windows</code> → <code>sync/portable</code> and
+              <code>packages/import/windows</code> → <code>import/portable</code>. <code>bay/data/BUILD.gn</code> already builds both on Linux.
+            </li>
+            <li>
+              <strong>Contract coverage.</strong> Extend <code>packages/platform/scripts/native-contracts.mjs</code> to list, for each of the 321 methods,
+              whether the macOS host and the WebUI host implement it. It reads the Expo module definitions and the WebUI handler tables. CI fails when a
+              method has no implementation on a platform and no capability saying it's unsupported there. Today
+              <code>nativeContracts.test.mjs</code> only checks that every module has a contract.
+            </li>
+            <li>
+              <strong>Record today's answers before moving anything.</strong> Save as golden files: the import Wire JSON for every profile in
+              <code>packages/import/fixtures</code>, from both the Swift and the C++ readers; the filter-list state after a scripted series of events (first
+              launch, toggles, an update, a failed fetch); and the sync vector, moved to <code>packages/sync/fixtures/golden.json</code>, the path
+              mobile-core's README already names. Where the Swift and C++ outputs differ, record which one is right before Phase 3.
+            </li>
+            <li><strong>SQLite link spike</strong> for <code>bay-import</code>. See open decision 1.</li>
+          </ol>
+          <dl class="kv">
+            <dt>Done when</dt>
+            <dd>
+              CI builds <code>libbay_desktop</code> for macOS arm64, Windows x64 and Linux x64. The blocker behaves exactly as before on all three, and the
+              coverage report runs in CI.
+            </dd>
+          </dl>
+
+          <div class="phase-head" id="p1">
+            <h3>Phase 1 · Filter lists → <code>bay-lists</code></h3>
+            <span class="pri">needs 0</span>
+          </div>
+          <p class="prose">
+            Both hosts wrap the same Rust matcher in about a thousand lines of list bookkeeping each, and the phones have a third copy. Move the bookkeeping
+            beside the matcher.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Moves to Rust</th>
+                  <th scope="col">Today (WebUI names)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Catalogue</td>
+                  <td>One <code>filter_lists.json</code> in the crate, replacing the copy in <code>packages/chromium/ios</code></td>
+                </tr>
+                <tr>
+                  <td>Selection</td>
+                  <td><code>OnByDefault</code>, <code>SelectedInOrder</code>, <code>SetEnabled</code>, <code>SetListEnabled</code></td>
+                </tr>
+                <tr>
+                  <td>Site exceptions</td>
+                  <td><code>IsAllowed</code>, <code>SetAllowed</code>, <code>SetPageAllowed</code>, <code>BlocksPage</code></td>
+                </tr>
+                <tr>
+                  <td>Updates</td>
+                  <td>First check 60 s after launch, then every 3 h (<code>kFirstUpdate</code>, <code>kUpdateEvery</code>); <code>UpdateLists</code>, <code>Fetch</code>, <code>Fetched</code> validation and retry</td>
+                </tr>
+                <tr>
+                  <td>Rebuilds</td>
+                  <td>Generations and the compiled-engine cache: <code>Rebuild</code>, <code>Seeded</code>, <code>BuildAndPublish</code>, <code>Apply</code>; cache keyed by engine format (<code>bay-adblock 6</code>) and version</td>
+                </tr>
+                <tr>
+                  <td>Reporting</td>
+                  <td><code>State</code> and <code>Stats</code> for Settings › Privacy</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mock" role="img" aria-label="Sketch of the bay-lists C API">bay_lists_open(settings_json, cache_bytes, now)    -> handle
+bay_lists_tick(handle, now)                          -> actions JSON
+    fetch [{id, url}] · save_settings · save_cache · publish_engine · next_tick_at
+bay_lists_fetched(handle, id, status, bytes, now)    -> actions JSON
+bay_lists_set_enabled / _set_list / _set_allowed     -> actions JSON
+bay_lists_state(handle)                              -> state JSON (Settings › Privacy)
+bay_lists_engine(handle)                             -> blocker handle for the request filters</div>
+          <dl class="kv">
+            <dt>Host keeps</dt>
+            <dd>
+              The fetch (<code>SimpleURLLoader</code> on Windows and Linux, <code>NSURLSession</code> on macOS), the timer, where files live, and handing the
+              engine to the request filters (<code>nn_request_filter.cc</code>, <code>bay_webui.cc</code>).
+            </dd>
+            <dt>Phones</dt>
+            <dd><code>bay-core/src/browser/filter_lists.rs</code> becomes a caller of <code>bay-lists</code>.</dd>
+            <dt>Done when</dt>
+            <dd>
+              <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code> hold no list logic. The Phase 0 event script gives the recorded state
+              in <code>cargo test</code> and through each host. On each OS: ads are blocked on a first launch offline, a list turns on and downloads, pausing
+              a site works, Settings › Privacy shows counts.
+            </dd>
+          </dl>
+
+          <div class="phase-head" id="p2">
+            <h3>Phase 2 · Sync → <code>bay-sync</code></h3>
+            <span class="pri">needs 0</span>
+          </div>
+          <p class="prose">
+            The sync file format is defined three times: Swift CryptoKit, C++ (with per-OS crypto backends) and Rust on the phones. Move the format into one
+            crate. Nothing about the format changes. Existing vaults must open.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Moves to Rust</th>
+                  <th scope="col">Detail</th>
+                  <th scope="col">From</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Key derivation</td>
+                  <td>HKDF-SHA256 to a 32-byte <code>file-key</code> and <code>name-key</code></td>
+                  <td><code>SyncCrypto.swift</code>, <code>SyncCrypto.cpp</code></td>
+                </tr>
+                <tr>
+                  <td>Name tags</td>
+                  <td>HMAC-SHA256 over the label, first 16 bytes, Base32</td>
+                  <td>same</td>
+                </tr>
+                <tr>
+                  <td>File sealing</td>
+                  <td>AES-256-GCM, 12-byte nonce, 16-byte tag, associated data from chain, scope and file</td>
+                  <td>same, and <code>SyncCryptoWindows.cpp</code>, <code>SyncCryptoLinux.cpp</code></td>
+                </tr>
+                <tr>
+                  <td>Vault</td>
+                  <td><code>write</code>, <code>read</code>, <code>remove</code>, <code>createChain</code>, <code>deleteChain</code>, <code>chainStatus</code>, <code>sealLocal</code>, <code>openLocal</code></td>
+                  <td><code>SyncVault.swift</code>, <code>SyncVault.cpp</code></td>
+                </tr>
+                <tr>
+                  <td>Recovery</td>
+                  <td>Phrase create and enter, word list, recovery-kit content and its QR matrix (replaces vendored <code>qrcodegen</code>)</td>
+                  <td><code>RecoveryPhrase.swift</code>, <code>RecoveryKit.swift</code>, <code>Wordlist</code>, <code>RecoveryKit.cpp</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="kv">
+            <dt>Host keeps</dt>
+            <dd>
+              The key store (<code>SyncKeyStore.swift</code>, DPAPI, <code>sync/linux/SyncKeyStore.cpp</code>), choosing and revealing the folder, the device
+              name, drawing the recovery kit (<code>RecoveryKitWindows.cpp</code>, <code>RecoveryKitLinux.cpp</code>), copy, share and save, and
+              <code>readPasswords</code>.
+            </dd>
+            <dt>Not moving</dt>
+            <dd>
+              Desktop phone sync stays in TypeScript (<code>packages/sync/src/relay</code>), and the phones' relay client stays in <code>bay-core</code>. Only
+              the shared primitives (<code>keys.rs</code>, <code>phrase.rs</code>, <code>bytes.rs</code>) move into <code>bay-sync</code>.
+            </dd>
+            <dt>Done when</dt>
+            <dd>
+              The golden vector matches byte for byte in <code>cargo test</code> and in each host's adapter test. A chain made by today's Mac release opens on
+              the new Windows and Linux builds and the reverse. Each OS keeps its existing chain across the update. <code>SyncCoreTests.swift</code> and
+              <code>sync/portable/tests</code> shrink to adapter tests.
+            </dd>
+          </dl>
+
+          <div class="phase-head" id="p3">
+            <h3>Phase 3 · Browser import → <code>bay-import</code></h3>
+            <span class="pri">needs 0</span>
+          </div>
+          <p class="prose">
+            The readers are the largest duplicated block, and the fixtures (<code>packages/import/fixtures</code>, built by <code>generate.py</code>
+            independently of both readers) are already shared. Only finding browsers and unlocking their secrets differ per OS.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Reader</th>
+                  <th scope="col">macOS (Swift, <code>Core/</code>)</th>
+                  <th scope="col">Windows and Linux (C++)</th>
+                  <th scope="col">Rust module</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Chromium data</td>
+                  <td><code>ChromiumBookmarks</code>, <code>HistoryReader</code>, <code>ChromiumAutofill</code>, <code>ChromiumSessions</code>, <code>ChromiumExtensions</code></td>
+                  <td><code>Readers.cpp</code>, <code>Sessions.cpp</code></td>
+                  <td><code>chromium</code></td>
+                </tr>
+                <tr>
+                  <td>Chromium passwords</td>
+                  <td><code>ChromiumCrypto</code>, <code>ChromiumSecrets</code></td>
+                  <td><code>Secrets.cpp</code>, <code>linux/ChromiumSecrets.cpp</code></td>
+                  <td><code>chromium::crypto</code>, given the key the host unlocked</td>
+                </tr>
+                <tr>
+                  <td>Firefox</td>
+                  <td><code>Firefox</code>, <code>FirefoxLogins</code>, <code>FirefoxExtensions</code>, <code>FirefoxExtensionAdapter</code>, <code>FirefoxExtensionCounterparts</code></td>
+                  <td><code>Readers.cpp</code>, <code>linux/FirefoxNSS.cpp</code></td>
+                  <td><code>firefox</code>, including the key4.db primary password</td>
+                </tr>
+                <tr>
+                  <td>Arc and Zen</td>
+                  <td><code>ArcSidebar</code>, <code>ZenSpaces</code></td>
+                  <td><code>Arc.cpp</code></td>
+                  <td><code>arc</code>, <code>zen</code></td>
+                </tr>
+                <tr>
+                  <td>Files</td>
+                  <td><code>NetscapeBookmarks</code>, <code>PasswordsCSV</code>, <code>SafariExport</code>, <code>ZipArchive</code></td>
+                  <td><code>ImportService.cpp</code></td>
+                  <td><code>files</code>, shared with the phones' <code>imports/exports.rs</code> and <code>archive.rs</code></td>
+                </tr>
+                <tr>
+                  <td>Output</td>
+                  <td><code>Model</code>, <code>Wire</code></td>
+                  <td><code>ImportCore.h</code></td>
+                  <td><code>wire</code>: the JSON the TypeScript side reads today, unchanged</td>
+                </tr>
+                <tr>
+                  <td>Where browsers live</td>
+                  <td><code>Discovery</code></td>
+                  <td><code>BrowserDiscovery.cpp</code></td>
+                  <td><code>discovery</code>: the path tables; the host supplies the home and app-data roots</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="kv">
+            <dt>Host keeps</dt>
+            <dd>
+              Unlocking secrets (Keychain “Safe Storage”, DPAPI and app-bound keys, Secret Service and KWallet via <code>SecretService.cpp</code>), installed-app
+              listing, file choosers, writing into the profile through the engine services (<code>ImportWriter.swift</code> and its WebUI counterpart), and the
+              macOS-only paths: <code>SafariDirect</code>, <code>SafariCookies</code>, Full Disk Access, <code>DiaAppleEvents</code>, <code>DiaTabs</code>.
+            </dd>
+            <dt>Secrets</dt>
+            <dd>Only the unlocked key crosses into Rust. It lives in <code>zeroize</code> buffers, which mobile-core already uses.</dd>
+            <dt>Done when</dt>
+            <dd>
+              Every fixture profile produces the Phase 0 Wire JSON on all three desktops, the Swift <code>Core/</code> readers and the C++ readers are
+              deleted, and each host's tests cover only its adapter.
+            </dd>
+          </dl>
+
+          <div class="phase-head" id="p4">
+            <h3>Phase 4 · Chromium glue → <code>//bay/core:portable</code></h3>
+            <span class="pri">needs nothing</span>
+          </div>
+          <p class="prose">
+            Each prompt splits into a <strong>model</strong> in portable C++ and a small <strong>presenter</strong> per host. The model owns the Chromium
+            objects and their callbacks and emits plain structs. NNCore's presenter hands them to Swift; the WebUI presenter sends them over Mojo. Bay already
+            does this in places: <code>nn_external_apps.cc</code> with <code>nn_external_apps_platform.h</code>, and <code>nn_downloads_{mac,win,linux}</code>.
+            <code>//bay/core:portable</code> already holds <code>nn_installed_bubble</code>, <code>nn_navigation_hold</code>, <code>nn_page_channel</code> and
+            <code>nn_request_filter</code>.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">macOS today</th>
+                  <th scope="col">Windows and Linux today</th>
+                  <th scope="col">Shared model</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1. Permission prompts</td>
+                  <td><code>nn_permissions.mm</code> <span class="num">(498)</span></td>
+                  <td><code>permission_prompts.cc</code> <span class="num">(484)</span></td>
+                  <td>Request grouping, steps, variants, FileSystemAccess</td>
+                </tr>
+                <tr>
+                  <td>2. Device choosers</td>
+                  <td><code>nn_device_chooser.mm</code> <span class="num">(372)</span></td>
+                  <td><code>device_choosers.cc</code> <span class="num">(274)</span></td>
+                  <td>USB, HID, serial and Bluetooth lists and choices</td>
+                </tr>
+                <tr>
+                  <td>3. Cast</td>
+                  <td><code>nn_cast_dialog.mm</code> <span class="num">(334)</span></td>
+                  <td><code>cast_dialogs.cc</code> <span class="num">(262)</span></td>
+                  <td>Sinks, sources, start and stop</td>
+                </tr>
+                <tr>
+                  <td>4. Autofill and passwords</td>
+                  <td><code>nn_password_prompt.mm</code>, <code>nn_autofill_prompt.mm</code> <span class="num">(594)</span></td>
+                  <td><code>form_prompts.cc</code> <span class="num">(507)</span></td>
+                  <td>Address, card and password save and update prompts</td>
+                </tr>
+                <tr>
+                  <td>5. Extension installs</td>
+                  <td><code>nn_installed_bubble.cc</code> (portable)</td>
+                  <td><code>install_prompts.cc</code></td>
+                  <td>Install prompt and installed notice</td>
+                </tr>
+                <tr>
+                  <td>6. Screen-share picker</td>
+                  <td><code>nn_desktop_capture.cc</code></td>
+                  <td><code>display_media_picker.cc</code></td>
+                  <td>Source lists and the choice</td>
+                </tr>
+                <tr>
+                  <td>7. Page context menu</td>
+                  <td><code>nn_context_menu.mm</code> <span class="num">(420)</span></td>
+                  <td><code>page_menu.cc</code> and patches</td>
+                  <td>The menu model; drawing stays per host</td>
+                </tr>
+                <tr>
+                  <td>8. External apps, icons</td>
+                  <td><code>nn_external_apps.mm</code>, <code>nn_icon_fetch.mm</code></td>
+                  <td><code>external_app_prompts.cc</code>, <code>icon_fetch.cc</code></td>
+                  <td>Prompt state, icon requests</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <dl class="kv">
+            <dt>Done when</dt>
+            <dd>
+              Each model has a unit test in <code>//bay/core:portable</code>, built by all three engine builds. The <code>.mm</code> files keep only the Cocoa
+              and Swift handoff. Each prompt is tried by hand on each OS.
+            </dd>
+          </dl>
+
+          <div class="phase-head" id="p5">
+            <h3>Phase 5 · Parity guards</h3>
+            <span class="pri">from 0 onward</span>
+          </div>
+          <ul class="prose">
+            <li><strong>Contract coverage</strong> from Phase 0 fails CI on a method missing from one host.</li>
+            <li>
+              <strong>TypeScript and Rust answer alike.</strong> Mobile-core's <code>fixtures/*.jsonl</code> were recorded from <code>@bay/core</code>'s tests
+              and, per its README, nothing records them any more. Add a recorder (<code>scripts/record-core-fixtures.mjs</code>) that rewrites them from the
+              TypeScript tests in CI, so a TypeScript change shows up as a failing Rust test until the port matches.
+            </li>
+            <li>
+              <strong>Rust in every check job.</strong> <code>cargo fmt --check</code>, <code>cargo clippy -- -D warnings</code> and <code>cargo test</code>
+              for the workspace in <code>ci.yml</code>, <code>windows-checks.yml</code> and <code>linux-checks.yml</code>, and in the pre-push hook next to
+              lint, typecheck and slop.
+            </li>
+            <li>
+              <strong>Write the rule down.</strong> Add the section 2 table to <code>AGENTS.md</code>: new platform-neutral native logic goes in a crate, new
+              Chromium glue in <code>//bay/core:portable</code>.
+            </li>
+          </ul>
+
+          <div class="phase-head" id="p6">
+            <h3>Phase 6 · One host for all three?</h3>
+            <span class="pri">decision after 1–4</span>
+          </div>
+          <p class="prose">
+            Windows and Linux are built and pass runtime acceptance on the WebUI host. The last split is the host itself. Running macOS on it would write each contract method once and
+            leave a single JS runtime model. This phase is a spike and a decision, not a commitment.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col"></th>
+                  <th scope="col">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Would remove</td>
+                  <td>
+                    The 18 CEF patches and the macOS-only Chromium patches the WebUI host doesn't need; most of NNCore (~17.7k, including
+                    <code>nncore_api.mm</code>, 2779); most Swift modules (~34k); the second runtime model behind <code>hasServiceClient()</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Aura-only files to port to Cocoa views</td>
+                  <td>
+                    <code>pip/nn_pip_aura.cc</code>, <code>dev_window.cc</code>, <code>dev_window_input.cc</code>, <code>native_file_drag.cc</code>,
+                    <code>window_key_watch.cc</code>, <code>window_placement.cc</code>, plus a <code>frame_mac</code> beside <code>frame_win</code> and
+                    <code>frame_linux</code> (vibrancy where Windows has Mica)
+                  </td>
+                </tr>
+                <tr>
+                  <td>macOS modules with no WebUI side today</td>
+                  <td>
+                    <code>BayWebKit</code> (the WebKit engine for protected video, so <code>WKWebView</code> inside a views window), <code>BaySwipe</code>,
+                    <code>BayCapture</code>, <code>BayCalendar</code>, <code>BayTranslate</code>, <code>BayTidyTabs</code>, <code>BayTidyNames</code>,
+                    <code>BayInlineCompletion</code>, <code>BayGlassEffect</code>, <code>BayDockSelection</code>; also the menus, the AppleScript dictionary,
+                    Sparkle and the Metal shaders (the web build uses WebGL)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Must not change</td>
+                  <td>
+                    Existing users' data folders open as they are. Sign-ins survive: same Safe Storage keychain names
+                    (<code>chromium-safe-storage-name.patch</code>), same passkey entitlements. Sparkle updates land on the new build.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Spike</td>
+                  <td>
+                    Add a macOS entry with <code>"runtime": "chrome-webui"</code> to <code>engine-lock.json</code>'s platforms, port the Aura files far enough to
+                    launch, and run Bay Dev on a copied <code>BAY_DATA_DIR</code>. Compare against the current Mac release: cold start, memory with 30 tabs, tab
+                    switch, typing latency in the address bar, scrolling over WebGL backdrops, idle energy, and a Netflix tab in WebKit.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Go if</td>
+                  <td>
+                    Every measure is no worse than today's Mac build and the WebKit tab works. Otherwise keep two hosts. After Phases 1–4 the remaining split
+                    is presentation only.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="build" aria-labelledby="build-h">
+          <h2 id="build-h">5. Build and linking</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col"></th>
+                  <th scope="col">macOS app</th>
+                  <th scope="col">Windows and Linux engine</th>
+                  <th scope="col">Phones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Builds</td>
+                  <td><code>packages/chromium/scripts/adblock.sh</code> → <code>bay-desktop</code> for <code>aarch64-apple-darwin</code></td>
+                  <td><code>scripts/engine.py</code> → <code>bay-desktop</code>, <code>+crt-static</code> on Windows</td>
+                  <td><code>bay-core</code> through UniFFI, as today</td>
+                </tr>
+                <tr>
+                  <td>Links</td>
+                  <td><code>BayNNCore.podspec</code>: <code>-lbay_desktop</code>, library and header search paths</td>
+                  <td><code>webui/BUILD.gn</code> <code>libs</code>, today's adblock entry renamed</td>
+                  <td>staticlib on iOS, cdylib on Android</td>
+                </tr>
+                <tr>
+                  <td>Header</td>
+                  <td>One header per crate (<code>bay_adblock.h</code>, <code>bay_lists.h</code>…) with a module map for Swift</td>
+                  <td>copied by <code>engine/chromium/apply.py</code></td>
+                  <td>generated bindings</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="prose">
+            The library is built by cargo and linked as a prebuilt archive, as the blocker is now, not compiled by gn. A Rust-only change then relinks the
+            engine without recompiling Chromium, and the crates build and test outside the Chromium tree.
+          </p>
+        </section>
+
+        <section id="accept" aria-labelledby="accept-h">
+          <h2 id="accept-h">6. Acceptance</h2>
+          <ul class="prose">
+            <li>Every golden file from Phase 0 still matches, from <code>cargo test</code> and from each host.</li>
+            <li>A sync chain made on any of the three desktops or a phone opens on every other one. Existing chains survive the update on each OS.</li>
+            <li>Imports from every fixture profile and from a real Chrome, Firefox, Arc and Zen install give the same result as the current release on each OS.</li>
+            <li>The blocker passes its first-launch, list, pause and cosmetic checks on each OS.</li>
+            <li>Each moved prompt works on each OS: permissions, choosers, cast, autofill and passwords, extension installs, screen sharing, context menu.</li>
+            <li>The contract coverage report shows no unexplained gaps.</li>
+            <li>
+              The signed macOS candidate and its Sparkle update pass as <code>docs/releasing.md</code> describes. App and engine size changes are measured
+              and noted in each phase's commit.
+            </li>
+            <li><code>pnpm lint</code>, <code>pnpm typecheck</code>, <code>pnpm slop</code>, <code>pnpm test</code> and the cargo checks pass.</li>
+          </ul>
+        </section>
+
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">7. Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">Mitigation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Saved data stops opening</td>
+                  <td>No format changes in this plan. Golden files are recorded before each move, and each phase keeps the old reader's tests until the new one matches.</td>
+                </tr>
+                <tr>
+                  <td>Rust symbols clash</td>
+                  <td>
+                    One <code>bay-desktop</code> archive per binary. On Windows and Linux the engine also carries Chromium's own Rust std;
+                    <code>scripts/engine.py</code> already renames the one clashing symbol (<code>rust_eh_personality</code>) and keeps doing so for the new
+                    archive.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Two SQLites</td>
+                  <td>Chromium ships its own renamed SQLite and the macOS app links the system one. Phase 0's spike settles it (decision 1).</td>
+                </tr>
+                <tr>
+                  <td>Size grows</td>
+                  <td>
+                    RustCrypto sits beside BoringSSL, and regex crates beside RE2. Keep the size profile and LTO, measure the archive per phase, and never trade
+                    away features for size (AGENTS.md).
+                  </td>
+                </tr>
+                <tr>
+                  <td>Secrets linger</td>
+                  <td>Secret retrieval stays in the host. Rust receives only the unlocked key, in <code>zeroize</code> buffers.</td>
+                </tr>
+                <tr>
+                  <td>Mobile branch not merged</td>
+                  <td>
+                    The desktop crates don't depend on PR #31. <code>bay-core</code> joins the workspace and drops its copies after it merges.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Hosts drift during the move</td>
+                  <td>
+                    Each phase lands per area, both hosts in the same commit, so main never has one host on the new code and the other on the old.
+                  </td>
+                </tr>
+                <tr>
+                  <td>One host loses Mac polish</td>
+                  <td>Phase 6 is gated on measurements, and nothing earlier depends on it.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="stays" aria-labelledby="stays-h">
+          <h2 id="stays-h">8. Stays per platform</h2>
+          <ul class="prose">
+            <li>OS adapters: secret stores, file pickers, notifications, autostart, default browser, tray and dock, window frames (Mica, GTK, macOS).</li>
+            <li>The WebKit engine and the Apple Intelligence features (Tidy Tabs, Tidy Names, inline completion), which stay macOS only.</li>
+            <li>Safari direct import, Full Disk Access and Dia's Apple Events.</li>
+            <li>Installers and updaters: Sparkle and DMG, winget and MSIX, AppImage, deb, rpm, tarball and AUR.</li>
+            <li>UI logic and per-keystroke work, which stay in TypeScript (section 2).</li>
+          </ul>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">9. Open decisions</h2>
+          <ol class="prose">
+            <li>
+              <strong>SQLite for <code>bay-import</code>.</strong> Bundle SQLite in the crate (<code>rusqlite</code> with <code>bundled</code>), or have the
+              host open a read-only snapshot and pass rows in through a callback? Bundling is simpler. Keep it if the Phase 0 link spike shows no clash with
+              Chromium's renamed copy or the system library on macOS.
+            </li>
+            <li>
+              <strong>Recovery kit drawing.</strong> Keep a native drawer per OS, as today, or have Rust produce one SVG or HTML kit that each host prints?
+              This plan keeps the native drawers.
+            </li>
+            <li>
+              <strong>Desktop input in Rust.</strong> This plan keeps address input and suggestions in TypeScript on desktop and holds the phones' Rust port
+              to it with fixtures. Confirm that's the intent rather than one Rust implementation for both.
+            </li>
+            <li>
+              <strong>Phase 6 measures.</strong> Are “no worse than today's Mac build” and a working WebKit tab the right bar, or do some measures (memory,
+              idle energy) need a margin?
+            </li>
+            <li>
+              <strong>Crate boundaries.</strong> One <code>bay-desktop</code> archive re-exporting separate crates (this plan), or fold the new code into
+              <code>bay-adblock</code>'s crate and rename it?
+            </li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
