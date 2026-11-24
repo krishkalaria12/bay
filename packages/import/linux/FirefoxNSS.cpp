@@ -1,5 +1,5 @@
 #include "FirefoxNSS.h"
-#include "../windows/SQLite.h"
+#include "../portable/SQLite.h"
 #include "SystemLibrary.h"
 #include <limits>
 #include <mutex>

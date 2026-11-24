@@ -91,7 +91,7 @@ def main():
     repo = Path(__file__).resolve().parents[4]
     test = Path(__file__).resolve().parent
     sources = [test / "SecretsTest.cpp", test.parent / "ChromiumSecrets.cpp", test.parent / "SecretService.cpp",
-               test.parent / "FirefoxNSS.cpp", repo / "packages/import/windows/Secrets.cpp", repo / "packages/import/windows/Readers.cpp"]
+               test.parent / "FirefoxNSS.cpp", repo / "packages/import/portable/Secrets.cpp", repo / "packages/import/portable/Readers.cpp"]
     includes = [repo / "engine/chromium/src/chrome/browser/bay/data/vendor",
                 Path("/opt/homebrew/opt/openssl@3/include"), Path("/opt/homebrew/opt/nss/include/nss"),
                 Path("/opt/homebrew/opt/nspr/include/nspr")]

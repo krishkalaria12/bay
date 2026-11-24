@@ -9,7 +9,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "chrome/browser/bay/data/packages/sync/windows/SyncService.h"
+#include "chrome/browser/bay/data/packages/sync/portable/SyncService.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"

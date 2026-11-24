@@ -18,8 +18,8 @@ if [[ $(uname -s) == Darwin ]]; then
 fi
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror "${platform_flags[@]}" \
   -Iengine/chromium/src/chrome/browser/bay/data/vendor \
-  packages/sync/windows/SyncCrypto.cpp \
+  packages/sync/portable/SyncCrypto.cpp \
   packages/sync/linux/SyncCryptoLinux.cpp \
-  packages/sync/windows/tests/LinuxCrypto.cpp \
+  packages/sync/portable/tests/LinuxCrypto.cpp \
   "${crypto_flags[@]}" -o "$tmp/check"
-"$tmp/check" packages/sync/windows/tests/golden.json "$tmp/vault"
+"$tmp/check" packages/sync/fixtures/golden.json "$tmp/vault"

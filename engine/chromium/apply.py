@@ -79,12 +79,13 @@ def layer_source(here: Path, owned: str):
             "}  // namespace bay\n", encoding="utf-8")
         # The blocker's C ABI; scripts/engine.py builds the library behind it.
         shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
+        # portable/ builds on Windows and Linux; linux/ holds the Linux-only adapters.
         for package in ("import", "sync"):
-            for platform in ("windows", "linux"):
-                canonical = repository / "packages" / package / platform
-                if platform == "linux" and not canonical.exists():
+            for folder in ("portable", "linux"):
+                canonical = repository / "packages" / package / folder
+                if folder == "linux" and not canonical.exists():
                     continue
-                destination = staged / "data/packages" / package / platform
+                destination = staged / "data/packages" / package / folder
                 shutil.copytree(canonical, destination,
                                 ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
         yield staged

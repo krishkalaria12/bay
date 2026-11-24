@@ -1,5 +1,5 @@
 #include "SyncService.h"
-#include "../../import/windows/ImportCore.h"
+#include "../../import/portable/ImportCore.h"
 #include "Base64.h"
 #include "RecoveryKit.h"
 #include "SyncVault.h"

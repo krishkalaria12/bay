@@ -1,5 +1,5 @@
 #pragma once
-#include "../../sync/windows/SyncCrypto.h"
+#include "../../sync/portable/SyncCrypto.h"
 #include <atomic>
 #include <filesystem>
 #include <functional>

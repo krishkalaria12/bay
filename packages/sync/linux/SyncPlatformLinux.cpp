@@ -1,5 +1,5 @@
-#include "../windows/SyncCrypto.h"
-#include "../windows/SyncService.h"
+#include "../portable/SyncCrypto.h"
+#include "../portable/SyncService.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include <cerrno>

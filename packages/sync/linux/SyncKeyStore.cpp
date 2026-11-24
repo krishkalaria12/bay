@@ -1,4 +1,4 @@
-#include "../windows/SyncCrypto.h"
+#include "../portable/SyncCrypto.h"
 #include <cstdlib>
 #include <libsecret/secret.h>
 #include <mutex>

@@ -1,5 +1,5 @@
-#include "../windows/RecoveryKit.h"
-#include "../windows/RecoveryKitInternal.h"
+#include "../portable/RecoveryKit.h"
+#include "../portable/RecoveryKitInternal.h"
 
 #include <algorithm>
 #include <cerrno>

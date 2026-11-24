@@ -198,8 +198,8 @@ def source_digest(platform="win"):
     digest = hashlib.sha256(platform.encode() + b"\0")
     for directory in ("engine/patches", "engine/chromium", "engine/nncore",
                       "packages/adblock/include", "packages/adblock/src", "packages/rust",
-                      "packages/import/windows", "packages/import/linux",
-                      "packages/sync/windows", "packages/sync/linux"):
+                      "packages/import/portable", "packages/import/linux",
+                      "packages/sync/portable", "packages/sync/linux"):
         for path in sorted((REPO / directory).rglob("*")):
             parts = path.relative_to(REPO / directory).parts
             package_test = directory.startswith("packages/") and "tests" in parts

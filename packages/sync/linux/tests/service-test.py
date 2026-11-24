@@ -42,14 +42,14 @@ gboolean secret_item_delete_sync(SecretItem *, GCancellable *, GError **);
 }
 ''')
     sources = [sync / path for path in [
-        "windows/SyncCrypto.cpp", "linux/SyncCryptoLinux.cpp", "linux/SyncKeyStore.cpp",
-        "windows/SyncVault.cpp", "windows/SyncService.cpp", "windows/RecoveryKit.cpp",
-        "windows/vendor/qrcodegen.cpp", "linux/tests/Service.cpp",
+        "portable/SyncCrypto.cpp", "linux/SyncCryptoLinux.cpp", "linux/SyncKeyStore.cpp",
+        "portable/SyncVault.cpp", "portable/SyncService.cpp", "portable/RecoveryKit.cpp",
+        "portable/vendor/qrcodegen.cpp", "linux/tests/Service.cpp",
     ]]
     # The shared service links the real import reader. macOS exercises Linux
     # service policy and POSIX crypto with fake desktop/keyring edges only.
     sources += [root / "packages/import" / path for path in [
-        "windows/Secrets.cpp", "windows/Readers.cpp", "linux/ChromiumSecrets.cpp",
+        "portable/Secrets.cpp", "portable/Readers.cpp", "linux/ChromiumSecrets.cpp",
         "linux/SecretService.cpp", "linux/FirefoxNSS.cpp",
     ]]
     flags = shlex.split(subprocess.check_output(
