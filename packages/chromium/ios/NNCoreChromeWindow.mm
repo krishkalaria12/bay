@@ -1106,6 +1106,10 @@ NSView *NNWindowRootView(NSWindow *window) {
   return gShouldClose ? gShouldClose(window) : YES;
 }
 
++ (BOOL)userSeesWindow:(NSWindow *)window {
+  return [NNCoreWindowController userSees:window];
+}
+
 + (void)embedRootView:(NSView *)root inWindow:(NSWindow *)window {
   NNCoreWindowController *controller = [NNCoreWindowController forNSWindow:window];
   if (!controller) return;

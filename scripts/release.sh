@@ -12,10 +12,10 @@
 # (Sparkle's update archive), appcast.xml (signed with the Sparkle EdDSA key) and release-notes.md (the GitHub
 # release's notes). scripts/release/publish.sh publishes them.
 #
-# A stable release needs release-notes/<version>.md, MARKETING_VERSION set to <version> (and CURRENT_PROJECT_VERSION
+# A stable release needs release-notes/mac/<version>.md, MARKETING_VERSION set to <version> (and CURRENT_PROJECT_VERSION
 # bumped) and a clean tree under apps/browser, packages and engine. A nightly needs none of the version bump: it builds
 # HEAD as <version>, build <newest stable build in the feed>.<n>, so it sorts after that stable and before the next
-# (42 < 42.1 < 42.2 < 43), with notes from the commits since the previous release unless release-notes/<version>.md
+# (42 < 42.1 < 42.2 < 43), with notes from the commits since the previous release unless release-notes/mac/<version>.md
 # exists. Its appcast item is on Sparkle's nightly channel, which only copies on Nightly read. A candidate builds the
 # working tree as <version> with the next build number, and uses the notes file if there is one.
 #
@@ -76,7 +76,7 @@ nncore="$root/packages/chromium"
 repo="krishkalaria12/bay"
 bundle_id="in.krishkalaria.bay"
 team="GP328GJT66"
-notes_page="https://baybrowser.in/release-notes/"
+notes_page="https://baybrowser.in/mac/release-notes/"
 notary_profile="${NOTARY_PROFILE:-bay}"
 # App Store Connect API key for notarytool, when scripts/.notary.env (untracked) sets NOTARY_KEY (path to
 # AuthKey_<id>.p8), NOTARY_KEY_ID and NOTARY_ISSUER. Preferred over the keychain profile: notarytool keeps that
@@ -209,7 +209,7 @@ fi
 
 # Written before the build: the website, the GitHub release and the update dialog all show it. A nightly without a
 # notes file lists the commits since the previous release.
-notes="$root/release-notes/$version.md"
+notes="$root/release-notes/mac/$version.md"
 if [ -f "$notes" ]; then
   frontmatter() { awk 'NR == 1 && $0 == "---" { inside = 1; next } inside && $0 == "---" { exit } inside' "$notes"; }
   notes_body() { awk 'NR == 1 && $0 == "---" { inside = 1; next } inside && $0 == "---" { inside = 0; next } !inside' "$notes" | sed '/./,$!d'; }
@@ -224,7 +224,7 @@ elif [ "$rc" = 1 ]; then
   headline="Release candidate $version"
   notes_body() { echo "A release candidate of Bay $version. Not published."; }
 else
-  die "no release notes: write release-notes/$version.md first"
+  die "no release notes: write release-notes/mac/$version.md first"
 fi
 
 # A release ships a commit: anything uncommitted in the app's sources would ship with it (another agent's work in

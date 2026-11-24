@@ -84,14 +84,63 @@ Set `BAY_WINDOWS_UPDATE_FEED` to the HTTPS channel JSON URL and
 `BAY_WINDOWS_DOWNLOAD_BASE` to the HTTPS installer directory, then omit
 `-Unsigned`. Every executable/DLL, the installer and uninstaller are signed.
 The package command writes the installer, checksum, channel JSON and app PDB ZIP.
-It reads release notes from `release-notes/<version>.md` when present. Publishing
-these files is a separate release action.
+It reads release notes from `release-notes/windows/<version>.md` when present. Publishing
+is a separate step: `scripts/windows/publish.py` adds the installer to the GitHub
+release `windows-v<version>` and submits it to winget (`docs/releasing.md` › Windows). The winget
+manifests come from `scripts/windows/winget.py`; the package is
+`BayBrowser.Bay`, matched to the installed copy by Inno's uninstall key (the
+`AppId` with `_is1`) and `UninstallDisplayName`.
 
 The installer registers Bay in the current user's RegisteredApplications,
 StartMenuInternet capabilities, HTTP/HTTPS/HTML/PDF ProgIDs, and Start menu AUMID.
 It leaves Windows' protected UserChoice alone. Use Windows Settings to select
 Bay as the default browser. Uninstall removes app-owned registration and files;
 profiles outside the install directory remain available for reinstall.
+
+## Microsoft Store package
+
+`package.ps1 -Msix` stages the app as for the installer, then `scripts/windows/msix.py`
+writes `AppxManifest.xml`, copies the logos from `msix/Assets` and leaves out
+`update.ps1`: the Store signs and updates the package. `makepri` indexes the
+logos' scales and target sizes into `resources.pri` and `makeappx` packs
+`Bay-<version>-windows-x64.msix`. The manifest runs `Bay.exe` as a full-trust
+desktop app, registers http/https and .htm/.html/.pdf with
+`--single-argument "%1"` as the installer's ProgIDs do, and declares
+`notification_helper.exe` as the toast activator's COM server.
+`scripts/windows/sideload-msix.ps1` signs a copy with a throwaway certificate
+for installing outside the Store. Redraw the logos with
+`msix/make-assets.py` after the icon changes. Store setup and submission:
+`docs/releasing.md` › Microsoft Store.
+
+Inside the package Windows knows Bay by the package's app ID
+(`<package family name>!Bay`) and keeps its AppData and HKCU writes private, so
+`chromium-bay-msix-win.patch` adapts the engine when
+`GetCurrentApplicationUserModelId` says it runs packaged:
+
+- Windows and taskbar pins use the package's app ID instead of `Bay.Browser`,
+  so Bay groups with its pinned icon.
+- Native toasts are on without the installer's Start menu shortcut and
+  registry entry, which the manifest's activator replaces; web apps'
+  notifications use the package's app ID too.
+- The default-browser check matches the package's own handlers (ProgIDs named
+  `AppX…`, whose `Application\AppUserModelID` is the package's app), and
+  "make default" opens Windows 11 Settings on the package's page.
+- Web apps' shortcuts start Bay through the `baybrowser.exe` app execution
+  alias, so they run inside the package with its profile.
+- The profile is `%LOCALAPPDATA%\Bay\Store User Data`, which Windows keeps in
+  the package's private AppData and removes with it. Windows only keeps new
+  files private and lets a package change ones already in AppData, so sharing
+  the installer's `User Data` would let both copies open one profile at once.
+
+Still limited, as for any packaged desktop app without the restricted
+`unvirtualizedResources` capability (which needs Microsoft's approval): web
+apps' Start menu shortcuts, start-at-login entries and their own protocol and
+file handlers are written to the package's private AppData and registry, so
+Windows doesn't see them. Desktop shortcuts work. For the same reason the
+`bay` CLI can't install itself on PATH or find a Store copy's data: it needs
+the installer. `elevation_service.exe` and
+`elevated_tracing_service.exe` ship but aren't registered, as with the
+per-user installer.
 
 ## Updater protocol
 

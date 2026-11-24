@@ -6,11 +6,14 @@ param(
     [ValidateSet('stable', 'beta')][string]$Channel = 'beta',
     [string]$FeedUrl = $env:BAY_WINDOWS_UPDATE_FEED,
     [string]$DownloadBaseUrl = $env:BAY_WINDOWS_DOWNLOAD_BASE,
-    [switch]$Unsigned
+    [switch]$Unsigned,
+    # An MSIX for the Microsoft Store (scripts/windows/msix.py) instead of the installer. The Store signs it.
+    [switch]$Msix
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+if ($Msix) { $Unsigned = $true }
 if (-not $AppDirectory) { $AppDirectory = Join-Path $repo 'dist/windows-app' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo 'dist/windows' }
 $AppDirectory = (Resolve-Path $AppDirectory).Path
@@ -23,12 +26,26 @@ if (-not $Unsigned -and -not $env:BAY_SIGNING_CERT_SHA1 -and -not $env:BAY_SIGNI
 }
 if ($FeedUrl -and ([uri]$FeedUrl).Scheme -ne 'https') { throw 'FeedUrl must use HTTPS' }
 if ($DownloadBaseUrl -and ([uri]$DownloadBaseUrl).Scheme -ne 'https') { throw 'DownloadBaseUrl must use HTTPS' }
-$compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-if (-not $compiler) {
-    $inno = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
-    if (-not (Test-Path $inno)) { throw 'Install Inno Setup 6 or add ISCC.exe to PATH' }
-    $compilerPath = $inno
-} else { $compilerPath = $compiler.Source }
+function Find-SdkTool([string]$name) {
+    $command = Get-Command $name -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $sdk = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin') -Directory -ErrorAction SilentlyContinue |
+        Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
+        Where-Object { Test-Path (Join-Path $_.FullName "x64/$name") } | Select-Object -First 1
+    if (-not $sdk) { throw "Install the Windows SDK or add $name to PATH" }
+    return Join-Path $sdk.FullName "x64/$name"
+}
+if ($Msix) {
+    $makeappx = Find-SdkTool 'makeappx.exe'
+    $makepri = Find-SdkTool 'makepri.exe'
+} else {
+    $compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if (-not $compiler) {
+        $inno = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+        if (-not (Test-Path $inno)) { throw 'Install Inno Setup 6 or add ISCC.exe to PATH' }
+        $compilerPath = $inno
+    } else { $compilerPath = $compiler.Source }
+}
 $stage = Join-Path ([IO.Path]::GetTempPath()) ('Bay-package-' + [guid]::NewGuid())
 New-Item $stage -ItemType Directory | Out-Null
 New-Item $OutputDirectory -ItemType Directory -Force | Out-Null
@@ -95,6 +112,25 @@ try {
             }
         }
     }
+    if ($Msix) {
+        & python (Join-Path $PSScriptRoot 'msix.py') --stage $stage --version $Version
+        if ($LASTEXITCODE -ne 0) { throw 'Writing the MSIX manifest failed' }
+        # resources.pri lets Windows pick each logo's scale and target size. Its config stays out of the package.
+        $priConfig = Join-Path ([IO.Path]::GetTempPath()) ('Bay-priconfig-' + [guid]::NewGuid() + '.xml')
+        try {
+            & $makepri createconfig /cf $priConfig /dq en-US /pv 10.0.0 /o
+            if ($LASTEXITCODE -ne 0) { throw 'makepri createconfig failed' }
+            & $makepri new /pr $stage /cf $priConfig /mn (Join-Path $stage 'AppxManifest.xml') /of (Join-Path $stage 'resources.pri') /o
+            if ($LASTEXITCODE -ne 0) { throw 'makepri new failed' }
+        } finally { Remove-Item $priConfig -Force -ErrorAction SilentlyContinue }
+        $package = Join-Path $OutputDirectory "Bay-$Version-windows-x64.msix"
+        & $makeappx pack /d $stage /p $package /o
+        if ($LASTEXITCODE -ne 0) { throw 'makeappx pack failed' }
+        $checksum = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$checksum  $([IO.Path]::GetFileName($package))" | Set-Content "$package.sha256" -Encoding ascii
+        Write-Output $package
+        return
+    }
     # Inno signs its generated uninstaller at compile time, then the setup binary.
     $arguments = @("/DAppVersion=$Version", "/DStageDir=$stage", "/DOutputDir=$OutputDirectory")
     if (-not $Unsigned) {
@@ -108,7 +144,7 @@ try {
     if (-not $Unsigned -and (Get-AuthenticodeSignature $installer).Status -ne 'Valid') { throw 'Installer signature validation failed' }
     $checksum = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
     "$checksum  $([IO.Path]::GetFileName($installer))" | Set-Content "$installer.sha256" -Encoding ascii
-    $notes = Join-Path $repo "release-notes/$Version.md"
+    $notes = Join-Path $repo "release-notes/windows/$Version.md"
     $releaseNotes = if (Test-Path $notes) { Get-Content $notes -Raw } else { '' }
     @{ version = $Version; channel = $Channel; sha256 = $checksum; signed = -not $Unsigned;
        url = if ($DownloadBaseUrl) { $DownloadBaseUrl.TrimEnd('/') + '/' + [IO.Path]::GetFileName($installer) } else { $null };

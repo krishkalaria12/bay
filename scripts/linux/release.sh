@@ -1,6 +1,6 @@
 #!/bin/bash
 # Packs a staged Linux app (scripts/linux/build-app.py) for release: the /opt/bay tree with its desktop integration, as
-# a .tar.xz, .deb, .rpm, AppImage (with zsync updates) and the AUR bay-bin PKGBUILD, plus SHA256SUMS.
+# a .tar.xz, .deb, .rpm, AppImage (with zsync updates) and the AUR bay-browser-bin PKGBUILD, plus SHA256SUMS.
 #
 #   scripts/linux/release.sh --app dist/linux-app --version 1.4.0 [--output dist/linux-release] [--formats tar,deb,...]
 #
@@ -67,12 +67,12 @@ chmod 0755 "$root/opt/bay/bay-wrapper" "$root/opt/bay/chrome-sandbox"
 ln -s /opt/bay/bay-wrapper "$root/usr/bin/bay"
 install -m 0644 "$packaging/bay.desktop" "$root/usr/share/applications/bay.desktop"
 install -m 0644 "$packaging/apparmor/bay" "$root/etc/apparmor.d/bay"
-# The release date is the release notes' when they have one.
-notes="$repo/release-notes/$version.md"
+# The release date is the Linux release notes' when they have one (release-notes/ itself is the Mac's).
+notes="$repo/release-notes/linux/$version.md"
 date=$( { [[ -f "$notes" ]] && sed -n 's/^date: *\([0-9-]*\)$/\1/p' "$notes"; } || true)
 date=${date:-$(date -u +%Y-%m-%d)}
 sed "s|</component>|  <releases>\n    <release version=\"$version\" date=\"$date\" />\n  </releases>\n</component>|" \
-  "$packaging/in.krishkalaria.bay.metainfo.xml" >"$root/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml"
+  "$packaging/in.baybrowser.bay.metainfo.xml" >"$root/usr/share/metainfo/in.baybrowser.bay.metainfo.xml"
 # The Mac app's icon set: the small cut at 16 and 32, the full mark above (README › The icon).
 icons="$repo/apps/browser/macos/Bay-macOS/Assets.xcassets/AppIcon.appiconset"
 for pair in 16:icon_16x16_1x 32:icon_32x32_1x 64:icon_32x32_2x 128:icon_128x128_1x 256:icon_256x256_1x 512:icon_512x512_1x; do
@@ -99,7 +99,7 @@ if want deb; then
   echo /etc/apparmor.d/bay >"$deb/DEBIAN/conffiles"
   # Chrome's own .deb dependencies, unversioned until the engine's glibc floor is measured (engine-lock.json).
   cat >"$deb/DEBIAN/control" <<EOF
-Package: bay
+Package: bay-browser
 Version: $version
 Architecture: amd64
 Maintainer: Krish Kalaria <https://github.com/krishkalaria12>
@@ -113,16 +113,16 @@ Description: A fast browser with your tabs in a sidebar
  Bay is a browser built around a sidebar, on Chromium: spaces, pinned tabs and
  folders, Peek and Split View, a command bar, and built-in ad blocking.
 EOF
-  dpkg-deb --root-owner-group -Zxz --build "$deb" "$output/bay_${version}_amd64.deb" >/dev/null
-  artifacts+=("$output/bay_${version}_amd64.deb")
+  dpkg-deb --root-owner-group -Zxz --build "$deb" "$output/bay-browser_${version}_amd64.deb" >/dev/null
+  artifacts+=("$output/bay-browser_${version}_amd64.deb")
 fi
 
 if want rpm; then
   sed "s/@VERSION@/$version/" "$packaging/rpm/bay.spec.in" >"$work/bay.spec"
   rpmbuild -bb --quiet --define "_topdir $work/rpmbuild" --define "_rpmdir $work/rpms" --define "bay_root $root" \
     --define "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm" "$work/bay.spec"
-  cp "$work/rpms/bay-$version-1.x86_64.rpm" "$output/"
-  artifacts+=("$output/bay-$version-1.x86_64.rpm")
+  cp "$work/rpms/bay-browser-$version-1.x86_64.rpm" "$output/"
+  artifacts+=("$output/bay-browser-$version-1.x86_64.rpm")
 fi
 
 if want appimage; then
@@ -151,15 +151,15 @@ if want aur; then
 fi
 
 if want flatpak; then
-  # The tarball's release URL and checksum, with the files the manifest names: flathub/in.krishkalaria.bay's contents.
+  # The tarball's release URL and checksum, with the files the manifest names: flathub/in.baybrowser.bay's contents.
   mkdir -p "$output/flatpak"
   sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" \
-    "$packaging/flatpak/in.krishkalaria.bay.yaml.in" >"$output/flatpak/in.krishkalaria.bay.yaml"
+    "$packaging/flatpak/in.baybrowser.bay.yaml.in" >"$output/flatpak/in.baybrowser.bay.yaml"
   cp "$packaging/flatpak/bay.sh" "$packaging/flatpak/cobalt.ini" "$packaging/flatpak/flathub.json" "$output/flatpak/"
 fi
 
 if want nixpkgs; then
-  # pkgs/by-name/ba/bay/package.nix, with the release tarball's SRI hash.
+  # pkgs/by-name/ba/bay-browser/package.nix, with the release tarball's SRI hash.
   mkdir -p "$output/nixpkgs"
   hash=$(python3 -c 'import base64, hashlib, sys; print("sha256-" + base64.b64encode(hashlib.sha256(open(sys.argv[1], "rb").read()).digest()).decode())' "$tarball")
   sed -e "s/@VERSION@/$version/" -e "s|@HASH@|$hash|" "$packaging/nix/package.nix" >"$output/nixpkgs/package.nix"
@@ -173,17 +173,21 @@ if want snap; then
   install -m 0755 "$packaging/snap/local/bay" "$project/snap/local/bay"
   cp "$root/usr/share/icons/hicolor/256x256/apps/bay.png" "$project/snap/gui/bay.png"
   cp "$tarball" "$project/"
-  snap="$output/bay_${version}_amd64.snap"
+  snap="bay-browser_${version}_amd64.snap"
   # CI packs on the runner itself (SNAPCRAFT="sudo snapcraft", BAY_SNAPCRAFT_ARGS=--destructive-mode), which needs
-  # Ubuntu 24.04 to match core24; elsewhere snapcraft packs in its own container.
+  # Ubuntu 24.04 to match core24; elsewhere snapcraft packs in its own container. snapcraft only writes the snap inside
+  # the project.
   # shellcheck disable=SC2086
   (cd "$project" && $snapcraft pack ${BAY_SNAPCRAFT_ARGS:-} --output "$snap")
-  artifacts+=("$snap")
+  mv "$project/$snap" "$output/$snap"
+  # sudo snapcraft leaves root-owned parts behind, which the cleanup couldn't remove.
+  [[ "$snapcraft" == "sudo "* ]] && sudo rm -rf "$project"
+  artifacts+=("$output/$snap")
 fi
 
 if want nix; then
   store=$(nix-build "$packaging/nix" --arg tarball "$tarball" --out-link "$work/nix-result")
-  [[ "$store" =~ ^/nix/store/[a-z0-9]{32}-bay-[0-9]+\.[0-9]+\.[0-9]+$ && "$store" == *-bay-"$version" ]] || {
+  [[ "$store" =~ ^/nix/store/[a-z0-9]{32}-bay-browser-[0-9]+\.[0-9]+\.[0-9]+$ && "$store" == *-bay-browser-"$version" ]] || {
     echo "unexpected Nix output: $store" >&2; exit 1;
   }
   # Export every referenced store path, including runtime libraries, for an offline import on NixOS.
