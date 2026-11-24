@@ -1652,6 +1652,14 @@ BrowserPreferences { …, site_font: SiteFont, last_bookmark_folder: HashMap&lt;
           nothing. Desktop site on YouTube stays on through the move to www.youtube.com and off through the move back. Translate can't reach a localhost page
           (Google says so), as expected.
         </li>
+        <li>
+          <b>Space switching in one motion:</b> switching spaces from a page showed the new space twice (a blank or white page first, then the page), and from
+          the tab view the new space appeared all at once after the old one slid away. Now each space's last page stays loaded (pages are kept across spaces, up
+          to four), a page that must load again shows its picture until it draws, and the slide's starting place is set in the same update as the switch on both
+          apps (iOS used to set it a frame later, from the view). In the tab view the space left is held as a picture and slides out while the new space, its
+          cards' pictures read ahead, slides in beside it. The status bar's icons go light over the bookmarks drawer on Android, which is always dark; iOS
+          already picked them from what's behind.
+        </li>
       </ul>
 
       <h2 id="verify">Testing</h2>
