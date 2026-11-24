@@ -86,7 +86,7 @@ Set `BAY_WINDOWS_UPDATE_FEED` to the HTTPS channel JSON URL and
 The package command writes the installer, checksum, channel JSON and app PDB ZIP.
 It reads release notes from `release-notes/windows/<version>.md` when present. Publishing
 is a separate step: `scripts/windows/publish.py` adds the installer to the GitHub
-release and submits it to winget (`docs/releasing.md` › Windows). The winget
+release `windows-v<version>` and submits it to winget (`docs/releasing.md` › Windows). The winget
 manifests come from `scripts/windows/winget.py`; the package is
 `BayBrowser.Bay`, matched to the installed copy by Inno's uninstall key (the
 `AppId` with `_is1`) and `UninstallDisplayName`.

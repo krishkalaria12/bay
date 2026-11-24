@@ -8,7 +8,7 @@ name: Windows build from source
 # Start a run: git tag windows-build-N && git push origin windows-build-N
 #
 # A release is the same run with a version and publish: the installer's launch check must pass, then publish
-# (scripts/windows/publish.py) adds the installer to the release v<version> and submits it to winget.
+# (scripts/windows/publish.py) adds the installer to the release windows-v<version> and submits it to winget.
 # docs/releasing.md › Windows:
 #   gh workflow run windows-build.yml -f version=X.Y.Z -f publish=true
 on:
@@ -19,7 +19,7 @@ on:
         required: false
         default: ""
       publish:
-        description: "Publish the installer to the release v<version> and winget"
+        description: "Publish the installer to the release windows-v<version> and winget"
         type: boolean
         default: false
   push:
@@ -62,8 +62,12 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::version must be X.Y.Z: $version"; exit 1; }
           if [[ "$PUBLISH" == true ]]; then
             [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::publishing needs an X.Y.Z version"; exit 1; }
-            gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null || {
-              echo "::error::there is no release v$VERSION: Windows adds its installer to the Mac release, so publish that first"; exit 1; }
+            # Windows versions are its own (windows-v<version>), and a published one is never replaced: winget pins
+            # its installer's checksum.
+            if gh release view "windows-v$VERSION" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -qxF "Bay-$VERSION-windows-x64-setup.exe"; then
+              echo "::error::Bay $VERSION for Windows is already published (windows-v$VERSION)"; exit 1
+            fi
             [[ "$HAS_WINGET_TOKEN" == true ]] || { echo "::error::the WINGET_TOKEN secret isn't set (docs/releasing.md › Windows)"; exit 1; }
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

@@ -7,6 +7,7 @@ import re
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import publish
@@ -59,12 +60,14 @@ class ManifestTests(unittest.TestCase):
                                          'BayBrowser.Bay.yaml'])
         digest = hashlib.sha256(b'fixture installer').hexdigest().upper()
         text = files['BayBrowser.Bay.installer.yaml']
-        self.assertIn('  InstallerUrl: https://github.com/krishkalaria12/bay/releases/download/v1.7.0/'
+        self.assertIn('  InstallerUrl: https://github.com/krishkalaria12/bay/releases/download/windows-v1.7.0/'
                       'Bay-1.7.0-windows-x64-setup.exe\n', text)
         self.assertIn(f'  InstallerSha256: {digest}\n', text)
         self.assertIn("\nProductCode: '{C345791D-67B8-4C97-AB2B-D6DDE1F93B72}_is1'\n", text)
         self.assertIn('\nInstallerType: inno\nScope: user\n', text)
         self.assertIn('\nReleaseDate: 2026-11-21\n', text)
+        self.assertIn('ReleaseNotesUrl: https://github.com/krishkalaria12/bay/releases/tag/windows-v1.7.0\n',
+                      files['BayBrowser.Bay.locale.en-US.yaml'])
         for name, kind in (('BayBrowser.Bay.yaml', 'version'), ('BayBrowser.Bay.installer.yaml', 'installer'),
                            ('BayBrowser.Bay.locale.en-US.yaml', 'defaultLocale')):
             self.assertTrue(files[name].startswith(
@@ -135,6 +138,48 @@ class PublishTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(publish.PublishError, 'has no'):
             publish.publish(directory, '1.7.0', dry_run=True)
 
+    def publish_with(self, directory, assets):
+        """Runs a real publish against a stand-in gh, returning its calls; assets is None for no release yet."""
+        calls = []
+
+        def gh(*args, check=True):
+            calls.append(args)
+            if args[:2] == ('release', 'view'):
+                if assets is None:
+                    return mock.Mock(returncode=1, stdout='', stderr='release not found')
+                return mock.Mock(returncode=0, stdout=''.join(f'{name}\n' for name in assets), stderr='')
+            return mock.Mock(returncode=0, stdout='', stderr='')
+
+        environment = {'GH_TOKEN': 'x', 'WINGET_CREATE_GITHUB_TOKEN': 'x', 'GITHUB_SHA': 'abc123'}
+        with mock.patch.object(publish, 'gh', gh), mock.patch.object(publish, 'winget_has', return_value=True), \
+                mock.patch.object(publish.sys, 'platform', 'win32'), mock.patch.dict(publish.os.environ, environment), \
+                contextlib.redirect_stdout(io.StringIO()):
+            publish.publish(self.release(directory), '1.7.0', dry_run=False)
+        return calls
+
+    def test_creates_its_own_release_that_isnt_latest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = self.publish_with(directory, None)
+        create = next(call for call in calls if call[:2] == ('release', 'create'))
+        self.assertEqual(create[2], 'windows-v1.7.0')
+        self.assertIn('--latest=false', create)
+        self.assertEqual(create[create.index('--target') + 1], 'abc123')
+        self.assertEqual(create[create.index('--title') + 1], 'Bay 1.7.0 for Windows')
+        upload = next(call for call in calls if call[:2] == ('release', 'upload'))
+        self.assertEqual(upload[2], 'windows-v1.7.0')
+        self.assertNotIn('--clobber', upload)
+
+    def test_adds_to_an_existing_release_without_recreating_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = self.publish_with(directory, ['notes.txt'])
+        self.assertFalse([call for call in calls if call[:2] == ('release', 'create')])
+        self.assertTrue([call for call in calls if call[:2] == ('release', 'upload')])
+
+    def test_never_replaces_a_published_installer(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                self.assertRaisesRegex(publish.PublishError, r'already published \(windows-v1\.7\.0\)'):
+            self.publish_with(directory, ['Bay-1.7.0-windows-x64-setup.exe'])
+
     def test_wingetcreate_is_pinned(self):
         self.assertRegex(publish.WINGETCREATE_URL, r'/releases/download/v[\d.]+/wingetcreate\.exe$')
         self.assertRegex(publish.WINGETCREATE_SHA256, r'^[0-9a-f]{64}$')
@@ -153,7 +198,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}', publish_job)
         self.assertIn('python scripts/windows/publish.py --release dist/windows --version $env:VERSION', publish_job)
         plan = job('plan')
-        self.assertIn('gh release view "v$VERSION"', plan)
+        self.assertIn('gh release view "windows-v$VERSION"', plan)
+        self.assertIn('grep -qxF "Bay-$VERSION-windows-x64-setup.exe"', plan)
         self.assertIn("HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}", plan)
 
 

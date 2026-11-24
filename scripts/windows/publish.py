@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Publish a Windows release: add the installer to the GitHub release v<version> and submit it to winget.
+"""Publish a Windows release: add the installer to the GitHub release windows-v<version> and submit it to winget.
 
     python scripts/windows/publish.py --release dist/windows --version X.Y.Z [--dry-run]
 
 <release> is package.ps1's output (the windows-build workflow's bay-windows-release): the installer and its .sha256.
-Windows ships beside a Mac release with the same version, as Linux does, so the release has to exist first.
+Windows has its own versions, apart from the Mac's v<version>, as Linux does.
 
-1. uploads Bay-<version>-windows-x64-setup.exe and its .sha256 to v<version>;
+1. creates the release windows-v<version> if it's missing, never as "latest", which the site's /download and the Mac
+   appcast follow, and uploads Bay-<version>-windows-x64-setup.exe and its .sha256 to it. A published installer is
+   never replaced: winget pins its SHA-256;
 2. writes the winget manifests (scripts/windows/winget.py) into <release>/winget, pointing at that upload;
 3. opens a pull request on microsoft/winget-pkgs with wingetcreate, unless it already has this version.
 
@@ -26,6 +28,7 @@ import urllib.request
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import winget
 
+REPO = pathlib.Path(__file__).resolve().parents[2]
 WINGETCREATE_URL = 'https://github.com/microsoft/winget-create/releases/download/v1.28.1.0/wingetcreate.exe'
 WINGETCREATE_SHA256 = '63d980ba79e97042395bd6eb5992c2db9e01e9e7a8a22958a95c288f27310413'
 
@@ -73,25 +76,42 @@ def wingetcreate(directory):
     return target
 
 
+def create_release(tag, version, release):
+    notes = REPO / f'release-notes/windows/{version}.md'
+    if not notes.is_file():
+        notes = release / 'notes.md'
+        notes.write_text(f'Bay {version} for Windows. Install it with `winget install {winget.IDENTIFIER}`.\n',
+                         encoding='utf-8')
+    target = os.environ.get('GITHUB_SHA') or subprocess.run(
+        ['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True).stdout.strip()
+    gh('release', 'create', tag, '-R', winget.GITHUB, '--latest=false', '--target', target,
+       '--title', f'Bay {version} for Windows', '--notes-file', str(notes))
+
+
 def publish(release, version, dry_run):
     release = pathlib.Path(release).resolve()
     installer, checksum = check_release(release, version)
-    tag = f'v{version}'
+    tag = winget.release_tag(version)
     if not dry_run:
         for name in ('GH_TOKEN', 'WINGET_CREATE_GITHUB_TOKEN'):
             if not os.environ.get(name):
                 raise PublishError(f'set {name} (docs/releasing.md › Windows)')
         if sys.platform != 'win32':
             raise PublishError('wingetcreate runs on Windows')
-        if gh('release', 'view', tag, '-R', winget.GITHUB, check=False).returncode:
-            raise PublishError(f'there is no release {tag}: Windows adds its installer to the Mac release, so publish that first')
+        existing = gh('release', 'view', tag, '-R', winget.GITHUB, '--json', 'assets', '--jq', '.assets[].name',
+                      check=False)
+        has_release = existing.returncode == 0
+        if installer.name in existing.stdout.split():
+            raise PublishError(f'Bay {version} for Windows is already published ({tag})')
     manifests = winget.write(installer, version, release / 'winget')
     if dry_run:
         print(f'Dry run: nothing uploaded. For {tag}: {installer.name}, {checksum.name}. For winget:')
         for path in sorted(manifests.iterdir()):
             print(f'  {path.name}')
         return
-    gh('release', 'upload', tag, '-R', winget.GITHUB, '--clobber', str(installer), str(checksum))
+    if not has_release:
+        create_release(tag, version, release)
+    gh('release', 'upload', tag, '-R', winget.GITHUB, str(installer), str(checksum))
     if winget_has(version):
         print(f'winget-pkgs already has {winget.IDENTIFIER} {version}')
         return

@@ -194,8 +194,10 @@ The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by h
 
 ## Windows
 
-Windows ships beside a Mac release, with the same version, as Linux does: its installer goes on the release
-`v<version>`, so publish that first. The installer is unsigned (Bay has no code-signing certificate yet), so its own
+Windows has its own versions, apart from the Mac's, as Linux does: its installer goes on the release
+`windows-v<version>`, which `publish.py` creates and never marks latest (the site's `/download` and the Mac appcast
+follow the latest release). Notes for it can go in `release-notes/windows/<version>.md`, which become the release's
+notes. The installer is unsigned (Bay has no code-signing certificate yet), so its own
 updater is off and it reaches people through winget, which takes unsigned installers and usually installs without the
 SmartScreen prompt a downloaded installer gets. One run of `.github/workflows/windows-build.yml` builds (or reuses) the
 engine and packages the installer, then its **publish** job runs `scripts/windows/publish.py`:
@@ -204,8 +206,10 @@ engine and packages the installer, then its **publish** job runs `scripts/window
 gh workflow run windows-build.yml -f version=<version> -f publish=true
 ```
 
-Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, there's no release `v<version>` or
-`WINGET_TOKEN` isn't set. A release must pass the launch check that's only advisory in a test build, and is packaged on
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, `windows-v<version>` already has its
+installer or `WINGET_TOKEN` isn't set. A published installer is never replaced, because winget pins its checksum; to
+retry a release whose winget pull request never opened, delete the installer and its `.sha256` from the release
+first. A release must pass the launch check that's only advisory in a test build, and is packaged on
 the stable channel. A release run has its own concurrency group, so a `windows-build-N` tag pushed meanwhile neither
 cancels it nor is cancelled by it.
 
@@ -213,12 +217,12 @@ What a release publishes:
 
 | Where | What |
 |---|---|
-| Release `v<version>` | `Bay-<version>-windows-x64-setup.exe` and its `.sha256` |
+| Release `windows-v<version>` | `Bay-<version>-windows-x64-setup.exe` and its `.sha256` |
 | `microsoft/winget-pkgs` | a pull request adding `BayBrowser.Bay` `<version>`: the manifests from `scripts/windows/winget.py`, which point at the release's installer |
 
 winget-pkgs' bots install the package in a sandbox and a moderator merges it, which takes a few days for the first
 version; later versions of an existing package usually go faster. `publish.py` skips the pull
-request when winget-pkgs already has the version, so a rerun only re-uploads the installer. People install with
+request when winget-pkgs already has the version. People install with
 `winget install BayBrowser.Bay` (or `winget install bay`) and update with `winget upgrade BayBrowser.Bay`.
 
 To see the manifests a release would submit without uploading anything, put an X.Y.Z installer and its `.sha256` from

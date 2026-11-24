@@ -4,8 +4,8 @@
     python scripts/windows/winget.py --installer dist/windows/Bay-X.Y.Z-windows-x64-setup.exe --version X.Y.Z \
         --output dist/windows/winget
 
-The installer is the one on the GitHub release v<version>, which the manifest points winget at; its SHA-256 is taken
-from the file. wingetcreate submits the folder to microsoft/winget-pkgs (scripts/windows/publish.py).
+The installer is the one on the GitHub release windows-v<version>, which the manifest points winget at; its SHA-256 is
+taken from the file. wingetcreate submits the folder to microsoft/winget-pkgs (scripts/windows/publish.py).
 """
 import argparse
 import datetime
@@ -82,7 +82,7 @@ def product_code(script=INSTALLER_SCRIPT):
 
 def manifests(version, sha256, url, release_date, code):
     common = [('PackageIdentifier', IDENTIFIER), ('PackageVersion', version)]
-    release = f'https://github.com/{GITHUB}/releases/tag/v{version}'
+    release = f'https://github.com/{GITHUB}/releases/tag/{release_tag(version)}'
     return {
         f'{IDENTIFIER}.yaml': render('version', common + [
             ('DefaultLocale', 'en-US'), ('ManifestType', 'version'), ('ManifestVersion', MANIFEST_VERSION)]),
@@ -134,12 +134,17 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def release_tag(version):
+    """Windows has its own versions, apart from the Mac's v<version>, as Linux does with linux-v<version>."""
+    return f'windows-v{version}'
+
+
 def write(installer, version, output, release_date=None):
     name = installer_name(version)
     installer = pathlib.Path(installer)
     if installer.name != name:
         raise ValueError(f"{installer.name} isn't Bay {version}'s installer")
-    url = f'https://github.com/{GITHUB}/releases/download/v{version}/{name}'
+    url = f'https://github.com/{GITHUB}/releases/download/{release_tag(version)}/{name}'
     release_date = release_date or datetime.date.today().isoformat()
     output = pathlib.Path(output)
     output.mkdir(parents=True, exist_ok=True)
