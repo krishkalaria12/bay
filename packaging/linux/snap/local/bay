@@ -1,5 +1,5 @@
 #!/bin/sh
-# The snap's bay-wrapper: /snap/bin/bay is the stable name to relaunch through, not this revision's path.
-export CHROME_WRAPPER=/snap/bin/bay
+# The snap's bay-wrapper: /snap/bin/bay-browser is the stable name to relaunch through, not this revision's path.
+export CHROME_WRAPPER=/snap/bin/bay-browser
 export LD_LIBRARY_PATH="$SNAP/opt/bay${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$SNAP/opt/bay/bay" "$@"

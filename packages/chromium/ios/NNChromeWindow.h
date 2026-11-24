@@ -28,6 +28,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property(class, nonatomic, copy, nullable) BOOL (^shouldCloseHandler)(NSWindow *window);
 + (BOOL)windowShouldClose:(NSWindow *)window;
 
+// Whether the user sees `window`: not covered or left for another app; its own full-screen transitions never count.
+// Automatic Picture in Picture follows it on both engines. Each change posts NNCoreWindowSeenDidChange (object: the window).
++ (BOOL)userSeesWindow:(nullable NSWindow *)window NS_SWIFT_NAME(userSees(_:));
+
 @end
 
 NSView *_Nullable NNWindowRootView(NSWindow *_Nullable window);

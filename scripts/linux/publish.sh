@@ -1,11 +1,12 @@
 #!/bin/bash
 # Publishes the Linux packages scripts/linux/release.sh wrote (the linux-build workflow's bay-linux-packages):
 #
-#   1. signs the .rpm, then every artifact and the checksums, and adds them to the GitHub release v<version>, which the
-#      Mac release has already published;
+#   1. signs the .rpm, then every artifact and the checksums, and adds them to the GitHub release linux-v<version>.
+#      Linux has its own versions, apart from the Mac's v<version>; the release is never "latest", which the site's
+#      /download and the Mac appcast follow;
 #   2. rebuilds the signed APT and RPM repositories and the AppImage update file on the prerelease linux-repo. The
-#      packages stay on v<version>: apps/web/public/_redirects serves both at https://baybrowser.in/linux/;
-#   3. pushes bay-bin to the AUR;
+#      packages stay on linux-v<version>: apps/web/public/_redirects serves both at https://baybrowser.in/linux/;
+#   3. pushes bay-browser-bin to the AUR;
 #   4. uploads the snap to the Snap Store's stable channel, when SNAPCRAFT_STORE_CREDENTIALS is set and there's a snap.
 #
 # Flathub and nixpkgs update through pull requests: after the first, by hand, their bots open one for each release
@@ -42,16 +43,13 @@ if [[ $dry == false ]]; then
   [[ -f "${AUR_SSH_KEY:-}" ]] || die "set AUR_SSH_KEY to the AUR account's private key file"
 fi
 
-tag="v$version"
+tag="linux-v$version"
 packages=$(cd "$packages" && pwd)
-deb="bay_${version}_amd64.deb" rpm="bay-$version-1.x86_64.rpm" image="Bay-$version-x86_64.AppImage"
+deb="bay-browser_${version}_amd64.deb" rpm="bay-browser-$version-1.x86_64.rpm" image="Bay-$version-x86_64.AppImage"
 for file in SHA256SUMS "$deb" "$rpm" "bay-$version-linux-x64.tar.xz" "$image" "$image.zsync" aur/PKGBUILD aur/.SRCINFO; do
   [[ -f "$packages/$file" ]] || die "$packages has no $file: build it with release.sh --version $version"
 done
 grep -qxF $'\tpkgver = '"$version" "$packages/aur/.SRCINFO" || die "aur/.SRCINFO isn't for $version"
-if [[ $dry == false ]]; then
-  gh release view "$tag" -R "$github" >/dev/null 2>&1 || die "there is no release $tag: Linux adds its packages to the Mac release, so publish that first"
-fi
 sign() { gpg --batch --yes --local-user "$BAY_GPG_KEY" --digest-algo SHA512 "$@"; }
 
 out="$packages/publish"
@@ -77,7 +75,7 @@ gpg --armor --export --export-options export-minimal "$BAY_GPG_KEY" >"$out/repo/
 [[ -s "$out/repo/bay.gpg" ]] || die "gpg has no public key for $BAY_GPG_KEY"
 
 # APT, as a flat repository: deb [signed-by=/usr/share/keyrings/bay.gpg] https://baybrowser.in/linux/apt ./
-# Its Filename is pool/v<version>/<deb>, which the site redirects to the release's asset.
+# Its Filename is pool/linux-v<version>/<deb>, which the site redirects to the release's asset.
 apt="$out/apt"
 mkdir -p "$apt/pool/$tag"
 cp "$out/release/$deb" "$apt/pool/$tag/"
@@ -96,7 +94,7 @@ sign --clearsign --output "$apt/InRelease" "$apt/Release"
 sign --armor --detach-sign --output "$apt/Release.gpg" "$apt/Release"
 cp "$apt"/{Packages,Packages.gz,Release,InRelease,Release.gpg} "$out/repo/"
 
-# RPM, for dnf and zypper: baseurl https://baybrowser.in/linux/rpm, packages at pool/v<version>/<rpm> as above.
+# RPM, for dnf and zypper: baseurl https://baybrowser.in/linux/rpm, packages at pool/linux-v<version>/<rpm> as above.
 rpmrepo="$out/rpm"
 mkdir -p "$rpmrepo/pool/$tag"
 cp "$out/release/$rpm" "$rpmrepo/pool/$tag/"
@@ -137,11 +135,20 @@ if [[ $dry == true ]]; then
   ls "$out/release"
   echo "For linux-repo:"
   ls "$out/repo"
-  echo "For the AUR (bay-bin):"
+  echo "For the AUR (bay-browser-bin):"
   ls -A "$packages/aur"
   exit 0
 fi
 
+if ! gh release view "$tag" -R "$github" >/dev/null 2>&1; then
+  notes="$repo/release-notes/linux/$version.md"
+  if [[ ! -f "$notes" ]]; then
+    notes="$out/notes.md"
+    echo "Bay $version for Linux. Install it with your package manager: https://github.com/$github/blob/main/docs/linux-install.md" >"$notes"
+  fi
+  gh release create "$tag" -R "$github" --latest=false --target "${GITHUB_SHA:-$(git -C "$repo" rev-parse HEAD)}" \
+    --title "Bay $version for Linux" --notes-file "$notes"
+fi
 gh release upload "$tag" -R "$github" --clobber "$out/release"/*
 
 if ! gh release view linux-repo -R "$github" >/dev/null 2>&1; then
@@ -171,18 +178,18 @@ aur=$(mktemp -d)
 trap 'rm -rf "$aur"' EXIT
 echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" >"$aur/known_hosts"
 export GIT_SSH_COMMAND="ssh -i $AUR_SSH_KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$aur/known_hosts -o StrictHostKeyChecking=yes"
-git clone -q ssh://aur@aur.archlinux.org/bay-bin.git "$aur/bay-bin"
-cp "$packages/aur/PKGBUILD" "$packages/aur/.SRCINFO" "$aur/bay-bin/"
-cd "$aur/bay-bin"
+git clone -q ssh://aur@aur.archlinux.org/bay-browser-bin.git "$aur/bay-browser-bin"
+cp "$packages/aur/PKGBUILD" "$packages/aur/.SRCINFO" "$aur/bay-browser-bin/"
+cd "$aur/bay-browser-bin"
 git add PKGBUILD .SRCINFO
 if git diff --cached --quiet; then
-  echo "The AUR already has bay-bin $version"
+  echo "The AUR already has bay-browser-bin $version"
 else
-  git -c user.name="Krish Kalaria" -c user.email="krishkalaria12@users.noreply.github.com" commit -q -m "bay-bin $version"
+  git -c user.name="Krish Kalaria" -c user.email="krishkalaria12@users.noreply.github.com" commit -q -m "bay-browser-bin $version"
   git push -q origin HEAD:master
 fi
 cd "$packages"
-snap="bay_${version}_amd64.snap"
+snap="bay-browser_${version}_amd64.snap"
 if [[ -n "${SNAPCRAFT_STORE_CREDENTIALS:-}" && -f "$snap" ]]; then
   snapcraft upload --release=stable "$snap"
 elif [[ -f "$snap" ]]; then
