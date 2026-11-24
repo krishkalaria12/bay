@@ -2,7 +2,7 @@
 # docs/shared-desktop-core-plan.html, Phase 0.
 [workspace]
 resolver = "3"
-members = ["bay-desktop"]
+members = ["bay-desktop", "bay-lists"]
 
 [workspace.package]
 edition = "2024"
@@ -11,6 +11,12 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 bay-adblock = { path = "../adblock" }
+bay-lists = { path = "bay-lists" }
+memmap2 = "0.9"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
 
 # The blocker's adblock-rust carries one change (packages/adblock/vendor/README.md); patches apply from the root.
 [patch.crates-io]
