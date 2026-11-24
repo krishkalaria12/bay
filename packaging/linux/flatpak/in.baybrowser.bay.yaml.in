@@ -1,8 +1,8 @@
 # Bay for Flathub, from the release tarball. scripts/linux/release.sh --formats flatpak fills in the version and
-# checksum and writes this with the files beside it: that folder is the flathub/in.krishkalaria.bay repository.
+# checksum and writes this with the files beside it: that folder is the flathub/in.baybrowser.bay repository.
 # Chromium's own sandbox can't run in Flatpak, so zypak runs it through Flatpak's sandbox instead, and cobalt (from the
 # Chromium base app) starts Bay with it, as Flathub's other Chromium browsers do.
-app-id: in.krishkalaria.bay
+app-id: in.baybrowser.bay
 runtime: org.freedesktop.Platform
 runtime-version: "26.08"
 sdk: org.freedesktop.Sdk
@@ -65,15 +65,15 @@ modules:
       - install -Dm 755 bay.sh /app/bin/bay
       - install -Dm 644 -t /app/etc cobalt.ini
       - >-
-        sed -e 's|^Exec=/usr/bin/bay|Exec=bay|' -e '/^TryExec=/d' -e 's|^Icon=bay$|Icon=in.krishkalaria.bay|'
-        usr/share/applications/bay.desktop | install -Dm 644 /dev/stdin /app/share/applications/in.krishkalaria.bay.desktop
+        sed -e 's|^Exec=/usr/bin/bay|Exec=bay|' -e '/^TryExec=/d' -e 's|^Icon=bay$|Icon=in.baybrowser.bay|'
+        usr/share/applications/bay.desktop | install -Dm 644 /dev/stdin /app/share/applications/in.baybrowser.bay.desktop
       - >-
         for icon in usr/share/icons/hicolor/*/apps/bay.*; do
-        install -Dm 644 "$icon" "/app/${icon#usr/}"; mv "/app/${icon#usr/}" "$(dirname "/app/${icon#usr/}")/in.krishkalaria.bay.${icon##*.}";
+        install -Dm 644 "$icon" "/app/${icon#usr/}"; mv "/app/${icon#usr/}" "$(dirname "/app/${icon#usr/}")/in.baybrowser.bay.${icon##*.}";
         done
       - >-
-        sed 's|<launchable type="desktop-id">bay.desktop</launchable>|<launchable type="desktop-id">in.krishkalaria.bay.desktop</launchable>|'
-        usr/share/metainfo/in.krishkalaria.bay.metainfo.xml | install -Dm 644 /dev/stdin /app/share/metainfo/in.krishkalaria.bay.metainfo.xml
+        sed 's|<launchable type="desktop-id">bay.desktop</launchable>|<launchable type="desktop-id">in.baybrowser.bay.desktop</launchable>|'
+        usr/share/metainfo/in.baybrowser.bay.metainfo.xml | install -Dm 644 /dev/stdin /app/share/metainfo/in.baybrowser.bay.metainfo.xml
     sources:
       - type: archive
         url: https://github.com/krishkalaria12/bay/releases/download/linux-v@VERSION@/bay-@VERSION@-linux-x64.tar.xz

@@ -1,0 +1,268 @@
+diff --git a/chrome/install_static/user_data_dir.cc b/chrome/install_static/user_data_dir.cc
+--- a/chrome/install_static/user_data_dir.cc
++++ b/chrome/install_static/user_data_dir.cc
+@@ -71,6 +71,21 @@
+                                   invalid_supplied_directory);
+ }
+ 
++// Bay's Microsoft Store package. Windows keeps the files a package creates in
++// AppData private but lets it change the ones already there, so it can't share
++// the installer's folder: both copies would open one profile, each blind to
++// the other's lock.
++bool IsBayPackage() {
++  // Looked up rather than imported, as chrome_elf's imports are fixed.
++  using GetCurrentPackageFamilyNameFunction = LONG(WINAPI*)(UINT32*, PWSTR);
++  const auto get_name = reinterpret_cast<GetCurrentPackageFamilyNameFunction>(
++      ::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"),
++                       "GetCurrentPackageFamilyName"));
++  UINT32 length = 0;
++  // Outside a package this fails with APPMODEL_ERROR_NO_PACKAGE.
++  return get_name && get_name(&length, nullptr) == ERROR_INSUFFICIENT_BUFFER;
++}
++
+ // Populates |result| with the default User Data directory for the current
+ // user. Returns false if all attempts at locating a User Data directory fail.
+ // TODO(ananta)
+@@ -99,7 +114,7 @@
+     result->push_back(L'\\');
+   AppendChromeInstallSubDirectory(mode, true /* include_suffix */, result);
+   result->push_back(L'\\');
+-  result->append(L"User Data");
++  result->append(IsBayPackage() ? L"Store User Data" : L"User Data");
+   return true;
+ }
+ 
+diff --git a/chrome/installer/util/install_util.h b/chrome/installer/util/install_util.h
+--- a/chrome/installer/util/install_util.h
++++ b/chrome/installer/util/install_util.h
+@@ -87,6 +87,10 @@
+   // CLSID registered.
+   static bool IsStartMenuShortcutWithActivatorGuidInstalled();
+ 
++  // Bay: the app ID Windows knows this process by when it runs from Bay's
++  // Microsoft Store package (<package family name>!Bay), or empty outside one.
++  static const std::wstring& GetPackageAppUserModelId();
++
+   // Returns true if the current process has the interactive user token. False
+   // otherwise.
+   static bool IsRunningAsInteractiveUser();
+diff --git a/chrome/installer/util/install_util.cc b/chrome/installer/util/install_util.cc
+--- a/chrome/installer/util/install_util.cc
++++ b/chrome/installer/util/install_util.cc
+@@ -9,6 +9,7 @@
+ 
+ #include <windows.h>
+ 
++#include <appmodel.h>
+ #include <shellapi.h>
+ #include <shlobj.h>
+ 
+@@ -22,6 +23,7 @@
+ #include "base/files/file_util.h"
+ #include "base/logging.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/no_destructor.h"
+ #include "base/notreached.h"
+ #include "base/path_service.h"
+ #include "base/process/launch.h"
+@@ -296,6 +298,31 @@
+ }
+ 
+ // static
++const std::wstring& InstallUtil::GetPackageAppUserModelId() {
++  static const base::NoDestructor<std::wstring> id([] {
++    // Looked up rather than imported, so the binaries' imports stay as they
++    // are.
++    const auto get_id =
++        reinterpret_cast<decltype(&::GetCurrentApplicationUserModelId)>(
++            ::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"),
++                             "GetCurrentApplicationUserModelId"));
++    UINT32 length = 0;
++    // Outside a package this fails with APPMODEL_ERROR_NO_APPLICATION.
++    if (!get_id || get_id(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER ||
++        !length) {
++      return std::wstring();
++    }
++    std::wstring value(length, L'\0');
++    if (get_id(&length, value.data()) != ERROR_SUCCESS || !length) {
++      return std::wstring();
++    }
++    value.resize(length - 1);  // `length` counts the terminating null.
++    return value;
++  }());
++  return *id;
++}
++
++// static
+ bool InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled() {
+   base::FilePath shortcut_path;
+ 
+diff --git a/chrome/installer/util/shell_util.cc b/chrome/installer/util/shell_util.cc
+--- a/chrome/installer/util/shell_util.cc
++++ b/chrome/installer/util/shell_util.cc
+@@ -937,6 +937,22 @@
+   }
+ 
+   return shortcut_properties;
++}
++
++// Bay's Microsoft Store package: whether `prog_id`, a default handler Windows
++// reports, opens this package's app. A package's handlers are ProgIDs Windows
++// names itself (AppX...), each recording its app's ID.
++bool IsPackageProgId(const wchar_t* prog_id) {
++  const std::wstring& package_id = InstallUtil::GetPackageAppUserModelId();
++  if (package_id.empty())
++    return false;
++  base::win::RegKey key;
++  std::wstring app_id;
++  return key.Open(HKEY_CLASSES_ROOT,
++                  base::StrCat({prog_id, L"\\Application"}).c_str(),
++                  KEY_QUERY_VALUE) == ERROR_SUCCESS &&
++         key.ReadValue(L"AppUserModelID", &app_id) == ERROR_SUCCESS &&
++         app_id == package_id;
+ }
+ 
+ // Probes default handler registration (in a manner appropriate for the current
+@@ -987,7 +1003,8 @@
+       return ShellUtil::NOT_DEFAULT;
+     const bool is_pdf = type == AT_FILEEXTENSION && identifier == L".pdf";
+     if (browser_prog_id.compare(current_app) == 0 ||
+-        (is_pdf && pdf_prog_id.compare(current_app) == 0)) {
++        (is_pdf && pdf_prog_id.compare(current_app) == 0) ||
++        IsPackageProgId(current_app.get())) {
+       continue;
+     }
+ 
+@@ -1807,8 +1824,12 @@
+ 
+ std::wstring ShellUtil::GetBrowserModelId(bool is_per_user_install) {
+   std::wstring app_id(install_static::GetBaseAppId());
+-  if (UsesBayRegistrationIdentity())
+-    return app_id;
++  if (UsesBayRegistrationIdentity()) {
++    // A Microsoft Store copy's windows, taskbar pins and toasts belong to its
++    // package, which Windows knows by the package's app ID.
++    const std::wstring& package_id = InstallUtil::GetPackageAppUserModelId();
++    return package_id.empty() ? app_id : package_id;
++  }
+   std::wstring suffix;
+ 
+   // TODO(robertshield): Temporary hack to make the kRegisterChromeBrowserSuffix
+@@ -1910,6 +1931,20 @@
+     const base::FilePath& chrome_exe) {
+   if (!install_static::SupportsSetAsDefaultBrowser())
+     return false;
++
++  // Bay's Microsoft Store package declares its handlers in its manifest, and
++  // Windows 11's Settings can open on the package's own page.
++  if (const std::wstring& package_id = InstallUtil::GetPackageAppUserModelId();
++      !package_id.empty()) {
++    if (GetChromeDefaultState() == IS_DEFAULT)
++      return true;
++    if (base::win::GetVersion() >= base::win::Version::WIN11 &&
++        base::win::LaunchSettingsUri(base::StrCat(
++            {L"ms-settings:defaultapps?registeredAUMID=", package_id}))) {
++      return true;
++    }
++    return base::win::LaunchDefaultAppsSettingsModernDialog(L"http");
++  }
+ 
+   if (!RegisterChromeBrowser(chrome_exe, std::wstring(), true))
+     return false;
+diff --git a/chrome/browser/notifications/notification_platform_bridge_win.cc b/chrome/browser/notifications/notification_platform_bridge_win.cc
+--- a/chrome/browser/notifications/notification_platform_bridge_win.cc
++++ b/chrome/browser/notifications/notification_platform_bridge_win.cc
+@@ -373,6 +373,11 @@
+     // Check that experiment to use PWA icons in notifications is enabled. If
+     // not, just return GetBrowserAppId().
+     if (!base::FeatureList::IsEnabled(features::kAppSpecificNotifications)) {
++      return GetBrowserAppId();
++    }
++    // Bay's Microsoft Store package: web apps' Start menu shortcuts stay in the
++    // package's private AppData, so Windows only knows the package's app.
++    if (!InstallUtil::GetPackageAppUserModelId().empty()) {
+       return GetBrowserAppId();
+     }
+     webapps::AppId web_app_id =
+@@ -831,9 +836,12 @@
+       NotificationPlatformBridge::NotificationBridgeReadyCallback callback) {
+     DCHECK(notification_task_runner_->RunsTasksInCurrentSequence());
+ 
+-    bool activator_registered = IsToastActivatorRegistered();
++    // Bay's Microsoft Store package declares the activator and its app in its
++    // manifest, not in the registry and a Start menu shortcut.
++    const bool packaged = !InstallUtil::GetPackageAppUserModelId().empty();
++    bool activator_registered = packaged || IsToastActivatorRegistered();
+     bool shortcut_installed =
+-        InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled();
++        packaged || InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled();
+ 
+     int status = static_cast<int>(SetReadyCallbackStatus::kSuccess);
+     bool enabled = activator_registered && shortcut_installed;
+diff --git a/chrome/browser/shortcuts/platform_util_win.cc b/chrome/browser/shortcuts/platform_util_win.cc
+--- a/chrome/browser/shortcuts/platform_util_win.cc
++++ b/chrome/browser/shortcuts/platform_util_win.cc
+@@ -4,8 +4,16 @@
+ 
+ #include "chrome/browser/shortcuts/platform_util_win.h"
+ 
++#include <windows.h>
++
++#include <appmodel.h>
++
++#include <string>
++
++#include "base/base_paths.h"
+ #include "base/check.h"
+ #include "base/files/file_path.h"
++#include "base/no_destructor.h"
+ #include "base/path_service.h"
+ 
+ namespace shortcuts {
+@@ -15,9 +23,46 @@
+ constexpr base::FilePath::CharType kChromeProxyExecutable[] =
+     FILE_PATH_LITERAL("chrome_proxy.exe");
+ 
++// Bay's Microsoft Store package: the app execution alias its manifest declares
++// (packaging/windows/msix), which starts Bay inside the package from anywhere.
++constexpr base::FilePath::CharType kPackageAlias[] =
++    FILE_PATH_LITERAL("baybrowser.exe");
++
++// The running package's family name, or empty outside a package.
++std::wstring GetPackageFamilyName() {
++  // Looked up rather than imported, so chrome.dll's imports stay as they are.
++  const auto get_name =
++      reinterpret_cast<decltype(&::GetCurrentPackageFamilyName)>(
++          ::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"),
++                           "GetCurrentPackageFamilyName"));
++  UINT32 length = 0;
++  if (!get_name || get_name(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER ||
++      !length) {
++    return std::wstring();
++  }
++  std::wstring name(length, L'\0');
++  if (get_name(&length, name.data()) != ERROR_SUCCESS || !length) {
++    return std::wstring();
++  }
++  name.resize(length - 1);  // `length` counts the terminating null.
++  return name;
++}
++
+ }  // namespace
+ 
+ base::FilePath GetChromeProxyPath() {
++  // Started from the package's own folder, Bay would run outside the package:
++  // another app to Windows, without the package's data. A Store copy's
++  // shortcuts go through the alias Windows keeps in the user's WindowsApps.
++  static const base::NoDestructor<std::wstring> family(GetPackageFamilyName());
++  base::FilePath local_app_data;
++  if (!family->empty() &&
++      base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data)) {
++    return local_app_data.Append(FILE_PATH_LITERAL("Microsoft"))
++        .Append(FILE_PATH_LITERAL("WindowsApps"))
++        .Append(*family)
++        .Append(kPackageAlias);
++  }
+   base::FilePath chrome_dir;
+   CHECK(base::PathService::Get(base::DIR_EXE, &chrome_dir));
+   return chrome_dir.Append(kChromeProxyExecutable);

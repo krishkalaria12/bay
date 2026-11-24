@@ -166,12 +166,12 @@ before the first Linux release. Users set it up with `docs/linux-install.md`.
 
 After the first release:
 
-4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.krishkalaria.bay.metainfo.xml`
+4. **Flathub.** First add two or three screenshots of Bay on Linux to `packaging/linux/in.baybrowser.bay.metainfo.xml`
    (`<screenshots>`, with images at stable `https://baybrowser.in/...` URLs): Flathub's linter refuses an app
    without them, and the site's are the Mac app's. Then fork `flathub/flathub`, branch from `new-pr`, add the files from `bay-linux-packages/flatpak/` and open a
-   pull request into `new-pr` titled "Add in.krishkalaria.bay". Reviewers build it and may ask for changes; once it's
-   merged, Flathub makes `flathub/in.krishkalaria.bay` and you're its maintainer. For the verified badge, sign in at
-   flathub.org and verify the domain `krishkalaria.in`, which the app ID names.
+   pull request into `new-pr` titled "Add in.baybrowser.bay". Reviewers build it and may ask for changes; once it's
+   merged, Flathub makes `flathub/in.baybrowser.bay` and you're its maintainer. For the verified badge, sign in at
+   flathub.org and verify the domain `baybrowser.in`, which the app ID names.
 5. **Snap Store.** Register the name (`bay` was taken, so it's `bay-browser`) and ask for the sandbox, which
    Chromium-based snaps need and the store grants by hand: a post in forum.snapcraft.io's "store-requests" asking for
    `browser-support` with `allow-sandbox` for `bay-browser`. Mention the `mpris` slot too: it's named `bay`, which isn't
@@ -191,6 +191,92 @@ After the first release:
    request.
 
 The `.deb` doesn't add the APT repository on its own, so a `.deb` installed by hand doesn't update.
+
+## Windows
+
+Windows has its own versions, apart from the Mac's, as Linux does: its installer goes on the release
+`windows-v<version>`, which `publish.py` creates and never marks latest (the site's `/download` and the Mac appcast
+follow the latest release). Notes for it can go in `release-notes/windows/<version>.md`, which become the release's
+notes. The installer is unsigned (Bay has no code-signing certificate yet), so its own
+updater is off and it reaches people through winget, which takes unsigned installers and usually installs without the
+SmartScreen prompt a downloaded installer gets. One run of `.github/workflows/windows-build.yml` builds (or reuses) the
+engine and packages the installer, then its **publish** job runs `scripts/windows/publish.py`:
+
+```bash
+gh workflow run windows-build.yml -f version=<version> -f publish=true
+```
+
+Its **plan** job fails at once, before the engine, if the version isn't X.Y.Z, `windows-v<version>` already has its
+installer or `WINGET_TOKEN` isn't set. A published installer is never replaced, because winget pins its checksum; to
+retry a release whose winget pull request never opened, delete the installer and its `.sha256` from the release
+first. A release must pass the launch check that's only advisory in a test build, and is packaged on
+the stable channel. A release run has its own concurrency group, so a `windows-build-N` tag pushed meanwhile neither
+cancels it nor is cancelled by it.
+
+What a release publishes:
+
+| Where | What |
+|---|---|
+| Release `windows-v<version>` | `Bay-<version>-windows-x64-setup.exe` and its `.sha256` |
+| `microsoft/winget-pkgs` | a pull request adding `BayBrowser.Bay` `<version>`: the manifests from `scripts/windows/winget.py`, which point at the release's installer |
+
+winget-pkgs' bots install the package in a sandbox and a moderator merges it, which takes a few days for the first
+version; later versions of an existing package usually go faster. `publish.py` skips the pull
+request when winget-pkgs already has the version. People install with
+`winget install BayBrowser.Bay` (or `winget install bay`) and update with `winget upgrade BayBrowser.Bay`.
+
+To see the manifests a release would submit without uploading anything, put an X.Y.Z installer and its `.sha256` from
+`package.ps1` in a folder and run `python scripts/windows/publish.py --release <folder> --version <version> --dry-run`;
+they're written to `<folder>/winget`.
+
+### One-time setup
+
+1. **winget token.** wingetcreate forks `microsoft/winget-pkgs` into the token's account and opens each pull request
+   from there. Make a classic personal access token (github.com › Settings › Developer settings › Tokens (classic))
+   with only `public_repo`, no expiry or a long one, and store it:
+
+   ```bash
+   gh secret set WINGET_TOKEN
+   ```
+
+2. **Agreement.** The first pull request asks its author to accept Microsoft's contributor license agreement in a
+   comment; reply as the bot says. Later pull requests don't ask again.
+
+### Microsoft Store
+
+Every run of `windows-build.yml` also packs an MSIX (`package.ps1 -Msix`, `scripts/windows/msix.py`) into the
+artifact `bay-windows-msix`: `Bay-<version>-windows-x64.msix` for the Store, and `-sideload.msix` with
+`Bay-sideload.cer`, the same package signed by a throwaway certificate so it installs without the Store. The step is
+allowed to fail without stopping the installer. The Store signs what it publishes and updates it, so the package leaves
+out the in-app updater; its files stay unsigned. Submit a release run's package (version `X.Y.Z.0`): each submission's
+version has to be higher than the last, and the Store refuses a last part other than 0.
+
+To try a package before the Store has it: download `bay-windows-msix`, trust the certificate once from an
+administrator PowerShell, then open the `-sideload.msix`:
+
+```powershell
+Import-Certificate -FilePath Bay-sideload.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+```
+
+#### One-time setup
+
+1. **Partner Center.** Enrol at storedeveloper.microsoft.com as an individual (free, with an ID check), then Apps and
+   games › New product › MSIX or PWA app, and reserve the name (Bay, or Bay Browser if it's taken).
+2. **Identity.** Product management › Product identity lists `Package/Identity/Name`, `Package/Identity/Publisher` and
+   `Package/Properties/PublisherDisplayName`. Store them, so the next build's package is the Store's:
+
+   ```bash
+   gh variable set BAY_MSIX_NAME --body '<Package/Identity/Name>'
+   gh variable set BAY_MSIX_PUBLISHER --body '<Package/Identity/Publisher>'
+   gh variable set BAY_MSIX_PUBLISHER_DISPLAY_NAME --body '<Package/Properties/PublisherDisplayName>'
+   ```
+
+   Until then the package is `BayBrowser.Bay` by `CN=BayBrowser`, for sideloading only.
+3. **First submission.** Pricing: free. Properties: category Productivity, and the privacy policy URL `https://baybrowser.in/privacy/`, which Bay needs since it uses
+   the internet. Age ratings: the questionnaire (unrestricted web access). Packages: the `.msix`. Store listing: the
+   description and at least one screenshot of Bay on Windows. Submission options: explain `runFullTrust`, e.g. "Bay is
+   a Chromium-based desktop web browser; its multi-process, sandboxed engine runs as a full-trust desktop app."
+   Certification takes a few days. Later versions are a new submission with the new package.
 
 ## Reading a Linux or Windows crash report
 

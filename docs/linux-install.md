@@ -29,10 +29,10 @@ sudo zypper install bay-browser
 
 ## Flatpak (any distribution)
 
-Bay is `in.krishkalaria.bay` on Flathub, so GNOME Software and KDE Discover list it too:
+Bay is `in.baybrowser.bay` on Flathub, so GNOME Software and KDE Discover list it too:
 
 ```bash
-flatpak install flathub in.krishkalaria.bay
+flatpak install flathub in.baybrowser.bay
 ```
 
 ## Snap (any distribution with snapd)
