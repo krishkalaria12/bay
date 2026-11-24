@@ -410,6 +410,7 @@
       <nav aria-label="Contents">
         <strong>Plan</strong>
         <ol>
+          <li><a href="#progress">Progress</a></li>
           <li><a href="#today">1. Where Bay stands</a></li>
           <li class="sub"><a href="#copies">Where the copies are</a></li>
           <li><a href="#rules">2. What goes where</a></li>
@@ -438,10 +439,88 @@
             A last phase decides whether macOS moves onto the WebUI host as well.
           </p>
           <p class="meta">
-            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Windows and Linux are built and pass runtime acceptance. Nothing in this
-            plan is built yet. Line counts are tracked files without fixtures or vendored code, rounded.
+            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Windows and Linux are built and pass runtime acceptance. Work happens
+            on <code>refactor/shared-desktop-core</code>; <a href="#progress">Progress</a> says what is built. Line counts are tracked files without
+            fixtures or vendored code, rounded.
           </p>
         </header>
+
+        <section id="progress" aria-labelledby="progress-h">
+          <h2 id="progress-h">Progress</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Phase</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0 · Groundwork</td>
+                  <td>
+                    Partly. Built: the <code>packages/rust</code> workspace, <code>bay-desktop</code> linked by the macOS pod and by
+                    <code>scripts/engine.py</code> and <code>webui/BUILD.gn</code>, the <code>portable/</code> renames, the sync vector at
+                    <code>packages/sync/fixtures/golden.json</code>, Rust checks in <code>ci.yml</code>. Open: see Known gaps.
+                  </td>
+                  <td>
+                    The Release app built and linked; <code>bay-desktop</code> exports the same 363 symbols as the old adblock archive; Python build tests;
+                    the Linux sync, service and import checks run on macOS; Windows and Linux Rust targets type-check. No Windows or Linux engine build yet.
+                  </td>
+                </tr>
+                <tr>
+                  <td>1 · Filter lists</td>
+                  <td>
+                    Built. <code>bay-lists</code> owns the catalogue, settings, list files, freshness and the cached engine; both
+                    <code>NNCoreContentBlocker.mm</code> (928 → 640 lines) and <code>content_blocker.cc</code> (1083 → 833) call it. The engine format is
+                    <code>bay-adblock 6</code> everywhere; Windows and Linux had drifted to 5, so their engine rebuilds once.
+                  </td>
+                  <td>
+                    19 Rust tests; the native blocker harness (9 checks); the Release app blocks an ad request on a new data folder and loads its engine
+                    from the cache on the next launch (300 → 27 ms). The Windows and Linux sources pass a Chromium syntax check with the macOS tree's
+                    flags, not a Windows or Linux build.
+                  </td>
+                </tr>
+                <tr>
+                  <td>2 – 6</td>
+                  <td>Not started.</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 id="gaps">Known gaps</h3>
+          <ul class="prose">
+            <li>
+              <strong>Windows and Linux builds.</strong> Neither engine has been built with these changes. Start a <code>windows-build-N</code> and a
+              <code>linux-build-N</code> run, then check the blocker on both: first launch offline, a list turning on, a paused site, Settings › Privacy.
+            </li>
+            <li>
+              <strong>Contract coverage</strong> isn't built. Reading the methods out of the sources doesn't work: the WebUI host registers them at run
+              time across many files, and the Swift modules don't all use one pattern. It needs a runtime report instead: each host lists what it
+              registered (the web host's <code>getNativeHostInfo</code>, the Expo modules' exports), checked by the acceptance scripts.
+            </li>
+            <li>
+              <strong>Recorded outputs.</strong> Only the sync vector is in place. The import Wire JSON per fixture profile still has to be recorded
+              from both readers before Phase 3.
+            </li>
+            <li><strong>SQLite link spike</strong> for <code>bay-import</code> isn't done (decision 1).</li>
+            <li>
+              <strong>The request filter's hot path</strong> (<code>Filter</code>, <code>Response</code>, the body and header filters,
+              <code>HostOf</code>, <code>Covers</code>) is still written twice, in <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code>.
+              It needs only the C ABI and the standard library, so one shared C++ header could serve both.
+            </li>
+            <li>
+              <strong>Two catalogue copies.</strong> <code>filter_lists.json</code> still ships from <code>packages/chromium/ios</code> and the phones
+              keep their own in <code>bay-core</code>; one file in <code>bay-lists</code> remains to do.
+            </li>
+            <li>
+              <strong>Dependency builds.</strong> Cargo builds every crate type a dependency lists, so <code>bay-adblock</code>'s <code>cdylib</code> is
+              linked whenever <code>bay-desktop</code> builds. The runners have linkers, so this costs time, not correctness.
+            </li>
+          </ul>
+        </section>
 
         <section id="today" aria-labelledby="today-h">
           <h2 id="today-h">1. Where Bay stands</h2>
@@ -615,9 +694,10 @@
           </div>
           <div class="callout">
             <p>
-              <strong>Rust crates are sans-IO.</strong> They don't open sockets, start threads, keep timers or read OS settings. The host fetches, schedules
-              and stores secrets, then hands bytes and the current time in. That keeps each host's networking (<code>SimpleURLLoader</code>,
-              <code>NSURLSession</code>), threading and sandbox rules as they are.
+              <strong>Rust crates don't do networking, threads or timers.</strong> They don't open sockets, start threads, keep timers or read OS
+              settings. The host fetches, schedules and stores secrets, then hands bytes and the current time in. That keeps each host's networking
+              (<code>SimpleURLLoader</code>, <code>NSURLSession</code>), threading and sandbox rules as they are. They may read and write their own files
+              in a folder the host names, off the host's main thread: that's where most of the duplicated code was.
             </p>
           </div>
         </section>
@@ -671,7 +751,6 @@
   adblock/                     bay-adblock, its own crate as today (matcher, C ABI, JNI)
   rust/
     Cargo.toml                 desktop workspace: one Cargo.lock, one target/, one release profile
-    rust-toolchain.toml        pinned toolchain for every host and CI
     bay-lists/                 filter-list catalogue, selection, updates, engine cache
     bay-sync/                  key derivation, file sealing, vault, phrase, recovery-kit data
     bay-import/                Chromium, Firefox, Arc, Zen, HTML, CSV and Safari-export readers
@@ -706,7 +785,7 @@
           </div>
           <ol class="prose">
             <li>
-              <strong>A desktop Cargo workspace.</strong> Add <code>packages/rust/Cargo.toml</code> and <code>rust-toolchain.toml</code>, with the new
+              <strong>A desktop Cargo workspace.</strong> Add <code>packages/rust/Cargo.toml</code>, with the new
               crates as members and <code>bay-adblock</code> as a path dependency. This follows mobile-core, which has its own workspace and takes
               <code>../adblock</code> by path. A single root workspace would need every crate as a member, would move <code>packages/adblock/target</code>
               (which the mobile and Android scripts read), and would clash with mobile-core's workspace. Each workspace repeats adblock's
@@ -732,8 +811,8 @@
             </li>
             <li>
               <strong>Contract coverage.</strong> Extend <code>packages/platform/scripts/native-contracts.mjs</code> to list, for each of the 321 methods,
-              whether the macOS host and the WebUI host implement it. It reads the Expo module definitions and the WebUI handler tables. CI fails when a
-              method has no implementation on a platform and no capability saying it's unsupported there. Today
+              whether the macOS host and the WebUI host implement it, from what each host registers at run time (Known gaps says why not from the
+              sources). CI fails when a method has no implementation on a platform and no capability saying it's unsupported there. Today
               <code>nativeContracts.test.mjs</code> only checks that every module has a contract.
             </li>
             <li>
@@ -796,13 +875,13 @@
               </tbody>
             </table>
           </div>
-          <div class="mock" role="img" aria-label="Sketch of the bay-lists C API">bay_lists_open(settings_json, cache_bytes, now)    -> handle
-bay_lists_tick(handle, now)                          -> actions JSON
-    fetch [{id, url}] · save_settings · save_cache · publish_engine · next_tick_at
-bay_lists_fetched(handle, id, status, bytes, now)    -> actions JSON
-bay_lists_set_enabled / _set_list / _set_allowed     -> actions JSON
-bay_lists_state(handle)                              -> state JSON (Settings › Privacy)
-bay_lists_engine(handle)                             -> blocker handle for the request filters</div>
+          <div class="mock" role="img" aria-label="The bay-lists C API as built">bay_lists_open(directory, catalogue, languages)   -> handle (catalogue + settings.json)
+bay_lists_selected / _selected_ids / _urls / _live -> JSON for builds, downloads, the request filter
+bay_lists_set_enabled / _set_list / _set_allowed / _set_page_allowed, bay_lists_save
+bay_lists_state / _stats(handle, timing)           -> Settings › Privacy
+bay_lists_seed / _absent / _due(directory, ids)    -> list files (blocking)
+bay_lists_store(directory, id, body, now)          -> 1 changed · 0 same · -1 not a list · -2 not written
+bay_lists_build(directory, lists, resources, cache) -> built engine; bay_lists_apply hands it over</div>
           <dl class="kv">
             <dt>Host keeps</dt>
             <dd>
@@ -1234,7 +1313,7 @@ bay_lists_engine(handle)                             -> blocker handle for the r
                 <tr>
                   <td>Mobile branch not merged</td>
                   <td>
-                    The desktop crates don't depend on PR #31. <code>bay-core</code> joins the workspace and drops its copies after it merges.
+                    The desktop crates don't depend on PR #31. <code>bay-core</code> takes the desktop crates by path and drops its copies after it merges.
                   </td>
                 </tr>
                 <tr>
