@@ -281,12 +281,12 @@ public struct ActionRow: View {
             }
           }
           // At the largest text sizes the value goes under the name, which would have no room beside it.
-          if let value, stacksValue { valueText(value).accessibilityIdentifier("\(testID)-value") }
+          if let value, stacksValue { BayText(value, variant: .subhead, tone: .muted).accessibilityIdentifier("\(testID)-value") }
           if let detail { BayText(detail, variant: .subhead, tone: .muted).lineLimit(2) }
         }
         Spacer(minLength: 0)
-        // Drawn again over the row, where tests can read it; this copy only holds its place, at its full width.
-        if let value, !stacksValue { valueText(value).fixedSize().hidden() }
+        // Drawn again over the row, where tests can read it; this copy only holds its place.
+        if let value, !stacksValue { valueText(value).hidden() }
         trailing
       }
       .padding(.horizontal, inset)
@@ -317,8 +317,14 @@ public struct ActionRow: View {
 
   private var stacksValue: Bool { sizeCategory.isAccessibilitySize }
 
+  /// Beside the label, at most two fifths of the screen and on up to two lines, as Android has it: at its full width a
+  /// long value ("Same as all websites (Original font)") squeezed the label into a letter a line.
   private func valueText(_ value: String) -> some View {
-    BayText(value, variant: .subhead, tone: .muted).lineLimit(1)
+    BayText(value, variant: .subhead, tone: .muted)
+      .lineLimit(2)
+      .multilineTextAlignment(.trailing)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: UIScreen.main.bounds.width * 0.4, alignment: .trailing)
   }
 
   @ViewBuilder private var trailing: some View {
