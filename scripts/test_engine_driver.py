@@ -350,6 +350,7 @@ class BuildTests(unittest.TestCase):
                     self.assertIn(f"--sysroot={sysroot}", cargo_env["CFLAGS_x86_64_unknown_linux_gnu"])
                 else:
                     self.assertFalse(any(key.startswith("CC_") for key in cargo_env))
+                    self.assertIn("-Dsqlite3_win32_sleep=bay_sqlite3_win32_sleep", cargo_env["LIBSQLITE3_FLAGS"])
                 self.assertEqual((src / "out/Release/bay_desktop" / library).read_text(), "library")
                 rename.assert_called_once_with(src, src / "out/Release/bay_desktop", library, env)
 

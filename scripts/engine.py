@@ -456,6 +456,11 @@ def generate_gn(root, env, platform="win"):
     run(["gn", "gen", lock["outputDirectory"]], cwd=src, env=env)
 
 
+SQLITE_WIN32_HELPERS = ("compact_heap", "mbcs_to_utf8", "mbcs_to_utf8_v2", "reset_heap", "set_directory",
+                        "set_directory16", "set_directory8", "sleep", "unicode_to_utf8", "utf8_to_mbcs",
+                        "utf8_to_mbcs_v2", "utf8_to_unicode", "write_debug")
+
+
 def build_rust(src, output_directory, env, platform):
     """Build Bay's desktop Rust library (packages/rust, bay-desktop) where webui/BUILD.gn links it."""
     target, library = {"win": ("x86_64-pc-windows-msvc", "bay_desktop.lib"),
@@ -464,6 +469,10 @@ def build_rust(src, output_directory, env, platform):
     if platform == "win":
         # Chrome links the static C runtime, and one binary can't mix the two.
         cargo_env["RUSTFLAGS"] = "-C target-feature=+crt-static"
+        # Chromium's SQLite renames its API but keeps the sqlite3_win32_* helpers, which bay-import's bundled SQLite
+        # also defines, so rename those in Bay's copy.
+        cargo_env["LIBSQLITE3_FLAGS"] = " ".join(f"-Dsqlite3_win32_{name}=bay_sqlite3_win32_{name}"
+                                                 for name in SQLITE_WIN32_HELPERS)
     if platform == "linux":
         # The library's C (bay-import's SQLite) is linked into Chrome against Chromium's Debian sysroot, so compile it
         # with Chromium's clang against that sysroot too: the runner's newer glibc headers turn fcntl into fcntl64,
