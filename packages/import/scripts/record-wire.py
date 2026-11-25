@@ -20,7 +20,7 @@ def main():
     spec.loader.exec_module(rust)
     archive, libraries, includes = rust.link_flags()
     openssl = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))
-    sources = [REPO / "packages/import/portable" / name for name in ("Readers.cpp", "Sessions.cpp", "Arc.cpp", "Secrets.cpp")]
+    sources = [REPO / "packages/import/portable" / name for name in ("Readers.cpp", "Secrets.cpp")]
     sources += [REPO / "packages/sync/portable/SyncCrypto.cpp", REPO / "packages/sync/portable/tests/OpenSSLBackend.cpp",
                 REPO / "packages/import/portable/tests/Dump.cpp"]
     output = REPO / "packages/import/fixtures/wire"

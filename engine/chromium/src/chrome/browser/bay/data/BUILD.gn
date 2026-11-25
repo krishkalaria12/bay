@@ -27,7 +27,6 @@ static_library("data_services") {
   sources = [
     "data_services.cc",
     "data_services.h",
-    "packages/import/portable/Arc.cpp",
     "packages/import/portable/BrowserDiscovery.cpp",
     "packages/import/portable/BrowserDiscovery.h",
     "packages/import/portable/ImportCore.h",
@@ -35,7 +34,6 @@ static_library("data_services") {
     "packages/import/portable/Readers.cpp",
     "packages/import/portable/SQLite.h",
     "packages/import/portable/Secrets.cpp",
-    "packages/import/portable/Sessions.cpp",
 
     # Sync dispatch reads engine passwords through the importer in this target.
     "packages/sync/portable/SyncService.cpp",
@@ -44,7 +42,13 @@ static_library("data_services") {
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   configs -= chromium_style_checks
-  include_dirs = [ "vendor" ]
+
+  # rust/: bay_import.h, the import readers' C ABI (Bay's desktop Rust library,
+  # linked through :sync_services).
+  include_dirs = [
+    "vendor",
+    "rust",
+  ]
 
   # Native picker adapters use the host-only sync recovery continuation API.
   public_deps = [ ":sync_services" ]

@@ -40,8 +40,6 @@ def main():
         "packages/import/portable/ImportService.cpp",
         "packages/import/portable/BrowserDiscovery.cpp",
         "packages/import/portable/Readers.cpp",
-        "packages/import/portable/Sessions.cpp",
-        "packages/import/portable/Arc.cpp",
         "packages/import/portable/Secrets.cpp",
         "packages/import/linux/ChromiumSecrets.cpp",
         "packages/import/linux/SecretService.cpp",

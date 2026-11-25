@@ -82,7 +82,7 @@ def main():
             run([binary, REPO / "packages/sync/fixtures/golden.json", root / "vault"])
         if args.suite in ("import", "all"):
             binary = root / ("import-test.exe" if windows else "import-test")
-            sources = ["packages/import/portable/Readers.cpp", "packages/import/portable/Sessions.cpp", "packages/import/portable/Arc.cpp", "packages/import/portable/Secrets.cpp", "packages/sync/portable/SyncCrypto.cpp", "packages/import/portable/tests/Readers.cpp"]
+            sources = ["packages/import/portable/Readers.cpp", "packages/import/portable/Secrets.cpp", "packages/sync/portable/SyncCrypto.cpp", "packages/import/portable/tests/Readers.cpp"]
             libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
                 sources.append("packages/sync/portable/tests/OpenSSLBackend.cpp")
@@ -97,7 +97,7 @@ def main():
                 data = layer / "data"
                 production = data / "packages"
                 sources = [data / "data_services.cc", data / "tests/Services.cpp"]
-                sources.extend(production / "import/portable" / name for name in ("ImportService.cpp", "Readers.cpp", "Sessions.cpp", "Arc.cpp", "Secrets.cpp"))
+                sources.extend(production / "import/portable" / name for name in ("ImportService.cpp", "Readers.cpp", "Secrets.cpp"))
                 sources.append(production / "import/portable/BrowserDiscovery.cpp")
                 sources.extend(production / "sync/portable" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp"))
                 libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]

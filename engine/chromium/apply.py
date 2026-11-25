@@ -83,6 +83,7 @@ def layer_source(here: Path, owned: str):
         # The sync format's C ABI, for the portable sync code (data/BUILD.gn include_dirs).
         (staged / "data/rust").mkdir(parents=True, exist_ok=True)
         shutil.copy2(repository / "packages/rust/bay-sync/include/bay_sync.h", staged / "data/rust/bay_sync.h")
+        shutil.copy2(repository / "packages/rust/bay-import/include/bay_import.h", staged / "data/rust/bay_import.h")
         # portable/ builds on Windows and Linux; linux/ holds the Linux-only adapters.
         for package in ("import", "sync"):
             for folder in ("portable", "linux"):

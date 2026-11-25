@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import shlex
 import subprocess
 import tempfile
 import sys
@@ -103,6 +104,8 @@ def main():
         for include in includes:
             command += ["-I", str(include)]
         command += [str(s) for s in sources]
+        # Readers.cpp hands its work to bay-import, in Bay's desktop Rust library.
+        command += shlex.split(subprocess.check_output([sys.executable, str(repo / "scripts/lib/rust_desktop.py")], text=True))
         command += ["/opt/homebrew/opt/openssl@3/lib/libcrypto.dylib", "-lsqlite3", "-o", str(root / "secrets-test")]
         subprocess.run(command, check=True)
         subprocess.run([str(root / "secrets-test"), str(root)], check=True)
