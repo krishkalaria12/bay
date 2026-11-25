@@ -88,7 +88,6 @@ source_set("impl") {
     "page_message_events.cc",
     "page_message_events.h",
     "page_script.g.h",
-    "page_security.cc",
     "page_security.h",
     "page_services.cc",
     "page_services.h",
@@ -708,15 +707,18 @@ test("runtime_unittests") {
 
 test("page_security_unittests") {
   sources = [
-    "page_security.cc",
+    "//bay/core/nn_page_security.cc",
+    "//bay/core/nn_page_security.h",
     "page_security.h",
     "page_security_unittest.cc",
   ]
   deps = [
+    "//base",
     "//base/test:run_all_unittests",
     "//content/public/browser",
     "//net",
     "//testing/gtest",
+    "//url",
   ]
 }
 

@@ -35,11 +35,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "net/cert/cert_status_flags.h"
-#include "net/cert/x509_certificate.h"
-#include "net/ssl/ssl_connection_status_flags.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -76,122 +72,6 @@ double Number(const base::ListValue& params,
              ? params[index].GetInt()
              : fallback;
 }
-std::string Hex(base::span<const uint8_t> bytes) {
-  std::string result;
-  for (uint8_t byte : bytes) {
-    if (!result.empty())
-      result += ':';
-    result += base::HexEncode(base::span_from_ref(byte));
-  }
-  return result;
-}
-base::DictValue Principal(const net::CertPrincipal& principal) {
-  base::ListValue organizations;
-  for (const auto& name : principal.organization_names)
-    organizations.Append(name);
-  return base::DictValue()
-      .Set("commonName", principal.common_name)
-      .Set("displayName", principal.GetDisplayName())
-      .Set("organizations", std::move(organizations))
-      .Set("country", principal.country_name);
-}
-base::DictValue SecurityInfo(content::WebContents* contents) {
-  auto* entry = contents->GetController().GetVisibleEntry();
-  const GURL url = entry ? entry->GetURL() : contents->GetVisibleURL();
-  base::DictValue info;
-  info.Set("url", url.spec());
-  info.Set("origin", url.SchemeIsHTTPOrHTTPS()
-                         ? base::Value(url::Origin::Create(url).Serialize())
-                         : base::Value());
-  if (url.SchemeIs("http") || url.SchemeIs("ws")) {
-    info.Set("level", "insecure");
-    return info;
-  }
-  if (!url.SchemeIs("https") && !url.SchemeIs("wss")) {
-    info.Set("level",
-             !url.is_empty() && url != GURL("about:blank") ? "local" : "none");
-    return info;
-  }
-  if (!entry) {
-    info.Set("level", "none");
-    return info;
-  }
-  const auto& ssl = entry->GetSSL();
-  const std::string_view level = PageSecurityLevel(ssl);
-  info.Set("level", level);
-  if (level == "none")
-    return info;
-  const auto errors = PageCertificateErrors(ssl.cert_status);
-  const bool ran =
-      ssl.content_status & (content::SSLStatus::RAN_INSECURE_CONTENT |
-                            content::SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS);
-  const bool displayed =
-      ssl.content_status &
-      (content::SSLStatus::DISPLAYED_INSECURE_CONTENT |
-       content::SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS);
-  base::ListValue names;
-  static constexpr std::pair<net::CertStatus, const char*> kErrors[] = {
-      {net::CERT_STATUS_COMMON_NAME_INVALID, "nameMismatch"},
-      {net::CERT_STATUS_DATE_INVALID, "dateInvalid"},
-      {net::CERT_STATUS_AUTHORITY_INVALID, "authorityInvalid"},
-      {net::CERT_STATUS_REVOKED, "revoked"},
-      {net::CERT_STATUS_INVALID, "invalid"},
-      {net::CERT_STATUS_WEAK_SIGNATURE_ALGORITHM, "weakSignature"},
-      {net::CERT_STATUS_NON_UNIQUE_NAME, "nonUniqueName"},
-      {net::CERT_STATUS_WEAK_KEY, "weakKey"},
-      {net::CERT_STATUS_PINNED_KEY_MISSING, "pinnedKeyMissing"},
-      {net::CERT_STATUS_NAME_CONSTRAINT_VIOLATION, "nameConstraint"},
-      {net::CERT_STATUS_VALIDITY_TOO_LONG, "validityTooLong"},
-      {net::CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED,
-       "certificateTransparency"},
-  };
-  for (const auto& [bit, name] : kErrors) {
-    if (errors & bit)
-      names.Append(name);
-  }
-  info.Set("certificateErrors", std::move(names));
-  info.Set("mixedContent", ran         ? base::Value("ran")
-                           : displayed ? base::Value("displayed")
-                                       : base::Value());
-  info.Set("isEV", (ssl.cert_status & net::CERT_STATUS_IS_EV) != 0);
-  switch (net::SSLConnectionStatusToVersion(ssl.connection_status)) {
-    case net::SSL_CONNECTION_VERSION_TLS1:
-      info.Set("protocol", "TLS 1.0");
-      break;
-    case net::SSL_CONNECTION_VERSION_TLS1_1:
-      info.Set("protocol", "TLS 1.1");
-      break;
-    case net::SSL_CONNECTION_VERSION_TLS1_2:
-      info.Set("protocol", "TLS 1.2");
-      break;
-    case net::SSL_CONNECTION_VERSION_TLS1_3:
-      info.Set("protocol", "TLS 1.3");
-      break;
-    case net::SSL_CONNECTION_VERSION_QUIC:
-      info.Set("protocol", "QUIC");
-      break;
-    default:
-      break;
-  }
-  if (const auto* cert = ssl.certificate.get()) {
-    info.Set(
-        "certificate",
-        base::DictValue()
-            .Set("subject", Principal(cert->subject()))
-            .Set("issuer", Principal(cert->issuer()))
-            .Set("validFrom",
-                 cert->valid_start().InMillisecondsFSinceUnixEpoch())
-            .Set("validUntil",
-                 cert->valid_expiry().InMillisecondsFSinceUnixEpoch())
-            .Set("chainLength",
-                 static_cast<int>(cert->intermediate_buffers().size() + 1))
-            .Set("serialNumber", Hex(cert->serial_number()))
-            .Set("sha256", Hex(net::X509Certificate::CalculateFingerprint256(
-                               cert->cert_buffer()))));
-  }
-  return info;
-}
-
 using PendingReply = base::RefCountedData<PageResponse>;
 void ReplyOnce(scoped_refptr<PendingReply> pending, base::Value value) {
   if (pending->data)
@@ -393,7 +273,7 @@ void CaptureImage(content::WebContents* contents,
 }  // namespace
 
 base::DictValue GetPageSecurityInfo(content::WebContents* contents) {
-  return SecurityInfo(contents);
+  return PageSecurityInfo(contents);
 }
 
 bool DispatchPageMethod(content::WebContents* contents,
