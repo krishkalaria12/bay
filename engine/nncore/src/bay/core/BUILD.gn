@@ -34,6 +34,8 @@ source_set("portable") {
     "nn_form_prompts.h",
     "nn_icon_download.cc",
     "nn_icon_download.h",
+    "nn_page_menu.cc",
+    "nn_page_menu.h",
     "nn_page_security.cc",
     "nn_page_security.h",
     "nn_permission_flow.cc",
@@ -43,6 +45,7 @@ source_set("portable") {
   ]
   deps = [
     "//base",
+    "//chrome/app:command_ids",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui/media_router",
     "//components/media_router/browser",
@@ -53,6 +56,7 @@ source_set("portable") {
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//third_party/blink/public/common",
+    "//ui/menus",
     "//url",
   ]
   if (!is_mac) {
@@ -141,6 +145,8 @@ if (is_mac) {
       "nn_devtools_call.h",
       "nn_icon_download.cc",
       "nn_icon_download.h",
+      "nn_page_menu.cc",
+      "nn_page_menu.h",
       "nn_page_security.cc",
       "nn_page_security.h",
       "nn_permission_flow.cc",
