@@ -163,6 +163,18 @@ fn firefox_profiles_read_as_before() {
 }
 
 #[test]
+fn arc_sidebars_read_as_before() {
+    same(
+        "arc-sidebar",
+        &bay_import::arc_sidebar(&support("Arc/StorableSidebar.json")).unwrap(),
+    );
+    same(
+        "arc-nested-sidebar",
+        &bay_import::arc_sidebar(&fixtures().join("arc/nested-sidebar.json")).unwrap(),
+    );
+}
+
+#[test]
 fn history_streams_in_chunks_stops_at_its_limit_and_can_be_cancelled() {
     let profiles = Profiles::new();
     let profile = profiles.copied(&support("Google/Chrome/Default"), "chrome");
@@ -210,4 +222,114 @@ fn history_streams_in_chunks_stops_at_its_limit_and_can_be_cancelled() {
         Cancel(&stop),
     );
     assert_eq!(cancelled.unwrap_err().code, "cancelled");
+}
+
+/// Zen's spaces in the shapes Zen 1.22 writes (the session store's window, which zen-sessions.jsonlz4 shares), as
+/// `packages/import/portable/tests/Readers.cpp` builds them.
+#[test]
+fn zen_spaces_keep_pins_folders_tabs_and_essentials_by_container() {
+    use serde_json::json;
+    let tab = |url: &str,
+               space: Option<&str>,
+               pinned: bool,
+               essential: bool,
+               group: Option<&str>,
+               empty: bool,
+               context: i64,
+               loaded: bool| {
+        let mut tab = json!({"pinned": pinned, "zenEssential": essential, "zenIsEmpty": empty, "userContextId": context, "index": 1, "entries": []});
+        if loaded {
+            tab["entries"] = json!([{"url": url, "title": url}]);
+        } else {
+            tab["userTypedValue"] = json!(url);
+        }
+        if let Some(space) = space {
+            tab["zenWorkspace"] = json!(space);
+        }
+        if let Some(group) = group {
+            tab["groupId"] = json!(group);
+        }
+        tab
+    };
+    let window = json!({
+        "spaces": [
+            {"uuid": "{home}", "name": "Home", "icon": "🏠", "containerTabId": 0, "theme": {"gradientColors": [{"c": [58, 96, 115]}]}},
+            {"uuid": "{dev}", "name": "Dev", "icon": "chrome://browser/skin/zen-icons/selectable/code.svg", "containerTabId": 0},
+            {"uuid": "{meet}", "name": "Meetings", "containerTabId": 2},
+        ],
+        "folders": [
+            {"id": "docs", "name": "Docs", "workspaceId": "{dev}", "parentId": null},
+            {"id": "react", "name": "React", "workspaceId": "{dev}", "parentId": "docs"},
+        ],
+        "tabs": [
+            tab("https://github.com/", None, true, true, None, false, 0, true),
+            tab("https://app.slack.com/", None, true, true, None, false, 0, false),
+            tab("https://work.example/", None, true, true, None, false, 2, true),
+            tab("https://news.ycombinator.com/", Some("{home}"), true, false, None, false, 0, true),
+            tab("https://developer.mozilla.org/", Some("{dev}"), true, false, None, false, 0, true),
+            tab("about:blank", None, true, false, Some("docs"), true, 0, true),
+            tab("https://nodejs.org/", Some("{dev}"), true, false, Some("docs"), false, 0, true),
+            tab("https://react.dev/", Some("{dev}"), true, false, Some("react"), false, 0, true),
+            tab("https://linear.app/", Some("{dev}"), true, false, None, false, 0, false),
+            tab("https://example.com/", Some("{home}"), false, false, None, false, 0, true),
+            tab("about:blank", Some("{home}"), false, false, None, true, 0, true),
+            tab("https://meet.google.com/", Some("{meet}"), true, false, None, false, 0, true),
+        ],
+    });
+    let profile = tempfile::tempdir().unwrap();
+    std::fs::write(
+        profile.path().join("sessionstore.js"),
+        json!({"windows": [window]}).to_string(),
+    )
+    .unwrap();
+    let spaces = bay_import::zen_spaces(profile.path(), "Profiles/abc.Default").unwrap();
+    assert_eq!(spaces.as_array().unwrap().len(), 3);
+    assert_eq!(
+        (spaces[0]["name"].as_str(), spaces[0]["profileId"].as_str()),
+        (Some("Home"), Some("Profiles/abc.Default"))
+    );
+    assert_eq!(
+        spaces[0]["pinned"],
+        json!([{"type": "url", "title": "https://news.ycombinator.com/", "url": "https://news.ycombinator.com/"}])
+    );
+    assert_eq!(spaces[0]["tabs"].as_array().unwrap().len(), 1);
+    assert_eq!(spaces[0]["tabs"][0]["url"], "https://example.com/");
+    let dev = &spaces[1]["pinned"];
+    assert_eq!(dev.as_array().unwrap().len(), 3);
+    assert_eq!(
+        (dev[1]["type"].as_str(), dev[1]["title"].as_str()),
+        (Some("folder"), Some("Docs"))
+    );
+    assert_eq!(dev[1]["children"][0]["url"], "https://nodejs.org/");
+    assert_eq!(dev[1]["children"][1]["title"], "React");
+    assert_eq!(dev[2]["url"], "https://linear.app/");
+    assert_eq!(spaces[0]["favorites"].as_array().unwrap().len(), 2);
+    assert_eq!(spaces[0]["favorites"][1]["url"], "https://app.slack.com/");
+    assert_eq!(
+        spaces[2]["favorites"],
+        json!([{"url": "https://work.example/", "title": "https://work.example/", "pinned": true, "windowIndex": 0, "active": false}])
+    );
+    assert_eq!(
+        (spaces[0]["emoji"].as_str(), spaces[0]["color"].as_str()),
+        (Some("🏠"), Some("#3A6073"))
+    );
+    assert!(spaces[1].get("emoji").is_none());
+    let stop = AtomicBool::new(false);
+    let open = bay_import::firefox_tabs(profile.path(), Cancel(&stop)).unwrap();
+    assert!(
+        open["tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tab| tab["url"] != "about:blank")
+    );
+    std::fs::write(
+        profile.path().join("sessionstore.js"),
+        r#"{"windows":[{"tabs":[{"entries":[{"url":"https://a.test/"}],"index":1}]}]}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        bay_import::zen_spaces(profile.path(), "p").unwrap(),
+        json!([])
+    );
 }

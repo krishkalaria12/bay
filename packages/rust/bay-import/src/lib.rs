@@ -6,14 +6,18 @@
 //! into Bay's own profile, and the macOS-only sources (Safari, Dia). Every reader is checked against what the C++
 //! readers answered for the shared fixtures (`packages/import/fixtures/wire`).
 
+mod arc;
 mod failure;
 pub mod ffi;
 mod readers;
+mod sessions;
 mod snapshot;
 
+pub use arc::arc_sidebar;
 pub use failure::Failure;
 pub use readers::{
     Cancel, HistoryOptions, chromium_bookmarks, chromium_time, extensions, firefox_bookmarks,
     history, parse_netscape_bookmarks, parse_passwords_csv,
 };
+pub use sessions::{chromium_tabs, firefox_tabs, zen_spaces};
 pub use snapshot::Snapshot;
