@@ -1,5 +1,7 @@
 # bay-sync's C ABI (packages/rust/bay-sync), imported as BaySyncFFI; the app links the library (BayNNCore.podspec).
 ffi = File.expand_path('../ffi', __dir__)
+# BayImport's module, which this pod imports, depends on BayImportFFI.
+import_ffi = File.expand_path('../../import/ffi', __dir__)
 
 Pod::Spec.new do |s|
   s.name           = 'BaySync'
@@ -18,7 +20,7 @@ Pod::Spec.new do |s|
   # Core/ is plain Swift with no Expo dependency; it's also built and tested on its own by
   # ../Package.swift (`pnpm --filter @bay/sync test`).
   s.source_files   = 'SyncModule.swift', 'Core/**/*.swift'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\" \"#{import_ffi}\"" }
   # The app imports BaySync, whose module depends on BaySyncFFI, so it needs the path too.
   s.user_target_xcconfig = { 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
 end

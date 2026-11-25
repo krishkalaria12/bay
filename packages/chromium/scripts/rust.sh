@@ -12,8 +12,11 @@ workspace=$(cd "$here/../../rust" && pwd)
 out="$workspace/target/desktop"
 export PATH="$HOME/.cargo/bin:$PATH"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
-# Xcode's environment points the compilers at its SDK for the app; cargo's build scripts compile for the host.
+# Xcode's environment points the compilers at its SDK for the app; cargo's build scripts compile for the host. The C
+# they compile (bay-import's SQLite) still needs the macOS SDK's headers, so name it plainly.
 unset SDKROOT LIBRARY_PATH CPATH
+SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export SDKROOT
 
 command -v cargo >/dev/null || { echo "error: no cargo: install Rust with rustup (https://rustup.rs)" >&2; exit 1; }
 slices=()
