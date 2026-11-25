@@ -12,6 +12,7 @@
 //     keyless encrypted file is then "locked" (ask to unlock) rather than "unsupported"
 //   {"reader": "zenSpaces", "profile": "...", "profileId": "..."}
 //   {"reader": "arcSidebar", "file": ".../StorableSidebar.json"}
+//   firefoxTabs, zenSpaces and arcSidebar take "text" (the session's or sidebar's JSON) instead of a path.
 //   {"reader": "extensions", "profile": "..."}
 
 #ifndef BAY_IMPORT_H_
@@ -30,6 +31,12 @@ typedef void (*BayImportObserver)(void *context, const char *event);
 // bay_import_string_free.
 char *bay_import_read(const char *request, const bool *cancelled, BayImportObserver observer, void *context);
 void bay_import_string_free(char *text);
+
+// A stop flag owned through the library, for hosts without atomics of their own: pass it as `cancelled`.
+bool *bay_import_cancel_new(void);
+void bay_import_cancel(bool *token);
+bool bay_import_cancelled(const bool *token);
+void bay_import_cancel_free(bool *token);
 
 #ifdef __cplusplus
 }

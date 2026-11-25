@@ -14,11 +14,13 @@ mod readers;
 mod sessions;
 mod snapshot;
 
-pub use arc::arc_sidebar;
+pub use arc::{arc_sidebar, arc_sidebar_from_json};
 pub use failure::Failure;
 pub use readers::{
     Cancel, HistoryOptions, chromium_bookmarks, chromium_time, extensions, firefox_bookmarks,
     history, parse_netscape_bookmarks, parse_passwords_csv,
 };
-pub use sessions::{chromium_tabs, firefox_tabs, zen_spaces};
+pub use sessions::{
+    chromium_tabs, firefox_tabs, firefox_tabs_from_json, zen_spaces, zen_spaces_from_json,
+};
 pub use snapshot::Snapshot;

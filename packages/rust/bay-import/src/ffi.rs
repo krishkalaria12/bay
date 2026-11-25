@@ -96,9 +96,18 @@ fn read(
                 can_unlock,
             )
         }
-        "firefoxTabs" => crate::firefox_tabs(&path(request, "profile")?, cancel),
-        "zenSpaces" => crate::zen_spaces(&path(request, "profile")?, field(request, "profileId")?),
-        "arcSidebar" => crate::arc_sidebar(&path(request, "file")?),
+        "firefoxTabs" => match request.get("text").and_then(Value::as_str) {
+            Some(text) => crate::firefox_tabs_from_json(text, cancel),
+            None => crate::firefox_tabs(&path(request, "profile")?, cancel),
+        },
+        "zenSpaces" => match request.get("text").and_then(Value::as_str) {
+            Some(text) => crate::zen_spaces_from_json(text, field(request, "profileId")?),
+            None => crate::zen_spaces(&path(request, "profile")?, field(request, "profileId")?),
+        },
+        "arcSidebar" => match request.get("text").and_then(Value::as_str) {
+            Some(text) => crate::arc_sidebar_from_json(text),
+            None => crate::arc_sidebar(&path(request, "file")?),
+        },
         "extensions" => crate::extensions(&path(request, "profile")?),
         other => Err(Failure::new("format", format!("No import reader {other}"))),
     }
@@ -143,6 +152,43 @@ pub unsafe extern "C" fn bay_import_read(
         Err(failure) => json!({"error": {"code": failure.code, "message": failure.message}}),
     };
     give(answer.to_string())
+}
+
+/// A stop flag the host owns through the library (Swift has no atomics of its own): pass it as `cancelled`. Free with
+/// `bay_import_cancel_free`.
+#[unsafe(no_mangle)]
+pub extern "C" fn bay_import_cancel_new() -> *mut bool {
+    Box::into_raw(Box::new(AtomicBool::new(false))).cast()
+}
+
+/// Asks the reads using `token` to stop.
+///
+/// # Safety
+/// `token` must come from `bay_import_cancel_new` and not be freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_import_cancel(token: *mut bool) {
+    // SAFETY: as the caller's: a flag this library allocated.
+    unsafe { AtomicBool::from_ptr(token) }.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether `token` was cancelled.
+///
+/// # Safety
+/// `token` must come from `bay_import_cancel_new` and not be freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_import_cancelled(token: *const bool) -> bool {
+    // SAFETY: as the caller's: a flag this library allocated.
+    unsafe { AtomicBool::from_ptr(token.cast_mut()) }.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// # Safety
+/// `token` must be null or come from `bay_import_cancel_new`, with no read still using it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_import_cancel_free(token: *mut bool) {
+    if !token.is_null() {
+        // SAFETY: as the caller's.
+        drop(unsafe { Box::from_raw(token.cast::<AtomicBool>()) });
+    }
 }
 
 /// Frees an answer from `bay_import_read`.

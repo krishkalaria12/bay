@@ -242,8 +242,13 @@ impl Walker<'_> {
 /// Arc's sidebar file, as macOS read it: a missing sidebar is an error, cycles and folders past the fifth level fold in,
 /// and a profile's favourites from several containers add up.
 pub fn arc_sidebar(file: &Path) -> Result<Value> {
+    arc_sidebar_from_json(&read_text(file)?)
+}
+
+/// Arc's sidebar from the file's text.
+pub fn arc_sidebar_from_json(text: &str) -> Result<Value> {
     let not_arc = || Failure::new("unreadable", "StorableSidebar.json is not an Arc sidebar");
-    let document: Value = serde_json::from_str(&read_text(file)?).map_err(|_| not_arc())?;
+    let document: Value = serde_json::from_str(text).map_err(|_| not_arc())?;
     let containers = document
         .get("sidebar")
         .and_then(|sidebar| sidebar.get("containers"))

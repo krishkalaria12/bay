@@ -557,7 +557,15 @@ fn firefox_session(profile: &Path) -> Result<Value> {
 
 /// The tabs a Firefox profile last had open, with its tab groups.
 pub fn firefox_tabs(profile: &Path, cancel: Cancel<'_>) -> Result<Value> {
-    let data = firefox_session(profile)?;
+    firefox_session_tabs(&firefox_session(profile)?, cancel)
+}
+
+/// The tabs in a Firefox session store's JSON (already decompressed).
+pub fn firefox_tabs_from_json(text: &str, cancel: Cancel<'_>) -> Result<Value> {
+    firefox_session_tabs(&parse_json(text.as_bytes())?, cancel)
+}
+
+fn firefox_session_tabs(data: &Value, cancel: Cancel<'_>) -> Result<Value> {
     let mut tabs = Vec::new();
     let mut groups = Vec::new();
     let empty = Vec::new();
@@ -897,6 +905,11 @@ fn zen_spaces_in(top: &Value, profile_id: &str) -> Value {
         })
         .collect();
     Value::Array(out)
+}
+
+/// Zen's spaces in a session's JSON (zen-sessions or the session store, decompressed).
+pub fn zen_spaces_from_json(text: &str, profile_id: &str) -> Result<Value> {
+    Ok(zen_spaces_in(&parse_json(text.as_bytes())?, profile_id))
 }
 
 /// Zen's spaces (SpaceSuggestion), each with its pins, folders, open tabs and its container's essentials; empty for a

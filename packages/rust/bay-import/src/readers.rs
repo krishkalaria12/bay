@@ -689,21 +689,52 @@ pub fn history(
     if options.limit == 0 {
         return Ok((Value::Array(all), 0));
     }
-    observer(json!({"type": "progress", "kind": "history", "phase": "start", "processed": 0}));
-    let sql = if firefox {
-        "SELECT url,title,visit_count,last_visit_date,typed FROM moz_places WHERE hidden=0 AND visit_count>0 AND \
-         last_visit_date IS NOT NULL AND (url LIKE 'http://%' OR url LIKE 'https://%') ORDER BY last_visit_date DESC"
+    // The time limit goes in the query, so the count the progress starts from is the count read.
+    let (time_column, base) = if firefox {
+        (
+            "last_visit_date",
+            "FROM moz_places WHERE hidden=0 AND visit_count>0 AND last_visit_date IS NOT NULL",
+        )
     } else {
-        "SELECT url,title,visit_count,last_visit_time,typed_count FROM urls WHERE hidden=0 AND last_visit_time>0 AND \
-         (url LIKE 'http://%' OR url LIKE 'https://%') ORDER BY last_visit_time DESC"
+        (
+            "last_visit_time",
+            "FROM urls WHERE hidden=0 AND last_visit_time>0",
+        )
     };
+    let since = if options.since > 0.0 {
+        let raw = if firefox {
+            (options.since * 1000.0) as i64
+        } else {
+            (options.since * 1000.0) as i64 + 11_644_473_600_000_000
+        };
+        format!(" AND {time_column}>={raw}")
+    } else {
+        String::new()
+    };
+    let filter = format!("{base}{since} AND (url LIKE 'http://%' OR url LIKE 'https://%')");
+    let mut total: i64 = 0;
+    db.query(&format!("SELECT count(*) {filter}"), |row| {
+        total = integer(row, 0);
+        Ok(false)
+    })?;
+    let expected = if options.limit >= 0 {
+        options.limit.min(total)
+    } else {
+        total
+    };
+    observer(
+        json!({"type": "progress", "kind": "history", "phase": "start", "processed": 0, "total": expected}),
+    );
+    let columns = if firefox {
+        "url,title,visit_count,last_visit_date,typed"
+    } else {
+        "url,title,visit_count,last_visit_time,typed_count"
+    };
+    let sql = format!("SELECT {columns} {filter} ORDER BY {time_column} DESC");
     let chunk_size = options.chunk_size.max(1);
-    db.query(sql, |row| {
+    db.query(&sql, |row| {
         cancel.check()?;
         let time = if firefox { integer(row, 3) as f64 / 1000.0 } else { chromium_time(integer(row, 3)) };
-        if time < options.since {
-            return Ok(true);
-        }
         let mut entry = Map::new();
         entry.insert("url".into(), json!(text(row, 0)));
         entry.insert("title".into(), json!(text(row, 1)));
@@ -722,7 +753,7 @@ pub fn history(
             if options.stream {
                 observer(json!({"type": "history", "entries": Value::Array(std::mem::take(&mut chunk)).to_string()}));
             }
-            observer(json!({"type": "progress", "kind": "history", "phase": "progress", "processed": count}));
+            observer(json!({"type": "progress", "kind": "history", "phase": "progress", "processed": count, "total": expected}));
         }
         Ok(options.limit < 0 || count < options.limit)
     })?;
