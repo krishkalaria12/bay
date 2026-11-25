@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- AppStream metadata for software centres. scripts/linux/release.sh adds the <releases> entry for the version it packs. -->
 <component type="desktop-application">
-  <id>in.krishkalaria.bay</id>
+  <id>in.baybrowser.bay</id>
   <name>Bay</name>
   <summary>A fast browser with your tabs in a sidebar</summary>
-  <developer id="in.krishkalaria">
+  <developer id="in.baybrowser">
     <name>Krish Kalaria</name>
   </developer>
   <metadata_license>CC0-1.0</metadata_license>
