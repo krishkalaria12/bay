@@ -5,5 +5,15 @@
 - Preserve browser features and resources. Validate the signed candidate and Sparkle update before shipping; size reductions must not remove locales, codecs or GPU fallbacks.
 - After landing a proper feature or a very important fix, ship a nightly: push `main`, then `gh workflow run release.yml` (docs/releasing.md).
 
+# Shared desktop code
+
+Write logic once for macOS, Windows and Linux (docs/shared-desktop-core-plan.html):
+
+- Code that calls Chromium's C++ API goes in `//bay/core:portable` (engine/nncore), which both hosts link.
+- Platform-neutral data work in native code (parsing, crypto, file formats, list bookkeeping) goes in a crate in
+  `packages/rust`, linked through `bay-desktop`; check it against shared fixtures.
+- UI logic and anything per keystroke stays in TypeScript.
+- Only OS calls (Keychain, DPAPI, Secret Service, pickers) stay per platform, kept thin.
+
 # Rules
 - Before committing, run linting, type checking and anti slop[slop command in package json] commands and if any error, fix it before moving forward

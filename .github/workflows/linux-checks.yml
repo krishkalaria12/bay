@@ -33,6 +33,9 @@ jobs:
           bun install --frozen-lockfile
           bun run typecheck
           bun test tests/
+      # Bay's desktop Rust library, on this OS: the readers, sync format and blocker lists both desktop hosts link.
+      - name: Desktop Rust library
+        run: cargo test --locked --workspace --manifest-path packages/rust/Cargo.toml
       - run: pnpm typecheck
       - run: pnpm typecheck:web
       - run: pnpm build:web
