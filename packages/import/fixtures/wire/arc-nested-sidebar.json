@@ -39,11 +39,6 @@
                   "title": "Right page",
                   "type": "url",
                   "url": "https://right.example/"
-                },
-                {
-                  "children": [],
-                  "title": "Work",
-                  "type": "folder"
                 }
               ],
               "title": "Research",
