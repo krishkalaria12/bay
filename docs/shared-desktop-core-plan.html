@@ -497,13 +497,13 @@
                 <tr>
                   <td>3 · Browser import</td>
                   <td>
-                    Built for every reader the plan lists except discovery. <code>bay-import</code> reads CSV and HTML exports, bookmarks, history, extensions,
-                    Chromium, Firefox and Zen tabs, Arc's sidebar, Firefox and Zen logins (key4.db without NSS, so <code>FirefoxNSS.cpp</code> and Windows'
-                    <code>nss3.dll</code> loader are gone), Chromium logins, autofill and cookies, and Firefox cookies, on all three desktops. Each host opens
-                    sealed values its own way (an opener: DPAPI, the Linux keyrings, the engine's OSCrypt; macOS's v10 key), and card numbers and cookie values
-                    leave the answer through a hook into memory the host wipes (<code>SecretBytes</code> on macOS). Swift's <code>ChromiumSecrets</code>,
-                    <code>ChromiumAutofill</code>, <code>ChromiumCrypto</code> and Firefox cookie code are façades now; <code>Secrets.cpp</code> 725 → 225
-                    lines; <code>SQLite.h</code> is gone.
+                    Built for every reader the plan lists, discovery included. <code>bay-import</code> reads CSV and HTML exports, bookmarks, history,
+                    extensions, Chromium, Firefox and Zen tabs, Arc's sidebar, Firefox and Zen logins (key4.db without NSS, so <code>FirefoxNSS.cpp</code> and
+                    Windows' <code>nss3.dll</code> loader are gone), Chromium logins, autofill and cookies, and Firefox cookies, on all three desktops. Each
+                    host opens sealed values its own way (an opener: DPAPI, the Linux keyrings, the engine's OSCrypt; macOS's v10 key), and card numbers and
+                    cookie values leave the answer through a hook into memory the host wipes (<code>SecretBytes</code> on macOS). Swift's
+                    <code>ChromiumSecrets</code>, <code>ChromiumAutofill</code>, <code>ChromiumCrypto</code> and Firefox cookie code are façades now;
+                    <code>Secrets.cpp</code> 725 → 225 lines; <code>SQLite.h</code> is gone.
                   </td>
                   <td>
                     21 Rust tests against the shared fixtures, including Zen's SHA-384 primary password and a non-UTF-8 cookie value byte for byte; the 70 Swift
@@ -556,8 +556,11 @@
               routes, reported in <code>getHostInfo</code>, for the same check macOS has.
             </li>
             <li>
-              <strong>Browser discovery</strong> (where each browser keeps its profiles) is still <code>Discovery.swift</code> and
-              <code>BrowserDiscovery.cpp</code>; the path tables could move into <code>bay-import</code> with the host giving its home and app-data folders.
+              <strong>Browser discovery</strong> is shared: <code>bay-import</code> lists a browser's profiles (Chromium's Local State and profile folders,
+              Firefox's <code>profiles.ini</code> and <code>installs.ini</code>), what each has to import and Arc's spaces; each host keeps where browsers live
+              and what only it shows (installed apps, macOS's profile pictures and extensions). Where the copies differed, the stricter rule won: an empty
+              profile folder isn't listed, tabs need a session file and not only its folder, and Windows now takes Chromium's last-used profile as the default,
+              lists profiles Local State names, keeps profiles inside the data folder, and reads Arc's tabs from its spaces only.
             </li>
             <li>
               <strong>Phase 4 models have no unit tests in <code>//bay/core:portable</code></strong
