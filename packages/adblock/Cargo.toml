@@ -6,8 +6,10 @@ publish = false
 description = "Bay's content blocker: Brave's adblock-rust behind a C ABI and JNI, shared by the desktop and mobile engines."
 
 [lib]
-# "lib" lets the mobile core link it into its own library (one Rust artifact per app, plan D16).
-crate-type = ["lib", "staticlib", "cdylib"]
+# A Rust library only: the desktops link it through bay-desktop and the mobile core into its own library (one Rust
+# artifact per app, plan D16). Whoever wants a C library asks for one (`cargo rustc --lib --crate-type staticlib` or
+# `cdylib`, as scripts/adblock and the bench do), so building bay-desktop doesn't link a cdylib nobody uses.
+crate-type = ["lib"]
 
 [dependencies]
 adblock = { version = "0.13.5", features = ["content-blocking", "debug-info", "css-validation"] }

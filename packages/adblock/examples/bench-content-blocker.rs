@@ -1,6 +1,6 @@
 //! Offline macOS C ABI benchmark. Build the release library before running this example.
 //!
-//! cargo build --release --locked --manifest-path packages/adblock/Cargo.toml
+//! cargo rustc --release --locked --lib --crate-type cdylib --manifest-path packages/adblock/Cargo.toml
 //! cargo run --release --locked --manifest-path packages/adblock/Cargo.toml --example bench-content-blocker -- [options]
 
 use serde::Deserialize;
