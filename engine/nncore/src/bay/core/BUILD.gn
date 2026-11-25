@@ -22,6 +22,8 @@ source_set("engine_api") {
 
 source_set("portable") {
   sources = [
+    "nn_device_choosers.cc",
+    "nn_device_choosers.h",
     "nn_devtools_call.cc",
     "nn_devtools_call.h",
     "nn_icon_download.cc",
@@ -118,6 +120,8 @@ if (is_mac) {
       "nn_desktop_capture.h",
       "nn_device_chooser.h",
       "nn_device_chooser.mm",
+      "nn_device_choosers.cc",
+      "nn_device_choosers.h",
       "nn_devtools_call.cc",
       "nn_devtools_call.h",
       "nn_icon_download.cc",
