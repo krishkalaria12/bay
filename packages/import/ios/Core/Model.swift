@@ -346,15 +346,6 @@ public struct ImportOptions: Sendable {
 }
 
 enum Time {
-  static func fromWebKit(_ micros: Int64) -> Double? {
-    guard micros > 0 else { return nil }
-    return Double(micros - 11_644_473_600_000_000) / 1000
-  }
-
-  static func fromWebKit(_ string: String?) -> Double? {
-    string.flatMap { Int64($0) }.flatMap { fromWebKit($0) }
-  }
-
   static func fromUnixMicros(_ micros: Int64) -> Double? {
     micros > 0 ? Double(micros) / 1000 : nil
   }

@@ -100,7 +100,6 @@ Json chromiumLogins(const Path &profile, const ChromiumSecretContext &context,
                     const std::atomic_bool &cancelled, int &blocked);
 
 Bytes decodeBase64(const std::string &text);
-std::string encodeBase64(const Bytes &bytes);
 void wipeJson(Json &value) noexcept;
 struct SensitiveImport {
   Json cookies = Json::array(), addresses = Json::array(),
@@ -142,25 +141,6 @@ using SecretOpener = std::function<std::optional<Bytes>(const Bytes &)>;
 // "chromiumAutofill"), each value opened by `open`.
 Json readSealed(const std::string &reader, const Path &profile,
                 const std::atomic_bool &cancelled, const SecretOpener &open);
-inline std::string utf8(std::uint32_t cp) {
-  std::string out;
-  if (cp < 0x80)
-    out += static_cast<char>(cp);
-  else if (cp < 0x800) {
-    out += static_cast<char>(0xc0 | (cp >> 6));
-    out += static_cast<char>(0x80 | (cp & 63));
-  } else if (cp < 0x10000) {
-    out += static_cast<char>(0xe0 | (cp >> 12));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 63));
-    out += static_cast<char>(0x80 | (cp & 63));
-  } else {
-    out += static_cast<char>(0xf0 | (cp >> 18));
-    out += static_cast<char>(0x80 | ((cp >> 12) & 63));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 63));
-    out += static_cast<char>(0x80 | (cp & 63));
-  }
-  return out;
-}
 void checkCancelled(const std::atomic_bool &cancelled);
 using EventSink = std::function<void(const std::string &, const std::string &,
                                      const std::string &)>;

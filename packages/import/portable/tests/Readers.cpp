@@ -214,8 +214,6 @@ int main(int argc, char **argv) {
                                 cancelled, blocked);
     require(wrong.empty() && blocked == 4,
             "Wrong Chromium key returned plaintext");
-    require(decodeBase64(encodeBase64(v10)) == v10,
-            "Binary base64 round trip failed");
     cancelled = true;
     refused = false;
     try {

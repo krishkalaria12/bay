@@ -69,23 +69,6 @@ Bytes decrypt(const Bytes &value, const EnginePasswordDecryptor &decryptor) {
   return result;
 }
 } // namespace
-std::string encodeBase64(const Bytes &bytes) {
-  static const char alphabet[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string out;
-  for (std::size_t i = 0; i < bytes.size(); i += 3) {
-    std::uint32_t n = std::uint32_t(bytes[i]) << 16;
-    if (i + 1 < bytes.size())
-      n |= std::uint32_t(bytes[i + 1]) << 8;
-    if (i + 2 < bytes.size())
-      n |= bytes[i + 2];
-    out += alphabet[(n >> 18) & 63];
-    out += alphabet[(n >> 12) & 63];
-    out += i + 1 < bytes.size() ? alphabet[(n >> 6) & 63] : '=';
-    out += i + 2 < bytes.size() ? alphabet[n & 63] : '=';
-  }
-  return out;
-}
 Bytes decodeBase64(const std::string &text) {
   static const std::string alphabet =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

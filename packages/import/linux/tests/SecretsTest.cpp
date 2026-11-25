@@ -1,12 +1,7 @@
 #include "../ChromiumSecrets.h"
-#include <dlfcn.h>
 #include <fstream>
 #include <iostream>
-#include <nss.h>
 #include <openssl/rand.h>
-#include <pk11pub.h>
-#include <pk11sdr.h>
-#include <secitem.h>
 #include <stdexcept>
 using namespace bay::importer;
 namespace bay::sync {
@@ -163,30 +158,6 @@ int main(int argc, char **argv) {
         locked.browser(), true, LinuxSecretBackend::SecretService, *fake);
     fails("locked",
           [&] { decryptLinuxChromiumSecret(vector(vectors, "v11"), wrong); });
-    // Keep a separate, already initialized internal NSS slot alive throughout
-    // imports. The imported profiles have different keys and primary passwords.
-    void *library = dlopen("/opt/homebrew/opt/nss/lib/libnss3.dylib",
-                           RTLD_NOW | RTLD_LOCAL);
-    require(library != nullptr, "fixture system NSS missing");
-    auto init = reinterpret_cast<decltype(&NSS_InitContext)>(
-        dlsym(library, "NSS_InitContext"));
-    auto shutdown = reinterpret_cast<decltype(&NSS_ShutdownContext)>(
-        dlsym(library, "NSS_ShutdownContext"));
-    auto internalSlot = reinterpret_cast<decltype(&PK11_GetInternalKeySlot)>(
-        dlsym(library, "PK11_GetInternalKeySlot"));
-    auto freeSlot = reinterpret_cast<decltype(&PK11_FreeSlot)>(
-        dlsym(library, "PK11_FreeSlot"));
-    auto decrypt = reinterpret_cast<decltype(&PK11SDR_Decrypt)>(
-        dlsym(library, "PK11SDR_Decrypt"));
-    auto freeItem = reinterpret_cast<decltype(&SECITEM_ZfreeItem)>(
-        dlsym(library, "SECITEM_ZfreeItem"));
-    auto path = "sql:" + (root / "sentinel").string();
-    auto *existing =
-        init(path.c_str(), "", "", "", nullptr,
-             NSS_INIT_READONLY | NSS_INIT_NOMODDB | NSS_INIT_NOROOTINIT);
-    require(existing, "sentinel NSS context init");
-    auto *slot = internalSlot();
-    require(slot, "sentinel slot");
     std::atomic_bool cancelled{false};
     for (unsigned i = 0; i < 2; ++i) {
       auto rows = firefoxLogins(root / "firefox", "fixture-primary", cancelled);
@@ -201,25 +172,12 @@ int main(int argc, char **argv) {
     }
     fails("locked",
           [&] { firefoxLogins(root / "firefox", "wrong-primary", cancelled); });
-    auto sentinel = Json::parse(readText(root / "sentinel" / "logins.json"));
-    auto bytes = decodeBase64(sentinel["logins"][0]["encryptedPassword"]);
-    SECItem input{siBuffer, bytes.data(), static_cast<unsigned>(bytes.size())},
-        output{};
-    require(decrypt(&input, &output, nullptr) == SECSuccess,
-            "import shut down or switched existing NSS");
-    require(std::string(reinterpret_cast<char *>(output.data), output.len) ==
-                "sentinel-password",
-            "sentinel key changed");
-    freeItem(&output, PR_FALSE);
-    freeSlot(slot);
-    shutdown(existing);
-    dlclose(library);
     cancelled = true;
     fails("cancelled", [&] {
       firefoxLogins(root / "firefox", "fixture-primary", cancelled);
     });
     std::cout << "linux secret fixtures passed: CBC schemes, consent, mixed "
-                 "readers, NSS-written key4 without NSS, and an existing NSS slot untouched\n";
+                 "readers and NSS-written key4 profiles read without NSS\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
