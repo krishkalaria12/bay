@@ -2,10 +2,6 @@
 #ifndef CHROME_BROWSER_BAY_WEBUI_PAGE_MENU_H_
 #define CHROME_BROWSER_BAY_WEBUI_PAGE_MENU_H_
 
-namespace ui {
-class SimpleMenuModel;
-}
-
 namespace bay {
 
 // Chrome's page menu in Bay's windows, as macOS's NNContextMenu: without the
@@ -16,9 +12,6 @@ class PageMenu {
  public:
   // Installs the menu's hook (chromium-context-menu-items-webui.patch).
   static void Start();
-
-  // Removes those items, and any separator that leaves doubled or at an end.
-  static void RemoveViewlessItems(ui::SimpleMenuModel& menu);
 };
 
 }  // namespace bay

@@ -12,9 +12,10 @@ import subprocess
 import sys
 import time
 
-# Every Bay test target Windows builds (chrome/browser/bay/BUILD.gn and webui/BUILD.gn). Those on Chrome's test
+# Every Bay test target Windows builds (bay/core/BUILD.gn, chrome/browser/bay/BUILD.gn and webui/BUILD.gn). Those on Chrome's test
 # support build Chrome's own WebUI tests too, which chromium-webui-tests-ungoogled.patch keeps compiling.
 TESTS = [
+    "bay_core_unittests",
     "clear_specks_unittests",
     "content_blocker_rules_unittests",
     "crash_reports_unittests",
@@ -25,7 +26,6 @@ TESTS = [
     "native_file_drag_unittests",
     "native_host_unittests",
     "notifications_unittests",
-    "page_security_unittests",
     "pip_platform_unittests",
     "runtime_unittests",
     "search_suggestions_policy_unittests",

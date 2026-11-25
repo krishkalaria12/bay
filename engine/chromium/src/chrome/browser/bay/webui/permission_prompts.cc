@@ -3,7 +3,6 @@
 
 #include <utility>
 
-#include "bay/core/nn_permission_flow.h"
 #include "bay/core/nn_permission_prompts.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
@@ -25,11 +24,6 @@ void Tell(const char* event, base::DictValue payload) {
 }
 
 }  // namespace
-
-// static
-const char* PermissionPrompts::KindName(permissions::RequestType type) {
-  return nncore::PermissionKindName(type);
-}
 
 // static
 void PermissionPrompts::Start(Sink sink) {

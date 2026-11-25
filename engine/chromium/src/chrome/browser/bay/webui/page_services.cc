@@ -3,7 +3,6 @@
 #include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
 #include "chrome/browser/bay/webui/page_message_events.h"
-#include "chrome/browser/bay/webui/page_security.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +21,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "bay/core/nn_devtools_call.h"
+#include "bay/core/nn_page_security.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/webui/library_files.h"
@@ -273,7 +273,7 @@ void CaptureImage(content::WebContents* contents,
 }  // namespace
 
 base::DictValue GetPageSecurityInfo(content::WebContents* contents) {
-  return PageSecurityInfo(contents);
+  return nncore::PageSecurityInfo(contents);
 }
 
 bool DispatchPageMethod(content::WebContents* contents,

@@ -18,7 +18,7 @@ namespace {
 
 void MenuBuilt(content::WebContents* contents, ui::SimpleMenuModel* menu) {
   if (WindowRegistry::Get().HoldsTab(contents))
-    PageMenu::RemoveViewlessItems(*menu);
+    nncore::RemoveViewlessItems(*menu);
 }
 
 }  // namespace
@@ -26,11 +26,6 @@ void MenuBuilt(content::WebContents* contents, ui::SimpleMenuModel* menu) {
 // static
 void PageMenu::Start() {
   g_bay_context_menu_built = &MenuBuilt;
-}
-
-// static
-void PageMenu::RemoveViewlessItems(ui::SimpleMenuModel& menu) {
-  nncore::RemoveViewlessItems(menu);
 }
 
 }  // namespace bay

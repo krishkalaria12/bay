@@ -8,6 +8,8 @@
 
 assert(is_mac || is_win || is_linux)
 
+import("//testing/test.gni")
+
 source_set("engine_api") {
   sources = [
     "nncore_engine_api.cc",
@@ -321,4 +323,32 @@ if (is_mac) {
       ]
     }
   }
+}
+
+# The shared models' unit tests, each with only the sources it needs (no link of
+# //chrome). Every engine build lists the target (scripts/windows/unit-tests.py,
+# docs/engine-cli.md).
+test("bay_core_unittests") {
+  sources = [
+    "nn_page_menu.cc",
+    "nn_page_menu.h",
+    "nn_page_menu_unittest.cc",
+    "nn_page_security.cc",
+    "nn_page_security.h",
+    "nn_page_security_unittest.cc",
+    "nn_permission_flow.cc",
+    "nn_permission_flow.h",
+    "nn_permission_flow_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//chrome/app:command_ids",
+    "//components/permissions",
+    "//content/public/browser",
+    "//net",
+    "//testing/gtest",
+    "//ui/menus",
+    "//url",
+  ]
 }

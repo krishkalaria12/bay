@@ -1,10 +1,10 @@
 // Copyright 2026 Bay. Apache-2.0.
-#include "chrome/browser/bay/webui/page_security.h"
+#include "bay/core/nn_page_security.h"
 
 #include "content/public/browser/ssl_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace bay {
+namespace nncore {
 TEST(PageSecurityTest, PendingHttpsWithoutAHandshakeIsNeutral) {
   content::SSLStatus pending;
   ASSERT_FALSE(pending.initialized);
@@ -41,4 +41,4 @@ TEST(PageSecurityTest, FiltersOnlyTheExistingAdvisoryRevocationStatuses) {
                                   net::CERT_STATUS_NO_REVOCATION_MECHANISM),
             net::CERT_STATUS_AUTHORITY_INVALID);
 }
-}  // namespace bay
+}  // namespace nncore
