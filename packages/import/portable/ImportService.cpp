@@ -98,169 +98,17 @@ std::vector<Browser> browsers() {
   return out;
 #endif
 }
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
-Json available(const Path &profile, bool firefox) {
-  Json kinds = Json::array();
-  auto add = [&](const char *kind, bool exists) {
-    if (exists)
-      kinds.push_back(kind);
-  };
-  add("bookmarks",
-      fs::exists(profile / (firefox ? "places.sqlite" : "Bookmarks")) ||
-          (!firefox && fs::exists(profile / "AccountBookmarks")));
-  add("history", fs::exists(profile / (firefox ? "places.sqlite" : "History")));
-  add("passwords",
-      fs::exists(profile / (firefox ? "logins.json" : "Login Data")));
-  add("tabs", firefox ? (fs::exists(profile / "sessionstore-backups") ||
-                         fs::exists(profile / "sessionstore.jsonlz4") ||
-                         fs::exists(profile / "sessionstore.js"))
-                      : (fs::exists(profile / "Sessions") ||
-                         fs::exists(profile / "Sessions_Encrypted") ||
-                         fs::exists(profile / "Current Session") ||
-                         fs::exists(profile / "Last Session")));
-  add("cookies",
-      firefox &&
-          fs::exists(profile / "cookies.sqlite")); // Chromium cookies remain
-                                                   // source-browser bound.
-  add("autofill", !firefox && fs::exists(profile / "Web Data"));
-  return kinds;
-}
-#endif
+// bay-import's discovery, shared with macOS. On Windows a data folder that is
+// itself a profile (Opera) is "Default", and Arc's sidebar sits beside its
+// user data.
 Json profiles(const Browser &browser) {
 #if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
   return discovery::linuxProfiles(browser);
 #else
-  Json out = Json::array();
-  if (browser.firefox) {
-    if (!fs::exists(browser.root / "profiles.ini"))
-      return out;
-    std::istringstream input(readText(browser.root / "profiles.ini"));
-    std::string line, section;
-    std::map<std::string, std::map<std::string, std::string>> sections;
-    std::set<std::string> defaults;
-    while (std::getline(input, line)) {
-      if (!line.empty() && line.back() == '\r')
-        line.pop_back();
-      if (line.empty() || line[0] == '#' || line[0] == ';')
-        continue;
-      if (line.front() == '[' && line.back() == ']')
-        section = line.substr(1, line.size() - 2);
-      else {
-        auto eq = line.find('=');
-        if (eq != std::string::npos)
-          sections[section][line.substr(0, eq)] = line.substr(eq + 1);
-      }
-    }
-    for (auto &entry : sections)
-      if (entry.first.rfind("Install", 0) == 0 &&
-          !entry.second["Default"].empty())
-        defaults.insert(entry.second["Default"]);
-    for (auto &entry : sections)
-      if (entry.first.rfind("Profile", 0) == 0) {
-        auto &v = entry.second;
-        if (v["Path"].empty())
-          continue;
-        auto path = fs::u8path(v["Path"]);
-        if (v["IsRelative"] != "0")
-          path = browser.root / path;
-        if (!fs::is_directory(path))
-          continue;
-        out.push_back(
-            {{"id", entry.first},
-             {"name", v["Name"].empty() ? entry.first : v["Name"]},
-             {"path", path.u8string()},
-             {"isDefault", defaults.empty() ? v["Default"] == "1"
-                                            : defaults.count(v["Path"]) != 0},
-             {"available", available(path, true)}});
-      }
-  } else {
-    Json info = Json::object();
-    try {
-      info = Json::parse(readText(browser.root / "Local State"))
-                 .value("profile", Json::object())
-                 .value("info_cache", Json::object());
-    } catch (const std::exception &) {
-    }
-    std::vector<Path> paths;
-    if (browser.rootProfile)
-      paths.push_back(browser.root);
-    else {
-      std::error_code error;
-      for (fs::directory_iterator it(browser.root, error), end;
-           !error && it != end; it.increment(error)) {
-        auto name = it->path().filename().u8string();
-        if (it->is_directory() &&
-            (name == "Default" || name.rfind("Profile ", 0) == 0))
-          paths.push_back(it->path());
-      }
-    }
-    std::sort(paths.begin(), paths.end());
-    for (auto &path : paths) {
-      auto id = browser.rootProfile ? "Default" : path.filename().u8string();
-      auto metadata = info.value(id, Json::object());
-      auto name = metadata.value("name", id);
-      Json profile = {{"id", id},
-                      {"name", name.empty() ? id : name},
-                      {"path", path.u8string()},
-                      {"isDefault", id == "Default"},
-                      {"available", available(path, false)}};
-      auto email = metadata.value("user_name", "");
-      if (!email.empty())
-        profile["email"] = email;
-      out.push_back(profile);
-    }
-  }
-  if (browser.id == "arc" &&
-      fs::exists(browser.root.parent_path() / "StorableSidebar.json")) {
-    try {
-      auto sidebar =
-          arcSidebar(browser.root.parent_path() / "StorableSidebar.json");
-      std::function<unsigned(const Json &)> links = [&](const Json &node) {
-        if (node.value("type", "") == "url")
-          return 1u;
-        unsigned count = 0;
-        for (auto &child : node.value("children", Json::array()))
-          count += links(child);
-        return count;
-      };
-      for (auto &profile : out) {
-        Json spaces = Json::array();
-        bool favorites =
-            sidebar["favorites"].contains(profile["id"].get<std::string>());
-        for (auto &space : sidebar["spaces"])
-          if (space["profileId"] == profile["id"]) {
-            Json summary = {{"id", space["id"]},
-                            {"name", space["name"]},
-                            {"tabCount", space["tabs"].size()}};
-            unsigned count = 0;
-            for (auto &node : space["pinned"])
-              count += links(node);
-            summary["pinnedCount"] = count;
-            for (auto key : {"color", "emoji", "icon"})
-              if (space.contains(key))
-                summary[key] = space[key];
-            spaces.push_back(summary);
-          }
-        if (!spaces.empty()) {
-          profile["spaces"] = spaces;
-          for (auto kind : {"spaces", "pinnedTabs", "tabs"})
-            if (std::find(profile["available"].begin(),
-                          profile["available"].end(),
-                          kind) == profile["available"].end())
-              profile["available"].push_back(kind);
-        }
-        if (favorites)
-          profile["available"].push_back("favorites");
-      }
-    } catch (
-        const std::exception &) { /* Ordinary Chromium data can still be
-                                     imported if Arc's sidebar is unreadable. */
-    }
-  }
-  std::stable_sort(out.begin(), out.end(), [](const Json &a, const Json &b) {
-    return a.value("isDefault", false) && !b.value("isDefault", false);
-  });
-  return out;
+  return discovery::profiles(
+      browser, "Default",
+      browser.id == "arc" ? browser.root.parent_path() / "StorableSidebar.json"
+                          : Path{});
 #endif
 }
 std::pair<Browser, Json> resolve(const std::string &id,

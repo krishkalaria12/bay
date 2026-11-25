@@ -157,11 +157,15 @@ void roots(const fs::path &temporary) {
 }
 void chromiumProfiles(const fs::path &temporary) {
   auto root = temporary / "chromium";
-  for (auto name : {"Default", "Profile 1", "Profile 2", "Profile invalid",
-                    "Guest Profile", "System Profile", "Work"})
+  // "Profile 5" stays empty: a folder that was never used isn't a profile.
+  for (auto name : {"Default", "Profile 1", "Profile 2", "Profile 5",
+                    "Profile invalid", "Guest Profile", "System Profile",
+                    "Work"})
     fs::create_directories(root / name);
   put(root / "Default/Bookmarks");
   put(root / "Profile 1/History");
+  put(root / "Profile 2/Preferences");
+  put(root / "Work/Preferences");
   d::Browser source{"chromium", "Chromium", root, false, false, "chromium"};
   for (auto state : {"", "not json", "[]", "null", "{\"profile\":false}",
                      "{\"profile\":{\"info_cache\":[]}}"}) {
@@ -294,8 +298,9 @@ void available(const fs::path &temporary) {
   for (auto name : {"Bookmarks", "History", "Login Data", "Web Data", "Cookies",
                     "places.sqlite", "logins.json", "cookies.sqlite"})
     put(root / name);
-  fs::create_directories(root / "Sessions");
-  fs::create_directories(root / "sessionstore-backups");
+  // Tabs need a session file, not only its folder.
+  put(root / "Sessions/Session_13300000000000000");
+  put(root / "sessionstore-backups/recovery.jsonlz4");
   auto chromium = d::linuxAvailable(root, false),
        firefox = d::linuxAvailable(root, true);
   require(chromium ==

@@ -209,6 +209,32 @@ fn read(
         "firefoxCookies" => {
             crate::firefox_cookies(&cookies(&["cookies.sqlite"])?, secrets, now(), cancel)
         }
+        "profiles" => {
+            let flag = |key: &str| request.get(key).and_then(Value::as_bool).unwrap_or(false);
+            let sidebar = request
+                .get("arcSidebar")
+                .and_then(Value::as_str)
+                .map(PathBuf::from);
+            let options = crate::DiscoveryOptions {
+                firefox: flag("firefox"),
+                root_is_profile: flag("rootIsProfile"),
+                root_id: request
+                    .get("rootId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Root"),
+                chromium_cookies: flag("chromiumCookies"),
+                arc_sidebar: sidebar.as_deref(),
+            };
+            Ok(crate::profiles(&path(request, "root")?, &options))
+        }
+        "available" => {
+            let flag = |key: &str| request.get(key).and_then(Value::as_bool).unwrap_or(false);
+            Ok(crate::available(
+                &path(request, "profile")?,
+                flag("firefox"),
+                flag("chromiumCookies"),
+            ))
+        }
         "firefoxLogins" => {
             let password = request
                 .get("primaryPassword")

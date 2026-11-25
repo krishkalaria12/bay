@@ -1,33 +1,6 @@
 import Foundation
 
 public enum Firefox {
-  public struct Profile: Equatable {
-    public var name: String
-    public var path: String
-    public var isDefault: Bool
-  }
-
-  public static func profiles(ini: String) -> [Profile] {
-    var sections: [(name: String, values: [String: String])] = []
-    for raw in ini.split(whereSeparator: \.isNewline) {
-      let line = raw.trimmingCharacters(in: .whitespaces)
-      if line.isEmpty || line.hasPrefix(";") || line.hasPrefix("#") { continue }
-      if line.hasPrefix("["), line.hasSuffix("]") {
-        sections.append((String(line.dropFirst().dropLast()), [:]))
-      } else if let eq = line.firstIndex(of: "="), !sections.isEmpty {
-        sections[sections.count - 1].values[String(line[..<eq])] = String(line[line.index(after: eq)...])
-      }
-    }
-    let installDefaults = Set(sections.filter { $0.name.hasPrefix("Install") }.compactMap { $0.values["Default"] })
-    var out: [Profile] = []
-    for s in sections where s.name.hasPrefix("Profile") {
-      guard let path = s.values["Path"], !path.isEmpty else { continue }
-      let isDefault = installDefaults.isEmpty ? s.values["Default"] == "1" : installDefaults.contains(path)
-      out.append(Profile(name: s.values["Name"] ?? path, path: path, isDefault: isDefault))
-    }
-    return out.sorted { $0.isDefault && !$1.isDefault }
-  }
-
   // MARK: Bookmarks
 
   /// A profile's bookmarks (places.sqlite), read by the shared reader (bay-import).

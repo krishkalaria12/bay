@@ -19,6 +19,10 @@
 //   {"reader": "extensions", "profile": "..."}
 //   {"reader": "firefoxLogins", "profile": "...", "primaryPassword": "..."}  a Firefox or Zen profile's credentials,
 //     key4.db opened without NSS; a wrong primary password is "locked"
+//   {"reader": "profiles", "root": "...", "firefox": bool, "rootIsProfile": bool, "rootId": "...",
+//    "chromiumCookies": bool, "arcSidebar": "..."}  a browser's profiles in its data folder, the default first:
+//     [{id, name, path, email?, color?, isDefault, available, spaces?}]
+//   {"reader": "available", "profile": "...", "firefox": bool, "chromiumCookies": bool}  what one profile has to import
 //   {"reader": "firefoxCookies", "profile": "..."}             {"cookies": [...], "skipped": n}
 //   {"reader": "chromiumCookies", "profile": "..."}            {"cookies": [...], "blocked": n}
 //     Both cookie readers take "database" (the file) instead of "profile".

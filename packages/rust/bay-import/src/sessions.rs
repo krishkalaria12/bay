@@ -314,15 +314,9 @@ fn apply(
     Ok(())
 }
 
-/// The tabs a Chromium profile last had open, from its newest session file. An encrypted one (version 5, each record
-/// sealed as a `v10` value) needs the browser's `key`; without one it's `locked` when the host can unlock the browser
-/// (`can_unlock`), else `unsupported`.
-pub fn chromium_tabs(
-    profile: &Path,
-    cancel: Cancel<'_>,
-    key: Option<&[u8]>,
-    can_unlock: bool,
-) -> Result<Value> {
+/// A Chromium profile's newest session file: the newest `Session_<time>` in `Sessions` (or `Sessions_Encrypted`),
+/// else a legacy `Current Session` or `Last Session`.
+pub(crate) fn chromium_session_file(profile: &Path) -> Option<PathBuf> {
     let mut latest: Option<PathBuf> = None;
     let mut stamp: i64 = -1;
     for directory in ["Sessions", "Sessions_Encrypted"] {
@@ -340,12 +334,24 @@ pub fn chromium_tabs(
             }
         }
     }
-    if latest.is_none() {
-        latest = ["Current Session", "Last Session"]
+    latest.or_else(|| {
+        ["Current Session", "Last Session"]
             .iter()
             .map(|name| profile.join(name))
-            .find(|path| path.exists());
-    }
+            .find(|path| path.is_file())
+    })
+}
+
+/// The tabs a Chromium profile last had open, from its newest session file. An encrypted one (version 5, each record
+/// sealed as a `v10` value) needs the browser's `key`; without one it's `locked` when the host can unlock the browser
+/// (`can_unlock`), else `unsupported`.
+pub fn chromium_tabs(
+    profile: &Path,
+    cancel: Cancel<'_>,
+    key: Option<&[u8]>,
+    can_unlock: bool,
+) -> Result<Value> {
+    let latest = chromium_session_file(profile);
     let latest = latest.ok_or_else(|| Failure::new("notFound", "No saved tabs in this profile"))?;
     let bytes = read_bytes(&latest)?;
     let mut reader = Reader::new(&bytes);
@@ -525,8 +531,8 @@ fn tab_page(tab: &Value) -> Option<(String, String)> {
     Some((url, title))
 }
 
-/// The newest session store in a Firefox profile, parsed.
-fn firefox_session(profile: &Path) -> Result<Value> {
+/// The newest session store in a Firefox profile.
+pub(crate) fn firefox_session_file(profile: &Path) -> Option<PathBuf> {
     let mut file: Option<(PathBuf, SystemTime)> = None;
     for name in [
         "sessionstore-backups/recovery.jsonlz4",
@@ -543,8 +549,13 @@ fn firefox_session(profile: &Path) -> Result<Value> {
             file = Some((candidate, modified));
         }
     }
-    let (file, _) =
-        file.ok_or_else(|| Failure::new("notFound", "No Firefox session in this profile"))?;
+    file.map(|(file, _)| file)
+}
+
+/// The newest session store in a Firefox profile, parsed.
+fn firefox_session(profile: &Path) -> Result<Value> {
+    let file = firefox_session_file(profile)
+        .ok_or_else(|| Failure::new("notFound", "No Firefox session in this profile"))?;
     let mut bytes = read_bytes(&file)?;
     if file
         .extension()

@@ -8,6 +8,7 @@
 
 mod arc;
 mod crypto;
+mod discovery;
 mod failure;
 pub mod ffi;
 mod firefox_logins;
@@ -17,6 +18,7 @@ mod sessions;
 mod snapshot;
 
 pub use arc::{arc_sidebar, arc_sidebar_from_json};
+pub use discovery::{DiscoveryOptions, available, profiles};
 pub use failure::Failure;
 pub use firefox_logins::{firefox_logins, firefox_logins_from_json, firefox_master_key};
 pub use readers::{

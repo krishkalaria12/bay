@@ -47,10 +47,12 @@ def main():
     ]
     with tempfile.TemporaryDirectory(prefix="bay-import-service-fixtures-") as directory:
         discovery = Path(directory) / "discovery-tests"
+        # Profile listing is bay-import's, in Bay's desktop Rust library.
         subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra",
                         "-I" + str(REPO / "engine/chromium/src/chrome/browser/bay/data/vendor"),
                         str(REPO / "packages/import/portable/BrowserDiscovery.cpp"),
                         str(REPO / "packages/import/portable/tests/Discovery.cpp"),
+                        *shlex.split(subprocess.check_output([sys.executable, str(REPO / "scripts/lib/rust_desktop.py")], text=True)),
                         "-o", str(discovery)], check=True)
         discovery_home = Path(directory) / "discovery-home"
         discovery_home.mkdir()

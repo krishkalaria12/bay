@@ -351,18 +351,6 @@ enum Time {
   }
 }
 
-enum Hex {
-  static func color(red: Double, green: Double, blue: Double) -> String {
-    func byte(_ v: Double) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
-    return String(format: "#%02X%02X%02X", byte(red), byte(green), byte(blue))
-  }
-
-  static func color(skColor: Int) -> String {
-    let v = UInt32(truncatingIfNeeded: skColor)
-    return String(format: "#%02X%02X%02X", (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
-  }
-}
-
 extension URL {
   static func isWebURL(_ string: String) -> Bool {
     guard let scheme = string.split(separator: ":", maxSplits: 1).first?.lowercased() else { return false }
