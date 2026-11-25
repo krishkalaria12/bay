@@ -56,7 +56,7 @@ static_library("data_services") {
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",
     ]
-    libs = [
+    libs += [
       "advapi32.lib",
       "bcrypt.lib",
       "crypt32.lib",
@@ -105,14 +105,29 @@ static_library("sync_services") {
     "packages/sync/portable/SyncService.h",
     "packages/sync/portable/SyncVault.cpp",
     "packages/sync/portable/SyncVault.h",
-    "packages/sync/portable/Wordlist.h",
     "packages/sync/portable/vendor/qrcodegen.cpp",
     "packages/sync/portable/vendor/qrcodegen.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   configs -= chromium_style_checks
-  include_dirs = [ "vendor" ]
+  # vendor/: qrcodegen. rust/: bay_sync.h, the sync format's C ABI, from Bay's
+  # desktop Rust library (packages/rust), which scripts/engine.py builds.
+  include_dirs = [
+    "vendor",
+    "rust",
+  ]
+  if (is_win) {
+    # With what Rust's standard library needs on Windows, as webui/BUILD.gn.
+    libs = [
+      "$root_out_dir/bay_desktop/bay_desktop.lib",
+      "ntdll.lib",
+      "userenv.lib",
+      "ws2_32.lib",
+    ]
+  } else {
+    libs = [ "$root_out_dir/bay_desktop/libbay_desktop.a" ]
+  }
   if (is_win) {
     sources += [
       "packages/sync/portable/RecoveryKitWindows.cpp",
@@ -123,7 +138,7 @@ static_library("sync_services") {
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",
     ]
-    libs = [
+    libs += [
       "advapi32.lib",
       "bcrypt.lib",
       "crypt32.lib",

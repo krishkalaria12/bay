@@ -256,7 +256,7 @@ std::string Invoke(const std::string &, const std::string &method,
   auto args = Json::parse(argsJson);
   Json result;
   if (method == "newDeviceId")
-    return Json(base32(randomBytes(16))).dump();
+    return Json(newFileId()).dump();
   if (method == "deviceName")
     return Json(deviceName()).dump();
   if (method == "chooseFolder")

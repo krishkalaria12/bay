@@ -80,6 +80,9 @@ def layer_source(here: Path, owned: str):
         # The blocker's and its lists' C ABI; scripts/engine.py builds the library behind them.
         shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
         shutil.copy2(repository / "packages/rust/bay-lists/include/bay_lists.h", staged / "webui/bay_lists.h")
+        # The sync format's C ABI, for the portable sync code (data/BUILD.gn include_dirs).
+        (staged / "data/rust").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repository / "packages/rust/bay-sync/include/bay_sync.h", staged / "data/rust/bay_sync.h")
         # portable/ builds on Windows and Linux; linux/ holds the Linux-only adapters.
         for package in ("import", "sync"):
             for folder in ("portable", "linux"):

@@ -174,7 +174,7 @@ std::string Vault::write(const std::string &scope, const Bytes &payload) const {
   auto path = scopePath(scope);
   fs::create_directories(path);
   safeDirectory(path);
-  auto id = base32(randomBytes(16));
+  auto id = newFileId();
   auto sealed = keys_.seal(payload, keys_.scopeTag(scope), id);
   auto temporary = path / ("." + id + ".tmp");
   auto destination = path / (id + ".nns");

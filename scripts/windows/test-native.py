@@ -35,6 +35,14 @@ def run(command):
     subprocess.run([str(part) for part in command], check=True, cwd=REPO)
 
 
+def rust_desktop():
+    """Bay's desktop Rust library (scripts/lib/rust_desktop.py): the sync format SyncCrypto.cpp calls."""
+    spec = importlib.util.spec_from_file_location("rust_desktop", REPO / "scripts/lib/rust_desktop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.link_flags()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=("sync", "import", "all"), default="all")
@@ -49,8 +57,11 @@ def main():
         root = Path(temporary)
         def compile(sources, binary, libraries=(), extra_includes=()):
             sources = [REPO / source for source in sources]
-            if windows:
-                if any(source.name == "SyncCrypto.cpp" for source in sources):
+            if any(source.name == "SyncCrypto.cpp" for source in sources):
+                archive, rust_libraries, rust_includes = rust_desktop()
+                libraries = [*libraries, archive, *rust_libraries]
+                extra_includes = [*extra_includes, *rust_includes]
+                if windows:
                     sources.append(REPO / "packages/sync/portable/SyncCryptoWindows.cpp")
             if windows:
                 # One object per source: Readers.cpp and tests/Readers.cpp would otherwise both write Readers.obj.

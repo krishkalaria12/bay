@@ -63,6 +63,9 @@ gboolean secret_item_delete_sync(SecretItem *, GCancellable *, GError **);
     else:
         # Use standalone SQLite rather than Chromium's vendored header.
         flags += ["-DBAY_IMPORT_LINUX_TEST", "-ldl"]
+    # The sync format (keys, sealed files, the recovery phrase) is bay-sync's, in Bay's desktop Rust library.
+    flags += shlex.split(subprocess.check_output(
+        [sys.executable, str(root / "scripts/lib/rust_desktop.py")], text=True))
     binary = temporary / "service-test"
     subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-Wno-missing-field-initializers", "-pthread", "-I", str(temporary),

@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+struct BaySyncKeys;
+
 namespace bay::sync {
 using Bytes = std::vector<std::uint8_t>;
 struct Failure : std::runtime_error {
@@ -22,10 +24,14 @@ Bytes aesGcmOpen(const Bytes &key, const Bytes &nonce,
                  const Bytes &cipherAndTag, const Bytes &aad);
 std::string base32(const Bytes &bytes);
 bool isTag(const std::string &text);
+// A chain's keys and the sync file format, from bay-sync (packages/rust/bay-sync), which macOS shares. `scope` here is
+// a scope tag (scopeTag()), as the files' folders are named.
 class Keys {
 public:
   explicit Keys(const Bytes &entropy);
   ~Keys();
+  Keys(const Keys &) = delete;
+  Keys &operator=(const Keys &) = delete;
   std::string chainTag() const;
   std::string scopeTag(const std::string &scope) const;
   Bytes seal(const Bytes &payload, const std::string &scope,
@@ -38,10 +44,10 @@ public:
              const std::string &id) const;
 
 private:
-  Bytes fileKey_, nameKey_;
-  std::string tag(const std::string &label) const;
-  Bytes aad(const std::string &scope, const std::string &id) const;
+  BaySyncKeys *keys_;
 };
+// A new file's name: 16 random bytes in base32.
+std::string newFileId();
 std::vector<std::string> recoveryWords(const Bytes &entropy);
 Bytes recoveryEntropy(const std::string &phrase);
 void erase(Bytes &bytes) noexcept;

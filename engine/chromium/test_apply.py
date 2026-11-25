@@ -50,6 +50,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -114,6 +117,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
             command = [sys.executable, str(here / "apply.py")]
@@ -153,6 +159,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]

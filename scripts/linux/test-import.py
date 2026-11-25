@@ -34,6 +34,8 @@ def main():
     if sys.platform == "linux":
         flags += shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
         flags += ["-ldl"]
+    # The sync format the shared C++ calls is bay-sync's, in Bay's desktop Rust library.
+    flags += shlex.split(subprocess.check_output([sys.executable, str(REPO / "scripts/lib/rust_desktop.py")], text=True))
     sources = [
         "packages/import/portable/ImportService.cpp",
         "packages/import/portable/BrowserDiscovery.cpp",
