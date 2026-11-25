@@ -67,8 +67,12 @@ final class SyncVaultTests: XCTestCase {
     for url in files {
       let name = url.deletingPathExtension().lastPathComponent
       XCTAssertTrue(Base32.isTag(name), name)
-      for secret in secrets + ["default", "app"] {
-        XCTAssertFalse(url.path.dropFirst(folder.path.count).contains(secret))
+      let relative = url.path.dropFirst(folder.path.count)
+      for secret in secrets { XCTAssertFalse(relative.contains(secret), "\(secret) in \(relative)") }
+      // Scope names are short enough to turn up inside a random base32 name, so only a whole name leaks one.
+      let components = relative.split(separator: "/").flatMap { $0.split(separator: ".") }
+      for scope in ["default", "app", "p:default"] {
+        XCTAssertFalse(components.contains { $0.lowercased() == scope }, "\(scope) in \(relative)")
       }
       guard let data = try? Data(contentsOf: url) else { continue }
       for secret in secrets { XCTAssertNil(data.range(of: Data(secret.utf8)), "\(secret) in \(url.lastPathComponent)") }
