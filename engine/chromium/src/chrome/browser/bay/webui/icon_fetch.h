@@ -22,7 +22,8 @@ void FetchIcon(const std::string& url,
                base::OnceCallback<void(base::Value)> reply);
 
 // What Chrome decodes as a favicon, sniffed from the bytes whatever the server
-// calls them: a .ico served as text/plain works, an HTML error page doesn't.
+// calls them: a .ico served as text/plain works, an HTML error page doesn't
+// (bay/core/nn_icon_download, shared with macOS).
 bool IsIconBody(std::string_view body);
 // An SVG file, from its first bytes.
 bool IsSvgBody(std::string_view body);
