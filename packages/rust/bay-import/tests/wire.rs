@@ -333,3 +333,31 @@ fn zen_spaces_keep_pins_folders_tabs_and_essentials_by_container() {
         json!([])
     );
 }
+
+/// An encrypted (version 5) session gives the same tabs as the plain one with the browser's key, and asks for the key
+/// (or for an export, where the host can't unlock the browser) without it.
+#[test]
+fn encrypted_chromium_sessions_open_with_the_browsers_key() {
+    let key: Vec<u8> = (0..32)
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&"b42cf03a29cc14e885851f164dd6594c"[at..at + 2], 16).unwrap())
+        .collect();
+    let profile = tempfile::tempdir().unwrap();
+    std::fs::create_dir(profile.path().join("Sessions")).unwrap();
+    std::fs::copy(
+        fixtures().join("misc/Session_v5_encrypted"),
+        profile.path().join("Sessions/Session_13300000000000000"),
+    )
+    .unwrap();
+    let stop = AtomicBool::new(false);
+    let tabs = bay_import::chromium_tabs(profile.path(), Cancel(&stop), Some(&key), true).unwrap();
+    same("tabs-chrome-default", &tabs);
+    let locked = bay_import::chromium_tabs(profile.path(), Cancel(&stop), None, true).unwrap_err();
+    assert_eq!(locked.code, "locked");
+    let refused =
+        bay_import::chromium_tabs(profile.path(), Cancel(&stop), None, false).unwrap_err();
+    assert_eq!(refused.code, "unsupported");
+    let wrong = bay_import::chromium_tabs(profile.path(), Cancel(&stop), Some(&[1u8; 16]), true)
+        .unwrap_err();
+    assert_eq!(wrong.code, "locked");
+}

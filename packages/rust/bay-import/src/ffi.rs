@@ -29,6 +29,20 @@ fn path(request: &Value, key: &str) -> Result<PathBuf, Failure> {
     field(request, key).map(PathBuf::from)
 }
 
+/// A key given as hex in a request.
+fn hex(text: &str) -> Result<Vec<u8>, Failure> {
+    let invalid = || Failure::new("format", "The import request's key isn't hex");
+    if !text.len().is_multiple_of(2) {
+        return Err(invalid());
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|at| {
+            u8::from_str_radix(text.get(at..at + 2).ok_or_else(invalid)?, 16).map_err(|_| invalid())
+        })
+        .collect()
+}
+
 fn read(
     request: &Value,
     cancel: Cancel<'_>,
@@ -65,7 +79,23 @@ fn read(
             )?;
             Ok(json!({"entries": entries, "count": count}))
         }
-        "chromiumTabs" => crate::chromium_tabs(&path(request, "profile")?, cancel),
+        "chromiumTabs" => {
+            let key = request
+                .get("key")
+                .and_then(Value::as_str)
+                .map(hex)
+                .transpose()?;
+            let can_unlock = request
+                .get("canUnlock")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            crate::chromium_tabs(
+                &path(request, "profile")?,
+                cancel,
+                key.as_deref(),
+                can_unlock,
+            )
+        }
         "firefoxTabs" => crate::firefox_tabs(&path(request, "profile")?, cancel),
         "zenSpaces" => crate::zen_spaces(&path(request, "profile")?, field(request, "profileId")?),
         "arcSidebar" => crate::arc_sidebar(&path(request, "file")?),

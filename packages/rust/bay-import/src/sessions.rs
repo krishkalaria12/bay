@@ -314,8 +314,15 @@ fn apply(
     Ok(())
 }
 
-/// The tabs a Chromium profile last had open, from its newest session file.
-pub fn chromium_tabs(profile: &Path, cancel: Cancel<'_>) -> Result<Value> {
+/// The tabs a Chromium profile last had open, from its newest session file. An encrypted one (version 5, each record
+/// sealed as a `v10` value) needs the browser's `key`; without one it's `locked` when the host can unlock the browser
+/// (`can_unlock`), else `unsupported`.
+pub fn chromium_tabs(
+    profile: &Path,
+    cancel: Cancel<'_>,
+    key: Option<&[u8]>,
+    can_unlock: bool,
+) -> Result<Value> {
     let mut latest: Option<PathBuf> = None;
     let mut stamp: i64 = -1;
     for directory in ["Sessions", "Sessions_Encrypted"] {
@@ -346,25 +353,71 @@ pub fn chromium_tabs(profile: &Path, cancel: Cancel<'_>) -> Result<Value> {
         return Err(Failure::new("unreadable", "Not a Chromium session"));
     }
     let version = reader.integer(4)?;
-    if version != 1 && version != 3 {
-        return Err(Failure::new(
+    let unsupported = || {
+        Failure::new(
             "unsupported",
             "The saved session is encrypted or uses a newer format. Export bookmarks for these tabs",
-        ));
-    }
+        )
+    };
     let mut tabs: BTreeMap<i32, Tab> = BTreeMap::new();
     let mut windows: BTreeMap<i32, Window> = BTreeMap::new();
     let mut groups: BTreeMap<String, Value> = BTreeMap::new();
-    while reader.offset + 2 <= bytes.len() {
-        cancel.check()?;
-        let size = reader.integer(2)? as usize;
-        if size < 1 || size > bytes.len() - reader.offset {
-            break;
+    match (version, key) {
+        (1 | 3, _) => {
+            while reader.offset + 2 <= bytes.len() {
+                cancel.check()?;
+                let size = reader.integer(2)? as usize;
+                if size < 1 || size > bytes.len() - reader.offset {
+                    break;
+                }
+                let command = reader.integer(1)?;
+                let payload = &bytes[reader.offset..reader.offset + size - 1];
+                reader.skip(size - 1)?;
+                let _ = apply(command, payload, &mut tabs, &mut windows, &mut groups);
+            }
         }
-        let command = reader.integer(1)?;
-        let payload = &bytes[reader.offset..reader.offset + size - 1];
-        reader.skip(size - 1)?;
-        let _ = apply(command, payload, &mut tabs, &mut windows, &mut groups);
+        (5, Some(key)) => {
+            // A marker record opens the file; CBC can "decrypt" with the wrong key, so without it the key was wrong.
+            let mut saw_marker = false;
+            while reader.offset + 4 <= bytes.len() {
+                cancel.check()?;
+                let size = reader.integer(4)? as usize;
+                if size > bytes.len() - reader.offset {
+                    break;
+                }
+                let sealed = &bytes[reader.offset..reader.offset + size];
+                reader.skip(size)?;
+                let Some(plain) = crate::crypto::decrypt_cbc(sealed, key) else {
+                    break;
+                };
+                let Some((&command, payload)) = plain.split_first() else {
+                    break;
+                };
+                if command == 255 && payload.is_empty() {
+                    saw_marker = true;
+                }
+                let _ = apply(
+                    u64::from(command),
+                    payload,
+                    &mut tabs,
+                    &mut windows,
+                    &mut groups,
+                );
+            }
+            if !saw_marker {
+                return Err(Failure::new(
+                    "locked",
+                    "Couldn't decrypt the session file with this key",
+                ));
+            }
+        }
+        (5, None) if can_unlock => {
+            return Err(Failure::new(
+                "locked",
+                "This session file is encrypted; unlock the browser first",
+            ));
+        }
+        _ => return Err(unsupported()),
     }
     let mut out_tabs = Vec::new();
     let mut used = BTreeSet::new();

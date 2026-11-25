@@ -7,6 +7,7 @@
 //! readers answered for the shared fixtures (`packages/import/fixtures/wire`).
 
 mod arc;
+mod crypto;
 mod failure;
 pub mod ffi;
 mod readers;

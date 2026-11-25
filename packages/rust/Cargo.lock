@@ -125,6 +125,7 @@ dependencies = [
 name = "bay-import"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "getrandom",
  "regex",
  "rusqlite",

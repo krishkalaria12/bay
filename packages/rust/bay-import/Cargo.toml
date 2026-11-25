@@ -7,6 +7,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+aes = "0.9"
 getrandom = "0.4"
 regex.workspace = true
 # Bundled: the readers carry their own SQLite (decision 1), with no symbols shared with Chromium's renamed copy.

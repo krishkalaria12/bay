@@ -8,6 +8,8 @@
 //   {"reader": "history", "profile": "...", "firefox": bool, "limit": n, "since": ms, "chunkSize": n, "stream": bool}
 //                                                              {"entries": [...], "count": n}; events go to the observer
 //   {"reader": "chromiumTabs" | "firefoxTabs", "profile": "..."}  {"tabs": [...], "groups": [...]}
+//     chromiumTabs also takes "key" (hex, the 16-byte v10 key) for an encrypted session file, and "canUnlock": a
+//     keyless encrypted file is then "locked" (ask to unlock) rather than "unsupported"
 //   {"reader": "zenSpaces", "profile": "...", "profileId": "..."}
 //   {"reader": "arcSidebar", "file": ".../StorableSidebar.json"}
 //   {"reader": "extensions", "profile": "..."}
