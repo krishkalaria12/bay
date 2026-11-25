@@ -1,0 +1,142 @@
+{
+  "favorites": {
+    "Default": [
+      {
+        "active": false,
+        "lastActive": 1788220740000.0,
+        "pinned": true,
+        "title": "Mail",
+        "url": "https://mail.example.com/",
+        "windowIndex": 0
+      },
+      {
+        "active": false,
+        "customTitle": "Tunes",
+        "lastActive": 1788220740000.0,
+        "pinned": true,
+        "title": "Music",
+        "url": "https://music.example/",
+        "windowIndex": 0
+      },
+      {
+        "active": false,
+        "lastActive": 1788220740000.0,
+        "pinned": true,
+        "title": "Maps",
+        "url": "https://maps.example/",
+        "windowIndex": 0
+      }
+    ],
+    "Profile 1": [
+      {
+        "active": false,
+        "lastActive": 1788220740000.0,
+        "pinned": true,
+        "title": "Slack",
+        "url": "https://slack.example/",
+        "windowIndex": 0
+      }
+    ]
+  },
+  "spaces": [
+    {
+      "color": "#3366CC",
+      "emoji": "🏡",
+      "id": "S-PERSONAL",
+      "name": "Personal",
+      "pinned": [
+        {
+          "pageTitle": "Calendar – Week of Sep 1",
+          "title": "Cal",
+          "type": "url",
+          "url": "https://calendar.example/"
+        },
+        {
+          "children": [
+            {
+              "title": "A long blog post",
+              "type": "url",
+              "url": "https://blog.example/post"
+            },
+            {
+              "children": [
+                {
+                  "title": "Later",
+                  "type": "url",
+                  "url": "https://later.example/"
+                }
+              ],
+              "title": "Later",
+              "type": "folder"
+            }
+          ],
+          "title": "Reading",
+          "type": "folder"
+        },
+        {
+          "title": "Left",
+          "type": "url",
+          "url": "https://left.example/"
+        },
+        {
+          "title": "Right",
+          "type": "url",
+          "url": "https://right.example/"
+        }
+      ],
+      "profileId": "Default",
+      "tabs": [
+        {
+          "active": false,
+          "lastActive": 1788220740000.0,
+          "pinned": false,
+          "title": "Today tab",
+          "url": "https://today.example/",
+          "windowIndex": 0
+        },
+        {
+          "active": false,
+          "customTitle": "Renamed today",
+          "lastActive": 1788220740000.0,
+          "pinned": false,
+          "title": "Another today",
+          "url": "https://today2.example/",
+          "windowIndex": 0
+        }
+      ]
+    },
+    {
+      "color": "#FF8000",
+      "colors": [
+        "#FF8000",
+        "#FF0080"
+      ],
+      "icon": "briefcase",
+      "id": "S-WORK",
+      "name": "Work",
+      "pinned": [
+        {
+          "title": "Board",
+          "type": "url",
+          "url": "https://jira.example/"
+        }
+      ],
+      "profileId": "Profile 1",
+      "tabs": []
+    },
+    {
+      "emoji": "🚀",
+      "id": "S-UNTITLED",
+      "name": "Space 1",
+      "pinned": [
+        {
+          "title": "Untitled space tab",
+          "type": "url",
+          "url": "https://untitled.example/"
+        }
+      ],
+      "profileId": "Default",
+      "tabs": []
+    }
+  ]
+}

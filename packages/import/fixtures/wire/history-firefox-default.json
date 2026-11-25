@@ -1,0 +1,30 @@
+[
+  {
+    "lastVisit": 1788220800000.0,
+    "title": "Only in WAL",
+    "typedCount": 0,
+    "url": "https://in-wal.example/",
+    "visits": 1
+  },
+  {
+    "lastVisit": 1788220750000.0,
+    "title": "MDN Docs",
+    "typedCount": 0,
+    "url": "https://developer.mozilla.example/docs",
+    "visits": 4
+  },
+  {
+    "lastVisit": 1788220700000.0,
+    "title": "Mozilla",
+    "typedCount": 1,
+    "url": "https://www.mozilla.example/",
+    "visits": 10
+  },
+  {
+    "lastVisit": 1788220400000.0,
+    "title": "Tagged",
+    "typedCount": 0,
+    "url": "https://tagged.example/",
+    "visits": 1
+  }
+]

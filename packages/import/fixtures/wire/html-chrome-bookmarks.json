@@ -1,0 +1,57 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1700000001000.0,
+          "title": "Bay",
+          "type": "url",
+          "url": "https://bay.example/"
+        },
+        {
+          "children": [],
+          "dateAdded": 1700000002000.0,
+          "title": "Empty folder",
+          "type": "folder"
+        },
+        {
+          "children": [
+            {
+              "dateAdded": 1700000004000.0,
+              "title": "Tool <beta> ✓",
+              "type": "url",
+              "url": "https://tool.example/?q=\"x\"&y='1'"
+            }
+          ],
+          "dateAdded": 1700000003000.0,
+          "title": "Tools",
+          "type": "folder"
+        }
+      ],
+      "dateAdded": 1700000000000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    },
+    {
+      "title": "Loose link",
+      "type": "url",
+      "url": "https://loose.example/"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1700000005000.0,
+          "title": "lowercase, unquoted",
+          "type": "url",
+          "url": "https://unquoted.example/"
+        }
+      ],
+      "role": "other",
+      "title": "Other Bookmarks",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

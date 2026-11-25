@@ -1,0 +1,20 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "Work wiki",
+          "type": "url",
+          "url": "https://wiki.work.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

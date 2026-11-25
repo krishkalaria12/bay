@@ -1,0 +1,19 @@
+{
+  "groups": [],
+  "tabs": [
+    {
+      "active": false,
+      "pinned": true,
+      "title": "Dia",
+      "url": "https://dia.example/",
+      "windowIndex": 0
+    },
+    {
+      "active": true,
+      "pinned": false,
+      "title": "Long read",
+      "url": "https://read.example/",
+      "windowIndex": 0
+    }
+  ]
+}

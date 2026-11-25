@@ -1,0 +1,86 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "Bay",
+          "type": "url",
+          "url": "https://bay.example/"
+        },
+        {
+          "children": [
+            {
+              "dateAdded": 1779580800000.0,
+              "title": "Swift Forums",
+              "type": "url",
+              "url": "https://forums.swift.example/"
+            },
+            {
+              "children": [
+                {
+                  "dateAdded": 1779580800000.0,
+                  "title": "SQLite — Docs",
+                  "type": "url",
+                  "url": "https://sqlite.example/docs.html"
+                }
+              ],
+              "dateAdded": 1779580800000.0,
+              "title": "Docs",
+              "type": "folder"
+            }
+          ],
+          "dateAdded": 1779580800000.0,
+          "title": "Dev",
+          "type": "folder"
+        },
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "Bookmarklet",
+          "type": "url",
+          "url": "javascript:alert(1)"
+        },
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "From account",
+          "type": "url",
+          "url": "https://account.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "Café ☕",
+          "type": "url",
+          "url": "https://cafe.example/menu?a=1&b=2"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "other",
+      "title": "Other bookmarks",
+      "type": "folder"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1779580800000.0,
+          "title": "Phone link",
+          "type": "url",
+          "url": "https://phone.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "mobile",
+      "title": "Mobile bookmarks",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

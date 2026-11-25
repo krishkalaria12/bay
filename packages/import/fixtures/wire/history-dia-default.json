@@ -1,0 +1,16 @@
+[
+  {
+    "lastVisit": 1788220770000.0,
+    "title": "Dia",
+    "typedCount": 2,
+    "url": "https://dia.example/",
+    "visits": 5
+  },
+  {
+    "lastVisit": 1788220500000.0,
+    "title": "Long read",
+    "typedCount": 0,
+    "url": "https://read.example/",
+    "visits": 1
+  }
+]
