@@ -11,6 +11,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 bay-adblock = { path = "../adblock" }
+bay-import = { path = "bay-import" }
 bay-lists = { path = "bay-lists" }
 bay-sync = { path = "bay-sync" }
 memmap2 = "0.9"

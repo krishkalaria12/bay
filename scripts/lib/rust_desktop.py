@@ -18,7 +18,8 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 WORKSPACE = REPO / "packages/rust"
-HEADERS = [REPO / "packages/adblock/include", WORKSPACE / "bay-lists/include", WORKSPACE / "bay-sync/include"]
+HEADERS = [REPO / "packages/adblock/include", WORKSPACE / "bay-import/include", WORKSPACE / "bay-lists/include",
+           WORKSPACE / "bay-sync/include"]
 
 
 def link_flags() -> tuple[pathlib.Path, list[str], list[pathlib.Path]]:

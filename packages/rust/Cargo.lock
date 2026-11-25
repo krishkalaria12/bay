@@ -116,6 +116,7 @@ name = "bay-desktop"
 version = "0.1.0"
 dependencies = [
  "bay-adblock",
+ "bay-import",
  "bay-lists",
  "bay-sync",
 ]
