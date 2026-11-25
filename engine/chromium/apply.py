@@ -79,6 +79,7 @@ def layer_source(here: Path, owned: str):
             "}  // namespace bay\n", encoding="utf-8")
         # The blocker's and its lists' C ABI; scripts/engine.py builds the library behind them.
         shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
+        shutil.copy2(repository / "packages/adblock/include/bay_blocker_hooks.h", staged / "webui/bay_blocker_hooks.h")
         shutil.copy2(repository / "packages/rust/bay-lists/include/bay_lists.h", staged / "webui/bay_lists.h")
         # The sync format's C ABI, for the portable sync code (data/BUILD.gn include_dirs).
         (staged / "data/rust").mkdir(parents=True, exist_ok=True)

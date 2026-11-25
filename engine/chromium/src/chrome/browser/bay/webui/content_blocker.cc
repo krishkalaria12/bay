@@ -5,9 +5,7 @@
 #include <string.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
-#include <mutex>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -19,12 +17,12 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "bay/core/nn_request_filter.h"
 #include "chrome/browser/bay/webui/bay_adblock.h"
+#include "chrome/browser/bay/webui/bay_blocker_hooks.h"
 #include "chrome/browser/bay/webui/bay_lists.h"
 #include "chrome/browser/bay/webui/content_blocker_rules.h"
 #include "chrome/browser/browser_process.h"
@@ -41,8 +39,6 @@
 
 namespace bay {
 namespace {
-using content_blocker::Covers;
-using content_blocker::HostOf;
 
 // The longest list downloaded. bay-lists refuses longer ones too.
 constexpr size_t kMaxList = 32 * 1024 * 1024;
@@ -62,233 +58,21 @@ constexpr net::NetworkTrafficAnnotationTag kListsAnnotation =
         policy_exception_justification: "Bay's own feature."
       })");
 
-// What the host needs from the engine, whatever the thread.
-struct Engine {
-  explicit Engine(BayBlocker* blocker) : blocker(blocker) {}
-  ~Engine() { bay_blocker_free(blocker); }
-  Engine(const Engine&) = delete;
-  Engine& operator=(const Engine&) = delete;
-  // Allocated and freed by the Rust library, outside PartitionAlloc.
-  RAW_PTR_EXCLUSION BayBlocker* const blocker;
-};
-
-// What the request filter reads: replaced whole, never changed in place.
-struct Live {
-  std::shared_ptr<Engine> engine;
-  bool enabled = true;
-  std::vector<std::string> allowed;
-  // Sites visited despite a block on the page itself. Requests are still
-  // filtered on them.
-  std::vector<std::string> pages;
-};
-
-std::mutex& LiveLock() {
-  // Never destroyed. NoDestructor refuses std::mutex where it is trivially
-  // destructible, as on Windows.
-  static std::mutex* lock = new std::mutex;
-  return *lock;
-}
-std::shared_ptr<const Live>& LiveSlot() {
-  static base::NoDestructor<std::shared_ptr<const Live>> live(
-      std::make_shared<Live>());
-  return *live;
-}
-std::shared_ptr<const Live> CurrentLive() {
-  std::lock_guard<std::mutex> lock(LiveLock());
-  return LiveSlot();
-}
-void Publish(std::shared_ptr<const Live> live) {
-  std::lock_guard<std::mutex> lock(LiveLock());
-  LiveSlot() = std::move(live);
-}
-
-std::atomic<uint64_t> g_lookups{0};
-std::atomic<uint64_t> g_lookup_micros_x1000{0};
-std::atomic<uint64_t> g_max_lookup_micros_x1000{0};
-
-const char* Or(const char* text, const char* fallback) {
-  return text ? text : fallback;
-}
-bool Present(const char* text) {
-  return text && *text;
-}
-bool PausedOn(const Live& live, const std::string& host) {
-  return std::ranges::any_of(live.allowed, [&](const std::string& allowed) {
-    return Covers(allowed, host);
-  });
-}
-// The engine to ask for a page at `top` (or else `fallback`), if any.
-std::shared_ptr<const Live> Filtering(const char* top, const char* fallback) {
-  auto live = CurrentLive();
-  if (!live->enabled || !live->engine ||
-      PausedOn(*live, HostOf(Or(Present(top) ? top : fallback, ""))))
-    return nullptr;
-  return live;
-}
-// A library string as the engine's to free.
-char* CopyOf(char* text) {
-  char* copy = text ? strdup(text) : nullptr;
-  bay_string_free(text);
-  return copy;
-}
-
-bool Filter(const char* url,
-            const char* source,
-            const char* top,
-            const char* type,
-            const char* method,
-            char** redirect,
-            bool* any_origin) {
-  if (redirect)
-    *redirect = nullptr;
-  if (any_origin)
-    *any_origin = false;
-  auto live = Filtering(top, source);
-  if (!live)
-    return false;
-  const base::TimeTicks start = base::TimeTicks::Now();
-  BayBlockerMatch match =
-      bay_blocker_match(live->engine->blocker, url, Or(source, ""),
-                        Or(type, "other"), Or(method, "GET"));
-  // A blocked request's stand-in, or an allowed one's cleaned URL.
-  const char* answer = match.blocked ? match.redirect : match.rewrite;
-  if (redirect && answer)
-    *redirect = strdup(answer);
-  if (any_origin && !match.blocked && match.rewrite_any_origin)
-    *any_origin = true;
-  bay_string_free(match.redirect);
-  bay_string_free(match.rewrite);
-  if (match.blocked && type && !strcmp(type, "document")) {
-    const std::string host = HostOf(url);
-    for (const auto& page : live->pages) {
-      if (Covers(page, host)) {
-        // Visit Anyway lifts the block whole: no stand-in either.
-        if (redirect) {
-          free(*redirect);
-          *redirect = nullptr;
-        }
-        return false;
-      }
-    }
-  }
-  const uint64_t micros_x1000 =
-      static_cast<uint64_t>((base::TimeTicks::Now() - start).InNanoseconds());
-  g_lookups.fetch_add(1, std::memory_order_relaxed);
-  g_lookup_micros_x1000.fetch_add(micros_x1000, std::memory_order_relaxed);
-  uint64_t max = g_max_lookup_micros_x1000.load(std::memory_order_relaxed);
-  while (micros_x1000 > max &&
-         !g_max_lookup_micros_x1000.compare_exchange_weak(
-             max, micros_x1000, std::memory_order_relaxed)) {
-  }
-  return match.blocked;
-}
-
-char* Response(const char* url,
-               const char* source,
-               const char* top,
-               const char* type,
-               const char* method,
-               const char* ip,
-               const char* headers) {
-  auto live = Filtering(top, source);
-  if (!live)
-    return nullptr;
-  return CopyOf(bay_blocker_response(live->engine->blocker, url, Or(source, ""),
-                                     Or(type, "other"), Or(method, "GET"), ip,
-                                     Or(headers, "[]")));
-}
-bool BodyFilterApplies(const char* url,
-                       const char* source,
-                       const char* top,
-                       const char* type,
-                       const char* method,
-                       int status,
-                       const char* content_type,
-                       const char* content_disposition) {
-  auto live = Filtering(top, url);
-  return live && bay_blocker_body_filter_applies(
-                     live->engine->blocker, url, Or(source, ""),
-                     Or(type, "other"), Or(method, "GET"), status,
-                     Or(content_type, ""), Or(content_disposition, ""));
-}
-// Holds the engine, which a list update may replace while this runs.
-uint8_t* BodyFiltered(const char* url,
-                      const char* source,
-                      const char* top,
-                      const char* type,
-                      const char* method,
-                      const char* content_type,
-                      const uint8_t* body,
-                      size_t length,
-                      size_t* out_length) {
-  *out_length = 0;
-  auto live = Filtering(top, url);
-  if (!live)
-    return nullptr;
-  size_t filtered_length = 0;
-  uint8_t* filtered = bay_blocker_body_filter(
-      live->engine->blocker, url, Or(source, ""), Or(type, "other"),
-      Or(method, "GET"), Or(content_type, ""), body, length, &filtered_length);
-  if (!filtered)
-    return nullptr;
-  auto* copy = static_cast<uint8_t*>(malloc(std::max<size_t>(filtered_length, 1)));
-  if (copy) {
-    memcpy(copy, filtered, filtered_length);
-    *out_length = filtered_length;
-  }
-  bay_bytes_free(filtered, filtered_length);
-  return copy;
-}
-char* RequestHeaderNames(const char* url,
-                         const char* source,
-                         const char* top,
-                         const char* type,
-                         const char* method) {
-  auto live = Filtering(top, url);
-  if (!live)
-    return nullptr;
-  return CopyOf(bay_blocker_request_header_names(
-      live->engine->blocker, url, Or(source, ""), Or(type, "other"),
-      Or(method, "GET")));
-}
-bool RequestHeadersBlocked(const char* url,
-                           const char* source,
-                           const char* top,
-                           const char* type,
-                           const char* method,
-                           const char* headers) {
-  auto live = Filtering(top, url);
-  return live && bay_blocker_request_headers_blocked(
-                     live->engine->blocker, url, Or(source, ""),
-                     Or(type, "other"), Or(method, "GET"), Or(headers, "[]"));
-}
-bool CnameBlocked(const char* url,
-                  const char* alias,
-                  const char* source,
-                  const char* top,
-                  const char* type,
-                  const char* method) {
-  auto live = Filtering(top, url);
-  return live && bay_blocker_cname_blocked(
-                     live->engine->blocker, url, alias, Or(source, ""),
-                     Or(type, "other"), Or(method, "GET"));
-}
-char* ContentSecurityPolicy(const char* url,
-                            const char* source,
-                            const char* top,
-                            const char* type) {
-  auto live = Filtering(top, url);
-  if (!live)
-    return nullptr;
-  return CopyOf(bay_blocker_content_security_policy(
-      live->engine->blocker, url, Or(source, ""), Or(type, "document")));
-}
-char* Scriptlets(const char* frame_url, const char* top_origin) {
-  auto live = Filtering(top_origin, frame_url);
-  if (!live)
-    return nullptr;
-  return CopyOf(bay_blocker_scriptlets(live->engine->blocker, frame_url));
-}
+// The engine, settings and request hooks are bay_blocker_hooks.h's, which
+// macOS shares.
+using bay_blocker::BodyFilterApplies;
+using bay_blocker::BodyFiltered;
+using bay_blocker::CnameBlocked;
+using bay_blocker::ContentSecurityPolicy;
+using bay_blocker::Engine;
+using bay_blocker::Filter;
+using bay_blocker::Filtering;
+using bay_blocker::Live;
+using bay_blocker::Publish;
+using bay_blocker::RequestHeaderNames;
+using bay_blocker::RequestHeadersBlocked;
+using bay_blocker::Response;
+using bay_blocker::Scriptlets;
 
 // bay-lists answers and their files, off the UI sequence where they touch the disk.
 std::string Utf8(const base::FilePath& path) {
@@ -332,13 +116,14 @@ double Now() {
 }
 // The request filter's timing, for the stats.
 std::string Timing() {
-  const uint64_t lookups = g_lookups.load(std::memory_order_relaxed);
+  const bay_blocker::Timings& timing = bay_blocker::Timing();
+  const uint64_t lookups = timing.lookups.load(std::memory_order_relaxed);
   const double average =
-      lookups ? g_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0 /
+      lookups ? timing.nanos.load(std::memory_order_relaxed) / 1000.0 /
                     lookups
               : 0;
   const double max =
-      g_max_lookup_micros_x1000.load(std::memory_order_relaxed) / 1000.0;
+      timing.max_nanos.load(std::memory_order_relaxed) / 1000.0;
   return base::WriteJson(
              base::DictValue()
                  .Set("lookups", static_cast<double>(lookups))
@@ -459,7 +244,7 @@ void ContentBlocker::PublishLive() {
   }
   // Only engines with such rules need every response marshalled to the host.
   const bool filtering = live->enabled && live->engine;
-  BayBlocker* blocker = filtering ? live->engine->blocker : nullptr;
+  BayBlocker* blocker = filtering ? live->engine->blocker() : nullptr;
   nncore::SetResponseFilter(
       blocker && bay_blocker_has_response_modifiers(blocker) ? Response
                                                              : nullptr);
@@ -783,7 +568,7 @@ std::optional<FrameCosmetics> ForFrame(const std::string& frame_url,
   auto live = Filtering(page_url.c_str(), nullptr);
   if (!live)
     return std::nullopt;
-  auto found = JsonFrom(bay_blocker_cosmetic(live->engine->blocker,
+  auto found = JsonFrom(bay_blocker_cosmetic(live->engine->blocker(),
                                              frame_url.c_str()));
   if (!found || !found->is_dict())
     return std::nullopt;
@@ -824,7 +609,7 @@ std::optional<std::string> ContentBlocker::GenericStyle(
   if (!text)
     return std::nullopt;
   auto selectors = JsonFrom(
-      bay_blocker_hidden_selectors(frame->live->engine->blocker, text->c_str()));
+      bay_blocker_hidden_selectors(frame->live->engine->blocker(), text->c_str()));
   if (!selectors || !selectors->is_list())
     return std::nullopt;
   return content_blocker::StyleFor(Strings(&selectors->GetList()));

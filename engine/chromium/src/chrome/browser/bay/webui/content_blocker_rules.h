@@ -4,8 +4,9 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
+
+#include "chrome/browser/bay/webui/bay_blocker_hooks.h"
 
 // The request filter's small decisions, as NNCoreContentBlocker.mm makes them
 // on macOS: they need neither the engine nor the browser. The lists' own (their
@@ -13,10 +14,10 @@
 // bay-lists'.
 namespace bay::content_blocker {
 
-// The lowercased host of a URL or origin ("" when it has none).
-std::string HostOf(std::string_view url);
-// A paused site covers its subdomains: "example.com" covers "www.example.com".
-bool Covers(std::string_view allowed, std::string_view host);
+// The lowercased host of a URL or origin, and whether a paused site covers a
+// host: bay_blocker_hooks.h's, which macOS shares.
+using bay_blocker::Covers;
+using bay_blocker::HostOf;
 // A hiding sheet, one rule per selector so that one the engine can't parse
 // drops only itself. nullopt for none.
 std::optional<std::string> StyleFor(const std::vector<std::string>& selectors);

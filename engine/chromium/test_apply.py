@@ -47,6 +47,7 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
@@ -117,6 +118,7 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
@@ -162,6 +164,7 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)

@@ -21,217 +21,36 @@
 #import "NNCoreInternal.h"
 
 #include <atomic>
-#include <chrono>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "bay_adblock.h"
+#include "bay_blocker_hooks.h"
 #include "bay_lists.h"
 
 namespace {
 
 // MARK: The live engine (any thread)
 
-struct Engine {
-  explicit Engine(BayBlocker *b) : blocker(b) {}
-  ~Engine() { bay_blocker_free(blocker); }
-  Engine(const Engine &) = delete;
-  Engine &operator=(const Engine &) = delete;
-  BayBlocker *const blocker;
-};
+// The engine, settings and request hooks are bay_blocker_hooks.h's, which Windows and Linux share.
+using bay_blocker::BodyFilterApplies;
+using bay_blocker::BodyFiltered;
+using bay_blocker::CnameBlocked;
+using bay_blocker::ContentSecurityPolicy;
+using bay_blocker::Engine;
+using bay_blocker::Filter;
+using bay_blocker::HostOf;
+using bay_blocker::Live;
+using bay_blocker::PausedOn;
+using bay_blocker::Publish;
+using bay_blocker::RequestHeaderNames;
+using bay_blocker::RequestHeadersBlocked;
+using bay_blocker::Response;
+using bay_blocker::Scriptlets;
 
-// What the request filter reads: replaced whole (never changed in place) under gLiveLock.
-struct Live {
-  std::shared_ptr<Engine> engine;
-  bool enabled = true;
-  std::vector<std::string> allowed;
-  // Sites the user chose to visit despite a block on the page itself; their requests are still filtered.
-  std::vector<std::string> pages;
-};
-
-std::mutex gLiveLock;
-std::shared_ptr<const Live> gLive = std::make_shared<Live>();
-
-std::shared_ptr<const Live> CurrentLive() {
-  std::lock_guard<std::mutex> lock(gLiveLock);
-  return gLive;
-}
-
-void Publish(std::shared_ptr<const Live> live) {
-  std::lock_guard<std::mutex> lock(gLiveLock);
-  gLive = std::move(live);
-}
-
-std::atomic<uint64_t> gLookups{0};
-std::atomic<uint64_t> gLookupNanos{0};
-std::atomic<uint64_t> gMaxLookupNanos{0};
-
-// The lowercased host of a URL or origin ("" when it has none).
-std::string HostOf(const char *url) {
-  if (!url) return {};
-  std::string text(url);
-  size_t start = text.find("://");
-  start = start == std::string::npos ? 0 : start + 3;
-  size_t end = text.find_first_of("/?#", start);
-  std::string authority = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
-  const size_t at = authority.rfind('@');
-  if (at != std::string::npos) authority.erase(0, at + 1);
-  if (!authority.empty() && authority[0] == '[') {
-    const size_t close = authority.find(']');
-    authority = authority.substr(0, close == std::string::npos ? std::string::npos : close + 1);
-  } else {
-    const size_t colon = authority.find(':');
-    if (colon != std::string::npos) authority.erase(colon);
-  }
-  for (char &c : authority) c = (char)tolower((unsigned char)c);
-  return authority;
-}
-
-// A paused site covers its subdomains: "example.com" covers "www.example.com".
-bool Covers(const std::string &allowed, const std::string &host) {
-  if (allowed.empty() || host.empty()) return false;
-  if (host == allowed) return true;
-  return host.size() > allowed.size() && host.compare(host.size() - allowed.size(), allowed.size(), allowed) == 0 &&
-         host[host.size() - allowed.size() - 1] == '.';
-}
-
-bool PausedOn(const Live &live, const std::string &host) {
-  for (const std::string &allowed : live.allowed)
-    if (Covers(allowed, host)) return true;
-  return false;
-}
-
-// NNCoreRequestFilter: on the engine's threads.
-bool Filter(const char *url, const char *source, const char *top, const char *type, const char *method,
-            char **redirect, bool *any_origin) {
-  if (redirect) *redirect = nullptr;
-  if (any_origin) *any_origin = false;
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return false;
-  if (PausedOn(*live, HostOf(top && *top ? top : source))) return false;
-  const auto start = std::chrono::steady_clock::now();
-  BayBlockerMatch match =
-      bay_blocker_match(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
-  // A blocked request's stand-in, or an allowed one's URL without its tracking parameters.
-  const char *answer = match.blocked ? match.redirect : match.rewrite;
-  if (redirect && answer) *redirect = strdup(answer);
-  if (any_origin && !match.blocked && match.rewrite_any_origin) *any_origin = true;
-  bay_string_free(match.redirect);
-  bay_string_free(match.rewrite);
-  if (match.blocked && type && !strcmp(type, "document")) {
-    const std::string host = HostOf(url);
-    for (const std::string &page : live->pages)
-      if (Covers(page, host)) {
-        // Visit Anyway lifts the block whole: no stand-in either.
-        if (redirect) free(*redirect), *redirect = nullptr;
-        return false;
-      }
-  }
-  const uint64_t nanos =
-      (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
-  gLookups.fetch_add(1, std::memory_order_relaxed);
-  gLookupNanos.fetch_add(nanos, std::memory_order_relaxed);
-  uint64_t max = gMaxLookupNanos.load(std::memory_order_relaxed);
-  while (nanos > max && !gMaxLookupNanos.compare_exchange_weak(max, nanos, std::memory_order_relaxed)) {
-  }
-  return match.blocked;
-}
-
-// NNCoreResponseFilter: $header, $ipaddress, $permissions and ##^responseheader, on the request's sequence.
-char *Response(const char *url, const char *source, const char *top, const char *type, const char *method,
-               const char *ip, const char *headers) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return nullptr;
-  if (PausedOn(*live, HostOf(top && *top ? top : source))) return nullptr;
-  return bay_blocker_response(live->engine->blocker, url, source ?: "", type ?: "other",
-                              method ?: "GET", ip, headers ?: "[]");
-}
-
-// NNCoreBodyFilterGate: every response's question, whether $replace or an HTML ##^ rule wants its body.
-bool BodyFilterApplies(const char *url, const char *source, const char *top, const char *type, const char *method,
-                       int status, const char *contentType, const char *contentDisposition) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return false;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
-  return bay_blocker_body_filter_applies(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET", status,
-                                         contentType ?: "", contentDisposition ?: "");
-}
-
-// NNCoreBodyFilter: a whole body the gate asked for, on the thread pool. Keeps its own hold on the engine, which a list
-// update may replace while it runs.
-uint8_t *BodyFiltered(const char *url, const char *source, const char *top, const char *type, const char *method,
-                      const char *contentType, const uint8_t *body, size_t length, size_t *outLength) {
-  *outLength = 0;
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return nullptr;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
-  size_t filteredLength = 0;
-  uint8_t *filtered = bay_blocker_body_filter(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
-                                              contentType ?: "", body, length, &filteredLength);
-  if (!filtered) return nullptr;
-  uint8_t *copy = (uint8_t *)malloc(filteredLength ?: 1);
-  if (copy) {
-    memcpy(copy, filtered, filteredLength);
-    *outLength = filteredLength;
-  }
-  bay_bytes_free(filtered, filteredLength);
-  return copy;
-}
-
-// NNCoreRequestHeaderNames: what $requestheader rules read for this request, nearly always nothing.
-char *RequestHeaderNames(const char *url, const char *source, const char *top, const char *type, const char *method) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return nullptr;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
-  char *names = bay_blocker_request_header_names(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
-  char *copy = names ? strdup(names) : nullptr;
-  bay_string_free(names);
-  return copy;
-}
-
-// NNCoreRequestHeaderFilter: $requestheader, with the headers it asked for.
-bool RequestHeadersBlocked(const char *url, const char *source, const char *top, const char *type, const char *method,
-                           const char *headers) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return false;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
-  return bay_blocker_request_headers_blocked(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
-                                             headers ?: "[]");
-}
-
-// NNCoreCnameFilter: what a hostname is an alias of, for each alias of a response.
-bool CnameBlocked(const char *url, const char *alias, const char *source, const char *top, const char *type,
-                  const char *method) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return false;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
-  return bay_blocker_cname_blocked(live->engine->blocker, url, alias, source ?: "", type ?: "other", method ?: "GET");
-}
-
-// NNCoreContentSecurityPolicySource: $csp rules, on the filter's sequence while the navigation waits.
-char *ContentSecurityPolicy(const char *url, const char *source, const char *top, const char *type) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return nullptr;
-  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
-  char *policy = bay_blocker_content_security_policy(live->engine->blocker, url, source ?: "", type ?: "document");
-  char *copy = policy ? strdup(policy) : nullptr;
-  bay_string_free(policy);
-  return copy;
-}
-
-// NNCoreScriptletSource: on a background sequence, while the document's renderer waits.
-char *Scriptlets(const char *frameURL, const char *topOrigin) {
-  std::shared_ptr<const Live> live = CurrentLive();
-  if (!live->enabled || !live->engine) return nullptr;
-  if (PausedOn(*live, HostOf(topOrigin && *topOrigin ? topOrigin : frameURL))) return nullptr;
-  char *script = bay_blocker_scriptlets(live->engine->blocker, frameURL);
-  char *copy = script ? strdup(script) : nullptr;
-  bay_string_free(script);
-  return copy;
-}
+std::shared_ptr<const Live> CurrentLive() { return bay_blocker::Current(); }
 
 // The engine runs scriptlets itself, before a document's own scripts (setScriptletSource:); an older one gets them
 // with the frame's cosmetic filters, once its page script says hello.
@@ -309,17 +128,17 @@ void PublishLive() {
   for (NSString *host in settings[@"pages"]) live->pages.emplace_back(host.UTF8String);
   // Only engines with response rules need every response's headers marshalled to the host.
   if ([NNCoreEngine respondsToSelector:@selector(setResponseFilter:)])
-    [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker)
+    [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker())
                                         ? Response
                                         : nullptr];
   // The rest are asked about every response or request, so they're only there when a rule can answer.
   const bool filtering = live->enabled && live->engine;
   if ([NNCoreEngine respondsToSelector:@selector(setBodyFilterGate:filter:)]) {
-    const bool bodies = filtering && bay_blocker_has_body_modifiers(live->engine->blocker);
+    const bool bodies = filtering && bay_blocker_has_body_modifiers(live->engine->blocker());
     [NNCoreEngine setBodyFilterGate:bodies ? BodyFilterApplies : nullptr filter:bodies ? BodyFiltered : nullptr];
   }
   if ([NNCoreEngine respondsToSelector:@selector(setRequestHeaderNames:filter:)]) {
-    const bool headers = filtering && bay_blocker_has_request_header_modifiers(live->engine->blocker);
+    const bool headers = filtering && bay_blocker_has_request_header_modifiers(live->engine->blocker());
     [NNCoreEngine setRequestHeaderNames:headers ? RequestHeaderNames : nullptr filter:headers ? RequestHeadersBlocked : nullptr];
   }
   if ([NNCoreEngine respondsToSelector:@selector(setCnameFilter:)])
@@ -339,12 +158,13 @@ dispatch_queue_t Work() {
 
 // The request filter's timing, for the stats.
 NSString *Timing() {
-  const uint64_t lookups = gLookups.load(std::memory_order_relaxed);
-  const double averageMicros = lookups ? gLookupNanos.load(std::memory_order_relaxed) / 1000.0 / lookups : 0;
+  const bay_blocker::Timings &timing = bay_blocker::Timing();
+  const uint64_t lookups = timing.lookups.load(std::memory_order_relaxed);
+  const double averageMicros = lookups ? timing.nanos.load(std::memory_order_relaxed) / 1000.0 / lookups : 0;
   return JSONText(@{
     @"lookups" : @(lookups),
     @"averageLookupMicros" : @(round(averageMicros * 100) / 100),
-    @"maxLookupMicros" : @(round(gMaxLookupNanos.load(std::memory_order_relaxed) / 10.0) / 100),
+    @"maxLookupMicros" : @(round(timing.max_nanos.load(std::memory_order_relaxed) / 10.0) / 100),
   });
 }
 
@@ -510,7 +330,7 @@ std::shared_ptr<Engine> CosmeticEngine(NSString *frameURL, NSString *pageURL, NS
   if (!IsWeb(frameURL)) return nullptr;
   std::shared_ptr<const Live> live = CurrentLive();
   if (!live->enabled || !live->engine || PausedOn(*live, HostOf(pageURL.UTF8String))) return nullptr;
-  NSDictionary *found = JSONFrom(bay_blocker_cosmetic(live->engine->blocker, frameURL.UTF8String));
+  NSDictionary *found = JSONFrom(bay_blocker_cosmetic(live->engine->blocker(), frameURL.UTF8String));
   if (![found isKindOfClass:NSDictionary.class]) return nullptr;
   *resources = found;
   return live->engine;
@@ -569,7 +389,7 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
   NSData *json = [NSJSONSerialization dataWithJSONObject:query options:0 error:nil];
   if (!json) return nil;
   NSString *text = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
-  NSArray *selectors = JSONFrom(bay_blocker_hidden_selectors(engine->blocker, text.UTF8String));
+  NSArray *selectors = JSONFrom(bay_blocker_hidden_selectors(engine->blocker(), text.UTF8String));
   return [selectors isKindOfClass:NSArray.class] ? StyleFor(selectors) : nil;
 }
 
