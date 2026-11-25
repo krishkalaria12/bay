@@ -24,7 +24,7 @@ public enum ChromiumSessions {
 
   public static func load(profile: URL, key: Data?) throws -> OpenTabs {
     var request: [String: Any] = ["reader": "chromiumTabs", "profile": profile.path, "canUnlock": true]
-    if let key { request["key"] = key.map { String(format: "%02x", $0) }.joined() }
+    if let key { request["key"] = SharedReaders.hex(key) }
     return try SharedReaders.read(request, as: SharedReaders.Tabs.self).open
   }
 }

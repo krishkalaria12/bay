@@ -1,5 +1,8 @@
 // Bay's browser import readers on the desktops (packages/rust/bay-import/src/ffi.rs), linked through bay-desktop.
 //
+// With a secret hook, card numbers and cookie values leave the answer: each is {"secret": n}, its bytes handed to
+// the hook as n, for a host that keeps them in memory it wipes.
+//
 // bay_import_read takes a JSON request naming a reader and answers {"value": ...} or {"error": {"code", "message"}}:
 //   {"reader": "passwordsCsv", "text": "..."}                  a password CSV export, as credentials
 //   {"reader": "netscapeBookmarks", "text": "..."}             a bookmarks HTML export, as a bookmark tree
@@ -17,10 +20,12 @@
 //   {"reader": "firefoxLogins", "profile": "...", "primaryPassword": "..."}  a Firefox or Zen profile's credentials,
 //     key4.db opened without NSS; a wrong primary password is "locked"
 //   {"reader": "firefoxCookies", "profile": "..."}             {"cookies": [...], "skipped": n}
+//   {"reader": "chromiumCookies", "profile": "..."}            {"cookies": [...], "blocked": n}
+//     Both cookie readers take "database" (the file) instead of "profile".
 //   {"reader": "chromiumLogins", "profile": "..."}             {"credentials": [...], "blocked": n}
 //   {"reader": "chromiumAutofill", "profile": "..."}           {"addresses": [...], "cards": [...], "blocked": n,
 //                                                              "locked": n}
-//     Both open sealed values with "key" (hex, macOS's 16-byte v10 key), then the opener; "unsealedIsPlain" (macOS)
+//     The Chromium readers open sealed values with "key" (hex, macOS's 16-byte v10 key), then the opener; "unsealedIsPlain" (macOS)
 //     reads a value without the v10 prefix as plain text. App-bound (v20) values open for no one.
 
 #ifndef BAY_IMPORT_H_
@@ -45,10 +50,19 @@ typedef void (*BayImportPut)(void *sink, const uint8_t *plain, size_t length);
 // bytes to `put` with `sink` and answers true, or answers false. On the reading thread.
 typedef bool (*BayImportOpener)(void *context, const uint8_t *sealed, size_t length, void *sink, BayImportPut put);
 
-// `cancelled` is the host's stop flag (a C++ std::atomic_bool) or null; `observer` and `opener` may be null and share
-// `context`. Free the answer with bay_import_string_free, which wipes it (an answer can hold passwords).
-char *bay_import_read(const char *request, const bool *cancelled, BayImportObserver observer, BayImportOpener opener,
-                      void *context);
+// `cancelled` is the host's stop flag (a C++ std::atomic_bool) or null; `hooks` may be null. Free the answer with bay_import_string_free, which wipes it (an answer can hold passwords).
+// Takes a card number or cookie value the reader hands out of its answer, as `index`. On the reading thread.
+typedef void (*BayImportSecret)(void *context, size_t index, const uint8_t *plain, size_t length);
+
+// What a host gives a read besides the request: each callback may be null, and all take `context`.
+typedef struct BayImportHooks {
+  BayImportObserver observer;
+  BayImportOpener opener;
+  BayImportSecret secret;
+  void *context;
+} BayImportHooks;
+
+char *bay_import_read(const char *request, const bool *cancelled, const BayImportHooks *hooks);
 void bay_import_string_free(char *text);
 
 // A stop flag owned through the library, for hosts without atomics of their own: pass it as `cancelled`.

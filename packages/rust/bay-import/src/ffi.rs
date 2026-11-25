@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::readers::Cancel;
-use crate::secrets::{Opener, Plain, Unlock};
+use crate::secrets::{Opener, Plain, Secrets, Sink, Unlock};
 use crate::{Failure, HistoryOptions};
 
 /// Hears a reader's events (history progress and chunks) as JSON, on the reading thread.
@@ -31,6 +31,21 @@ pub type BayImportOpener = Option<
         put: BayImportPut,
     ) -> bool,
 >;
+
+/// Takes a card number or cookie value the reader hands out of its answer (`{"secret": index}` there), for a host
+/// that keeps them in memory it wipes. On the reading thread.
+pub type BayImportSecret = Option<
+    unsafe extern "C" fn(context: *mut c_void, index: usize, plain: *const u8, length: usize),
+>;
+
+/// What a host gives a read besides the request: each callback may be null, and all take `context`.
+#[repr(C)]
+pub struct BayImportHooks {
+    pub observer: BayImportObserver,
+    pub opener: BayImportOpener,
+    pub secret: BayImportSecret,
+    pub context: *mut c_void,
+}
 
 /// Wipes what a request or an answer held (primary passwords, saved passwords, card numbers, cookies).
 fn wipe(value: &mut Value) {
@@ -76,7 +91,25 @@ fn read(
     cancel: Cancel<'_>,
     observer: &mut dyn FnMut(Value),
     opener: Option<Opener<'_>>,
+    secrets: &mut Secrets<'_>,
 ) -> Result<Value, Failure> {
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |since| since.as_secs_f64() * 1000.0)
+    };
+    // A cookie reader's database: "database", or the one in "profile".
+    let cookies = |names: &[&str]| -> Result<PathBuf, Failure> {
+        if request.get("database").is_some() {
+            return path(request, "database");
+        }
+        let profile = path(request, "profile")?;
+        names
+            .iter()
+            .map(|name| profile.join(name))
+            .find(|file| file.exists())
+            .ok_or_else(|| Failure::new("notFound", "No cookies in this profile"))
+    };
     match field(request, "reader")? {
         "passwordsCsv" => crate::parse_passwords_csv(field(request, "text")?),
         "netscapeBookmarks" => Ok(crate::parse_netscape_bookmarks(field(request, "text")?)),
@@ -138,7 +171,7 @@ fn read(
             None => crate::arc_sidebar(&path(request, "file")?),
         },
         "extensions" => crate::extensions(&path(request, "profile")?),
-        "chromiumLogins" | "chromiumAutofill" => {
+        "chromiumLogins" | "chromiumAutofill" | "chromiumCookies" => {
             let key = request
                 .get("key")
                 .and_then(Value::as_str)
@@ -154,18 +187,27 @@ fn read(
                 unsealed_is_plain,
                 opener,
             };
-            let profile = path(request, "profile")?;
-            if field(request, "reader")? == "chromiumLogins" {
-                crate::chromium_logins(&profile, &mut unlock, cancel)
-            } else {
-                crate::chromium_autofill(&profile, &mut unlock, cancel)
+            match field(request, "reader")? {
+                "chromiumLogins" => {
+                    crate::chromium_logins(&path(request, "profile")?, &mut unlock, cancel)
+                }
+                "chromiumAutofill" => crate::chromium_autofill(
+                    &path(request, "profile")?,
+                    &mut unlock,
+                    secrets,
+                    cancel,
+                ),
+                _ => crate::chromium_cookies(
+                    &cookies(&["Network/Cookies", "Cookies"])?,
+                    &mut unlock,
+                    secrets,
+                    now(),
+                    cancel,
+                ),
             }
         }
         "firefoxCookies" => {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0.0, |since| since.as_secs_f64() * 1000.0);
-            crate::firefox_cookies(&path(request, "profile")?, now, cancel)
+            crate::firefox_cookies(&cookies(&["cookies.sqlite"])?, secrets, now(), cancel)
         }
         "firefoxLogins" => {
             let password = request
@@ -179,20 +221,25 @@ fn read(
 }
 
 /// Runs the reader `request` names (`{"reader": "chromiumBookmarks", "profile": "…"}`; see `include/bay_import.h`).
-/// `cancelled` is the host's stop flag (a C++ `std::atomic_bool`), or null; `observer` hears events, or is null. The
+/// `cancelled` is the host's stop flag (a C++ `std::atomic_bool`), or null; `hooks` its callbacks, or null. The
 /// answer is `{"value": …}` or `{"error": {"code": …, "message": …}}`; free it with `bay_import_string_free`.
 ///
 /// # Safety
 /// `request` must be a valid string; `cancelled` null or a live flag only written atomically while this runs;
-/// `observer`'s `context` as the observer expects.
+/// `hooks` null or live for the call, its `context` as its callbacks expect.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn bay_import_read(
     request: *const c_char,
     cancelled: *const bool,
-    observer: BayImportObserver,
-    opener: BayImportOpener,
-    context: *mut c_void,
+    hooks: *const BayImportHooks,
 ) -> *mut c_char {
+    let (observer, opener, secret, context) = if hooks.is_null() {
+        (None, None, None, std::ptr::null_mut())
+    } else {
+        // SAFETY: the caller passes live hooks for this call.
+        let hooks = unsafe { &*hooks };
+        (hooks.observer, hooks.opener, hooks.secret, hooks.context)
+    };
     let never = AtomicBool::new(false);
     let flag = if cancelled.is_null() {
         &never
@@ -230,11 +277,23 @@ pub unsafe extern "C" fn bay_import_read(
         let opened = unsafe { opener(context, sealed.as_ptr(), sealed.len(), sink.cast(), put) };
         opened.then_some(plain)
     };
+    let mut handed = 0;
+    let mut hand = |plain: &[u8]| -> usize {
+        let index = handed;
+        handed += 1;
+        if let Some(secret) = secret {
+            // SAFETY: as the caller's: the callback takes its own context and these bytes for this call.
+            unsafe { secret(context, index, plain.as_ptr(), plain.len()) };
+        }
+        index
+    };
+    let mut secrets = Secrets(secret.is_some().then_some(&mut hand as Sink<'_>));
     let mut answer = match read(
         &request,
         Cancel(flag),
         &mut hear,
         opener.is_some().then_some(&mut open as Opener<'_>),
+        &mut secrets,
     ) {
         Ok(value) => json!({"value": value}),
         Err(failure) => json!({"error": {"code": failure.code, "message": failure.message}}),
@@ -319,9 +378,12 @@ mod tests {
             bay_import_read(
                 request.as_ptr(),
                 flag,
-                Some(hear),
-                None,
-                (&raw mut events).cast(),
+                &BayImportHooks {
+                    observer: Some(hear),
+                    opener: None,
+                    secret: None,
+                    context: (&raw mut events).cast(),
+                },
             )
         };
         // SAFETY: an answer this library gave, freed once.

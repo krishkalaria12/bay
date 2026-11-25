@@ -63,11 +63,12 @@ bool open(void *context, const std::uint8_t *sealed, std::size_t length,
 Json read(const Json &request, const std::atomic_bool *cancelled = nullptr,
           const Observer *observer = nullptr,
           const SecretOpener *opener = nullptr) {
-  Hooks hooks{observer, opener};
+  Hooks context{observer, opener};
+  BayImportHooks hooks{observer ? hear : nullptr, opener ? open : nullptr,
+                       nullptr, &context};
   auto text = request.dump();
   char *answer = bay_import_read(
-      text.c_str(), reinterpret_cast<const bool *>(cancelled),
-      observer ? hear : nullptr, opener ? open : nullptr, &hooks);
+      text.c_str(), reinterpret_cast<const bool *>(cancelled), &hooks);
   // A request can hold a primary password: wiped, as the answer is when freed.
   volatile char *bytes = text.data();
   for (std::size_t i = 0; i < text.size(); ++i)

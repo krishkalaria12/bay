@@ -1,5 +1,5 @@
-//! Readers for what a browser keeps secret: Chromium's saved passwords and autofill (addresses, local cards) and
-//! Firefox's cookies. Each host unlocks the browser its own way (Keychain, DPAPI and app-bound keys, Secret Service,
+//! Readers for what a browser keeps secret: Chromium's saved passwords, autofill (addresses, local cards) and cookies,
+//! and Firefox's cookies. Each host unlocks the browser its own way (Keychain, DPAPI and app-bound keys, Secret Service,
 //! the engine's own OSCrypt) and only that crosses in: macOS gives its unlocked `v10` key, and any value the key
 //! doesn't open goes to the host's opener. A value no one opens is counted, not guessed at.
 
@@ -7,18 +7,37 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::crypto::decrypt_cbc;
 use crate::failure::{Failure, Result};
 use crate::readers::{Cancel, chromium_time};
-use crate::snapshot::{Snapshot, column, named_blob, named_integer, named_text, text};
+use crate::snapshot::{
+    Snapshot, column, integer, is_null, named_blob, named_integer, named_text, text,
+};
 
 /// Plain bytes the host's opener gave, wiped when they go.
 pub type Plain = Zeroizing<Vec<u8>>;
 
 /// Opens a sealed value the given key can't: `None` when the host can't either.
 pub type Opener<'a> = &'a mut dyn FnMut(&[u8]) -> Option<Plain>;
+
+/// Takes a card number or cookie value and answers its index (`{"secret": n}` in the answer).
+pub type Sink<'a> = &'a mut dyn FnMut(&[u8]) -> usize;
+
+/// Where card numbers and cookie values go: into the answer as text, or to a host that keeps them in memory it wipes,
+/// one by one, so it never holds a copy it can't wipe.
+pub struct Secrets<'a>(pub Option<Sink<'a>>);
+
+impl Secrets<'_> {
+    fn hand(&mut self, plain: &[u8]) -> Value {
+        match &mut self.0 {
+            Some(sink) => json!({"secret": sink(plain)}),
+            None => json!(String::from_utf8_lossy(plain)),
+        }
+    }
+}
 
 /// How a reader opens Chromium's encrypted values: macOS's unlocked `v10` key, the host's opener, or both.
 pub struct Unlock<'a> {
@@ -34,13 +53,19 @@ impl Unlock<'_> {
         self.key.is_some() || self.opener.is_some()
     }
 
-    /// `None` for app-bound (`v20`) values, which only the source browser can open, and for anything nobody opened.
-    fn open(&mut self, value: &[u8]) -> Option<Plain> {
-        if value.starts_with(b"v20") {
-            return None;
-        }
-        if self.unsealed_is_plain && !value.starts_with(b"v10") {
+    /// A saved password: on macOS one without the `v10` prefix is its plain text.
+    fn open_login(&mut self, value: &[u8]) -> Option<Plain> {
+        if self.unsealed_is_plain && !value.starts_with(b"v10") && !value.starts_with(b"v20") {
             return Some(Zeroizing::new(value.to_vec()));
+        }
+        self.open(value)
+    }
+
+    /// A sealed value: `None` for app-bound (`v20`) values, which only the source browser can open, for anything
+    /// nobody opened, and on macOS for anything but `v10`.
+    fn open(&mut self, value: &[u8]) -> Option<Plain> {
+        if value.starts_with(b"v20") || (self.unsealed_is_plain && !value.starts_with(b"v10")) {
+            return None;
         }
         if let Some(key) = &self.key
             && value.starts_with(b"v10")
@@ -97,7 +122,7 @@ pub fn chromium_logins(
             }
             // A password that isn't text didn't really open.
             let Some(password) = unlock
-                .open(&sealed)
+                .open_login(&sealed)
                 .filter(|plain| std::str::from_utf8(plain).is_ok())
             else {
                 blocked += 1;
@@ -362,6 +387,7 @@ fn card_number(plain: &[u8]) -> Option<Plain> {
 pub fn chromium_autofill(
     profile: &Path,
     unlock: &mut Unlock<'_>,
+    secrets: &mut Secrets<'_>,
     cancel: Cancel<'_>,
 ) -> Result<Value> {
     let file = profile.join("Web Data");
@@ -425,7 +451,7 @@ pub fn chromium_autofill(
                 return Ok(true);
             };
             let mut card = Map::new();
-            card.insert("number".into(), json!(String::from_utf8_lossy(&number)));
+            card.insert("number".into(), secrets.hand(&number));
             for (from, to) in [("name_on_card", "name"), ("nickname", "nickname")] {
                 if let Some(value) = non_empty(&named_text(row, from)) {
                     card.insert(to.into(), json!(value));
@@ -541,10 +567,15 @@ fn same_site(value: i64, raw: Option<i64>, secure: bool) -> &'static str {
     }
 }
 
-/// A Firefox profile's cookies (cookies.sqlite is plaintext on disk): `{"cookies": [...], "skipped": n}`, `skipped`
+/// A Firefox profile's cookies.sqlite (plaintext on disk): `{"cookies": [...], "skipped": n}`, `skipped`
 /// counting the ones from jars Chromium has no equivalent for. Expired cookies are left out.
-pub fn firefox_cookies(profile: &Path, now_ms: f64, cancel: Cancel<'_>) -> Result<Value> {
-    let db = Snapshot::open(&profile.join("cookies.sqlite"))?;
+pub fn firefox_cookies(
+    database: &Path,
+    secrets: &mut Secrets<'_>,
+    now_ms: f64,
+    cancel: Cancel<'_>,
+) -> Result<Value> {
+    let db = Snapshot::open(database)?;
     if !db.table("moz_cookies")? {
         return Err(Failure::new("unreadable", "cookies.sqlite has no cookies"));
     }
@@ -580,7 +611,8 @@ pub fn firefox_cookies(profile: &Path, now_ms: f64, cancel: Cancel<'_>) -> Resul
         let mut cookie = Map::new();
         cookie.insert("domain".into(), json!(text(row, host_at)));
         cookie.insert("name".into(), json!(text(row, name_at)));
-        cookie.insert("value".into(), json!(named_text(row, "value")));
+        let value = Zeroizing::new(named_blob(row, "value"));
+        cookie.insert("value".into(), secrets.hand(&value));
         cookie.insert(
             "path".into(),
             json!(if path.is_empty() {
@@ -631,6 +663,138 @@ pub fn firefox_cookies(profile: &Path, now_ms: f64, cancel: Cancel<'_>) -> Resul
     Ok(json!({"cookies": cookies, "skipped": skipped}))
 }
 
+/// A WebKit-epoch time in microseconds as Unix milliseconds, unrounded (a cookie's times are to the microsecond).
+fn webkit_time(micros: i64) -> Option<f64> {
+    (micros > 0).then(|| (micros - 11_644_473_600_000_000) as f64 / 1000.0)
+}
+
+fn chromium_same_site(value: Option<i64>) -> &'static str {
+    match value {
+        Some(0) => "none",
+        Some(1) => "lax",
+        Some(2) => "strict",
+        _ => "unspecified",
+    }
+}
+
+/// A Chromium profile's Cookies database: `{"cookies": [...], "blocked": n}`, `blocked` counting the values nobody
+/// could open (and rows with both a plain and a sealed value, which Chromium rejects). Expired cookies are left out.
+/// From version 24 every sealed value starts with SHA-256 of its host, which is checked and taken off.
+pub fn chromium_cookies(
+    database: &Path,
+    unlock: &mut Unlock<'_>,
+    secrets: &mut Secrets<'_>,
+    now_ms: f64,
+    cancel: Cancel<'_>,
+) -> Result<Value> {
+    let db = Snapshot::open(database)?;
+    if !db.table("cookies")? {
+        return Err(Failure::new("unreadable", "Cookies has no cookies table"));
+    }
+    let mut version = 0;
+    if db.table("meta")? {
+        db.query(
+            "SELECT CAST(value AS INTEGER) FROM meta WHERE key='version'",
+            |row| {
+                version = integer(row, 0);
+                Ok(false)
+            },
+        )?;
+    }
+    let host_hashed = version >= 24;
+    let mut cookies = Vec::new();
+    let mut blocked = 0;
+    db.query("SELECT * FROM cookies", |row| {
+        cancel.check()?;
+        let (Some(host_at), Some(name_at)) = (column(row, "host_key"), column(row, "name")) else {
+            return Ok(true);
+        };
+        if is_null(row, host_at) || is_null(row, name_at) {
+            return Ok(true);
+        }
+        let host = text(row, host_at);
+        let number = |name: &str| column(row, name).filter(|at| !is_null(row, *at)).map(|at| integer(row, at));
+        // Columns were renamed over the years (secure → is_secure, persistent → is_persistent → has_expires).
+        let flag = |names: &[&str]| names.iter().find_map(|name| number(name)).map(|value| value != 0);
+        let persistent = flag(&["has_expires", "is_persistent", "persistent"]).unwrap_or(true);
+        let expires = if persistent { number("expires_utc").and_then(webkit_time) } else { None };
+        if expires.is_some_and(|expires| expires < now_ms) {
+            return Ok(true);
+        }
+        let plain = Zeroizing::new(named_blob(row, "value"));
+        let sealed = named_blob(row, "encrypted_value");
+        let value = if !plain.is_empty() && !sealed.is_empty() {
+            blocked += 1;
+            return Ok(true);
+        } else if !sealed.is_empty() {
+            let Some(opened) = unlock.open(&sealed) else {
+                blocked += 1;
+                return Ok(true);
+            };
+            if host_hashed {
+                let hash = Sha256::digest(host.as_bytes());
+                if !opened.starts_with(&hash) {
+                    blocked += 1;
+                    return Ok(true);
+                }
+                Zeroizing::new(opened[hash.len()..].to_vec())
+            } else {
+                opened
+            }
+        } else {
+            plain
+        };
+        let path = named_text(row, "path");
+        let port = number("source_port").unwrap_or(-1);
+        let mut cookie = Map::new();
+        cookie.insert("domain".into(), json!(host));
+        cookie.insert("name".into(), json!(text(row, name_at)));
+        cookie.insert("value".into(), secrets.hand(&value));
+        cookie.insert("path".into(), json!(if path.is_empty() { "/".to_owned() } else { path }));
+        cookie.insert("secure".into(), json!(flag(&["is_secure", "secure"]).unwrap_or(false)));
+        cookie.insert("httpOnly".into(), json!(flag(&["is_httponly", "httponly"]).unwrap_or(false)));
+        cookie.insert(
+            "sameSite".into(),
+            json!(chromium_same_site(number("samesite").or_else(|| number("firstpartyonly")))),
+        );
+        cookie.insert(
+            "priority".into(),
+            json!(match number("priority") {
+                Some(0) => "low",
+                Some(2) => "high",
+                _ => "medium",
+            }),
+        );
+        cookie.insert(
+            "sourceScheme".into(),
+            json!(match number("source_scheme") {
+                Some(1) => "nonSecure",
+                Some(2) => "secure",
+                _ => "unset",
+            }),
+        );
+        cookie.insert("sourcePort".into(), json!(if (0..=65535).contains(&port) { port } else { -1 }));
+        let top_frame = named_text(row, "top_frame_site_key");
+        if !top_frame.is_empty() {
+            cookie.insert(
+                "partitionKey".into(),
+                json!({"topLevelSite": top_frame, "crossSite": number("has_cross_site_ancestor").unwrap_or(0) != 0}),
+            );
+        }
+        if let Some(expires) = expires {
+            cookie.insert("expires".into(), json!(expires));
+        }
+        for (from, to) in [("creation_utc", "created"), ("last_access_utc", "lastAccess")] {
+            if let Some(time) = number(from).and_then(webkit_time) {
+                cookie.insert(to.into(), json!(time));
+            }
+        }
+        cookies.push(Value::Object(cookie));
+        Ok(true)
+    })?;
+    Ok(json!({"cookies": cookies, "blocked": blocked}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,6 +810,29 @@ mod tests {
         );
         assert!(origin_attributes("^partitionKey=%28ftp%2Cexample.com%29").0);
         assert!(origin_attributes("^=x").0);
+    }
+
+    #[test]
+    fn malformed_origin_attributes_are_another_jar() {
+        assert!(origin_attributes("^=").0);
+        assert!(origin_attributes("^=1&userContextId=0").0);
+    }
+
+    // On macOS a card number or cookie value is sealed with v10 or not at all; a password may be plain.
+    #[test]
+    fn macos_opens_only_v10_sealed_values() {
+        let mut unlock = Unlock {
+            key: Some(Zeroizing::new(vec![7; 16])),
+            unsealed_is_plain: true,
+            opener: None,
+        };
+        assert!(unlock.open(b"v11garbage-but-printable").is_none());
+        assert!(unlock.open(b"v10\x01\x02\x03").is_none());
+        assert!(unlock.open(b"plain").is_none());
+        assert_eq!(
+            unlock.open_login(b"plain").as_deref().map(Vec::as_slice),
+            Some(&b"plain"[..])
+        );
     }
 
     #[test]
@@ -766,8 +953,13 @@ mod fixture_tests {
     #[test]
     fn autofill_reads_addresses_without_a_key_and_cards_with_it() {
         let profile = support("Google/Chrome/Default");
-        let open =
-            chromium_autofill(&profile, &mut mac(Some(&KEY)), Cancel(&NOT_CANCELLED)).unwrap();
+        let open = chromium_autofill(
+            &profile,
+            &mut mac(Some(&KEY)),
+            &mut Secrets(None),
+            Cancel(&NOT_CANCELLED),
+        )
+        .unwrap();
         assert_eq!(
             open["addresses"][0],
             json!({"name": "Alex Example", "organization": "Bay Ltd", "street": "1 Example Way\nSuite 2",
@@ -783,16 +975,54 @@ mod fixture_tests {
             ])
         );
         assert_eq!(open["blocked"], 1);
-        let locked = chromium_autofill(&profile, &mut mac(None), Cancel(&NOT_CANCELLED)).unwrap();
+        let locked = chromium_autofill(
+            &profile,
+            &mut mac(None),
+            &mut Secrets(None),
+            Cancel(&NOT_CANCELLED),
+        )
+        .unwrap();
         assert_eq!(locked["addresses"].as_array().unwrap().len(), 3);
         assert_eq!(locked["cards"], json!([]));
         assert_eq!(locked["locked"], 3);
     }
 
     #[test]
+    fn chromium_cookies_hand_their_values_out_byte_for_byte() {
+        let mut values: Vec<Vec<u8>> = Vec::new();
+        let mut sink = |plain: &[u8]| {
+            values.push(plain.to_vec());
+            values.len() - 1
+        };
+        let answer = chromium_cookies(
+            &support("Google/Chrome/Default/Network/Cookies"),
+            &mut mac(Some(&KEY)),
+            &mut Secrets(Some(&mut sink)),
+            1_000.0,
+            Cancel(&NOT_CANCELLED),
+        )
+        .unwrap();
+        // A wrong key, a v24 value without the host hash, and a row with both a value and a sealed one.
+        assert_eq!(answer["blocked"], 3);
+        let value = |name: &str| {
+            let cookie = answer["cookies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["name"] == name)
+                .unwrap();
+            values[cookie["value"]["secret"].as_u64().unwrap() as usize].clone()
+        };
+        assert_eq!(value("sid"), b"s3ss10n");
+        assert_eq!(value("pref"), b"dark");
+        assert_eq!(value("bin"), [0xFF, 0xFE]);
+    }
+
+    #[test]
     fn firefox_cookies_leave_out_other_jars() {
         let answer = firefox_cookies(
-            &support("Firefox/Profiles/abcd1234.default-release"),
+            &support("Firefox/Profiles/abcd1234.default-release/cookies.sqlite"),
+            &mut Secrets(None),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

@@ -15,12 +15,6 @@ final class ImportTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: file.path + "-journal"))
   }
 
-  func testDecryptRejectsWrongKeyAndPassesLegacyPlaintext() {
-    let wrong = ChromiumCrypto.deriveKey(secret: Data("nope".utf8))
-    XCTAssertNil(ChromiumCrypto.decrypt(Data("v10".utf8) + Data(repeating: 1, count: 16), key: wrong))
-    XCTAssertEqual(ChromiumCrypto.decrypt(Data("plain".utf8), key: wrong), "plain")
-  }
-
   func testLoginsDecryptAndDedupeAcrossAccountStore() throws {
     let outcome = try ChromiumSecrets.logins(profile: chrome, key: Fixtures.chromiumKey)
     let pairs = outcome.items.map { "\($0.username)@\($0.url)=\($0.password)" }
