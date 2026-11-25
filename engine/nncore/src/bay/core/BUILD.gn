@@ -36,6 +36,8 @@ source_set("portable") {
     "nn_icon_download.h",
     "nn_permission_flow.cc",
     "nn_permission_flow.h",
+    "nn_permission_prompts.cc",
+    "nn_permission_prompts.h",
   ]
   deps = [
     "//base",
@@ -139,6 +141,8 @@ if (is_mac) {
       "nn_icon_download.h",
       "nn_permission_flow.cc",
       "nn_permission_flow.h",
+      "nn_permission_prompts.cc",
+      "nn_permission_prompts.h",
       "nn_extension_view.cc",
       "nn_extension_view.h",
       "nn_external_app_requests.cc",
