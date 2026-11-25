@@ -1,6 +1,6 @@
 #include "RecoveryKit.h"
 #include "RecoveryKitInternal.h"
-#include "vendor/qrcodegen.hpp"
+#include "bay_sync.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -13,10 +13,33 @@
 
 namespace bay::sync {
 namespace {
-using QR = qrcodegen::QrCode;
-QR qrCode(const Bytes &entropy) {
-  return QR::encodeText(recoveryPhrase(entropy).c_str(), QR::Ecc::MEDIUM);
-}
+// The recovery phrase's QR code, from bay-sync (macOS draws the same modules).
+// The phrase is in it, so the modules are wiped when it goes.
+class QR {
+public:
+  explicit QR(const Bytes &entropy) {
+    if (entropy.size() != 32)
+      throw Failure("format", "A recovery QR code needs the chain's 32 bytes");
+    std::size_t side = 0;
+    auto *modules = bay_sync_phrase_qr(entropy.data(), &side);
+    if (!modules)
+      throw Failure("image", "Could not make the recovery QR code");
+    modules_.assign(modules, modules + side * side);
+    bay_sync_secret_free(modules, side * side);
+    size_ = static_cast<int>(side);
+  }
+  QR(const QR &) = delete;
+  QR &operator=(const QR &) = delete;
+  ~QR() { erase(modules_); }
+  int getSize() const { return size_; }
+  bool getModule(int x, int y) const {
+    return modules_[static_cast<std::size_t>(y) * size_ + x] != 0;
+  }
+
+private:
+  int size_ = 0;
+  Bytes modules_;
+};
 void append32(Bytes &output, std::uint32_t value) {
   for (int i = 24; i >= 0; i -= 8)
     output.push_back(static_cast<std::uint8_t>(value >> i));
@@ -121,10 +144,10 @@ Bytes encodeRGBPNG(unsigned width, unsigned height, const Bytes &rgb) {
 void drawRecoveryQR(Bytes &rgb, unsigned width, unsigned height,
                     const Bytes &entropy, unsigned left, unsigned top,
                     unsigned scale) {
-  drawQR(rgb, width, height, qrCode(entropy), left, top, scale);
+  drawQR(rgb, width, height, QR(entropy), left, top, scale);
 }
 unsigned recoveryQRSize(const Bytes &entropy) {
-  return static_cast<unsigned>(qrCode(entropy).getSize());
+  return static_cast<unsigned>(QR(entropy).getSize());
 }
 } // namespace detail
 #if (!defined(_WIN32) && !defined(__linux__) &&                                \
@@ -174,7 +197,7 @@ std::string recoveryKitPDF(const Bytes &entropy, const std::string &device) {
   for (std::size_t i = 0; i < words.size(); ++i)
     content += pdfText(60 + (i / 6) * 127, 550 - (i % 6) * 28, 12,
                        std::to_string(i + 1) + ". " + words[i]);
-  auto qr = qrCode(entropy);
+  QR qr(entropy);
   double scale = 132.0 / (qr.getSize() + 8), left = 50 + 4 * scale,
          bottom = 204 + 4 * scale;
   std::ostringstream drawing;
@@ -220,7 +243,7 @@ std::string recoveryKitPDF(const Bytes &entropy, const std::string &device) {
          std::to_string(xref) + "\n%%EOF\n";
 }
 Bytes recoveryQrPNG(const Bytes &entropy) {
-  auto qr = qrCode(entropy);
+  QR qr(entropy);
   constexpr unsigned scale = 8, border = 4;
   unsigned width = (static_cast<unsigned>(qr.getSize()) + border * 2) * scale;
   Bytes pixels(static_cast<std::size_t>(width) * width * 3, 255);

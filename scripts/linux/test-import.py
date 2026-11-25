@@ -63,7 +63,7 @@ def main():
             binary = Path(directory) / (name + "-tests")
             sync_sources = [] if name == "service" else [
                 REPO / "packages/sync/portable" / source for source in
-                ("SyncService.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp")
+                ("SyncService.cpp", "SyncVault.cpp", "RecoveryKit.cpp")
             ]
             subprocess.run([compiler, "-std=c++17", "-DBAY_IMPORT_LINUX_TEST", "-DBAY_SYNC_PORTABLE_TEST", "-pthread",
                             "-I" + str(data / "vendor"), "-I" + str(data), "-I" + str(REPO),

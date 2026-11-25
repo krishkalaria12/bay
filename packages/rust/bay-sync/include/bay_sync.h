@@ -48,6 +48,9 @@ bool bay_sync_is_tag(const char *name);
 
 // The 24 recovery phrase words for a chain's 32 bytes, separated by single spaces.
 char *bay_sync_phrase_words(const uint8_t *entropy);
+// The phrase's QR code: *side modules a row, side * side bytes (1 dark). Free with
+// bay_sync_secret_free(modules, side * side): the phrase is in it.
+uint8_t *bay_sync_phrase_qr(const uint8_t *entropy, size_t *side);
 // A typed phrase's 32 bytes into `out`: 0 read; 1 wrong word count (*detail the count); 2 not a word (*detail the
 // word); 3 checksum failed. *detail is null or freed with bay_sync_string_free; `detail` may be null.
 int32_t bay_sync_phrase_entropy(const char *text, uint8_t *out, char **detail);

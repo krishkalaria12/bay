@@ -12,6 +12,7 @@ bip39 = { version = "3", default-features = false, features = ["std"] }
 getrandom = "0.4"
 hkdf = "0.13"
 hmac = "0.13"
+qrcodegen = "1.8"
 sha2 = "0.11"
 zeroize = "1"
 

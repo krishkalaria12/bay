@@ -10,7 +10,9 @@ mod bytes;
 pub mod ffi;
 mod keys;
 mod phrase;
+mod qr;
 
 pub use bytes::{base32, base64, base64url, from_base64, is_tag};
 pub use keys::{NONCE, SealError, SyncKeys, random_bytes};
 pub use phrase::{PHRASE_WORDS, PhraseProblem, phrase_entropy, phrase_words};
+pub use qr::phrase_qr;

@@ -44,7 +44,7 @@ gboolean secret_item_delete_sync(SecretItem *, GCancellable *, GError **);
     sources = [sync / path for path in [
         "portable/SyncCrypto.cpp", "linux/SyncCryptoLinux.cpp", "linux/SyncKeyStore.cpp",
         "portable/SyncVault.cpp", "portable/SyncService.cpp", "portable/RecoveryKit.cpp",
-        "portable/vendor/qrcodegen.cpp", "linux/tests/Service.cpp",
+        "linux/tests/Service.cpp",
     ]]
     # The shared service links the real import reader. macOS exercises Linux
     # service policy and POSIX crypto with fake desktop/keyring edges only.

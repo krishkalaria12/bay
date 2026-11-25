@@ -297,6 +297,24 @@ pub unsafe extern "C" fn bay_sync_phrase_words(entropy_bytes: *const u8) -> *mut
     give(words)
 }
 
+/// The recovery phrase's QR code for a chain's 32 bytes: `*side` modules a row, `side * side` bytes, 1 for dark. Free
+/// with `bay_sync_secret_free(modules, side * side)` (the phrase is in it).
+///
+/// # Safety
+/// `entropy` must point to 32 bytes and `side` be writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_sync_phrase_qr(entropy_bytes: *const u8, side: *mut usize) -> *mut u8 {
+    // SAFETY: as the caller's.
+    let mut bytes = unsafe { entropy(entropy_bytes) };
+    let (size, modules) = crate::phrase_qr(&bytes);
+    bytes.zeroize();
+    // SAFETY: as the caller's.
+    unsafe { *side = size };
+    let mut length = 0;
+    // SAFETY: `length` is ours; the copy goes to the caller, the original is wiped as it drops.
+    unsafe { give_bytes(modules.to_vec(), &mut length) }
+}
+
 /// The chain's 32 bytes a typed recovery phrase holds (any case and separators; a word by its first four letters or
 /// more): 0 with `out` filled; 1 for the wrong number of words (`*detail` the count); 2 for a word that isn't one
 /// (`*detail` the word); 3 when the checksum fails. `*detail` is null or freed with `bay_sync_string_free`.
@@ -522,7 +540,7 @@ mod tests {
     fn the_header_declares_exactly_these_functions() {
         let defined = functions(include_str!("ffi.rs"), "extern \"C\" fn ");
         let declared = functions(include_str!("../include/bay_sync.h"), "");
-        assert_eq!(defined.len(), 15);
+        assert_eq!(defined.len(), 16);
         assert_eq!(declared, defined);
     }
 }

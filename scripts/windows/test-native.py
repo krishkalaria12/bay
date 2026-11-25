@@ -72,7 +72,7 @@ def main():
             else:
                 run([compiler, "-std=c++17", "-DBAY_SYNC_PORTABLE_TEST", f"-I{include}", *[f"-I{path}" for path in extra_includes], *sources, *libraries, "-o", binary])
         if args.suite in ("sync", "all"):
-            sources = ["packages/sync/portable/SyncCrypto.cpp", "packages/sync/portable/SyncVault.cpp", "packages/sync/portable/RecoveryKit.cpp", "packages/sync/portable/vendor/qrcodegen.cpp", "packages/sync/portable/tests/Compatibility.cpp"]
+            sources = ["packages/sync/portable/SyncCrypto.cpp", "packages/sync/portable/SyncVault.cpp", "packages/sync/portable/RecoveryKit.cpp", "packages/sync/portable/tests/Compatibility.cpp"]
             libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
                 sources.append("packages/sync/portable/tests/OpenSSLBackend.cpp")
@@ -99,7 +99,7 @@ def main():
                 sources = [data / "data_services.cc", data / "tests/Services.cpp"]
                 sources.extend(production / "import/portable" / name for name in ("ImportService.cpp", "Readers.cpp", "Secrets.cpp"))
                 sources.append(production / "import/portable/BrowserDiscovery.cpp")
-                sources.extend(production / "sync/portable" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp"))
+                sources.extend(production / "sync/portable" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp"))
                 libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
                 if windows:
                     sources.append(production / "sync/portable/RecoveryKitWindows.cpp")

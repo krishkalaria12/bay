@@ -1,3 +1,4 @@
+import CoreImage
 import Foundation
 import XCTest
 @testable import BaySyncCore
@@ -15,6 +16,19 @@ final class RecoveryPhraseTests: XCTestCase {
       XCTAssertEqual(RecoveryPhrase.words(for: entropy).joined(separator: " "), phrase)
       XCTAssertEqual(try RecoveryPhrase.entropy(from: phrase), entropy)
     }
+  }
+}
+
+final class RecoveryKitTests: XCTestCase {
+  // The kit's QR is bay-sync's modules, drawn here: a camera has to read the phrase back from it.
+  func testQRCodeReadsBackAsThePhrase() throws {
+    let words = RecoveryPhrase.words(for: Data((0..<32).map { UInt8($0 * 7 & 0xFF) }))
+    let image = try XCTUnwrap(RecoveryKit.qrCode(words: words))
+    let detector = try XCTUnwrap(CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
+                                            options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]))
+    let found = detector.features(in: CIImage(cgImage: image)).compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+    XCTAssertEqual(found, [words.joined(separator: " ")])
+    XCTAssertNil(RecoveryKit.qrCode(words: ["not", "a", "phrase"]))
   }
 }
 

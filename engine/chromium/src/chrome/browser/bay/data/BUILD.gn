@@ -95,13 +95,11 @@ static_library("sync_services") {
     "packages/sync/portable/SyncService.h",
     "packages/sync/portable/SyncVault.cpp",
     "packages/sync/portable/SyncVault.h",
-    "packages/sync/portable/vendor/qrcodegen.cpp",
-    "packages/sync/portable/vendor/qrcodegen.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   configs -= chromium_style_checks
-  # vendor/: qrcodegen. rust/: bay_sync.h, the sync format's C ABI, from Bay's
+  # vendor/: nlohmann JSON. rust/: bay_sync.h, the sync format's C ABI, from Bay's
   # desktop Rust library (packages/rust), which scripts/engine.py builds.
   include_dirs = [
     "vendor",
