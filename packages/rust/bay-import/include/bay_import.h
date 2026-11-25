@@ -14,6 +14,8 @@
 //   {"reader": "arcSidebar", "file": ".../StorableSidebar.json"}
 //   firefoxTabs, zenSpaces and arcSidebar take "text" (the session's or sidebar's JSON) instead of a path.
 //   {"reader": "extensions", "profile": "..."}
+//   {"reader": "firefoxLogins", "profile": "...", "primaryPassword": "..."}  a Firefox or Zen profile's credentials,
+//     key4.db opened without NSS; a wrong primary password is "locked"
 
 #ifndef BAY_IMPORT_H_
 #define BAY_IMPORT_H_
@@ -28,7 +30,7 @@ extern "C" {
 typedef void (*BayImportObserver)(void *context, const char *event);
 
 // `cancelled` is the host's stop flag (a C++ std::atomic_bool) or null; `observer` may be null. Free the answer with
-// bay_import_string_free.
+// bay_import_string_free, which wipes it (an answer can hold passwords).
 char *bay_import_read(const char *request, const bool *cancelled, BayImportObserver observer, void *context);
 void bay_import_string_free(char *text);
 

@@ -2,18 +2,13 @@
 #include "SQLite.h"
 #if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
 #include "../linux/ChromiumSecrets.h"
-#include "../linux/FirefoxNSS.h"
 #endif
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <map>
-#include <mutex>
 #include <set>
 #include <sstream>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 namespace bay::importer {
 void wipeJson(Json &value) noexcept {
   if (value.is_string()) {
@@ -565,161 +560,4 @@ SensitiveImport firefoxCookies(const Path &profile,
   });
   return out;
 }
-#ifdef _WIN32
-namespace {
-std::mutex nssMutex;
-struct SECItem {
-  unsigned type;
-  unsigned char *data;
-  unsigned len;
-};
-class NSS {
-public:
-  HMODULE library = nullptr;
-  int (*init)(const char *, const char *, const char *, const char *,
-              std::uint32_t) = nullptr;
-  int (*shutdown)() = nullptr;
-  void *(*slot)() = nullptr;
-  void (*freeSlot)(void *) = nullptr;
-  int (*checkPassword)(void *, const char *) = nullptr;
-  int (*decrypt)(SECItem *, SECItem *, void *) = nullptr;
-  void (*freeItem)(SECItem *, int) = nullptr;
-  bool initialized = false;
-  template <class T> T function(const char *name) {
-    auto f = GetProcAddress(library, name);
-    if (!f)
-      throw Failure("unsupported",
-                    "The installed Firefox NSS library is incompatible");
-    return reinterpret_cast<T>(f);
-  }
-  NSS() {
-    // Any Firefox-family NSS opens any profile's key4.db: Firefox's, or the
-    // one Zen ships (a Zen user often has no Firefox installed).
-    for (auto folder : {L"Mozilla Firefox", L"Zen Browser", L"Zen"}) {
-      for (auto variable :
-           {L"ProgramW6432", L"ProgramFiles", L"ProgramFiles(x86)"}) {
-        wchar_t root[32768]{};
-        auto n = GetEnvironmentVariableW(variable, root, 32768);
-        if (!n || n >= 32768)
-          continue;
-        auto path = Path(root) / folder / L"nss3.dll";
-        library = LoadLibraryExW(path.c_str(), nullptr,
-                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
-                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (library)
-          break;
-      }
-      if (library)
-        break;
-    }
-    if (!library)
-      throw Failure("unsupported",
-                    "Install Firefox or Zen to import their encrypted "
-                    "passwords, or import a password CSV export");
-    try {
-      init = function<decltype(init)>("NSS_Initialize");
-      shutdown = function<decltype(shutdown)>("NSS_Shutdown");
-      slot = function<decltype(slot)>("PK11_GetInternalKeySlot");
-      freeSlot = function<decltype(freeSlot)>("PK11_FreeSlot");
-      checkPassword =
-          function<decltype(checkPassword)>("PK11_CheckUserPassword");
-      decrypt = function<decltype(decrypt)>("PK11SDR_Decrypt");
-      freeItem = function<decltype(freeItem)>("SECITEM_FreeItem");
-    } catch (...) {
-      FreeLibrary(library);
-      library = nullptr;
-      throw;
-    }
-  }
-  ~NSS() {
-    if (initialized)
-      shutdown();
-    if (library)
-      FreeLibrary(library);
-  }
-  std::string field(const std::string &value) {
-    auto bytes = decodeBase64(value);
-    SECItem input{0, bytes.data(), static_cast<unsigned>(bytes.size())},
-        output{};
-    if (decrypt(&input, &output, nullptr) != 0)
-      throw Failure("locked", "Firefox could not decrypt a saved login");
-    std::string result(reinterpret_cast<char *>(output.data), output.len);
-    SecureZeroMemory(output.data, output.len);
-    freeItem(&output, 0);
-    return result;
-  }
-};
-} // namespace
-Json firefoxLogins(const Path &profile, const std::string &password,
-                   const std::atomic_bool &cancelled) {
-  std::lock_guard<std::mutex> lock(nssMutex);
-  auto temporary =
-      std::filesystem::temp_directory_path() /
-      std::filesystem::u8path("bay-firefox-" +
-                              bay::sync::base32(bay::sync::randomBytes(16)));
-  bay::sync::createPrivateDirectory(temporary);
-  struct RemoveCopy {
-    Path path;
-    ~RemoveCopy() {
-      std::error_code ignored;
-      std::filesystem::remove_all(path, ignored);
-    }
-  } remove{temporary};
-  Snapshot(profile / "key4.db").writeTo(temporary / "key4.db");
-  if (std::filesystem::exists(profile / "cert9.db"))
-    Snapshot(profile / "cert9.db").writeTo(temporary / "cert9.db");
-  NSS nss;
-  auto path = "sql:" + temporary.u8string();
-  // NSS public nss.h flags: read-only, no profile modules, no root certificate
-  // modules.
-  constexpr std::uint32_t flags = 0x1 | 0x4 | 0x10;
-  if (nss.init(path.c_str(), "", "", "secmod.db", flags) != 0)
-    throw Failure("unreadable",
-                  "Firefox could not open this profile's key4.db");
-  nss.initialized = true;
-  auto slot = nss.slot();
-  if (!slot)
-    throw Failure("locked", "Firefox login key is unavailable");
-  int status = nss.checkPassword(slot, password.c_str());
-  nss.freeSlot(slot);
-  if (status != 0)
-    throw Failure("locked", "Wrong Firefox primary password");
-  auto json = Json::parse(readText(profile / "logins.json"));
-  Json out = Json::array();
-  for (auto &row : json.value("logins", Json::array())) {
-    checkCancelled(cancelled);
-    auto pass = nss.field(row.value("encryptedPassword", ""));
-    if (pass.empty())
-      continue;
-    auto host = row.value("hostname", "");
-    auto url = row.contains("formSubmitURL") && row["formSubmitURL"].is_string()
-                   ? row["formSubmitURL"].get<std::string>()
-                   : "";
-    Json item = {
-        {"url", url.empty() ? host : url},
-        {"username", nss.field(row.value("encryptedUsername", ""))},
-        {"password", pass},
-        {"realm", row.contains("httpRealm") && row["httpRealm"].is_string()
-                      ? row["httpRealm"]
-                      : Json(host)}};
-    for (auto field : {std::pair{"timeCreated", "created"},
-                       {"timeLastUsed", "lastUsed"},
-                       {"timesUsed", "timesUsed"}})
-      if (row.contains(field.first))
-        item[field.second] = row[field.first];
-    out.push_back(item);
-  }
-  return out;
-}
-#elif defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
-Json firefoxLogins(const Path &profile, const std::string &password,
-                   const std::atomic_bool &cancelled) {
-  return firefoxLoginsLinux(profile, password, cancelled);
-}
-#else
-Json firefoxLogins(const Path &, const std::string &,
-                   const std::atomic_bool &) {
-  throw Failure("unsupported", "NSS password decryption is tested on Windows");
-}
-#endif
 } // namespace bay::importer

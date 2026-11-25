@@ -118,12 +118,6 @@ enum AES {
     }
     return status == kCCSuccess ? out.prefix(written) : nil
   }
-
-  static func unpadLeniently(_ data: Data, blockSize: Int) -> Data {
-    guard let last = data.last, last > 0, Int(last) <= blockSize, Int(last) <= data.count,
-          data.suffix(Int(last)).allSatisfy({ $0 == last }) else { return data }
-    return data.dropLast(Int(last))
-  }
 }
 
 public enum SafeStorageKeychain {

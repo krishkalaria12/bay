@@ -50,12 +50,10 @@ gboolean secret_item_delete_sync(SecretItem *, GCancellable *, GError **);
     # service policy and POSIX crypto with fake desktop/keyring edges only.
     sources += [root / "packages/import" / path for path in [
         "portable/Secrets.cpp", "portable/Readers.cpp", "linux/ChromiumSecrets.cpp",
-        "linux/SecretService.cpp", "linux/FirefoxNSS.cpp",
+        "linux/SecretService.cpp",
     ]]
     flags = shlex.split(subprocess.check_output(
         ["pkg-config", "--cflags", "--libs", "openssl"], text=True))
-    flags += shlex.split(subprocess.check_output(
-        ["pkg-config", "--cflags", "nss"], text=True))
     flags += shlex.split(subprocess.check_output(
         ["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
     if sys.platform == "darwin":

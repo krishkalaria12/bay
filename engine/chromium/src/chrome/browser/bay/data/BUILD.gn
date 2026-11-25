@@ -8,12 +8,6 @@ if (is_linux) {
   import("//build/config/features.gni")
   import("//build/config/linux/pkg_config.gni")
   import("//build/config/ui.gni")
-
-  # NSS is loaded at runtime from trusted system locations by the reader.
-  pkg_config("import_nss_headers") {
-    packages = [ "nss" ]
-    ignore_libs = true
-  }
 }
 
 # This is portable package code and vendored libraries, not Chromium code, so
@@ -75,8 +69,6 @@ static_library("data_services") {
     sources += [
       "packages/import/linux/ChromiumSecrets.cpp",
       "packages/import/linux/ChromiumSecrets.h",
-      "packages/import/linux/FirefoxNSS.cpp",
-      "packages/import/linux/FirefoxNSS.h",
       "packages/import/linux/SecretService.cpp",
       "packages/import/linux/SystemLibrary.h",
     ]
@@ -86,7 +78,6 @@ static_library("data_services") {
     cflags_cc = [ "-fno-char8_t" ]
     assert(use_gio && use_glib, "Bay Linux import requires GIO")
     configs += [
-      ":import_nss_headers",
       "//build/config/linux:glib",
       "//build/linux:gio_config",
     ]

@@ -192,10 +192,10 @@ int main(int argc, char **argv) {
       auto rows = firefoxLogins(root / "firefox", "fixture-primary", cancelled);
       require(rows.size() == 1 && rows[0]["username"] == "fixture-user" &&
                   rows[0]["password"] == "fixture-password",
-              "real NSS key4 import");
+              "NSS-written key4 import");
       auto other = firefoxLogins(root / "firefox-empty", "", cancelled);
       require(other.size() == 1 && other[0]["password"] == "other-password",
-              "second profile NSS isolation");
+              "second profile import");
       wipeJson(rows);
       wipeJson(other);
     }
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
       firefoxLogins(root / "firefox", "fixture-primary", cancelled);
     });
     std::cout << "linux secret fixtures passed: CBC schemes, consent, mixed "
-                 "readers, NSS real key4 and existing-slot isolation\n";
+                 "readers, NSS-written key4 without NSS, and an existing NSS slot untouched\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

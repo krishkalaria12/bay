@@ -36,11 +36,15 @@ void hear(void *context, const char *event) {
 }
 Json read(const Json &request, const std::atomic_bool *cancelled = nullptr,
           const Observer *observer = nullptr) {
-  const auto text = request.dump();
+  auto text = request.dump();
   char *answer = bay_import_read(
       text.c_str(), reinterpret_cast<const bool *>(cancelled),
       observer ? hear : nullptr,
       const_cast<void *>(static_cast<const void *>(observer)));
+  // A request can hold a primary password: wiped, as the answer is when freed.
+  volatile char *bytes = text.data();
+  for (std::size_t i = 0; i < text.size(); ++i)
+    bytes[i] = 0;
   auto parsed = Json::parse(answer ? answer : "null", nullptr, false);
   bay_import_string_free(answer);
   if (!parsed.is_object())
@@ -48,7 +52,7 @@ Json read(const Json &request, const std::atomic_bool *cancelled = nullptr,
   if (parsed.contains("error"))
     throw Failure(parsed["error"].value("code", "unreadable"),
                   parsed["error"].value("message", ""));
-  return parsed["value"];
+  return std::move(parsed["value"]);
 }
 std::string pathText(const Path &path) { return path.u8string(); }
 } // namespace
@@ -95,6 +99,13 @@ Json zenSpaces(const Path &profile, const std::string &profileId) {
 }
 Json arcSidebar(const Path &file) {
   return read({{"reader", "arcSidebar"}, {"file", pathText(file)}});
+}
+Json firefoxLogins(const Path &profile, const std::string &password,
+                   const std::atomic_bool &cancelled) {
+  return read({{"reader", "firefoxLogins"},
+               {"profile", pathText(profile)},
+               {"primaryPassword", password}},
+              &cancelled);
 }
 Json extensions(const Path &profile) {
   return read({{"reader", "extensions"}, {"profile", pathText(profile)}});

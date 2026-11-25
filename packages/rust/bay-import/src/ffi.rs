@@ -109,6 +109,13 @@ fn read(
             None => crate::arc_sidebar(&path(request, "file")?),
         },
         "extensions" => crate::extensions(&path(request, "profile")?),
+        "firefoxLogins" => {
+            let password = request
+                .get("primaryPassword")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            crate::firefox_logins(&path(request, "profile")?, password, cancel)
+        }
         other => Err(Failure::new("format", format!("No import reader {other}"))),
     }
 }
@@ -199,7 +206,12 @@ pub unsafe extern "C" fn bay_import_cancel_free(token: *mut bool) {
 pub unsafe extern "C" fn bay_import_string_free(text: *mut c_char) {
     if !text.is_null() {
         // SAFETY: as the caller's.
-        drop(unsafe { CString::from_raw(text) });
+        let mut bytes = unsafe { CString::from_raw(text) }.into_bytes_with_nul();
+        // An answer can hold passwords: wiped before the memory goes back.
+        for byte in &mut bytes {
+            // SAFETY: a byte of the vector, written in place.
+            unsafe { std::ptr::write_volatile(byte, 0) };
+        }
     }
 }
 

@@ -10,12 +10,14 @@ mod arc;
 mod crypto;
 mod failure;
 pub mod ffi;
+mod firefox_logins;
 mod readers;
 mod sessions;
 mod snapshot;
 
 pub use arc::{arc_sidebar, arc_sidebar_from_json};
 pub use failure::Failure;
+pub use firefox_logins::{firefox_logins, firefox_logins_from_json, firefox_master_key};
 pub use readers::{
     Cancel, HistoryOptions, chromium_bookmarks, chromium_time, extensions, firefox_bookmarks,
     history, parse_netscape_bookmarks, parse_passwords_csv,
