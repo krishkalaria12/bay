@@ -25,8 +25,10 @@ NAMESPACES = {
 
 
 def parse(**identity):
-    values = {'name': 'BayBrowser.Bay', 'publisher': 'CN=BayBrowser', 'display_name': 'Bay'} | identity
-    text = msix.manifest('1.7.0', values['name'], values['publisher'], values['display_name'], msix.toast_activator())
+    values = {'name': 'BayBrowser.Bay', 'publisher': 'CN=BayBrowser', 'publisher_display_name': 'Bay',
+              'display_name': 'Bay'} | identity
+    text = msix.manifest('1.7.0', values['name'], values['publisher'], values['publisher_display_name'],
+                         msix.toast_activator(), values['display_name'])
     return ElementTree.fromstring(text.encode())
 
 
@@ -55,11 +57,23 @@ class ManifestTests(unittest.TestCase):
                                            'ProcessorArchitecture': 'x64'})
         partner_center = 'CN=12345678-90AB-CDEF-1234-567890ABCDEF'
         self.assertEqual(parse(publisher=partner_center).find('m:Identity', NAMESPACES).get('Publisher'), partner_center)
-        self.assertEqual(parse(display_name='Bay & Co').find('m:Properties/m:PublisherDisplayName', NAMESPACES).text,
+        self.assertEqual(parse(publisher_display_name='Bay & Co').find('m:Properties/m:PublisherDisplayName',
+                                                                       NAMESPACES).text,
                          'Bay & Co')
-        for field, value in (('name', 'a b'), ('name', 'ab'), ('publisher', 'BayBrowser'), ('display_name', ' ')):
+        for field, value in (('name', 'a b'), ('name', 'ab'), ('publisher', 'BayBrowser'),
+                             ('publisher_display_name', ' '), ('display_name', ' ')):
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                 parse(**{field: value})
+
+    def test_display_name_is_the_reserved_one(self):
+        # Partner Center checks both against the product's reserved names.
+        root = parse(display_name='Bay Browser')
+        self.assertEqual(root.find('m:Properties/m:DisplayName', NAMESPACES).text, 'Bay Browser')
+        self.assertEqual(root.find('m:Applications/m:Application/uap:VisualElements', NAMESPACES).get('DisplayName'),
+                         'Bay Browser')
+        self.assertEqual(parse().find('m:Properties/m:DisplayName', NAMESPACES).text, 'Bay')
+        workflow = WORKFLOW.read_text()
+        self.assertIn('BAY_MSIX_DISPLAY_NAME: ${{ vars.BAY_MSIX_DISPLAY_NAME }}', workflow)
 
     def test_runs_bay_with_full_trust(self):
         root = parse()

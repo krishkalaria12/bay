@@ -5,8 +5,8 @@
 
 The Microsoft Store signs and updates the package, so the in-app updater's script is left out. The identity comes from
 Partner Center (Product identity): --name, --publisher (CN=...) and --publisher-display-name, or BAY_MSIX_NAME,
-BAY_MSIX_PUBLISHER and BAY_MSIX_PUBLISHER_DISPLAY_NAME. Until the app is reserved there, the defaults below build a
-package for sideloading only.
+BAY_MSIX_PUBLISHER and BAY_MSIX_PUBLISHER_DISPLAY_NAME. The app's --display-name (BAY_MSIX_DISPLAY_NAME) must be a name
+reserved there too. Until the app is reserved, the defaults below build a package for sideloading only.
 """
 import argparse
 import os
@@ -25,6 +25,7 @@ INSTALLER_SCRIPT = REPO / 'packaging/windows/Bay.iss'
 DEFAULT_NAME = 'BayBrowser.Bay'
 DEFAULT_PUBLISHER = 'CN=BayBrowser'
 DEFAULT_PUBLISHER_DISPLAY_NAME = 'Bay'
+DEFAULT_DISPLAY_NAME = 'Bay'
 # Windows 10 1809, the oldest Windows 10 Chromium still supports, to Windows 11 24H2.
 MIN_VERSION = '10.0.17763.0'
 MAX_VERSION_TESTED = '10.0.26100.0'
@@ -53,17 +54,19 @@ def toast_activator():
     return match.group(1)
 
 
-def check_identity(name, publisher, display_name):
+def check_identity(name, publisher, publisher_display_name, display_name):
     if not re.fullmatch(r'[A-Za-z0-9.-]{3,50}', name):
         raise ValueError(f'package name must be 3 to 50 letters, digits, dots or hyphens: {name}')
     if not re.fullmatch(r'CN=[^,]+(?:, ?[A-Z]+=[^,]+)*', publisher):
         raise ValueError(f'publisher must be a distinguished name starting with CN=: {publisher}')
-    if not display_name.strip():
+    if not publisher_display_name.strip():
         raise ValueError('publisher display name is empty')
+    if not display_name.strip():
+        raise ValueError('display name is empty')
 
 
-def manifest(version, name, publisher, display_name, clsid):
-    check_identity(name, publisher, display_name)
+def manifest(version, name, publisher, publisher_display_name, clsid, display_name=DEFAULT_DISPLAY_NAME):
+    check_identity(name, publisher, publisher_display_name, display_name)
     arguments = quoteattr(ARGUMENTS)
     protocols = ''.join(f"""
         <uap3:Extension Category="windows.protocol">
@@ -93,8 +96,8 @@ def manifest(version, name, publisher, display_name, clsid):
   IgnorableNamespaces="uap uap3 desktop com rescap">
   <Identity Name={quoteattr(name)} Publisher={quoteattr(publisher)} Version="{package_version(version)}" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>Bay</DisplayName>
-    <PublisherDisplayName>{escape(display_name)}</PublisherDisplayName>
+    <DisplayName>{escape(display_name)}</DisplayName>
+    <PublisherDisplayName>{escape(publisher_display_name)}</PublisherDisplayName>
     <Logo>Assets\\StoreLogo.png</Logo>
   </Properties>
   <Dependencies>
@@ -105,7 +108,7 @@ def manifest(version, name, publisher, display_name, clsid):
   </Resources>
   <Applications>
     <Application Id="Bay" Executable="Bay.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Bay" Description={quoteattr(winget.SHORT_DESCRIPTION)} BackgroundColor="transparent"
+      <uap:VisualElements DisplayName={quoteattr(display_name)} Description={quoteattr(winget.SHORT_DESCRIPTION)} BackgroundColor="transparent"
         Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png">
         <uap:DefaultTile ShortName="Bay" Wide310x150Logo="Assets\\Wide310x150Logo.png"
           Square71x71Logo="Assets\\Square71x71Logo.png" Square310x310Logo="Assets\\Square310x310Logo.png" />
@@ -137,11 +140,11 @@ def manifest(version, name, publisher, display_name, clsid):
 """
 
 
-def prepare(stage, version, name, publisher, display_name):
+def prepare(stage, version, name, publisher, publisher_display_name, display_name=DEFAULT_DISPLAY_NAME):
     stage = pathlib.Path(stage)
     if not (stage / 'Bay.exe').is_file() or not (stage / 'notification_helper.exe').is_file():
         raise ValueError(f'{stage} has no staged Bay.exe and notification_helper.exe')
-    text = manifest(version, name, publisher, display_name, toast_activator())
+    text = manifest(version, name, publisher, publisher_display_name, toast_activator(), display_name)
     (stage / 'AppxManifest.xml').write_text(text, encoding='utf-8', newline='\r\n')
     shutil.copytree(ASSETS, stage / 'Assets', dirs_exist_ok=True)
     (stage / 'update.ps1').unlink(missing_ok=True)
@@ -156,9 +159,11 @@ def main():
     parser.add_argument('--publisher', default=os.environ.get('BAY_MSIX_PUBLISHER') or DEFAULT_PUBLISHER)
     parser.add_argument('--publisher-display-name',
                         default=os.environ.get('BAY_MSIX_PUBLISHER_DISPLAY_NAME') or DEFAULT_PUBLISHER_DISPLAY_NAME)
+    parser.add_argument('--display-name', default=os.environ.get('BAY_MSIX_DISPLAY_NAME') or DEFAULT_DISPLAY_NAME)
     args = parser.parse_args()
     try:
-        print(prepare(args.stage, args.version, args.name, args.publisher, args.publisher_display_name))
+        print(prepare(args.stage, args.version, args.name, args.publisher, args.publisher_display_name,
+                      args.display_name))
     except (OSError, ValueError) as error:
         sys.exit(f'msix: {error}')
 

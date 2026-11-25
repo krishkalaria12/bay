@@ -263,15 +263,17 @@ Import-Certificate -FilePath Bay-sideload.cer -CertStoreLocation Cert:\LocalMach
 1. **Partner Center.** Enrol at storedeveloper.microsoft.com as an individual (free, with an ID check), then Apps and
    games › New product › MSIX or PWA app, and reserve the name (Bay, or Bay Browser if it's taken).
 2. **Identity.** Product management › Product identity lists `Package/Identity/Name`, `Package/Identity/Publisher` and
-   `Package/Properties/PublisherDisplayName`. Store them, so the next build's package is the Store's:
+   `Package/Properties/PublisherDisplayName`. Store them, with the name you reserved as the app's display name (Partner
+   Center refuses a package whose display name isn't reserved), so the next build's package is the Store's:
 
    ```bash
    gh variable set BAY_MSIX_NAME --body '<Package/Identity/Name>'
    gh variable set BAY_MSIX_PUBLISHER --body '<Package/Identity/Publisher>'
    gh variable set BAY_MSIX_PUBLISHER_DISPLAY_NAME --body '<Package/Properties/PublisherDisplayName>'
+   gh variable set BAY_MSIX_DISPLAY_NAME --body '<the reserved name>'
    ```
 
-   Until then the package is `BayBrowser.Bay` by `CN=BayBrowser`, for sideloading only.
+   Until then the package is `BayBrowser.Bay` by `CN=BayBrowser`, named Bay, for sideloading only.
 3. **First submission.** Pricing: free. Properties: category Productivity, and the privacy policy URL `https://baybrowser.in/privacy/`, which Bay needs since it uses
    the internet. Age ratings: the questionnaire (unrestricted web access). Packages: the `.msix`. Store listing: the
    description and at least one screenshot of Bay on Windows. Submission options: explain `runFullTrust`, e.g. "Bay is

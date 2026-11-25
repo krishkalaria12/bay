@@ -311,6 +311,7 @@ jobs:
           BAY_MSIX_NAME: ${{ vars.BAY_MSIX_NAME }}
           BAY_MSIX_PUBLISHER: ${{ vars.BAY_MSIX_PUBLISHER }}
           BAY_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.BAY_MSIX_PUBLISHER_DISPLAY_NAME }}
+          BAY_MSIX_DISPLAY_NAME: ${{ vars.BAY_MSIX_DISPLAY_NAME }}
         run: |
           & scripts/windows/package.ps1 -Version $env:VERSION -Msix -OutputDirectory dist/windows-msix
           $package = Get-Item "dist/windows-msix/Bay-$env:VERSION-windows-x64.msix"
