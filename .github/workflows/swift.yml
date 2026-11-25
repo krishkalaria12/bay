@@ -9,14 +9,18 @@ on:
       - "packages/import/**"
       - "packages/sync/**"
       - "packages/shaders/**"
+      - "packages/rust/**"
       - "scripts/swift-test.sh"
+      - "scripts/test-native.mjs"
       - ".github/workflows/swift.yml"
   pull_request:
     paths:
       - "packages/import/**"
       - "packages/sync/**"
       - "packages/shaders/**"
+      - "packages/rust/**"
       - "scripts/swift-test.sh"
+      - "scripts/test-native.mjs"
       - ".github/workflows/swift.yml"
   workflow_dispatch:
 
@@ -42,7 +46,6 @@ jobs:
         working-directory: packages/import
         run: bash ../../scripts/swift-test.sh
       - name: Sync tests
-        working-directory: packages/sync
-        run: bash ../../scripts/swift-test.sh
+        run: node scripts/test-native.mjs sync
       - name: Shaders compile
         run: node packages/shaders/scripts/check-shaders.mjs

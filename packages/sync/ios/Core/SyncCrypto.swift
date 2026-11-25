@@ -1,85 +1,60 @@
-import CryptoKit
+import BaySyncFFI
 import Foundation
 
-public struct SyncKeys {
-  static let magic = Data("NNS1".utf8)
-  static let salt = Data("bay-sync/v1".utf8)
-  static let padding = 1024
-
-  let fileKey: SymmetricKey
-  let nameKey: SymmetricKey
-
+/// A chain's keys and the sync file format, from bay-sync (packages/rust/bay-sync), which Windows and Linux share.
+/// Immutable once made, so any thread may use one.
+public final class SyncKeys: @unchecked Sendable {
   public enum Failure: Error, Equatable {
     case format
     case authentication
   }
 
+  private let keys: OpaquePointer
+
   public init(entropy: Data) {
-    let ikm = SymmetricKey(data: entropy)
-    fileKey = HKDF<SHA256>.deriveKey(inputKeyMaterial: ikm, salt: Self.salt, info: Data("file-key".utf8), outputByteCount: 32)
-    nameKey = HKDF<SHA256>.deriveKey(inputKeyMaterial: ikm, salt: Self.salt, info: Data("name-key".utf8), outputByteCount: 32)
+    precondition(entropy.count == 32, "a chain's key is 32 bytes")
+    keys = entropy.withUnsafeBytes { bay_sync_keys_new($0.bindMemory(to: UInt8.self).baseAddress)! }
   }
 
-  public var chainTag: String { tag("chain") }
+  deinit { bay_sync_keys_free(keys) }
 
-  public func scopeTag(_ scope: String) -> String { tag("scope/" + scope) }
+  public var chainTag: String { Self.string(bay_sync_chain_tag(keys)) }
 
-  func tag(_ label: String) -> String {
-    Base32.encode(Data(HMAC<SHA256>.authenticationCode(for: Data(label.utf8), using: nameKey)).prefix(16))
-  }
-
-  static func associatedData(chain: String, scope: String, file: String) -> Data {
-    magic + Data("\(chain)/\(scope)/\(file)".utf8)
-  }
+  public func scopeTag(_ scope: String) -> String { Self.string(bay_sync_scope_tag(keys, scope)) }
 
   public func seal(_ payload: Data, scopeTag: String, fileId: String) throws -> Data {
-    var plain = withUnsafeBytes(of: UInt32(payload.count).bigEndian) { Data($0) } + payload
-    plain.append(Data(count: (Self.padding - plain.count % Self.padding) % Self.padding))
-    let box = try AES.GCM.seal(plain, using: fileKey, authenticating: Self.associatedData(chain: chainTag, scope: scopeTag, file: fileId))
-    return Self.magic + box.nonce + box.ciphertext + box.tag
+    var length = 0
+    let sealed = payload.withUnsafeBytes { bytes in
+      bay_sync_seal(keys, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, scopeTag, fileId, &length)
+    }
+    defer { bay_sync_bytes_free(sealed, length) }
+    return Data(bytes: sealed!, count: length)
   }
 
   public func open(_ file: Data, scopeTag: String, fileId: String) throws -> Data {
-    let file = Data(file)
-    guard file.count >= Self.magic.count + 12 + 16 + 4, file.prefix(Self.magic.count) == Self.magic else { throw Failure.format }
-    let body = file.dropFirst(Self.magic.count)
-    let plain: Data
-    do {
-      let box = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: body.prefix(12)), ciphertext: body.dropFirst(12).dropLast(16), tag: body.suffix(16))
-      plain = try AES.GCM.open(box, using: fileKey, authenticating: Self.associatedData(chain: chainTag, scope: scopeTag, file: fileId))
-    } catch {
-      throw Failure.authentication
+    var payload: UnsafeMutablePointer<UInt8>?
+    var length = 0
+    let status = file.withUnsafeBytes { bytes in
+      bay_sync_open(keys, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, scopeTag, fileId, &payload, &length)
     }
-    let length = plain.prefix(4).reduce(0) { $0 << 8 | Int($1) }
-    guard length <= plain.count - 4 else { throw Failure.format }
-    return Data(plain.dropFirst(4).prefix(length))
+    switch status {
+    case 0:
+      defer { bay_sync_secret_free(payload, length) }
+      return length == 0 ? Data() : Data(bytes: payload!, count: length)
+    case 1: throw Failure.format
+    default: throw Failure.authentication
+    }
   }
 
-  public static func newFileId() -> String {
-    Base32.encode(RecoveryPhrase.generateEntropy().prefix(16))
+  public static func newFileId() -> String { string(bay_sync_new_file_id()) }
+
+  static func string(_ text: UnsafeMutablePointer<CChar>?) -> String {
+    defer { bay_sync_string_free(text) }
+    return text.map { String(cString: $0) } ?? ""
   }
 }
 
 enum Base32 {
-  static let alphabet = Array("abcdefghijklmnopqrstuvwxyz234567")
-
-  static func encode(_ data: Data) -> String {
-    var out = ""
-    var buffer = 0, bits = 0
-    for byte in data {
-      buffer = buffer << 8 | Int(byte)
-      bits += 8
-      while bits >= 5 {
-        out.append(alphabet[(buffer >> (bits - 5)) & 31])
-        bits -= 5
-      }
-      buffer &= (1 << bits) - 1
-    }
-    if bits > 0 { out.append(alphabet[(buffer << (5 - bits)) & 31]) }
-    return out
-  }
-
-  static func isTag(_ name: String) -> Bool {
-    name.count == 26 && name.allSatisfy { alphabet.contains($0) }
-  }
+  /// A tag: 16 bytes in base32, as every chain, scope and file name is.
+  static func isTag(_ name: String) -> Bool { bay_sync_is_tag(name) }
 }
