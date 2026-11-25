@@ -1,6 +1,6 @@
 //! C ABI (`include/bay_sync.h`), linked into both desktop hosts through `bay-desktop`. Strings returned to the caller
-//! are owned by Rust (`bay_string_free`, from `bay_adblock.h`); sealed files are freed with `bay_bytes_free`, and
-//! opened payloads, which are secret, with `bay_sync_secret_free`, which wipes them first.
+//! are owned by Rust and freed with `bay_sync_string_free`; sealed files with `bay_sync_bytes_free`, and opened
+//! payloads, which are secret, with `bay_sync_secret_free`, which wipes them first.
 
 use std::ffi::{CStr, CString, c_char};
 
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn bay_sync_scope_tag(
 }
 
 /// `payload` sealed as the file `file_id` in the scope tagged `scope_tag`, with a fresh nonce. Free with
-/// `bay_bytes_free(file, *length)`.
+/// `bay_sync_bytes_free(file, *length)`.
 ///
 /// # Safety
 /// `keys` must be live; `payload` must point to `payload_length` bytes (or be null when it's 0); `scope_tag` and
@@ -219,6 +219,30 @@ pub unsafe extern "C" fn bay_sync_open(
     }
 }
 
+/// Frees a string this library returned.
+///
+/// # Safety
+/// `text` must be null or come from this library, freed once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_sync_string_free(text: *mut c_char) {
+    if !text.is_null() {
+        // SAFETY: as the caller's.
+        drop(unsafe { CString::from_raw(text) });
+    }
+}
+
+/// Frees bytes this library returned (a sealed file).
+///
+/// # Safety
+/// `data` and `length` must come from one call of this library, freed once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_sync_bytes_free(data: *mut u8, length: usize) {
+    if !data.is_null() {
+        // SAFETY: as the caller's: a boxed slice this library gave out.
+        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(data, length)) });
+    }
+}
+
 /// Wipes and frees secret bytes this library returned (an opened payload).
 ///
 /// # Safety
@@ -275,7 +299,7 @@ pub unsafe extern "C" fn bay_sync_phrase_words(entropy_bytes: *const u8) -> *mut
 
 /// The chain's 32 bytes a typed recovery phrase holds (any case and separators; a word by its first four letters or
 /// more): 0 with `out` filled; 1 for the wrong number of words (`*detail` the count); 2 for a word that isn't one
-/// (`*detail` the word); 3 when the checksum fails. `*detail` is null or freed with `bay_string_free`.
+/// (`*detail` the word); 3 when the checksum fails. `*detail` is null or freed with `bay_sync_string_free`.
 ///
 /// # Safety
 /// `text` must be a valid string; `out` must point to 32 writable bytes; `detail` writable or null.
@@ -321,16 +345,7 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
-    // As bay_string_free and bay_bytes_free (bay-adblock) release them; this crate doesn't link that one.
-    unsafe fn bay_string_free(text: *mut c_char) {
-        // SAFETY: a string this library returned, freed once.
-        drop(unsafe { CString::from_raw(text) });
-    }
-
-    unsafe fn bay_bytes_free(data: *mut u8, length: usize) {
-        // SAFETY: a boxed slice this library returned, freed once.
-        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(data, length)) });
-    }
+    use super::{bay_sync_bytes_free as bay_bytes_free, bay_sync_string_free as bay_string_free};
 
     fn golden() -> Value {
         serde_json::from_str(include_str!("../../../sync/fixtures/golden.json")).unwrap()
@@ -507,7 +522,7 @@ mod tests {
     fn the_header_declares_exactly_these_functions() {
         let defined = functions(include_str!("ffi.rs"), "extern \"C\" fn ");
         let declared = functions(include_str!("../include/bay_sync.h"), "");
-        assert_eq!(defined.len(), 13);
+        assert_eq!(defined.len(), 15);
         assert_eq!(declared, defined);
     }
 }
