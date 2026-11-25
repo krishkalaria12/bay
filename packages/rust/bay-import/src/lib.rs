@@ -12,6 +12,7 @@ mod failure;
 pub mod ffi;
 mod firefox_logins;
 mod readers;
+mod secrets;
 mod sessions;
 mod snapshot;
 
@@ -22,6 +23,7 @@ pub use readers::{
     Cancel, HistoryOptions, chromium_bookmarks, chromium_time, extensions, firefox_bookmarks,
     history, parse_netscape_bookmarks, parse_passwords_csv,
 };
+pub use secrets::{Opener, Plain, Unlock, chromium_autofill, chromium_logins, firefox_cookies};
 pub use sessions::{
     chromium_tabs, firefox_tabs, firefox_tabs_from_json, zen_spaces, zen_spaces_from_json,
 };

@@ -27,20 +27,47 @@ std::string readText(const Path &path) {
   return std::string(bytes.begin(), bytes.end());
 }
 namespace {
+// What bay_import_read's context carries back to its callbacks.
+struct Hooks {
+  const Observer *observer;
+  const SecretOpener *opener;
+};
 void hear(void *context, const char *event) {
   // An exception mustn't cross back into Rust; the observer only reports.
   try {
-    (*static_cast<const Observer *>(context))(Json::parse(event));
+    (*static_cast<const Hooks *>(context)->observer)(Json::parse(event));
   } catch (...) {
   }
 }
+bool open(void *context, const std::uint8_t *sealed, std::size_t length,
+          void *sink, BayImportPut put) {
+  std::optional<Bytes> plain;
+  struct Wipe {
+    std::optional<Bytes> &bytes;
+    ~Wipe() {
+      if (bytes)
+        bay::sync::erase(*bytes);
+    }
+  } wipe{plain};
+  try {
+    plain = (*static_cast<const Hooks *>(context)->opener)(
+        Bytes(sealed, sealed + length));
+  } catch (...) {
+    return false;
+  }
+  if (!plain)
+    return false;
+  put(sink, plain->data(), plain->size());
+  return true;
+}
 Json read(const Json &request, const std::atomic_bool *cancelled = nullptr,
-          const Observer *observer = nullptr) {
+          const Observer *observer = nullptr,
+          const SecretOpener *opener = nullptr) {
+  Hooks hooks{observer, opener};
   auto text = request.dump();
   char *answer = bay_import_read(
       text.c_str(), reinterpret_cast<const bool *>(cancelled),
-      observer ? hear : nullptr,
-      const_cast<void *>(static_cast<const void *>(observer)));
+      observer ? hear : nullptr, opener ? open : nullptr, &hooks);
   // A request can hold a primary password: wiped, as the answer is when freed.
   volatile char *bytes = text.data();
   for (std::size_t i = 0; i < text.size(); ++i)
@@ -106,6 +133,20 @@ Json firefoxLogins(const Path &profile, const std::string &password,
                {"profile", pathText(profile)},
                {"primaryPassword", password}},
               &cancelled);
+}
+SensitiveImport firefoxCookies(const Path &profile,
+                               const std::atomic_bool &cancelled) {
+  auto answer = read(
+      {{"reader", "firefoxCookies"}, {"profile", pathText(profile)}},
+      &cancelled);
+  SensitiveImport out;
+  out.cookies = std::move(answer["cookies"]);
+  return out;
+}
+Json readSealed(const std::string &reader, const Path &profile,
+                const std::atomic_bool &cancelled, const SecretOpener &open) {
+  return read({{"reader", reader}, {"profile", pathText(profile)}},
+              &cancelled, nullptr, &open);
 }
 Json extensions(const Path &profile) {
   return read({{"reader", "extensions"}, {"profile", pathText(profile)}});

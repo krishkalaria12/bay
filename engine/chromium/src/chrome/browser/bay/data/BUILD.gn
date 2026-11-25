@@ -26,7 +26,6 @@ static_library("data_services") {
     "packages/import/portable/ImportCore.h",
     "packages/import/portable/ImportService.cpp",
     "packages/import/portable/Readers.cpp",
-    "packages/import/portable/SQLite.h",
     "packages/import/portable/Secrets.cpp",
 
     # Sync dispatch reads engine passwords through the importer in this target.
@@ -63,7 +62,6 @@ static_library("data_services") {
       "shell32.lib",
       "user32.lib",
       "uuid.lib",
-      "winsqlite3.lib",
     ]
   } else {
     sources += [
@@ -81,10 +79,7 @@ static_library("data_services") {
       "//build/config/linux:glib",
       "//build/linux:gio_config",
     ]
-    deps = [
-      "//third_party/boringssl",
-      "//third_party/sqlite",
-    ]
+    deps = [ "//third_party/boringssl" ]
     libs = [ "dl" ]
   }
 }

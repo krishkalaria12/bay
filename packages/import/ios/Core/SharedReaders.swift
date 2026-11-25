@@ -29,7 +29,7 @@ enum SharedReaders {
       Unmanaged<Events>.fromOpaque(context).takeUnretainedValue().hear(Data(bytes: event, count: strlen(event)))
     }
     let answer = withExtendedLifetime(events) {
-      bay_import_read(text, cancellation?.token, observer, context)
+      bay_import_read(text, cancellation?.token, observer, nil, context)
     }
     defer { bay_import_string_free(answer) }
     guard let answer else { throw ImportError.unreadable("The import reader gave no answer") }

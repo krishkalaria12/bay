@@ -54,7 +54,7 @@ void deleteSecret(const std::string &) {
 
 #if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
 #include "packages/import/linux/ChromiumSecrets.h"
-#include "packages/import/portable/SQLite.h"
+#include <sqlite3.h>
 #include <openssl/evp.h>
 #endif
 

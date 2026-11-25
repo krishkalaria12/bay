@@ -7,15 +7,43 @@ use std::sync::atomic::AtomicBool;
 
 use serde_json::{Value, json};
 
+use zeroize::{Zeroize, Zeroizing};
+
 use crate::readers::Cancel;
+use crate::secrets::{Opener, Plain, Unlock};
 use crate::{Failure, HistoryOptions};
 
 /// Hears a reader's events (history progress and chunks) as JSON, on the reading thread.
 pub type BayImportObserver =
     Option<unsafe extern "C" fn(context: *mut c_void, event: *const c_char)>;
 
-fn give(text: String) -> *mut c_char {
-    CString::new(text).map_or(std::ptr::null_mut(), CString::into_raw)
+/// Takes the plain bytes an opener gives.
+pub type BayImportPut = unsafe extern "C" fn(sink: *mut c_void, plain: *const u8, length: usize);
+
+/// Opens a browser value the reader's key can't (DPAPI, the engine's OSCrypt, a keyring asked on demand): gives the
+/// plain bytes to `put` with `sink` and answers true, or answers false. On the reading thread.
+pub type BayImportOpener = Option<
+    unsafe extern "C" fn(
+        context: *mut c_void,
+        sealed: *const u8,
+        length: usize,
+        sink: *mut c_void,
+        put: BayImportPut,
+    ) -> bool,
+>;
+
+/// Wipes what a request or an answer held (primary passwords, saved passwords, card numbers, cookies).
+fn wipe(value: &mut Value) {
+    match value {
+        Value::String(text) => text.zeroize(),
+        Value::Array(items) => items.iter_mut().for_each(wipe),
+        Value::Object(fields) => fields.values_mut().for_each(wipe),
+        _ => {}
+    }
+}
+
+fn give(text: &str) -> *mut c_char {
+    CString::new(text.as_bytes()).map_or(std::ptr::null_mut(), CString::into_raw)
 }
 
 fn field<'a>(request: &'a Value, key: &str) -> Result<&'a str, Failure> {
@@ -47,6 +75,7 @@ fn read(
     request: &Value,
     cancel: Cancel<'_>,
     observer: &mut dyn FnMut(Value),
+    opener: Option<Opener<'_>>,
 ) -> Result<Value, Failure> {
     match field(request, "reader")? {
         "passwordsCsv" => crate::parse_passwords_csv(field(request, "text")?),
@@ -109,6 +138,35 @@ fn read(
             None => crate::arc_sidebar(&path(request, "file")?),
         },
         "extensions" => crate::extensions(&path(request, "profile")?),
+        "chromiumLogins" | "chromiumAutofill" => {
+            let key = request
+                .get("key")
+                .and_then(Value::as_str)
+                .map(hex)
+                .transpose()?
+                .map(Zeroizing::new);
+            let unsealed_is_plain = request
+                .get("unsealedIsPlain")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let mut unlock = Unlock {
+                key,
+                unsealed_is_plain,
+                opener,
+            };
+            let profile = path(request, "profile")?;
+            if field(request, "reader")? == "chromiumLogins" {
+                crate::chromium_logins(&profile, &mut unlock, cancel)
+            } else {
+                crate::chromium_autofill(&profile, &mut unlock, cancel)
+            }
+        }
+        "firefoxCookies" => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0.0, |since| since.as_secs_f64() * 1000.0);
+            crate::firefox_cookies(&path(request, "profile")?, now, cancel)
+        }
         "firefoxLogins" => {
             let password = request
                 .get("primaryPassword")
@@ -132,6 +190,7 @@ pub unsafe extern "C" fn bay_import_read(
     request: *const c_char,
     cancelled: *const bool,
     observer: BayImportObserver,
+    opener: BayImportOpener,
     context: *mut c_void,
 ) -> *mut c_char {
     let never = AtomicBool::new(false);
@@ -141,7 +200,7 @@ pub unsafe extern "C" fn bay_import_read(
         // SAFETY: the caller passes a live flag it writes only atomically (std::atomic_bool has bool's layout).
         unsafe { AtomicBool::from_ptr(cancelled.cast_mut()) }
     };
-    let request = if request.is_null() {
+    let mut request = if request.is_null() {
         Value::Null
     } else {
         // SAFETY: the caller passes a valid string.
@@ -154,11 +213,36 @@ pub unsafe extern "C" fn bay_import_read(
             unsafe { observer(context, text.as_ptr()) };
         }
     };
-    let answer = match read(&request, Cancel(flag), &mut hear) {
+    let mut open = |sealed: &[u8]| -> Option<Plain> {
+        let opener = opener?;
+        let mut plain = Zeroizing::new(Vec::new());
+        unsafe extern "C" fn put(sink: *mut c_void, bytes: *const u8, length: usize) {
+            if !bytes.is_null() {
+                // SAFETY: the opener gives `length` readable bytes, and `sink` is the vector below for this call.
+                unsafe {
+                    (*sink.cast::<Vec<u8>>())
+                        .extend_from_slice(std::slice::from_raw_parts(bytes, length))
+                };
+            }
+        }
+        let sink: *mut Vec<u8> = &mut *plain;
+        // SAFETY: as the caller's: the opener takes its own context and these bytes for this call.
+        let opened = unsafe { opener(context, sealed.as_ptr(), sealed.len(), sink.cast(), put) };
+        opened.then_some(plain)
+    };
+    let mut answer = match read(
+        &request,
+        Cancel(flag),
+        &mut hear,
+        opener.is_some().then_some(&mut open as Opener<'_>),
+    ) {
         Ok(value) => json!({"value": value}),
         Err(failure) => json!({"error": {"code": failure.code, "message": failure.message}}),
     };
-    give(answer.to_string())
+    let text = Zeroizing::new(answer.to_string());
+    wipe(&mut answer);
+    wipe(&mut request);
+    give(&text)
 }
 
 /// A stop flag the host owns through the library (Swift has no atomics of its own): pass it as `cancelled`. Free with
@@ -232,7 +316,13 @@ mod tests {
         let flag = cancelled.map_or(std::ptr::null(), |flag| flag.as_ptr().cast_const());
         // SAFETY: a valid request, a live flag (or null) and the matching observer context.
         let answer = unsafe {
-            bay_import_read(request.as_ptr(), flag, Some(hear), (&raw mut events).cast())
+            bay_import_read(
+                request.as_ptr(),
+                flag,
+                Some(hear),
+                None,
+                (&raw mut events).cast(),
+            )
         };
         // SAFETY: an answer this library gave, freed once.
         let value =

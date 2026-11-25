@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 namespace bay::importer {
@@ -134,6 +135,13 @@ SensitiveImport chromiumAutofill(const Path &profile,
                                  int &blocked);
 SensitiveImport firefoxCookies(const Path &profile,
                                const std::atomic_bool &cancelled);
+// Opens a sealed browser value for the shared readers: its plain bytes, or
+// nullopt when this host can't.
+using SecretOpener = std::function<std::optional<Bytes>(const Bytes &)>;
+// A bay-import reader of a profile's sealed values ("chromiumLogins",
+// "chromiumAutofill"), each value opened by `open`.
+Json readSealed(const std::string &reader, const Path &profile,
+                const std::atomic_bool &cancelled, const SecretOpener &open);
 inline std::string utf8(std::uint32_t cp) {
   std::string out;
   if (cp < 0x80)

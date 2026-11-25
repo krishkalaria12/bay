@@ -235,3 +235,27 @@ pub fn is_null(row: &rusqlite::Row<'_>, column: usize) -> bool {
         Ok(rusqlite::types::ValueRef::Null) | Err(_)
     )
 }
+
+/// The index of the column named `name` in the row's statement, if it has one (older and newer browsers differ).
+pub fn column(row: &rusqlite::Row<'_>, name: &str) -> Option<usize> {
+    row.as_ref().column_index(name).ok()
+}
+
+/// A named column's text, empty when the column is missing or null.
+pub fn named_text(row: &rusqlite::Row<'_>, name: &str) -> String {
+    column(row, name).map_or_else(String::new, |at| text(row, at))
+}
+
+/// A named column's integer, 0 when the column is missing or null.
+pub fn named_integer(row: &rusqlite::Row<'_>, name: &str) -> i64 {
+    column(row, name).map_or(0, |at| integer(row, at))
+}
+
+/// A named column's bytes, empty when the column is missing or null.
+pub fn named_blob(row: &rusqlite::Row<'_>, name: &str) -> Vec<u8> {
+    match column(row, name).and_then(|at| row.get_ref(at).ok()) {
+        Some(rusqlite::types::ValueRef::Blob(bytes))
+        | Some(rusqlite::types::ValueRef::Text(bytes)) => bytes.to_vec(),
+        _ => Vec::new(),
+    }
+}

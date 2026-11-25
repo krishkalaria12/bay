@@ -83,10 +83,10 @@ def main():
         if args.suite in ("import", "all"):
             binary = root / ("import-test.exe" if windows else "import-test")
             sources = ["packages/import/portable/Readers.cpp", "packages/import/portable/Secrets.cpp", "packages/sync/portable/SyncCrypto.cpp", "packages/import/portable/tests/Readers.cpp"]
-            libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib"]
+            libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
                 sources.append("packages/sync/portable/tests/OpenSSLBackend.cpp")
-                libraries = ["-lsqlite3", *shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
+                libraries = [*shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
             compile(sources, binary, libraries)
             run([binary, REPO / "packages/import/fixtures", root / "import-db"])
         if args.suite == "all":
@@ -100,7 +100,7 @@ def main():
                 sources.extend(production / "import/portable" / name for name in ("ImportService.cpp", "Readers.cpp", "Secrets.cpp"))
                 sources.append(production / "import/portable/BrowserDiscovery.cpp")
                 sources.extend(production / "sync/portable" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp"))
-                libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
+                libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
                 if windows:
                     sources.append(production / "sync/portable/RecoveryKitWindows.cpp")
                 else:

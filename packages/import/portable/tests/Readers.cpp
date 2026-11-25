@@ -1,7 +1,11 @@
 #include "../ImportCore.h"
 #include <fstream>
 #include <iostream>
+// The fixtures are written with the SQLite bay-import bundles (in
+// bay_desktop), so a binary holds one copy: the system winsqlite3 would define
+// the same symbols again.
 #ifdef _WIN32
+#define SQLITE_API
 #include <winsqlite/winsqlite3.h>
 #else
 #include <sqlite3.h>
