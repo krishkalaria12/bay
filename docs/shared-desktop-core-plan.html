@@ -495,7 +495,32 @@
                   </td>
                 </tr>
                 <tr>
-                  <td>3 – 6</td>
+                  <td>3 · Browser import</td>
+                  <td>
+                    Partly built. <code>bay-import</code> reads CSV and HTML exports, bookmarks, history, extensions, Chromium, Firefox and Zen tabs, Arc's
+                    sidebar, Firefox and Zen logins (key4.db without NSS, so <code>FirefoxNSS.cpp</code> and Windows' <code>nss3.dll</code> loader are gone),
+                    Chromium logins and autofill (each host opens sealed values through an opener: DPAPI, the Linux keyrings, the engine's OSCrypt) and Firefox
+                    cookies. <code>Secrets.cpp</code> 725 → 225 lines; <code>SQLite.h</code> is gone.
+                  </td>
+                  <td>
+                    18 Rust tests against the shared fixtures, including Zen's SHA-384 primary password; the 73 Swift import tests; the Linux secret, service
+                    and import fixtures and the portable import and data suites, run on macOS. No Windows or Linux build yet.
+                  </td>
+                </tr>
+                <tr>
+                  <td>4 · Chromium glue</td>
+                  <td>
+                    Partly built. Shared in <code>//bay/core</code> and used by both hosts: the permission flow and prompts (with the file-restore prompt),
+                    device choosers, cast, password and autofill prompts, external app requests, the tabless icon download and page security (the WebUI's rule
+                    that a pending HTTPS entry isn't a certificate error now holds on macOS too). Open: screen-share picker, context menu.
+                  </td>
+                  <td>
+                    Each file passes a Chromium syntax check with the macOS tree's flags; <code>page_security_unittests</code> covers the shared security level.
+                    No engine build and no prompt tried by hand.
+                  </td>
+                </tr>
+                <tr>
+                  <td>5 – 6</td>
                   <td>Not started.</td>
                   <td></td>
                 </tr>
@@ -517,7 +542,25 @@
               <strong>Recorded outputs.</strong> Only the sync vector is in place. The import Wire JSON per fixture profile still has to be recorded from both
               readers before Phase 3.
             </li>
-            <li><strong>SQLite link spike</strong> for <code>bay-import</code> isn't done (decision 1).</li>
+            <li>
+              <strong>SQLite on Windows.</strong> The C++ readers linked the system <code>winsqlite3</code> and <code>bay-import</code> bundles its own, so
+              every Windows check failed with duplicate symbols (LNK2005). No production C++ reads SQLite now, so <code>winsqlite3.lib</code> is gone and the
+              test fixtures are written with the bundled copy. Not yet confirmed by a Windows run.
+            </li>
+            <li>
+              <strong>macOS secret readers.</strong> <code>ChromiumSecrets</code>, <code>ChromiumAutofill</code> and <code>Firefox.cookies</code> still read in
+              Swift: their results hold card numbers and cookie values as <code>SecretBytes</code>, which the JSON answer can't carry without a copy.
+              <code>bay-import</code>'s readers give the same results for the fixtures (with <code>unsealedIsPlain</code> and the v10 key). Chromium cookies
+              have no shared reader yet.
+            </li>
+            <li>
+              <strong>Phase 4 models have no unit tests</strong> in <code>//bay/core:portable</code> yet, and the screen-share picker and context menu are still
+              written twice.
+            </li>
+            <li>
+              <strong>Flaky sync test.</strong> <code>SyncVaultTests.testFolderHoldsNoPlaintext</code> checks file names for "app", which a random base32 name
+              can contain; it failed once in CI (run 45550636877) and passed on the next.
+            </li>
             <li>
               <strong>The request filter's hot path</strong> (<code>Filter</code>, <code>Response</code>, the body and header filters, <code>HostOf</code>,
               <code>Covers</code>) is still written twice, in <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code>. It needs only the C ABI
