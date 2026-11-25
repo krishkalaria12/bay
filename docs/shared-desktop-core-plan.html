@@ -497,31 +497,47 @@
                 <tr>
                   <td>3 · Browser import</td>
                   <td>
-                    Partly built. <code>bay-import</code> reads CSV and HTML exports, bookmarks, history, extensions, Chromium, Firefox and Zen tabs, Arc's
-                    sidebar, Firefox and Zen logins (key4.db without NSS, so <code>FirefoxNSS.cpp</code> and Windows' <code>nss3.dll</code> loader are gone),
-                    Chromium logins and autofill (each host opens sealed values through an opener: DPAPI, the Linux keyrings, the engine's OSCrypt) and Firefox
-                    cookies. <code>Secrets.cpp</code> 725 → 225 lines; <code>SQLite.h</code> is gone.
+                    Built for every reader the plan lists except discovery. <code>bay-import</code> reads CSV and HTML exports, bookmarks, history, extensions,
+                    Chromium, Firefox and Zen tabs, Arc's sidebar, Firefox and Zen logins (key4.db without NSS, so <code>FirefoxNSS.cpp</code> and Windows'
+                    <code>nss3.dll</code> loader are gone), Chromium logins, autofill and cookies, and Firefox cookies, on all three desktops. Each host opens
+                    sealed values its own way (an opener: DPAPI, the Linux keyrings, the engine's OSCrypt; macOS's v10 key), and card numbers and cookie values
+                    leave the answer through a hook into memory the host wipes (<code>SecretBytes</code> on macOS). Swift's <code>ChromiumSecrets</code>,
+                    <code>ChromiumAutofill</code>, <code>ChromiumCrypto</code> and Firefox cookie code are façades now; <code>Secrets.cpp</code> 725 → 225
+                    lines; <code>SQLite.h</code> is gone.
                   </td>
                   <td>
-                    18 Rust tests against the shared fixtures, including Zen's SHA-384 primary password; the 73 Swift import tests; the Linux secret, service
-                    and import fixtures and the portable import and data suites, run on macOS. No Windows or Linux build yet.
+                    21 Rust tests against the shared fixtures, including Zen's SHA-384 primary password and a non-UTF-8 cookie value byte for byte; the 70 Swift
+                    import tests; the Linux secret, service and import fixtures and the portable import and data suites, run on macOS. Windows checks pass in
+                    CI. Engine builds <code>windows-build-38</code> and <code>linux-build-12</code> started.
                   </td>
                 </tr>
                 <tr>
                   <td>4 · Chromium glue</td>
                   <td>
-                    Partly built. Shared in <code>//bay/core</code> and used by both hosts: the permission flow and prompts (with the file-restore prompt),
-                    device choosers, cast, password and autofill prompts, external app requests, the tabless icon download and page security (the WebUI's rule
-                    that a pending HTTPS entry isn't a certificate error now holds on macOS too). Open: screen-share picker, context menu.
+                    Built. Shared in <code>//bay/core</code> and used by both hosts: the permission flow and prompts (with the file-restore prompt), device
+                    choosers, cast, password and autofill prompts, external app requests, the tabless icon download, page security (the WebUI's rule that a
+                    pending HTTPS entry isn't a certificate error now holds on macOS too) and the page menu's item pruning. The request filter's hooks are one
+                    header (<code>packages/adblock/include/bay_blocker_hooks.h</code>), which also fixed macOS handing the engine a Rust-allocated string to
+                    <code>free()</code>. The screen-share picker isn't duplicated: macOS approves a source and rewrites the <code>getUserMedia</code> request,
+                    the WebUI host implements Chrome's <code>DesktopMediaPicker</code>.
                   </td>
                   <td>
-                    Each file passes a Chromium syntax check with the macOS tree's flags; <code>page_security_unittests</code> covers the shared security level.
-                    No engine build and no prompt tried by hand.
+                    Each file passes a Chromium syntax check with the macOS tree's flags; <code>page_security_unittests</code> and the WebUI's menu test cover
+                    shared code; the macOS blocker harness (9 checks). Engine builds started; no prompt tried by hand.
                   </td>
                 </tr>
                 <tr>
-                  <td>5 – 6</td>
-                  <td>Not started.</td>
+                  <td>5 · Parity guards</td>
+                  <td>
+                    Partly built. Rust format, clippy and tests in the macOS, Windows and Linux check jobs and in the pre-push hook; the rule in
+                    <code>AGENTS.md</code>. macOS contract coverage: a test reads each Swift module's methods and fails on a contract method macOS lacks unless
+                    it's listed with its reason (22 today: the WebUI host's embedded tabs and its window, drag and sharing plumbing).
+                  </td>
+                  <td>The coverage test in <code>apps/browser</code>'s tests; the hook ran on each push.</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td>Not started (a decision after 1–4).</td>
                   <td></td>
                 </tr>
               </tbody>
@@ -530,66 +546,40 @@
           <h3 id="gaps">Known gaps</h3>
           <ul class="prose">
             <li>
-              <strong>Windows and Linux builds.</strong> Neither engine has been built with these changes. Start a <code>windows-build-N</code> and a
-              <code>linux-build-N</code> run, then check the blocker on both: first launch offline, a list turning on, a paused site, Settings › Privacy.
+              <strong>Windows and Linux engine builds</strong> <code>windows-build-38</code> and <code>linux-build-12</code> are running. Then check the blocker
+              on both (first launch offline, a list turning on, a paused site, Settings › Privacy), an import with saved passwords, cards and cookies, and each
+              moved prompt by hand.
             </li>
             <li>
-              <strong>Contract coverage</strong> isn't built. Reading the methods out of the sources doesn't work: the WebUI host registers them at run time
-              across many files, and the Swift modules don't all use one pattern. It needs a runtime report instead: each host lists what it registered (the web
-              host's <code>getNativeHostInfo</code>, the Expo modules' exports), checked by the acceptance scripts.
+              <strong>WebUI contract coverage.</strong> The WebUI host reports only its optional methods at run time and binds every required one, and its
+              dispatch is spread over several services, so a required method it lacks shows up only when called. It needs one registry of the methods the host
+              routes, reported in <code>getHostInfo</code>, for the same check macOS has.
             </li>
             <li>
-              <strong>Recorded outputs.</strong> Only the sync vector is in place. The import Wire JSON per fixture profile still has to be recorded from both
-              readers before Phase 3.
+              <strong>Browser discovery</strong> (where each browser keeps its profiles) is still <code>Discovery.swift</code> and
+              <code>BrowserDiscovery.cpp</code>; the path tables could move into <code>bay-import</code> with the host giving its home and app-data folders.
             </li>
             <li>
-              <strong>SQLite on Windows.</strong> The C++ readers linked the system <code>winsqlite3</code> and <code>bay-import</code> bundles its own, so
-              every Windows check failed with duplicate symbols (LNK2005). No production C++ reads SQLite now, so <code>winsqlite3.lib</code> is gone and the
-              test fixtures are written with the bundled copy. Not yet confirmed by a Windows run.
+              <strong>Phase 4 models have no unit tests in <code>//bay/core:portable</code></strong
+              >: only an engine build could run them.
             </li>
             <li>
-              <strong>macOS secret readers.</strong> <code>ChromiumSecrets</code>, <code>ChromiumAutofill</code> and <code>Firefox.cookies</code> still read in
-              Swift: their results hold card numbers and cookie values as <code>SecretBytes</code>, which the JSON answer can't carry without a copy.
-              <code>bay-import</code>'s readers give the same results for the fixtures (with <code>unsealedIsPlain</code> and the v10 key). Chromium cookies
-              have no shared reader yet.
+              <strong>Sync vaults stay per host.</strong> Most of the listing is OS file access (iCloud's download state and <code>NSFileCoordinator</code>,
+              Windows' cloud placeholders); the platform-neutral rest is ten lines. The one rule that differed now matches: macOS skips links and non-files as
+              Windows and Linux do.
             </li>
             <li>
-              <strong>Phase 4 models have no unit tests</strong> in <code>//bay/core:portable</code> yet, and the screen-share picker and context menu are still
-              written twice.
+              <strong>Phones.</strong> <code>bay-core</code> (PR #31) still has its own copies of the sync keys, phrase and base32, and its own
+              <code>filter_lists.json</code>; it takes <code>bay-sync</code> and <code>bay-lists</code> by path once both land. The desktops ship one catalogue
+              (<code>packages/chromium/ios/filter_lists.json</code>).
             </li>
             <li>
-              <strong>Flaky sync test.</strong> <code>SyncVaultTests.testFolderHoldsNoPlaintext</code> checks file names for "app", which a random base32 name
-              can contain; it failed once in CI (run 45550636877) and passed on the next.
-            </li>
-            <li>
-              <strong>The request filter's hot path</strong> (<code>Filter</code>, <code>Response</code>, the body and header filters, <code>HostOf</code>,
-              <code>Covers</code>) is still written twice, in <code>NNCoreContentBlocker.mm</code> and <code>content_blocker.cc</code>. It needs only the C ABI
-              and the standard library, so one shared C++ header could serve both.
-            </li>
-            <li>
-              <strong>Two catalogue copies.</strong> <code>filter_lists.json</code> still ships from <code>packages/chromium/ios</code> and the phones keep
-              their own in <code>bay-core</code>; one file in <code>bay-lists</code> remains to do.
-            </li>
-            <li>
-              <strong>Sync vaults.</strong> Reading and writing the vault folder is still written twice: Swift coordinates iCloud Drive
-              (<code>NSFileCoordinator</code>, <code>.icloud</code> placeholders) and C++ reads plain files. The listing rules (pending, damaged, present) could
-              move into <code>bay-sync</code> with a hook for how each host opens a file.
-            </li>
-            <li>
-              <strong>Recovery kit QR.</strong> Decision 2 has Rust give the QR matrix; macOS still draws it with Core Image and Windows and Linux with vendored
-              <code>qrcodegen</code>.
-            </li>
-            <li>
-              <strong>Phrase typing.</strong> macOS now reads a typed phrase as Windows, Linux and the phones do: ASCII letters only. Before, any Unicode letter
+              <strong>Phrase typing.</strong> macOS reads a typed phrase as Windows, Linux and the phones do: ASCII letters only. Before, any Unicode letter
               counted, so an accented letter could join two words where it now separates them. No valid phrase reads differently.
             </li>
             <li>
-              <strong>Phones.</strong> <code>bay-core</code> (PR #31) still has its own copies of the sync keys, phrase and base32; it takes
-              <code>bay-sync</code> by path once both land.
-            </li>
-            <li>
-              <strong>Dependency builds.</strong> Cargo builds every crate type a dependency lists, so <code>bay-adblock</code>'s <code>cdylib</code> is linked
-              whenever <code>bay-desktop</code> builds. The runners have linkers, so this costs time, not correctness.
+              <strong>The recovery kit's QR on macOS</strong> now draws bay-sync's modules with a one-module margin, as Core Image did; Windows and Linux keep a
+              four-module margin. A scan reads the phrase from both (tested on macOS with Core Image's detector).
             </li>
           </ul>
         </section>
