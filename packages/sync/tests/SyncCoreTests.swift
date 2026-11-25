@@ -93,6 +93,21 @@ final class SyncVaultTests: XCTestCase {
     }
   }
 
+  func testLinksInTheFolderAreNotRead() throws {
+    try vault.createChain()
+    let id = try vault.write(scope: "app", payload: Data("mine".utf8))
+    let scope = try XCTUnwrap(FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil)?
+      .compactMap { $0 as? URL }.first { $0.lastPathComponent == "\(id).nns" }).deletingLastPathComponent()
+    let elsewhere = folder.deletingLastPathComponent().appendingPathComponent("nn-sync-elsewhere-\(UUID().uuidString).nns")
+    try FileManager.default.copyItem(at: scope.appendingPathComponent("\(id).nns"), to: elsewhere)
+    defer { try? FileManager.default.removeItem(at: elsewhere) }
+    let link = SyncKeys.newFileId()
+    try FileManager.default.createSymbolicLink(at: scope.appendingPathComponent("\(link).nns"), withDestinationURL: elsewhere)
+    let listing = vault.read(scope: "app", skipping: [])
+    XCTAssertEqual(listing.present, [id])
+    XCTAssertEqual(listing.files.map(\.id), [id])
+  }
+
   func testDeleteChainLeavesOtherPhrases() throws {
     try vault.createChain()
     try vault.write(scope: "app", payload: Data("mine".utf8))
