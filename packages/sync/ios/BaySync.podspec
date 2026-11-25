@@ -19,4 +19,6 @@ Pod::Spec.new do |s|
   # ../Package.swift (`pnpm --filter @bay/sync test`).
   s.source_files   = 'SyncModule.swift', 'Core/**/*.swift'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
+  # The app imports BaySync, whose module depends on BaySyncFFI, so it needs the path too.
+  s.user_target_xcconfig = { 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
 end
