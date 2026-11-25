@@ -1,6 +1,8 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/permission_prompts.h"
 
+#include "bay/core/nn_permission_flow.h"
+
 #include <map>
 #include <memory>
 #include <optional>
@@ -72,38 +74,9 @@ std::map<std::string, base::WeakPtr<Prompt>>& Prompts() {
   return *prompts;
 }
 
-using Variant = permissions::EmbeddedPermissionPromptFlowModel::Variant;
-
-// What a prompt asks for. A page's permission element runs Chrome's embedded
-// flow: after the site is allowed, the manager keeps the same requests and shows
-// the next step. Only the flow's first view can be a question: a later one holds
-// requests already decided, and deciding one twice runs its spent callback.
-enum class Step { kAsk, kAlreadyAllowed, kSystemPrompt, kAcknowledge };
-
-Step StepOf(permissions::PermissionPrompt::Delegate* delegate) {
-  permissions::EmbeddedPermissionPromptFlowModel* flow =
-      delegate->GetEmbeddedPromptFlowModel();
-  if (!flow)
-    return Step::kAsk;
-  // The manager marks its requests displayed once their first view is up; a
-  // view made for the same requests after that is a later step.
-  const bool later_step = delegate->WasCurrentRequestAlreadyDisplayed();
-  switch (flow->prompt_variant()) {
-    case Variant::kOsPrompt:
-      return Step::kSystemPrompt;
-    case Variant::kAsk:
-    case Variant::kPreviouslyDenied:
-      return later_step ? Step::kAcknowledge : Step::kAsk;
-    case Variant::kPreviouslyGranted:
-      return later_step ? Step::kAcknowledge : Step::kAlreadyAllowed;
-    case Variant::kOsSystemSettings:
-    case Variant::kAdministratorGranted:
-    case Variant::kAdministratorDenied:
-    case Variant::kUninitialized:
-      return Step::kAcknowledge;
-  }
-  return Step::kAcknowledge;
-}
+// Which step of a permission flow a prompt is (bay/core/nn_permission_flow,
+// shared with macOS).
+using Step = nncore::PermissionStep;
 
 // One request group Chrome's PermissionRequestManager is asking about. The
 // manager owns it: it goes when the app answers, the page navigates or closes,
@@ -111,7 +84,7 @@ Step StepOf(permissions::PermissionPrompt::Delegate* delegate) {
 class Prompt : public permissions::PermissionPrompt {
  public:
   Prompt(content::WebContents* contents, Delegate* delegate)
-      : delegate_(delegate), step_(StepOf(delegate)) {
+      : delegate_(delegate), step_(nncore::PermissionStepOf(delegate)) {
     static int last_id = 0;
     id_ = "p" + base::NumberToString(++last_id);
     Prompts()[id_] = weak_factory_.GetWeakPtr();
@@ -404,63 +377,7 @@ bool AskToRestoreFiles(
 
 // static
 const char* PermissionPrompts::KindName(permissions::RequestType type) {
-  using permissions::RequestType;
-  switch (type) {
-    case RequestType::kCameraStream:
-      return "camera";
-    case RequestType::kMicStream:
-      return "microphone";
-    case RequestType::kCameraPanTiltZoom:
-      return "cameraPanTiltZoom";
-    case RequestType::kGeolocation:
-      return "location";
-    case RequestType::kNotifications:
-      return "notifications";
-    case RequestType::kClipboard:
-      return "clipboard";
-    case RequestType::kMidiSysex:
-      return "midi";
-    case RequestType::kMultipleDownloads:
-      return "multipleDownloads";
-    case RequestType::kLocalFonts:
-      return "localFonts";
-    case RequestType::kIdleDetection:
-      return "idleDetection";
-    case RequestType::kStorageAccess:
-    case RequestType::kTopLevelStorageAccess:
-      return "storageAccess";
-    case RequestType::kWindowManagement:
-      return "windowManagement";
-    case RequestType::kFileSystemAccess:
-      return "fileSystem";
-    case RequestType::kKeyboardLock:
-      return "keyboardLock";
-    case RequestType::kPointerLock:
-      return "pointerLock";
-    case RequestType::kRegisterProtocolHandler:
-      return "protocolHandler";
-    case RequestType::kSensors:
-      return "sensors";
-    case RequestType::kLocalNetwork:
-    case RequestType::kLoopbackNetwork:
-      return "localNetwork";
-    case RequestType::kVrSession:
-      return "vr";
-    case RequestType::kArSession:
-      return "ar";
-    case RequestType::kHandTracking:
-      return "handTracking";
-    case RequestType::kIdentityProvider:
-      return "identityProvider";
-    case RequestType::kWebAppInstallation:
-      return "webAppInstallation";
-    case RequestType::kCapturedSurfaceControl:
-      return "capturedSurfaceControl";
-    case RequestType::kDiskQuota:
-      return "diskQuota";
-    default:
-      return nullptr;
-  }
+  return nncore::PermissionKindName(type);
 }
 
 // static

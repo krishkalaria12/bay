@@ -28,6 +28,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "bay/core/nn_browser.h"
 #include "bay/core/nn_fake_media.h"
+#include "bay/core/nn_permission_flow.h"
 #include "bay/core/nn_test_system_permissions.h"
 #include "url/origin.h"
 
@@ -41,65 +42,10 @@ namespace nncore {
 
 namespace {
 
-// JS PermissionKind (packages/cef/src/module.ts), as packages/cef/ios/NNCef.mm names them.
+// JS PermissionKind (packages/cef/src/module.ts): the names both hosts use (nn_permission_flow).
 NSString* KindName(permissions::RequestType type) {
-  using permissions::RequestType;
-  switch (type) {
-    case RequestType::kCameraStream:
-      return @"camera";
-    case RequestType::kMicStream:
-      return @"microphone";
-    case RequestType::kCameraPanTiltZoom:
-      return @"cameraPanTiltZoom";
-    case RequestType::kGeolocation:
-      return @"location";
-    case RequestType::kNotifications:
-      return @"notifications";
-    case RequestType::kClipboard:
-      return @"clipboard";
-    case RequestType::kMidiSysex:
-      return @"midi";
-    case RequestType::kMultipleDownloads:
-      return @"multipleDownloads";
-    case RequestType::kLocalFonts:
-      return @"localFonts";
-    case RequestType::kIdleDetection:
-      return @"idleDetection";
-    case RequestType::kStorageAccess:
-    case RequestType::kTopLevelStorageAccess:
-      return @"storageAccess";
-    case RequestType::kWindowManagement:
-      return @"windowManagement";
-    case RequestType::kFileSystemAccess:
-      return @"fileSystem";
-    case RequestType::kKeyboardLock:
-      return @"keyboardLock";
-    case RequestType::kPointerLock:
-      return @"pointerLock";
-    case RequestType::kRegisterProtocolHandler:
-      return @"protocolHandler";
-    case RequestType::kSensors:
-      return @"sensors";
-    case RequestType::kLocalNetwork:
-    case RequestType::kLoopbackNetwork:
-      return @"localNetwork";
-    case RequestType::kVrSession:
-      return @"vr";
-    case RequestType::kArSession:
-      return @"ar";
-    case RequestType::kHandTracking:
-      return @"handTracking";
-    case RequestType::kIdentityProvider:
-      return @"identityProvider";
-    case RequestType::kWebAppInstallation:
-      return @"webAppInstallation";
-    case RequestType::kCapturedSurfaceControl:
-      return @"capturedSurfaceControl";
-    case RequestType::kDiskQuota:
-      return @"diskQuota";
-    default:
-      return nil;
-  }
+  const char* name = PermissionKindName(type);
+  return name ? @(name) : nil;
 }
 
 class NNPermissionPrompt;
@@ -110,44 +56,8 @@ std::map<std::string, base::WeakPtr<NNPermissionPrompt>>& Prompts() {
   return *prompts;
 }
 
-using Variant = permissions::EmbeddedPermissionPromptFlowModel::Variant;
-
-// What a prompt asks for. A page's permission element (<usermedia>, <geolocation>) runs
-// Chrome's embedded flow: after the site is allowed, the manager keeps the same requests and
-// shows the next step (ask macOS, open System Settings, an administrator's policy), the
-// views Chrome's EmbeddedPermissionPrompt picks by variant. Only the flow's first view can
-// be a question: a later one holds requests already decided, and deciding one twice runs its
-// spent callback (CEF 0.2.21 aborted there: its client answered the "ask macOS" step with
-// Accept). A later view is never a question even if its variant says so (the site's setting
-// reset while macOS was being asked): it closes, as Chrome's acknowledgement does.
-enum class Step { kAsk, kAlreadyAllowed, kSystemPrompt, kAcknowledge };
-
-Step StepOf(permissions::PermissionPrompt::Delegate* delegate) {
-  permissions::EmbeddedPermissionPromptFlowModel* flow =
-      delegate->GetEmbeddedPromptFlowModel();
-  if (!flow) {
-    return Step::kAsk;
-  }
-  // The manager marks its requests displayed once their first view is up; a view made for
-  // the same requests after that is a later step (this prompt keeps itself through tab
-  // switches and anchor updates, so nothing else recreates it).
-  const bool later_step = delegate->WasCurrentRequestAlreadyDisplayed();
-  switch (flow->prompt_variant()) {
-    case Variant::kOsPrompt:
-      return Step::kSystemPrompt;
-    case Variant::kAsk:
-    case Variant::kPreviouslyDenied:
-      return later_step ? Step::kAcknowledge : Step::kAsk;
-    case Variant::kPreviouslyGranted:
-      return later_step ? Step::kAcknowledge : Step::kAlreadyAllowed;
-    case Variant::kOsSystemSettings:
-    case Variant::kAdministratorGranted:
-    case Variant::kAdministratorDenied:
-    case Variant::kUninitialized:
-      return Step::kAcknowledge;
-  }
-  return Step::kAcknowledge;
-}
+// Which step of a permission flow a prompt is (nn_permission_flow, shared with Windows and Linux).
+using Step = PermissionStep;
 
 // One request group Chrome's PermissionRequestManager is asking about. The manager owns it:
 // it goes when the host answers, the page navigates or closes, or a request outranks it.
@@ -156,7 +66,7 @@ Step StepOf(permissions::PermissionPrompt::Delegate* delegate) {
 class NNPermissionPrompt : public permissions::PermissionPrompt {
  public:
   NNPermissionPrompt(content::WebContents* contents, Delegate* delegate)
-      : delegate_(delegate), step_(StepOf(delegate)) {
+      : delegate_(delegate), step_(PermissionStepOf(delegate)) {
     static int last_id = 0;
     id_ = "p" + std::to_string(++last_id);
     Prompts()[id_] = weak_factory_.GetWeakPtr();

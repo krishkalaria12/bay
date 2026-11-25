@@ -24,9 +24,12 @@ source_set("portable") {
   sources = [
     "nn_devtools_call.cc",
     "nn_devtools_call.h",
+    "nn_permission_flow.cc",
+    "nn_permission_flow.h",
   ]
   deps = [
     "//base",
+    "//components/permissions",
     "//content/public/browser",
   ]
   if (!is_mac) {
@@ -109,6 +112,8 @@ if (is_mac) {
       "nn_device_chooser.mm",
       "nn_devtools_call.cc",
       "nn_devtools_call.h",
+      "nn_permission_flow.cc",
+      "nn_permission_flow.h",
       "nn_extension_view.cc",
       "nn_extension_view.h",
       "nn_external_apps.h",
