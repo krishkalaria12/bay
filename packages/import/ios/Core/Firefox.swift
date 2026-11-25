@@ -1,4 +1,3 @@
-import Compression
 import Foundation
 
 public enum Firefox {
@@ -31,54 +30,10 @@ public enum Firefox {
 
   // MARK: Bookmarks
 
-  static let roots: [String: (role: String, title: String)] = [
-    "toolbar_____": ("toolbar", "Bookmarks Toolbar"),
-    "menu________": ("menu", "Bookmarks Menu"),
-    "unfiled_____": ("other", "Other Bookmarks"),
-    "mobile______": ("mobile", "Mobile Bookmarks"),
-  ]
-
+  /// A profile's bookmarks (places.sqlite), read by the shared reader (bay-import).
   public static func bookmarks(places: URL, cancellation: Cancellation = .init()) throws -> BookmarkNode {
-    let db = try SQLiteSnapshot(copying: places)
-    guard db.tableExists("moz_bookmarks") else { throw ImportError.unreadable("places.sqlite has no bookmarks") }
-    struct Row { var id: Int64; var type: Int64; var parent: Int64; var title: String; var url: String?; var added: Double?; var guid: String }
-    var children: [Int64: [Row]] = [:]
-    var rootId: Int64?
-    try db.query("""
-      SELECT b.id, b.type, b.parent, b.title, p.url, b.dateAdded, b.guid
-      FROM moz_bookmarks b LEFT JOIN moz_places p ON b.fk = p.id
-      ORDER BY b.parent, b.position
-      """) { r in
-      let row = Row(id: r.int(0), type: r.int(1), parent: r.int(2), title: r.text(3) ?? "", url: r.text(4),
-                    added: r.isNull(5) ? nil : Time.fromUnixMicros(r.int(5)), guid: r.text(6) ?? "")
-      if row.guid == "root________" { rootId = row.id } else { children[row.parent, default: []].append(row) }
-      return true
-    }
-    try cancellation.check()
-    func build(_ parent: Int64, depth: Int) -> [BookmarkNode] {
-      guard depth < 64 else { return [] }
-      return (children[parent] ?? []).compactMap { row in
-        switch row.type {
-        case 1:
-          guard let url = row.url, !url.hasPrefix("place:") else { return nil }
-          return .link(row.title, url, dateAdded: row.added)
-        case 2:
-          return .folder(row.title, build(row.id, depth: depth + 1), dateAdded: row.added)
-        default:
-          return nil
-        }
-      }
-    }
-    guard let rootId else { throw ImportError.unreadable("places.sqlite has no bookmarks root") }
-    var top: [BookmarkNode] = []
-    let order = ["toolbar_____", "menu________", "unfiled_____", "mobile______"]
-    for row in (children[rootId] ?? []).sorted(by: { (order.firstIndex(of: $0.guid) ?? 99) < (order.firstIndex(of: $1.guid) ?? 99) }) {
-      guard let root = roots[row.guid] else { continue }
-      let kids = build(row.id, depth: 0)
-      guard !kids.isEmpty else { continue }
-      top.append(.folder(root.title, kids, role: root.role, dateAdded: row.added))
-    }
-    return .folder("Bookmarks", top)
+    try SharedReaders.read(["reader": "firefoxBookmarks", "profile": places.deletingLastPathComponent().path],
+                           as: BookmarkNode.self, cancellation: cancellation)
   }
 
   // MARK: Cookies
@@ -209,53 +164,13 @@ public enum Firefox {
     (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
   }
 
-  public static func decompressMozLz4(_ data: Data) throws -> Data {
-    let magic = Data("mozLz40\0".utf8)
-    guard data.count > 12, data.prefix(8) == magic else { throw ImportError.unreadable("Not a mozlz4 file") }
-    var sizeReader = ByteReader(data.subdata(in: 8..<12))
-    guard let size = sizeReader.u32(), size > 0, size < 1 << 30 else { throw ImportError.unreadable("Bad mozlz4 size") }
-    let src = data.subdata(in: 12..<data.count)
-    var out = Data(count: Int(size))
-    let written = out.withUnsafeMutableBytes { dst in
-      src.withUnsafeBytes { s in
-        compression_decode_buffer(dst.bindMemory(to: UInt8.self).baseAddress!, Int(size),
-                                  s.bindMemory(to: UInt8.self).baseAddress!, src.count, nil, COMPRESSION_LZ4_RAW)
-      }
-    }
-    guard written == Int(size) else { throw ImportError.unreadable("Couldn't decompress the session store") }
-    return out
-  }
-
+  /// The tabs in a session store's JSON (decompressed), read by the shared reader (bay-import).
   public static func session(_ json: Data) throws -> OpenTabs {
-    guard let top = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
-          let windows = top["windows"] as? [[String: Any]] else {
-      throw ImportError.unreadable("Session store has no windows")
-    }
-    var tabs: [ImportedTab] = []
-    var groups: [ImportedTabGroup] = []
-    for (w, window) in windows.enumerated() {
-      let selected = (window["selected"] as? Int ?? 1) - 1
-      for (position, tab) in (window["tabs"] as? [[String: Any]] ?? []).enumerated() {
-        // Zen's placeholder for an empty space or folder isn't a page.
-        if tab["hidden"] as? Bool == true || tab["zenIsEmpty"] as? Bool == true { continue }
-        // A tab that never loaded (a pin after a restart) has no entries, only where it points.
-        guard let page = ZenSpaces.page(tab) else { continue }
-        tabs.append(ImportedTab(url: page.url, title: page.title,
-                                pinned: tab["pinned"] as? Bool ?? false, groupId: tab["groupId"] as? String,
-                                windowIndex: w, active: position == selected,
-                                lastActive: (tab["lastAccessed"] as? NSNumber)?.doubleValue))
-      }
-      for g in window["groups"] as? [[String: Any]] ?? [] {
-        guard let id = g["id"] as? String else { continue }
-        groups.append(ImportedTabGroup(id: id, title: g["name"] as? String ?? "", color: g["color"] as? String ?? "grey",
-                                       collapsed: g["collapsed"] as? Bool ?? false))
-      }
-    }
-    return OpenTabs(tabs: tabs, groups: groups)
+    try SharedReaders.read(["reader": "firefoxTabs", "text": String(decoding: json, as: UTF8.self)], as: SharedReaders.Tabs.self).open
   }
 
+  /// A profile's last open tabs, from its newest session store.
   public static func loadSession(profile: URL) throws -> OpenTabs {
-    guard let file = sessionFile(profile: profile) else { throw ImportError.notFound("No session store in this profile") }
-    return try session(decompressMozLz4(Data(contentsOf: file)))
+    try SharedReaders.read(["reader": "firefoxTabs", "profile": profile.path], as: SharedReaders.Tabs.self).open
   }
 }

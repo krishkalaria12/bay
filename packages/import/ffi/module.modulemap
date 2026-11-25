@@ -1,0 +1,6 @@
+// bay-import's C ABI (packages/rust/bay-import), for Swift: the Swift package (../Package.swift) and the BayImport pod
+// (ios/BayImport.podspec) both import it as BayImportFFI. The app links the library itself (bay-desktop).
+module BayImportFFI {
+  header "../../rust/bay-import/include/bay_import.h"
+  export *
+}

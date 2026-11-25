@@ -43,8 +43,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Import tests
-        working-directory: packages/import
-        run: bash ../../scripts/swift-test.sh
+        run: node scripts/test-native.mjs import
       - name: Sync tests
         run: node scripts/test-native.mjs sync
       - name: Shaders compile

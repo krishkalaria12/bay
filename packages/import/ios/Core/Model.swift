@@ -1,3 +1,4 @@
+import BayImportFFI
 import Foundation
 
 public enum ImportKind: String, Codable, CaseIterable, Sendable {
@@ -295,13 +296,15 @@ public enum ImportError: Error, Equatable, CustomStringConvertible {
 }
 
 public final class Cancellation: @unchecked Sendable {
-  private let lock = NSLock()
-  private var flag = false
+  /// The stop flag, owned through the shared readers so they see it as it's set.
+  let token = bay_import_cancel_new()!
 
   public init() {}
 
-  public var isCancelled: Bool { lock.withLock { flag } }
-  public func cancel() { lock.withLock { flag = true } }
+  deinit { bay_import_cancel_free(token) }
+
+  public var isCancelled: Bool { bay_import_cancelled(token) }
+  public func cancel() { bay_import_cancel(token) }
   public func check() throws { if isCancelled { throw ImportError.cancelled } }
 }
 
