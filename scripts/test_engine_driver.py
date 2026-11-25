@@ -341,6 +341,15 @@ class BuildTests(unittest.TestCase):
                 self.assertIn(target, command)
                 self.assertIn("--locked", command)
                 self.assertEqual("RUSTFLAGS" in run.call_args.kwargs["env"], platform == "win")
+                # Linux compiles the library's C (SQLite) with Chromium's clang against the sysroot Chrome links with.
+                cargo_env = run.call_args.kwargs["env"]
+                if platform == "linux":
+                    sysroot = src / "build/linux" / engine.platform_lock("linux")["sysroot"]["directory"]
+                    self.assertEqual(cargo_env["CC_x86_64_unknown_linux_gnu"],
+                                     str(src / "third_party/llvm-build/Release+Asserts/bin/clang"))
+                    self.assertIn(f"--sysroot={sysroot}", cargo_env["CFLAGS_x86_64_unknown_linux_gnu"])
+                else:
+                    self.assertFalse(any(key.startswith("CC_") for key in cargo_env))
                 self.assertEqual((src / "out/Release/bay_desktop" / library).read_text(), "library")
                 rename.assert_called_once_with(src, src / "out/Release/bay_desktop", library, env)
 

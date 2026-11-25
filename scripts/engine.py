@@ -464,6 +464,16 @@ def build_rust(src, output_directory, env, platform):
     if platform == "win":
         # Chrome links the static C runtime, and one binary can't mix the two.
         cargo_env["RUSTFLAGS"] = "-C target-feature=+crt-static"
+    if platform == "linux":
+        # The library's C (bay-import's SQLite) is linked into Chrome against Chromium's Debian sysroot, so compile it
+        # with Chromium's clang against that sysroot too: the runner's newer glibc headers turn fcntl into fcntl64,
+        # which the sysroot's libc doesn't have.
+        sysroot = src / "build/linux" / platform_lock("linux")["sysroot"]["directory"]
+        clang = src / "third_party/llvm-build/Release+Asserts/bin"
+        key = target.replace("-", "_")
+        cargo_env[f"CC_{key}"] = str(clang / "clang")
+        cargo_env[f"AR_{key}"] = str(clang / "llvm-ar")
+        cargo_env[f"CFLAGS_{key}"] = f"--target={target} --sysroot={sysroot}"
     workspace = REPO / "packages/rust"
     run(["cargo", "rustc", "--locked", "--release", "--package", "bay-desktop", "--lib", "--crate-type", "staticlib",
          "--target", target], cwd=workspace, env=cargo_env)
