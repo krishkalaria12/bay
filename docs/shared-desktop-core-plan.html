@@ -483,7 +483,19 @@
                   </td>
                 </tr>
                 <tr>
-                  <td>2 – 6</td>
+                  <td>2 · Sync</td>
+                  <td>
+                    Partly built. <code>bay-sync</code> owns key derivation, the chain and scope tags, sealing and opening files, file names and the recovery
+                    phrase. <code>SyncCrypto.swift</code> and <code>RecoveryPhrase.swift</code> on macOS and <code>SyncCrypto.cpp</code> on Windows and Linux
+                    are thin wrappers now, and both copies of the BIP-39 word list are gone. The format is unchanged.
+                  </td>
+                  <td>
+                    10 Rust tests, including the golden vector byte for byte; the Swift package tests; the Linux crypto, service, import and native data checks,
+                    run on macOS through the Rust library. No Windows or Linux build yet.
+                  </td>
+                </tr>
+                <tr>
+                  <td>3 – 6</td>
                   <td>Not started.</td>
                   <td></td>
                 </tr>
@@ -514,6 +526,23 @@
             <li>
               <strong>Two catalogue copies.</strong> <code>filter_lists.json</code> still ships from <code>packages/chromium/ios</code> and the phones keep
               their own in <code>bay-core</code>; one file in <code>bay-lists</code> remains to do.
+            </li>
+            <li>
+              <strong>Sync vaults.</strong> Reading and writing the vault folder is still written twice: Swift coordinates iCloud Drive
+              (<code>NSFileCoordinator</code>, <code>.icloud</code> placeholders) and C++ reads plain files. The listing rules (pending, damaged, present) could
+              move into <code>bay-sync</code> with a hook for how each host opens a file.
+            </li>
+            <li>
+              <strong>Recovery kit QR.</strong> Decision 2 has Rust give the QR matrix; macOS still draws it with Core Image and Windows and Linux with vendored
+              <code>qrcodegen</code>.
+            </li>
+            <li>
+              <strong>Phrase typing.</strong> macOS now reads a typed phrase as Windows, Linux and the phones do: ASCII letters only. Before, any Unicode letter
+              counted, so an accented letter could join two words where it now separates them. No valid phrase reads differently.
+            </li>
+            <li>
+              <strong>Phones.</strong> <code>bay-core</code> (PR #31) still has its own copies of the sync keys, phrase and base32; it takes
+              <code>bay-sync</code> by path once both land.
             </li>
             <li>
               <strong>Dependency builds.</strong> Cargo builds every crate type a dependency lists, so <code>bay-adblock</code>'s <code>cdylib</code> is linked
