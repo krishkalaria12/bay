@@ -6,13 +6,11 @@
 #import <Foundation/Foundation.h>
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
-#include "base/json/json_writer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
@@ -25,26 +23,19 @@
 #include "content/public/browser/web_contents.h"
 #include "bay/core/nn_browser.h"
 #include "bay/core/nn_device_choosers.h"
+#include "bay/core/nn_mac_values.h"
 #include "bay/core/nn_external_apps.h"
 
 namespace nncore {
 
 namespace {
 
-// The shared chooser's state, as the host's dictionary.
-NSDictionary* Dictionary(const base::DictValue& state) {
-  std::optional<std::string> json = base::WriteJson(state);
-  NSData* data = json ? [NSData dataWithBytes:json->data() length:json->size()] : nil;
-  id object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  return [object isKindOfClass:NSDictionary.class] ? object : @{};
-}
-
 int Adopt(std::unique_ptr<permissions::ChooserController> controller,
           content::WebContents* contents) {
   static bool told = [] {
     choosers::SetTell(base::BindRepeating([](content::WebContents* contents,
                                              base::DictValue state) {
-      HostDeviceChooser(contents, Dictionary(state));
+      HostDeviceChooser(contents, NSDictionaryFrom(state));
       return true;
     }));
     return true;
