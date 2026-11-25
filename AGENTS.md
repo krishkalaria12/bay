@@ -14,6 +14,10 @@ Write logic once for macOS, Windows and Linux (docs/shared-desktop-core-plan.htm
   `packages/rust`, linked through `bay-desktop`; check it against shared fixtures.
 - UI logic and anything per keystroke stays in TypeScript.
 - Only OS calls (Keychain, DPAPI, Secret Service, pickers) stay per platform, kept thin.
+- Crates don't open sockets, start threads, keep timers or read OS settings: the host fetches, schedules and unlocks
+  secrets, then hands bytes and the current time in. A crate may read and write its own files in a folder the host names.
+- Rust changes pass `cargo fmt --check --all`, `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo test --workspace` in `packages/rust` (the pre-push hook runs them).
 
 # Rules
 - Before committing, run linting, type checking and anti slop[slop command in package json] commands and if any error, fix it before moving forward

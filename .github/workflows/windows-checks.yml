@@ -33,8 +33,12 @@ jobs:
         with:
           arch: x64
       # Bay's desktop Rust library, on this OS: the readers, sync format and blocker lists both desktop hosts link.
+      # Clippy here is the only lint of the code compiled for this OS alone.
       - name: Desktop Rust library
-        run: cargo test --locked --workspace --manifest-path packages/rust/Cargo.toml
+        run: |
+          cargo fmt --check --all --manifest-path packages/rust/Cargo.toml
+          cargo clippy --locked --workspace --all-targets --manifest-path packages/rust/Cargo.toml -- -D warnings
+          cargo test --locked --workspace --manifest-path packages/rust/Cargo.toml
       - run: pnpm typecheck
       - run: pnpm typecheck:web
       - run: pnpm build:web
