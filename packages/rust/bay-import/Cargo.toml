@@ -1,0 +1,17 @@
+[package]
+name = "bay-import"
+version = "0.1.0"
+description = "Bay's browser import readers, shared by every desktop: other browsers' bookmarks, history, tabs, logins and more."
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+getrandom = "0.4"
+regex.workspace = true
+# Bundled: the readers carry their own SQLite (decision 1), with no symbols shared with Chromium's renamed copy.
+rusqlite = { version = "0.43", features = ["bundled", "backup"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

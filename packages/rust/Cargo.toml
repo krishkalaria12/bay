@@ -2,7 +2,7 @@
 # docs/shared-desktop-core-plan.html, Phase 0.
 [workspace]
 resolver = "3"
-members = ["bay-desktop", "bay-lists", "bay-sync"]
+members = ["bay-desktop", "bay-import", "bay-lists", "bay-sync"]
 
 [workspace.package]
 edition = "2024"
