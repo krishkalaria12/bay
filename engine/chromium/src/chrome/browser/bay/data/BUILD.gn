@@ -53,7 +53,7 @@ static_library("data_services") {
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",
     ]
-    libs += [
+    libs = [
       "advapi32.lib",
       "bcrypt.lib",
       "crypt32.lib",
