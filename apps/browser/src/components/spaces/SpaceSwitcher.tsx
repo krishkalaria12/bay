@@ -1,5 +1,7 @@
 import { Pressable, View } from "@bay/platform";
-import { showMenu, Symbol } from "@bay/desktop";
+import { bookmarksHtml, bookmarksJson, exportedSpace } from "../../lib/sidebarExport";
+import { isIncognitoSpace } from "../../store/model";
+import { saveTextFile, showMenu, Symbol } from "@bay/desktop";
 import { useEffect } from "react";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
@@ -170,6 +172,16 @@ export async function openSpaceMenu(windowId: string, id: string) {
     { separator: true },
     { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     newLiveFolderMenuItem(),
+    {
+      id: "export",
+      title: "Export Pinned Tabs",
+      symbol: "square.and.arrow.up",
+      children: [
+        { id: "export:html", title: "This Space as Bookmarks…" },
+        { id: "export:all", title: "All Spaces as Bookmarks…", enabled: s.spaceOrder.length > 1 },
+        { id: "export:json", title: "This Space as JSON…" },
+      ],
+    },
     { separator: true },
     { id: "settings", title: "Settings…", symbol: "gearshape" },
     { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.spaceOrder.length > 1 },
@@ -191,6 +203,12 @@ export async function openSpaceMenu(windowId: string, id: string) {
   } else if (choice.startsWith("live:")) {
     here();
     runNewLiveFolder(windowId, choice);
+  } else if (choice.startsWith("export:")) {
+    const state = useBrowser.getState();
+    const ids = choice === "export:all" ? state.spaceOrder.filter((spaceId) => !isIncognitoSpace(spaceId)) : [id];
+    const spaces = ids.map((spaceId) => exportedSpace(state, spaceId));
+    const name = choice === "export:all" ? "Bay pinned tabs" : `${space.name} pinned tabs`;
+    void (choice === "export:json" ? saveTextFile(`${name}.json`, bookmarksJson(spaces)) : saveTextFile(`${name}.html`, bookmarksHtml(spaces)));
   } else if (choice === "settings") openSettings("spaces", id);
   else if (choice === "delete") void deleteSpace(id, windowId);
 }
