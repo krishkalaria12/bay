@@ -77,6 +77,11 @@ export function AdvancedPane() {
             <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
               <Toggle value={settings.cliControl === true} onChange={(cliControl) => reportBrowserCommand(updateSettings({ cliControl }))} />
             </Row>
+            <Row
+              settingId={SETTINGS.mcpAgents.id}
+              title={SETTINGS.mcpAgents.title}
+              description="Coding agents can list, read and use your web page tabs over MCP while the control above is on. In a terminal: bay mcp install --agent claude-code (or codex, cursor, vscode)."
+            />
           </Group>
         </>
       ) : null}

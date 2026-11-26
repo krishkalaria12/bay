@@ -18,6 +18,9 @@ import { dataDirFlag, portFlag, secondsFlag, toggle, wsFlag } from "./cliFlags.t
 import { scripts } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
+import { installMcp, MCP_AGENTS, serveMcp } from "./mcp.ts";
+import { Session } from "./browser.ts";
+import { homedir } from "node:os";
 import { redact } from "./redact.ts";
 
 export const DESCRIPTION = "Control a running Bay from the terminal.";
@@ -177,9 +180,55 @@ export const skills = Command.make("skills").pipe(
   Command.withSubcommands([skillsInstall]),
 );
 
+// MARK: mcp
+
+export const MCP_DESCRIPTION = `Bay as an MCP server for coding agents: list, open and read tabs, click, type and take screenshots.
+
+  bay mcp serve                     speak MCP on stdin and stdout (what an agent runs)
+  bay mcp install --agent AGENT     add Bay to an agent's MCP servers, changing nothing else there
+
+Agents: ${MCP_AGENTS.join(", ")}. Needs Settings › Advanced › Let the bay command control Bay, as bay exec does,
+and reaches only web page tabs.`;
+
+const mcpServe = Command.make("serve", { dataDir: dataDirFlag, port: portFlag, ws: wsFlag }, (input) =>
+  Effect.promise(() =>
+    serveMcp(async () => {
+      const endpoint = await Effect.runPromise(
+        resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir: Option.getOrUndefined(input.dataDir) }),
+      );
+
+      const session = new Session(endpoint);
+      await session.connect();
+
+      return session;
+    }, VERSION),
+  ),
+).pipe(Command.withDescription("Serve MCP on stdin and stdout."), Command.withShortDescription("serve MCP to an agent"));
+
+const mcpInstall = Command.make(
+  "install",
+  { agent: Flag.Literals("agent", [...MCP_AGENTS]).pipe(Flag.withDescription("the agent to add Bay to (repeatable)"), Flag.atLeast(1)) },
+  (input) =>
+    Effect.gen(function* () {
+      for (const agent of input.agent) {
+        const path = yield* Effect.try({ try: () => installMcp(agent, homedir()), catch: (error) => error }).pipe(
+          Effect.catch((error) => failWith(1, `bay mcp install: ${agent}: ${messageOf(error)}`)),
+        );
+
+        yield* say(`${agent}: added bay to ${path}`);
+      }
+    }),
+).pipe(Command.withDescription("Add Bay to agents' MCP servers."), Command.withShortDescription("add Bay to an agent"));
+
+export const mcp = Command.make("mcp").pipe(
+  Command.withDescription(MCP_DESCRIPTION),
+  Command.withShortDescription("serve Bay to coding agents over MCP"),
+  Command.withSubcommands([mcpServe, mcpInstall]),
+);
+
 // MARK: The command
 
-export const bay = Command.make("bay").pipe(Command.withDescription(DESCRIPTION), Command.withSubcommands([exec, scripts, skills]));
+export const bay = Command.make("bay").pipe(Command.withDescription(DESCRIPTION), Command.withSubcommands([exec, scripts, skills, mcp]));
 
 // The parser's output: help and the version as it builds them, and a rejected invocation as one line on stderr.
 const presenter: CliOutput.Presenter = {

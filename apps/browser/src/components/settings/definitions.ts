@@ -203,6 +203,12 @@ export const SETTINGS = {
     title: "Let the bay command control Bay",
     words: "cli terminal automation agents scripts userscripts",
   },
+  mcpAgents: {
+    id: "advanced.mcpAgents",
+    pane: "advanced",
+    title: "Coding agents (MCP)",
+    words: "mcp model context protocol claude code codex cursor vscode agent ai",
+  },
   installCli: { id: "advanced.installCli", pane: "advanced", title: "Install the bay command", words: "cli terminal command path" },
   history: { id: "advanced.history", pane: "advanced", title: "History", words: "visited pages" },
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },

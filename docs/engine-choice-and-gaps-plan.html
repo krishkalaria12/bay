@@ -1159,6 +1159,14 @@
                     <code>apps/browser/src/privacyEndpoints.test.mjs</code> fails on a host the table lacks or a listed one the code no longer names.
                   </td>
                 </tr>
+                <tr>
+                  <td>G1</td>
+                  <td>
+                    First part done, all three platforms: <code>bay mcp serve</code> (MCP over stdio: list_tabs, open_tab, navigate, read_page, click, type,
+                    screenshot) on the bay command's own connection and permission, and <code>bay mcp install --agent</code> for Claude Code, Codex, Cursor and
+                    VS Code, changing only Bay's entry. Settings › Advanced explains it.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1190,6 +1198,11 @@
             <li>
               Ask on Page needs <code>pod install</code> before the Mac build, so Expo registers the new <code>BayAskPage</code> module. It has no keyboard
               shortcut or menu item yet, and long pages are cut to fit the model's context.
+            </li>
+            <li>
+              G1's per-agent approval and per-space reach aren't built: every agent shares the bay command's one permission and sees every web page tab outside
+              private windows (the token policy's rule). Scoping by space needs the token policy (<code>nn_cli_token_policy</code>) to filter targets by profile
+              per token, with an approval sheet in the app.
             </li>
           </ul>
         </section>
