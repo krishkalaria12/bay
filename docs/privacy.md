@@ -2,7 +2,9 @@
 
 Every web address written into Bay's own code (the app, its native modules and its engine code) is listed here.
 `apps/browser/src/privacyEndpoints.test.mjs` fails when a new one isn't, so this page stays complete. Pages you
-open, and the extensions you install, contact whatever they contact. This list covers only what Bay itself does.
+open, and the extensions you install, contact whatever they contact. So do plugins you add (Settings › Plugins), but
+only the hosts their manifest lists, which Bay shows before you add one, and never with your cookies
+([plugins.md](plugins.md)). This list covers only what Bay itself does.
 
 Reserved example names (`example.com`, `*.test`, `*.example`, `localhost`) don't count. Neither do three kinds of
 file that only name sites: `packages/core/src/bangList.ts` (search shortcuts, opened only when you type one),

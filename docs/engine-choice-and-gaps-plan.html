@@ -1249,6 +1249,23 @@
                     <code>SharedFoldersModule.swift</code> and <code>webui/shared_folders.cc</code>, each reaching only folders picked in its picker.
                   </td>
                 </tr>
+                <tr>
+                  <td>G9</td>
+                  <td>
+                    Done in source, all three platforms. A plugin is a folder with a <code>manifest.json</code> and a script, which the
+                    <code>bay-plugins</code> crate checks, copies into Bay's plugins folder and serves (Rust, tested; <code>docs/plugins.md</code>, with
+                    <code>docs/plugins/hello-bay</code> as the example the tests install). Each runs out of process in a sandboxed page of its own: a
+                    WebKit page on the Mac (<code>PluginsModule.swift</code>), a <code>chrome-untrusted://bay-plugin/</code> frame of the coordinator's
+                    document on Windows and Linux (<code>webui/plugins.cc</code>), under one content security policy: its own files, no network, a
+                    unique origin. It reaches Bay only through <code>bay</code> calls, which <code>lib/plugins/protocol.ts</code> checks against the
+                    manifest (tested): fetches to the hosts it lists (never with cookies; the engine makes them on Windows and Linux, where a
+                    <code>chrome://</code> document meets CORS), the page a command runs on with <code>permissions.tabs</code>, tabs opened only while
+                    something the person chose runs. It can add command bar entries, toolbar buttons, tab menu items, sidebar views, live folder
+                    sources and space themes; settings rows keep secrets in the system's keychain; and with <code>permissions.links</code> it decides
+                    which space a link from another app opens in, before Bay's link rules (G6's decide hooks, for plugins). Settings › Plugins adds,
+                    turns on and off, configures and removes them, and a kill switch can turn them all off.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1293,7 +1310,17 @@
             </li>
             <li>G5 groups list rows only: a tab held on a pinned row, an Essential or a row already in a group moves as before.</li>
             <li>
-              G7's GitLab items have no line counts, and approval shows only as required, not who approved. Sources from plugins wait on G9; Outlook, Notion,
+              G9's natives are unbuilt: the engine needs a rebuild for <code>webui/plugins.cc</code> (syntax checked) and the WebUI registration in
+              <code>chromium-bay-webui-window.patch</code> (applies to the local tree); the Mac needs <code>pod install</code> for the new
+              <code>BayPlugins</code> module, whose Swift is type-checked against stand-ins for Expo's only. The <code>sandbox</code> directive and
+              subresource loads from the opaque origin haven't been tried in a running WebKit or Chromium. Plugins add no menu bar items and no
+              page context menu items; their toolbar buttons don't show in Site Controls, so with the address bar in the sidebar and the toolbar
+              hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private
+              windows, history or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes in a
+              hidden document may have their timers slowed by the engine.
+            </li>
+            <li>
+              G7's GitLab items have no line counts, and approval shows only as required, not who approved. Plugins can add sources now (G9); Outlook, Notion,
               Confluence, Figma and Linear previews stay deferred.
             </li>
             <li>

@@ -459,6 +459,17 @@ mod tests {
     }
 
     #[test]
+    fn the_documented_example_is_a_plugin() {
+        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../docs/plugins/hello-bay");
+        let root = tempfile::tempdir().unwrap();
+        let m = install(root.path(), &example).unwrap();
+
+        assert_eq!(m.id, "hello-bay");
+        assert!(m.permissions.tabs && m.permissions.links);
+        assert_eq!(m.contributes.toolbar[0].view.as_deref(), Some("repos"));
+    }
+
+    #[test]
     fn the_host_page_escapes_the_script_path() {
         let m = manifest::check(r#"{"manifestVersion":1,"id":"hello","name":"Hi","version":"1","main":"src/my main.js"}"#).unwrap();
         assert!(host_page(&m).contains(r#"src="../src/my%20main.js""#));
