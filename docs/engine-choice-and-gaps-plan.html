@@ -309,9 +309,11 @@
           <li class="sub"><a href="#engine-phases">Phases</a></li>
           <li class="sub"><a href="#engine-accept">Acceptance</a></li>
           <li class="sub"><a href="#engine-risks">Risks</a></li>
-          <li><a href="#gaps">2. Other features to add</a></li>
-          <li><a href="#have">3. Already in Bay</a></li>
-          <li><a href="#decisions">4. Decisions</a></li>
+          <li><a href="#keychain">2. iCloud passwords and passkeys</a></li>
+          <li><a href="#gaps">3. Other features to add</a></li>
+          <li><a href="#have">4. Already in Bay</a></li>
+          <li><a href="#decisions">5. Decisions</a></li>
+          <li><a href="#progress">6. Progress and known gaps</a></li>
         </ol>
       </nav>
       <main>
@@ -676,8 +678,124 @@ WebKit pages
           </ul>
         </section>
 
+        <section id="keychain" aria-labelledby="keychain-h">
+          <h2 id="keychain-h">2. Passwords and passkeys from iCloud Keychain <span class="pri p0">P1</span></h2>
+          <p class="prose">
+            Many Mac users keep their logins in Apple's Passwords app (iCloud Keychain), synced with their iPhone. Bay today fills only from its own
+            Chromium store or a password manager extension. This item lets a space use the Mac's Passwords instead: logins, verification codes and
+            passkeys, in Chromium and WebKit pages alike. Mac only; Windows and Linux keep Bay's store and extensions, and Chromium's Windows Hello
+            passkeys already work there.
+          </p>
+
+          <h3 id="keychain-today">What Bay has today</h3>
+          <ul class="prose">
+            <li>Settings › Passwords: Chromium's password store per space, import and export, and a note on connecting 1Password, Bitwarden and others.</li>
+            <li>
+              <code>Bay-ICloudPasskeys.entitlements</code> already asks for Apple's browser passkey entitlement
+              (<code>com.apple.developer.web-browser.public-key-credential</code>) and Chromium's keychain groups. Apple hasn't granted it yet, so
+              signed builds ship without it.
+            </li>
+            <li>
+              <code>engine/patches/chromium-icloud-keychain-window.patch</code> attaches Chromium's iCloud Keychain passkey sheet to Bay's own window.
+            </li>
+            <li>WebKit pages hide <code>PublicKeyCredential</code> while the entitlement is missing; Settings › Engines shows the passkey access state.</li>
+          </ul>
+
+          <h3 id="keychain-see">What people see</h3>
+          <ul class="prose">
+            <li>
+              <strong>Settings › Passwords › Password manager</strong>, per space: <em>Bay</em> (today's store), <em>Passwords app (iCloud Keychain)</em>,
+              or <em>None (an extension handles logins)</em>. Spaces that share a profile share the choice, and the row says so.
+            </li>
+            <li>
+              <strong>Filling</strong>: with Passwords chosen, focusing a username, password or one-time-code field opens the Mac's own AutoFill panel under
+              the field, the same one Safari shows. Bay stops offering to save logins in that space, and says why in the save prompt's place. Logins already
+              in Bay's store still fill until the person exports them.
+            </li>
+            <li>
+              <strong>Verification codes</strong>: a page showing a setup QR code or an <code>otpauth://</code> link offers <em>Set Up in Passwords</em>,
+              which hands the link to the Passwords app.
+            </li>
+            <li>
+              <strong>Passkeys</strong>: one <em>Passkeys</em> row (Settings › Passwords, and the existing one in Settings › Engines) with the Mac's state:
+              waiting for Apple's entitlement, not set up on this Mac, <em>Allow Passkeys…</em>, allowed, or turned off with a button to System Settings ›
+              Privacy &amp; Security › Passkeys Access for Web Browsers. Once allowed, Chromium and WebKit pages both offer the iCloud Keychain passkeys.
+            </li>
+            <li><strong>Moving in</strong>: <em>Export to Passwords…</em> writes Bay's saved logins as a CSV the Passwords app imports, then offers to delete them.</li>
+          </ul>
+
+          <h3 id="keychain-how">How it works</h3>
+          <ul class="prose">
+            <li>
+              <strong>The AutoFill panel</strong>: macOS shows its Passwords panel for native text fields. Chromium's fields aren't native, so the host
+              tells AppKit which page field has focus and what kind it is (username, password, code). The page script already classifies fields for Bay's own
+              autofill; that classification is shared TypeScript, and only the panel hand-off is Mac native code. The panel's insert goes back into the field
+              through the page, as a paste would.
+            </li>
+            <li>
+              <strong>Passkeys in Chromium</strong>: Chromium's iCloud Keychain authenticator (<code>ASAuthorizationWebBrowserPlatformPublicKeyCredential</code>)
+              needs the entitlement and the person's permission. The Passkeys row asks for that permission once
+              (<code>requestAuthorizationForPublicKeyCredentials</code>), and the engine's iCloud Keychain preference is turned on for spaces that use it.
+            </li>
+            <li>
+              <strong>Passkeys in WebKit</strong>: <code>WKWebView</code> uses the same system passkeys once entitled; the hide-passkeys script is dropped
+              then.
+            </li>
+            <li>
+              <strong>Choice storage</strong>: <code>passwordManager</code> on each space's profile settings, synced like other space settings. A
+              <em>None</em> choice turns off Chromium's own save prompt for that profile (<code>credentials_enable_service</code>), so the extension's own
+              prompt is the only one.
+            </li>
+          </ul>
+
+          <h3 id="keychain-phases">Phases</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Work</th>
+                  <th>Platforms</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>K1</td>
+                  <td>Password manager choice per space (Bay, None) and Chromium's save prompt off for None. Works without Apple's entitlement.</td>
+                  <td>All three</td>
+                </tr>
+                <tr>
+                  <td>K2</td>
+                  <td>The Passwords app choice: focused-field hand-off to the AutoFill panel, insert back into the page, and the save prompt replaced by a note.</td>
+                  <td>Mac</td>
+                </tr>
+                <tr>
+                  <td>K3</td>
+                  <td>Verification code setup links handed to the Passwords app; Export to Passwords.</td>
+                  <td>Mac</td>
+                </tr>
+                <tr>
+                  <td>K4</td>
+                  <td>Passkeys row and permission request; iCloud Keychain passkeys in Chromium and WebKit pages once the entitlement is granted.</td>
+                  <td>Mac (needs Apple's grant)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="keychain-risks">Risks</h3>
+          <ul class="prose">
+            <li>
+              <strong>The AutoFill panel hand-off uses AppKit internals</strong> that aren't public API and can change with a macOS update. It's feature
+              detected: when the hook is missing, the choice falls back to Bay's store and Settings says so.
+            </li>
+            <li><strong>Apple's entitlement is a request, not a setting.</strong> Until it's granted, passkeys stay off and the row says it's waiting.</li>
+            <li><strong>Two password managers at once</strong> (an extension and the Passwords panel) would both prompt. <em>None</em> exists for that case.</li>
+          </ul>
+        </section>
+
         <section id="gaps" aria-labelledby="gaps-h">
-          <h2 id="gaps-h">2. Other features to add</h2>
+          <h2 id="gaps-h">3. Other features to add</h2>
           <p class="prose">
             These came from comparing Bay's code with two other Mac browsers built on Chromium, item by item. Each row says what Bay already has, so the work
             only builds what's missing. P1 items are the most visible, P2 make Bay stronger for power users or more reliable, and P3 are smaller or longer
@@ -835,7 +953,7 @@ WebKit pages
         </section>
 
         <section id="have" aria-labelledby="have-h">
-          <h2 id="have-h">3. Already in Bay, no work needed</h2>
+          <h2 id="have-h">4. Already in Bay, no work needed</h2>
           <p class="prose">
             The sweep also checked these, and Bay already has them: spaces with their own profiles, live folders, cookie-banner and annoyance lists, the
             address bar in the sidebar, two-finger swipe back, custom shortcuts, ask where to save downloads, tab groups, ⇧↩ to a search's top result, link
@@ -846,7 +964,7 @@ WebKit pages
         </section>
 
         <section id="decisions" aria-labelledby="decisions-h">
-          <h2 id="decisions-h">4. Decisions</h2>
+          <h2 id="decisions-h">5. Decisions</h2>
           <p class="prose">Settled on 24 Nov 2026. The sections above already follow these.</p>
           <div class="table-wrap">
             <table>
@@ -901,6 +1019,64 @@ WebKit pages
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section id="progress" aria-labelledby="progress-h">
+          <h2 id="progress-h">6. Progress and known gaps</h2>
+          <p class="prose">
+            Built on <code>feat/engine-choice</code>, stacked on the shared desktop core (PR #35). Logic all three platforms use lives in PR #35's Rust
+            crates or the shared engine C++ (<code>//chrome/browser/bay</code>); only WebKit's glue is Swift, since only the Mac has WebKit.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>E1</td>
+                  <td>Done: settings, the order in <code>store/engines.ts</code>, registrable-domain rules (<code>lib/siteDomain.ts</code>), per-tab picks, sync, tests.</td>
+                </tr>
+                <tr>
+                  <td>E2</td>
+                  <td>Done: Settings › Engines pane. WebKit mode stays out of the pop-up until E7 is verified on a real build.</td>
+                </tr>
+                <tr>
+                  <td>E3</td>
+                  <td>Done: Site Controls' Opens in row, tab menu, command bar actions, the Play in WebKit offer, the mark against the default engine.</td>
+                </tr>
+                <tr>
+                  <td>E4</td>
+                  <td>Done: the page held as a picture until the other engine loads (3 s at most), scroll restored, zoom carried, lazy moves on settings changes.</td>
+                </tr>
+                <tr>
+                  <td>E5</td>
+                  <td>Done in source: <code>nn_cookies_site</code> and <code>nn_cookies_apply</code> engine calls, WebKit cookie store glue, ledger merge, storage by script.</td>
+                </tr>
+                <tr>
+                  <td>E6</td>
+                  <td>Done in source: deceptive-site warnings, passkey row, staging clean-up, opt-in switch counts. README, site and release notes come with the PR.</td>
+                </tr>
+                <tr>
+                  <td>E7</td>
+                  <td>In progress: <code>bay_lists_webkit_rules</code> in bay-lists (Rust), compiled into content rule lists for WebKit pages.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 id="known-gaps">Known gaps</h3>
+          <ul class="prose">
+            <li>Nothing native is built yet: the engine (nncore, the Mac's Chromium) needs a rebuild for <code>nn_cookies_site</code> and <code>nn_cookies_apply</code>, and the app for the Swift changes. The C++ is syntax checked against the local Chromium tree.</li>
+            <li>A mode change asks about unsaved work per tab, when each tab moves, rather than once with a list of tabs.</li>
+            <li>A background tab a settings change left for later forgets the move if Bay quits first; it moves on its next settings change or pick.</li>
+            <li>The sign-in ledger lives for the app's run: after a relaunch, the first switch of a site copies cookies but carries no sign-outs.</li>
+            <li>Storage carries only <code>localStorage</code> of the page's own origin, written after the new page commits, so a page that reads it during load sees it on the next load.</li>
+            <li>No <em>Reopen in…</em> item in the app menu yet; the tab menu, Site Controls and the command bar have it.</li>
+            <li>Deceptive-site warnings apply to WebKit pages opened after the setting changes.</li>
+          </ul>
         </section>
       </main>
     </div>
