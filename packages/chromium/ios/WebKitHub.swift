@@ -226,6 +226,9 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
 
   func owner(of webView: WKWebView) -> WebKitTab? { owners[ObjectIdentifier(webView)]?.tab }
 
+  /// The tabs with a page now (WebKitContentRules reapplies its rules to them).
+  func liveTabs() -> [WebKitTab] { owners.values.compactMap(\.tab) }
+
   func noteLive(_ tab: WebKitTab, key: String) { liveByKey[key] = WeakTab(tab) }
 
   func forgetLive(_ tab: WebKitTab, key: String) {

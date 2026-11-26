@@ -1042,7 +1042,7 @@ WebKit pages
                 </tr>
                 <tr>
                   <td>E2</td>
-                  <td>Done: Settings › Engines pane. WebKit mode stays out of the pop-up until E7 is verified on a real build.</td>
+                  <td>Done: Settings › Engines pane, WebKit mode included now that E7 is in.</td>
                 </tr>
                 <tr>
                   <td>E3</td>
@@ -1062,7 +1062,11 @@ WebKit pages
                 </tr>
                 <tr>
                   <td>E7</td>
-                  <td>In progress: <code>bay_lists_webkit_rules</code> in bay-lists (Rust), compiled into content rule lists for WebKit pages.</td>
+                  <td>
+                    Done in source: <code>bay_lists_webkit_key</code> and <code>bay_lists_webkit_rules</code> in bay-lists (Rust, tested), compiled into
+                    content rule lists by <code>WebKitContentRules.swift</code>, cached in WebKit's store by key, none on paused sites. Site Controls' blocker
+                    toggle now works on WebKit pages.
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1076,6 +1080,8 @@ WebKit pages
             <li>Storage carries only <code>localStorage</code> of the page's own origin, written after the new page commits, so a page that reads it during load sees it on the next load.</li>
             <li>No <em>Reopen in…</em> item in the app menu yet; the tab menu, Site Controls and the command bar have it.</li>
             <li>Deceptive-site warnings apply to WebKit pages opened after the setting changes.</li>
+            <li>WebKit pages show no blocked count in Site Controls: content rules count nothing.</li>
+            <li>The Objective-C++ and Swift for E5–E7 are parse-checked only; the first Mac build may need small fixes.</li>
           </ul>
         </section>
       </main>

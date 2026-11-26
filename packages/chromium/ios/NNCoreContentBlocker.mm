@@ -144,6 +144,8 @@ void PublishLive() {
   if ([NNCoreEngine respondsToSelector:@selector(setCnameFilter:)])
     [NNCoreEngine setCnameFilter:filtering ? CnameBlocked : nullptr];
   Publish(std::move(live));
+  // WebKit pages' rules follow (WebKitContentRules.swift).
+  [NSNotificationCenter.defaultCenter postNotificationName:NNCoreContentBlockerChangedNotification object:nil];
 }
 
 dispatch_queue_t Work() {
@@ -395,7 +397,35 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
 
 }  // namespace nncore_host
 
+NSNotificationName const NNCoreContentBlockerChangedNotification = @"NNCoreContentBlockerChanged";
+
 @implementation NNCoreContentBlocker
+
++ (NSDictionary<NSString *, id> *)webKitRulesState {
+  NSDictionary *live = JSONFrom(bay_lists_live(Lists()));
+  return @{
+    @"enabled" : @([live[@"enabled"] boolValue]),
+    @"paused" : [live[@"allowed"] isKindOfClass:NSArray.class] ? live[@"allowed"] : @[],
+  };
+}
+
++ (void)webKitRulesKey:(void (^)(NSString *))completion {
+  NSString *lists = StringFrom(bay_lists_selected(Lists()));
+  completion = [completion copy];
+  dispatch_async(Work(), ^{
+    NSString *key = StringFrom(bay_lists_webkit_key(Directory().fileSystemRepresentation, lists.UTF8String, nullptr)) ?: @"";
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(key); });
+  });
+}
+
++ (void)webKitRules:(void (^)(NSString *_Nullable))completion {
+  NSString *lists = StringFrom(bay_lists_selected(Lists()));
+  completion = [completion copy];
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    NSString *rules = StringFrom(bay_lists_webkit_rules(Directory().fileSystemRepresentation, lists.UTF8String, nullptr));
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(rules); });
+  });
+}
 
 + (void)state:(void (^)(NSDictionary<NSString *, id> *))completion {
   completion(StateDictionary());

@@ -523,17 +523,7 @@ pub unsafe extern "C" fn bay_lists_build(
         return std::ptr::null_mut();
     };
     // SAFETY: as the caller's.
-    let sources: Vec<ListSource> = unsafe { read(lists) }
-        .and_then(|text| serde_json::from_str::<Vec<Value>>(&text).ok())
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|list| {
-            Some(ListSource {
-                id: list.get("id")?.as_str()?.to_owned(),
-                hosts: list.get("hosts").and_then(Value::as_bool).unwrap_or(false),
-            })
-        })
-        .collect();
+    let sources = unsafe { sources_of(lists) };
     // SAFETY: as the caller's.
     let resources = unsafe { read(resources) }.map(PathBuf::from);
     let built = files::build(
@@ -596,6 +586,81 @@ pub unsafe extern "C" fn bay_lists_built_free(built: *mut BayListsBuilt) {
         // SAFETY: as the caller's.
         drop(unsafe { Box::from_raw(built) });
     }
+}
+
+/// The chosen lists' WebKit rules key (`files::webkit_rules_key`): `lists` as for [`bay_lists_build`], `extra` the
+/// person's own rules or null. Cheap: file sizes and times.
+///
+/// # Safety
+/// Each argument must be null or a valid NUL-terminated string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_webkit_key(
+    directory: *const c_char,
+    lists: *const c_char,
+    extra: *const c_char,
+) -> *mut c_char {
+    // SAFETY: as the caller's.
+    let (Some(directory), sources, extra) = (
+        unsafe { read(directory) },
+        unsafe { sources_of(lists) },
+        unsafe { read(extra) },
+    ) else {
+        return std::ptr::null_mut();
+    };
+    let ids: Vec<String> = sources
+        .iter()
+        .filter(|list| files::list_path(Path::new(&directory), &list.id).exists())
+        .map(|list| list.id.clone())
+        .collect();
+    give(files::webkit_rules_key(
+        Path::new(&directory),
+        &ids,
+        &extra.unwrap_or_default(),
+    ))
+}
+
+/// The chosen lists' WebKit content rules (`files::webkit_rules`), a JSON array. Blocks on the disk and the CPU.
+///
+/// # Safety
+/// Each argument must be null or a valid NUL-terminated string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_webkit_rules(
+    directory: *const c_char,
+    lists: *const c_char,
+    extra: *const c_char,
+) -> *mut c_char {
+    // SAFETY: as the caller's.
+    let (Some(directory), sources, extra) = (
+        unsafe { read(directory) },
+        unsafe { sources_of(lists) },
+        unsafe { read(extra) },
+    ) else {
+        return std::ptr::null_mut();
+    };
+    give(files::webkit_rules(
+        Path::new(&directory),
+        &sources,
+        &extra.unwrap_or_default(),
+    ))
+}
+
+/// `bay_lists_selected`'s JSON as list sources; anything else reads as none.
+///
+/// # Safety
+/// `lists` must be null or a valid NUL-terminated string.
+unsafe fn sources_of(lists: *const c_char) -> Vec<ListSource> {
+    // SAFETY: as the caller's.
+    unsafe { read(lists) }
+        .and_then(|text| serde_json::from_str::<Vec<Value>>(&text).ok())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|list| {
+            Some(ListSource {
+                id: list.get("id")?.as_str()?.to_owned(),
+                hosts: list.get("hosts").and_then(Value::as_bool).unwrap_or(false),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -755,7 +820,7 @@ mod tests {
             r"\b(bay_lists_\w+)\(",
             include_str!("../include/bay_lists.h"),
         );
-        assert_eq!(defined.len(), 27);
+        assert_eq!(defined.len(), 29);
         assert_eq!(declared, defined);
     }
 }

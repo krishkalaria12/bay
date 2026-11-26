@@ -106,7 +106,17 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 @end
 
 // The built-in content blocker (Bay's own, packages/adblock). A change that fails (error) changed nothing.
+// Posted on the main thread when the blocker's engine or settings change (WebKit pages' rules follow).
+extern NSNotificationName const NNCoreContentBlockerChangedNotification;
+
 @interface NNCoreContentBlocker : NSObject
+// WebKit pages' rules (WebKitContentRules.swift), on the main thread: whether the blocker is on and the hosts it's
+// paused on (read at once, so a page reloaded after a pause gets it), and the key of the chosen lists' rules.
+// {"enabled": bool, "paused": [host…]}
++ (NSDictionary<NSString *, id> *)webKitRulesState NS_SWIFT_NAME(webKitRulesState());
++ (void)webKitRulesKey:(void (^)(NSString *key))completion NS_SWIFT_NAME(webKitRulesKey(_:));
+// The chosen lists as WKContentRuleList JSON (seconds for the default lists, off the main thread); null if unreadable.
++ (void)webKitRules:(void (^)(NSString *_Nullable rules))completion NS_SWIFT_NAME(webKitRules(_:));
 + (void)state:(void (^)(NSDictionary<NSString *, id> *state))completion NS_SWIFT_NAME(state(_:));
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setEnabled(_:completion:));
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setList(_:enabled:completion:));

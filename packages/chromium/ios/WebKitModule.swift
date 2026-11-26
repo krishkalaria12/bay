@@ -9,7 +9,10 @@ public class WebKitModule: Module {
 
     OnCreate {
       WebKitHub.shared.events = { [weak self] name, payload in self?.sendEvent(name, payload) }
-      DispatchQueue.main.async { WebKitHub.shared.downloads.removeLeftoverStaging() }
+      DispatchQueue.main.async {
+        WebKitHub.shared.downloads.removeLeftoverStaging()
+        WebKitContentRules.shared.start()
+      }
     }
 
     Function("prepareTransfer") { (key: String) in WebKitHub.shared.prepareTransfer(key) }

@@ -5,7 +5,7 @@ import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { useTheme } from "../../../lib/theme";
 import { siteFromInput } from "../../../lib/siteDomain";
-import { ENGINE_NAMES, PROTECTED_VIDEO_SITES } from "../../../store/engines";
+import { PROTECTED_VIDEO_SITES } from "../../../store/engines";
 import { useBrowserRead } from "../../../store/read";
 import type { EngineMode, Settings } from "../../../store/settings";
 import { Favicon, IconButton } from "../../ui/primitives";
@@ -21,20 +21,16 @@ const ENGINE_OPTIONS: Option<PageEngine>[] = [
   { value: "webkit", title: "WebKit" },
 ];
 
-// WebKit mode waits for ad blocking on WebKit pages (content rules), so a mode doesn't quietly turn blocking off.
 const MODE_OPTIONS: Option<EngineMode>[] = [
   { value: "automatic", title: "Automatic" },
   { value: "chromium", title: "Chromium" },
+  { value: "webkit", title: "WebKit" },
 ];
-
-// A Mac whose synced settings already chose WebKit mode still shows it.
-const modeOptions = (mode: EngineMode): Option<EngineMode>[] =>
-  mode === "webkit" ? [...MODE_OPTIONS, { value: "webkit", title: ENGINE_NAMES.webkit }] : MODE_OPTIONS;
 
 const MODE_DESCRIPTIONS: Record<EngineMode, string> = {
   automatic: "Most pages open in the default engine. Streaming sites open in WebKit to play protected video, and your site rules apply.",
   chromium: "Every page opens in Chromium. Streaming sites whose video needs FairPlay won't play.",
-  webkit: "Every page opens in WebKit, except Bay's own pages and extensions' pages. WebKit pages have no extensions.",
+  webkit: "Every page opens in WebKit, except Bay's own pages and extensions' pages. WebKit pages have no extensions, and a few ads get through there.",
 };
 
 const FALLBACK_OPTIONS: Option<Settings["protectedVideoFallback"]>[] = [
@@ -67,7 +63,7 @@ export function EnginesPane() {
       <SectionHeader title="Engines" />
       <Group>
         <Row settingId={SETTINGS.engineMode.id} title={SETTINGS.engineMode.title} description={MODE_DESCRIPTIONS[mode]}>
-          <PopUp value={mode} options={modeOptions(mode)} onChange={(engineMode) => patch({ engineMode })} minWidth={130} />
+          <PopUp value={mode} options={MODE_OPTIONS} onChange={(engineMode) => patch({ engineMode })} minWidth={130} />
         </Row>
         <Row
           settingId={SETTINGS.defaultEngine.id}
@@ -221,7 +217,10 @@ const DIFFERENCES: [string, string][] = [
     "Each engine keeps its own cookies and site data in every space. With Bring sign-ins along on, a switch copies the site's sign-in to the other engine.",
   ],
   ["Extensions", "Extensions run only in Chromium. Pages they open stay in Chromium in every mode."],
-  ["Ad blocking", "Runs only on Chromium pages for now."],
+  [
+    "Ad blocking",
+    "Both engines use your filter lists. WebKit pages get their network and element-hiding rules; script-based filters can't run there, so a few ads get through.",
+  ],
   ["DevTools", "DevTools open only on Chromium pages."],
   ["Shared", "Tabs, history, bookmarks, passwords and settings are the same in both engines."],
 ];

@@ -83,6 +83,13 @@ char *bay_lists_built_report(const BayListsBuilt *built);
 BayBlocker *bay_lists_apply(const BayLists *lists, BayListsBuilt *built);
 void bay_lists_built_free(BayListsBuilt *built);
 
+// WebKit content rules (macOS's WebKit pages): `lists` as for bay_lists_build, `extra` the person's own rules in
+// adblock syntax, or null. The key changes with the list files and `extra`; a host keeps its compiled rule lists while
+// it's the same. The rules are WKContentRuleList JSON (one array; network and element-hiding rules, no scriptlets).
+// The rules block on the disk and the CPU.
+char *bay_lists_webkit_key(const char *directory, const char *lists, const char *extra);
+char *bay_lists_webkit_rules(const char *directory, const char *lists, const char *extra);
+
 #ifdef __cplusplus
 }
 #endif

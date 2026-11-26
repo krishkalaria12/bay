@@ -311,6 +311,38 @@ pub fn build(
     }
 }
 
+/// Bump with a change to how lists become WebKit rules: every WebKit rule list a host compiled is rebuilt.
+pub const WEBKIT_RULES_FORMAT: &str = "bay-webkit-rules 1";
+
+/// The key WebKit rules for `ids` (and the person's own `extra` rules) were made for: a host keeps its compiled rule
+/// lists while the key is the same.
+pub fn webkit_rules_key(directory: &Path, ids: &[String], extra: &str) -> String {
+    let mut key = engine_key(directory, ids).replacen(ENGINE_FORMAT, WEBKIT_RULES_FORMAT, 1);
+    if !extra.is_empty() {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in extra.bytes() {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3);
+        }
+        key.push_str(&format!("\nextra {} {hash:016x}", extra.len()));
+    }
+    key
+}
+
+/// WebKit content rules (WKContentRuleList's JSON, one array) for the lists in `directory` that have a file, in order,
+/// then the person's own `extra` rules. Network and element-hiding rules convert; scriptlets and other rules WebKit
+/// can't express are left out. Blocks on the disk and the CPU (seconds for the default lists).
+pub fn webkit_rules(directory: &Path, lists: &[ListSource], extra: &str) -> String {
+    let mut text = String::new();
+    for list in lists {
+        if let Ok(bytes) = std::fs::read(list_path(directory, &list.id)) {
+            text.push_str(&String::from_utf8_lossy(&bytes));
+            text.push('\n');
+        }
+    }
+    text.push_str(extra);
+    bay_adblock::content_blocking_rules(&text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,5 +480,35 @@ mod tests {
         let built = build(dir, &lists, None, true);
         assert!(!built.cached);
         assert_eq!(built.counts.len(), 1);
+    }
+
+    #[test]
+    fn webkit_rules_convert_network_and_hiding_rules_and_key_by_files_and_extra() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("lists")).unwrap();
+        std::fs::write(list_path(dir.path(), "a"), LIST).unwrap();
+        let lists = [ListSource {
+            id: "a".to_owned(),
+            hosts: false,
+        }];
+        let rules: serde_json::Value =
+            serde_json::from_str(&webkit_rules(dir.path(), &lists, "||own.example^\n")).unwrap();
+        let text = rules.to_string();
+        assert!(
+            text.contains("ads\\\\.example") || text.contains("ads\\.example"),
+            "{text}"
+        );
+        assert!(text.contains("own"), "{text}");
+        assert!(text.contains("css-display-none"), "{text}");
+        let plain = webkit_rules_key(dir.path(), &ids(&["a"]), "");
+        assert!(plain.starts_with(WEBKIT_RULES_FORMAT));
+        assert_ne!(
+            plain,
+            webkit_rules_key(dir.path(), &ids(&["a"]), "||own.example^")
+        );
+        assert_eq!(
+            webkit_rules_key(dir.path(), &ids(&["a"]), "x"),
+            webkit_rules_key(dir.path(), &ids(&["a"]), "x")
+        );
     }
 }

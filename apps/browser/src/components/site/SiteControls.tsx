@@ -371,20 +371,19 @@ export function SiteControls({
                 <PopoverRow
                   icon="shield.lefthalf.filled"
                   title="Block ads and trackers"
+                  // A WebKit page blocks with content rules, which count nothing (WebKitContentRules.swift).
                   detail={
-                    webkitPage
-                      ? "Chromium only for now"
-                      : !blocker
-                        ? "Loading…"
-                        : !blocker.enabled
-                          ? "Off in Settings"
-                          : blocker.allowed
-                            ? "Off"
-                            : blocked > 0
-                              ? `On · ${blocked} blocked`
-                              : "On"
+                    !blocker
+                      ? "Loading…"
+                      : !blocker.enabled
+                        ? "Off in Settings"
+                        : blocker.allowed
+                          ? "Off"
+                          : blocked > 0 && !webkitPage
+                            ? `On · ${blocked} blocked`
+                            : "On"
                   }
-                  accessory={blocker?.enabled && !webkitPage ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
+                  accessory={blocker?.enabled ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
                 <PopoverRow
                   icon="chevron.left.forwardslash.chevron.right"
