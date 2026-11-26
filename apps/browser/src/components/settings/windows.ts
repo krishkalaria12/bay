@@ -24,6 +24,7 @@ export type SettingsPane =
   | "shortcuts"
   | "links"
   | "liveFolders"
+  | "plugins"
   | "calendar"
   | "advanced";
 

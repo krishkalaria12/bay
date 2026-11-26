@@ -10,6 +10,7 @@ import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
 import { EditBookmarkDialog } from "./components/bookmarks/EditBookmarkDialog";
 import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
+import { PluginSidePanel } from "./components/plugins/PluginPanel";
 import { DownloadMagnet } from "./components/downloads/DownloadRow";
 import { DownloadsPanel } from "./components/downloads/DownloadsPanel";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
@@ -213,6 +214,7 @@ function BrowserWindow() {
       >
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
+        {!fullscreen && <PluginSidePanel />}
       </Animated.View>
       {/* No toolbar or sidebar to move the window by: the gap over the page does. */}
       {addressInSidebar && !sidebarOpen && !fullscreen ? (

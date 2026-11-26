@@ -4,6 +4,7 @@ import { live } from "../../activity/activityStore";
 import { refreshFolder } from "../../activity/activityEngine";
 import { createWindow } from "../../runtime/windowActions";
 import type { BrowserStore } from "../../store/browserStore";
+import { switchedOff } from "../killSwitches";
 import { frontPage, frontPublicWindow } from "./pluginContext";
 import { MAX_FETCH_BODY, type FetchInit } from "./protocol";
 import type { FetchAnswer, PluginHost } from "./pluginService";
@@ -51,5 +52,6 @@ export function appPluginHost(store: BrowserStore): PluginHost {
     keychainSet: (account, secret) => keychainSet(account, secret).then(() => {}),
     keychainDelete: (account) => keychainDelete(account).then(() => {}),
     now: Date.now,
+    halted: () => switchedOff("plugins"),
   };
 }

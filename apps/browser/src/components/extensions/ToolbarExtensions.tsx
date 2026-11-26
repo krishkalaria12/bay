@@ -23,6 +23,7 @@ import {
   type Anchor,
 } from "./state";
 import { EXTENSION_BUTTON } from "./constants";
+import { PluginButton, usePluginButtons } from "../plugins/PluginButtons";
 
 function useToolbarExtensions(windowId: string) {
   const shown = useWindowExtensions(windowId);
@@ -33,7 +34,7 @@ function useToolbarExtensions(windowId: string) {
 export function useToolbarExtensionsWidth(windowId: string): number {
   const { pinned, overflow } = useToolbarExtensions(windowId);
   const casting = useCastRoutes(windowId).length > 0;
-  const count = pinned.length + (overflow ? 1 : 0) + (casting ? 1 : 0);
+  const count = pinned.length + (overflow ? 1 : 0) + (casting ? 1 : 0) + usePluginButtons().length;
 
   return count ? count * EXTENSION_BUTTON + 6 : 0;
 }
@@ -54,6 +55,7 @@ export const ToolbarExtensions = memo(function ToolbarExtensions({
 }) {
   const { pinned, overflow } = useToolbarExtensions(windowId);
   const routes = useCastRoutes(windowId);
+  const plugins = usePluginButtons();
 
   const browserId = usePages((p) => {
     for (const [id, tab] of Object.entries(p.browsers)) if (tab === tabId) return Number(id);
@@ -61,11 +63,14 @@ export const ToolbarExtensions = memo(function ToolbarExtensions({
     return 0;
   });
 
-  if (!pinned.length && !overflow && !routes.length) return null;
+  if (!pinned.length && !overflow && !routes.length && !plugins.length) return null;
 
   return (
     <View style={{ position: "absolute", top, right, flexDirection: "row" }}>
       {routes.length ? <CastButton windowId={windowId} routes={routes} palette={palette} /> : null}
+      {plugins.map((p) => (
+        <PluginButton key={`${p.pluginId}/${p.button.id}`} {...p} windowId={windowId} palette={palette} />
+      ))}
       {pinned.map((ext) => (
         <ExtensionButton key={ext.id} ext={ext} windowId={windowId} browserId={browserId} palette={palette} />
       ))}

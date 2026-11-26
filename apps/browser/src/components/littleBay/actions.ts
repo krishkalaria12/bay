@@ -1,10 +1,11 @@
 import { focus, openWindow } from "../../lib/actions";
-import { defaultLinkDestination, matchingLinkRule } from "../../lib/externalLinkRules";
+import { defaultLinkDestination, matchingLinkRule, type LinkDestination } from "../../lib/externalLinkRules";
+import { decideLink } from "../../lib/plugins/pluginService";
 import { browserRead } from "../../store/read";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { navigate, newTab } from "../../runtime/tabActions";
 import { closeWindow, createWindow } from "../../runtime/windowActions";
-import { viewTabIds } from "../../store/model";
+import { isIncognitoSpace, viewTabIds } from "../../store/model";
 import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/littleBay";
 import { handleSharedCollectionUrl } from "../../lib/sharedLinkEncoding";
 
@@ -17,12 +18,28 @@ export async function openLittleBay(url?: string, spaceId?: string): Promise<str
 
 const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 
-// Incoming desktop links use the first matching route, then the configured default.
+/** Where a plugin's links decide hook (lib/plugins) sends a link, as a link rule's destination; null leaves it. */
+async function pluginDestination(url: string, sourceApp: string | undefined): Promise<LinkDestination | null> {
+  const s = store();
+  const spaces = s.spaceOrder.flatMap((id) => (s.spaces[id] && !isIncognitoSpace(id) ? [{ id, name: s.spaces[id]!.name }] : []));
+  const decision = await decideLink({ url, sourceApp: sourceApp ?? null, spaces }).catch(() => null);
+
+  if (!decision) return null;
+
+  if (decision.kind !== "space") return { kind: decision.kind };
+  const wanted = decision.space.toLowerCase();
+  const space = spaces.find((sp) => sp.id === decision.space) ?? spaces.find((sp) => sp.name.toLowerCase() === wanted);
+
+  return space ? { kind: "space", spaceId: space.id } : null;
+}
+
+// Incoming desktop links go where a plugin decides, else by the first matching route, then the configured default.
 export async function openExternalUrls(urls: string[], sourceApp?: string) {
   for (const url of urls) {
     if (handleSharedCollectionUrl(url)) continue;
+    const decided = await pluginDestination(url, sourceApp);
     const s = store();
-    const matched = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
+    const matched = decided ?? matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
 
     const target =
       matched?.kind === "space" && !s.spaces[matched.spaceId] ? defaultLinkDestination(s.settings) : (matched ?? defaultLinkDestination(s.settings));

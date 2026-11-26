@@ -17,6 +17,8 @@ import { libraryAvailable } from "../library/availability";
 import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
 import { ENGINE_NAMES, engineSwitchFor } from "../../store/engines";
 import { canAskPage } from "../ask/askPage";
+import { activePlugins, usePlugins } from "../../lib/plugins/pluginStore";
+import { runPluginCommandIn } from "../../lib/plugins/pluginActions";
 
 const engineSwitch = ({ s, tab }: Context) => (tab ? engineSwitchFor(s, tab.id) : null);
 
@@ -330,6 +332,19 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     out.push(action);
   }
 
+  // Plugins' commands (lib/plugins), while their plugin runs.
+  for (const plugin of activePlugins(usePlugins.getState())) {
+    for (const command of plugin.manifest.contributes.commands) {
+      if (command.page && !tab?.url) continue;
+      out.push({
+        id: `plugin:${plugin.manifest.id}:${command.id}`,
+        title: command.title,
+        icon: command.icon,
+        keywords: [...command.keywords, plugin.manifest.name],
+      });
+    }
+  }
+
   if (w && !w.incognito) {
     s.spaceOrder.forEach((id, i) => {
       if (id === w.spaceId) return;
@@ -348,6 +363,9 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
 }
 
 export function runBarAction(id: string, windowId: string) {
+  const plugin = /^plugin:([^:]+):(.+)$/.exec(id);
+
+  if (plugin) return void runPluginCommandIn(windowId, plugin[1]!, plugin[2]!, "commandBar").catch(() => {});
   const i = id.indexOf(":");
   // SAFETY: actionId builds ids from a BrowserCommand (optionally suffixed `:arg`), so the prefix before ':' is one.
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;

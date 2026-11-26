@@ -3,10 +3,12 @@ import * as windowCommands from "../../runtime/windowActions";
 import { Pressable, View } from "@bay/platform";
 import { hapticTick, Surface, Symbol } from "@bay/desktop";
 import { WindowBackdrop } from "@bay/shaders";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text, type GestureResponderEvent } from "react-native";
 import { Image } from "expo-image";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
+import { activePlugins, usePlugins } from "../../lib/plugins/pluginStore";
 import {
   defaultHarmony,
   editableTheme,
@@ -68,6 +70,13 @@ const SWATCHES: Swatch[] = [
   ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, color: c, colors: [SPACE_COLORS[c].swatch] })),
   ...THEME_PRESETS,
 ];
+
+/** Bay's swatches, then the themes the turned-on plugins add (lib/plugins). */
+function useSwatches(): Swatch[] {
+  const plugins = usePlugins(useShallow(activePlugins));
+
+  return useMemo(() => [...SWATCHES, ...plugins.flatMap((p) => p.manifest.contributes.themes.map((t) => ({ name: t.name, colors: t.colors })))], [plugins]);
+}
 
 type Request = { windowId: string; spaceId: string };
 
@@ -162,7 +171,8 @@ export type Look = { color: SpaceColor; theme: SpaceTheme | null; followSite?: b
 export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { look: Look; width?: number; onChange(next: Look): void }) {
   // As many swatches a page as the width holds (the arrows either side take the rest).
   const perPage = Math.max(4, Math.min(THEME_SWATCHES_PER_PAGE, Math.floor((width - 48) / (THEME_SWATCH + 7))));
-  const pages = Math.ceil(SWATCHES.length / perPage);
+  const swatches = useSwatches();
+  const pages = Math.ceil(swatches.length / perPage);
   const appearance = useBrowser((s) => s.settings.appearance);
   const [page, setPage] = useState(0);
   const [harmony, setHarmony] = useState<Harmony>(() => defaultHarmony(look.theme?.colors.length ?? 1));
@@ -249,8 +259,8 @@ export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { l
       <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
         <IconButton icon="chevron.left" tooltip="Previous Colours" narrow disabled={page === 0} onPress={() => setPage(page - 1)} />
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "center", gap: 3 }}>
-          {SWATCHES.slice(page * perPage, (page + 1) * perPage).map((s) => (
-            <SwatchButton key={s.name} swatch={s} on={chosen(s)} onPress={() => applySwatch(s)} />
+          {swatches.slice(page * perPage, (page + 1) * perPage).map((s) => (
+            <SwatchButton key={`${s.name}|${s.colors.join(",")}`} swatch={s} on={chosen(s)} onPress={() => applySwatch(s)} />
           ))}
         </View>
         <IconButton icon="chevron.right" tooltip="More Colours" narrow disabled={page >= pages - 1} onPress={() => setPage(page + 1)} />

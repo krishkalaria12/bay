@@ -19,6 +19,7 @@ export const SWITCHABLE = {
   signInCarry: "Carrying sign-ins between engines",
   askPage: "Ask About This Page",
   sparePage: "Starting the next page early",
+  plugins: "Plugins",
 } as const;
 
 export type SwitchFeature = keyof typeof SWITCHABLE;

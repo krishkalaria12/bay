@@ -214,6 +214,7 @@ export const SETTINGS = {
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },
   liveFolders: { id: "liveFolders.liveFolders", pane: "liveFolders", title: "Live folders", words: "refresh" },
+  plugins: { id: "plugins.plugins", pane: "plugins", title: "Plugins", words: "plugin add install script manifest commands toolbar sidebar view theme" },
   engineMode: {
     id: "engines.engineMode",
     pane: "engines",

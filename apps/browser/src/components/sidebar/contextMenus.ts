@@ -7,6 +7,8 @@ import { boostsAvailable } from "../boosts/state";
 import { openBoostEditor } from "../boosts/editor";
 import { platformWords } from "../../lib/platformWords";
 import { canShareFolderSheet, sharedFoldersAvailable, showMenu, type MenuItem } from "@bay/desktop";
+import { runPluginCommandIn } from "../../lib/plugins/pluginActions";
+import { activePlugins, usePlugins } from "../../lib/plugins/pluginStore";
 import {
   inviteToSharedFolder,
   keepInSharedFolder,
@@ -289,6 +291,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
     ...(split ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash", ...hint("-", "shift", "control") }] : []),
     { id: "more", title: "More", symbol: "ellipsis.circle", children: more },
+    ...pluginTabItems(),
     sep,
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },
     {
@@ -303,6 +306,9 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const t = { kind: "tab" as const, id: tab.id };
 
   if (runCalendarMenu(choice)) return;
+  const plugin = /^plugin:([^:]+):(.+)$/.exec(choice);
+
+  if (plugin) return void runPluginCommandIn(windowId, plugin[1]!, plugin[2]!, "tabMenu", tab.id).catch(() => {});
 
   if (choice === "backToPin") reportBrowserCommand(returnToPinnedUrl(tab.id));
   else if (choice === "replacePin") reportBrowserCommand(setPinnedUrl(tab.id));
@@ -488,6 +494,19 @@ function firstAfterFolder(folderId: string): string | null {
   const last = ids.reduce((at, id, i) => (members.has(id) ? i : at), -1);
 
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
+}
+
+// Plugins' tab menu items (lib/plugins), while their plugin runs: each runs a command on this tab.
+function pluginTabItems(): MenuItem[] {
+  const items = activePlugins(usePlugins.getState()).flatMap((p) =>
+    p.manifest.contributes.tabMenu.map((item) => {
+      const command = p.manifest.contributes.commands.find((c) => c.id === item.command);
+
+      return { id: `plugin:${p.manifest.id}:${item.command}`, title: item.title, symbol: command?.icon ?? "puzzlepiece.extension" };
+    }),
+  );
+
+  return items.length ? [sep, ...items] : [];
 }
 
 // A folder kept in a shared folder of link files (lib/sharedFolderService.ts), on hosts that have them.

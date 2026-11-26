@@ -109,6 +109,7 @@ function fakeHost({ plugins, handlers = {}, documents = {} }) {
     keychainSet: async (account, value) => void keychain.set(account, value),
     keychainDelete: async (account) => void keychain.delete(account),
     now: () => Date.now(),
+    halted: () => false,
   };
 
   return host;

@@ -40,6 +40,8 @@ export type PluginHost = {
   keychainSet(account: string, secret: string): Promise<void>;
   keychainDelete(account: string): Promise<void>;
   now(): number;
+  // A remote kill switch turned plugins off for this release (lib/killSwitches.ts).
+  halted(): boolean;
 };
 
 const DOC = "plugins.json";
@@ -49,6 +51,7 @@ const DECIDE_MS = 400;
 const MAX_FETCHES = 8;
 const MAX_STORAGE = 1024 * 1024;
 const NOTIFY_EVERY_MS = 10_000;
+const HALTED = "Bay turned plugins off for this release (Settings › Advanced says why)";
 
 const SavedSchema = v.object({
   enabled: v.optional(v.record(v.string(), v.boolean()), {}),
@@ -140,6 +143,8 @@ function startOne(manifest: PluginManifest) {
   const h = host;
 
   if (!h) return;
+
+  if (h.halted()) return stopOne(manifest.id, "off", HALTED);
   stopOne(manifest.id, "starting");
   let live: Running | null = null;
 
@@ -360,6 +365,7 @@ export async function reloadPlugins(): Promise<void> {
     const changed = !!live && JSON.stringify(live.manifest) !== JSON.stringify(manifest);
 
     if (!saved.enabled[manifest.id]) stopOne(manifest.id);
+    else if (h.halted()) stopOne(manifest.id, "off", HALTED);
     else if (!live || changed) startOne(manifest);
   }
 }
@@ -403,7 +409,6 @@ export async function setPluginEnabled(pluginId: string, enabled: boolean): Prom
 /** Removes a plugin, its files, settings, secrets and storage. */
 export async function deletePlugin(pluginId: string): Promise<void> {
   const h = requireHost();
-  const manifest = entry(pluginId)?.manifest;
 
   stopOne(pluginId);
 
@@ -413,7 +418,8 @@ export async function deletePlugin(pluginId: string): Promise<void> {
   save();
   publishSaved();
 
-  if (manifest) await h.remove(pluginId);
+  // A plugin just added from another window may not be listed here yet: its folder goes all the same.
+  await h.remove(pluginId);
   await reloadPlugins();
 }
 

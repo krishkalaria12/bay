@@ -16,6 +16,7 @@ import { GeneralPane } from "./panes/General";
 import { LinksPane } from "./panes/Links";
 import { EnginesPane } from "./panes/Engines";
 import { LiveFoldersPane } from "./panes/LiveFolders";
+import { PluginsPane } from "./panes/Plugins";
 import { ExtensionsPane } from "./panes/Extensions";
 import { PasswordsPane } from "./panes/Passwords";
 import { AutofillPane } from "./panes/Autofill";
@@ -63,6 +64,7 @@ const SECTIONS: Item[][] = [
     { id: "autofill", title: "Autofill", icon: "creditcard.fill", color: "#30D158", words: "addresses cards payment" },
     { id: "privacy", title: "Privacy", icon: "hand.raised.fill", color: "#0A84FF", words: "security cookies tracking permissions clear data ads" },
     { id: "extensions", title: "Extensions", icon: "puzzlepiece.extension.fill", color: "#BF5AF2", words: "chrome web store" },
+    { id: "plugins", title: "Plugins", icon: "puzzlepiece.fill", color: "#FF9F0A", words: "plugin script manifest commands toolbar sidebar themes" },
     { id: "calendar", title: "Calendar", icon: "calendar", color: "#FF453A", words: "meetings events" },
     { id: "advanced", title: "Advanced", icon: "slider.horizontal.3", color: "#636366", words: "developer diagnostics" },
   ],
@@ -344,6 +346,8 @@ function Pane({ pane, spaceId }: { pane: SettingsPane; spaceId: string | null })
       return hasWebKit() ? <EnginesPane /> : <GeneralPane />;
     case "liveFolders":
       return <LiveFoldersPane />;
+    case "plugins":
+      return <PluginsPane />;
     case "calendar":
       return capabilities.calendar ? <CalendarPane /> : <GeneralPane />;
     case "advanced":
