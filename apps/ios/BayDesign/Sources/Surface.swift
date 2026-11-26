@@ -17,7 +17,7 @@ struct SurfaceModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if #available(iOS 26, *) {
-      content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+      content.glassEffect(.regular.tint(themeTint), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
     } else {
       content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
@@ -27,9 +27,13 @@ struct SurfaceModifier: ViewModifier {
 struct CapsuleSurfaceModifier: ViewModifier {
   func body(content: Content) -> some View {
     if #available(iOS 26, *) {
-      content.glassEffect(.regular, in: Capsule())
+      content.glassEffect(.regular.tint(themeTint), in: Capsule())
     } else {
       content.background(.regularMaterial, in: Capsule())
     }
   }
 }
+
+/// Liquid Glass takes its light or dark from what's behind it, so over a white page in dark mode it went pale grey under
+/// white icons. Tinted with the theme's surface it keeps the theme on any page, still letting a little of the page through.
+private let themeTint = BayColor.surface.opacity(0.7)
