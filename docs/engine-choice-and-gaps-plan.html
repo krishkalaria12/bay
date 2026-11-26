@@ -1218,6 +1218,15 @@
                     disagrees; <code>checklist</code> prints the 32 lines done by hand, a step of <code>docs/releasing.md</code>.
                   </td>
                 </tr>
+                <tr>
+                  <td>G13</td>
+                  <td>
+                    Done in source, all three platforms: <code>nn_spare_warmup</code> (<code>//chrome/browser/bay/nn_spare.cc</code>, syntax checked) asks
+                    Chrome's spare renderer manager for one when the address bar, the command bar or a new tab opens, as Chrome's omnibox does; Bay's bars are
+                    the app's own, so nothing asked before. Chrome keeps one per profile and drops it under memory pressure; the call skips it on battery saver.
+                    At most every ten seconds a profile, never for a private window, and a kill switch can turn it off (<code>lib/sparePage.ts</code>, tested).
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1279,6 +1288,10 @@
             <li>
               G8's checklist lines are by hand: 32 features (file and color pickers, dialogs, pointer and keyboard lock, payments, Web Share, passkeys…) have no
               automated scenario yet, and the map follows the Mac's Chromium tree, so a Windows or Linux pin on another Chromium may need rows of its own.
+            </li>
+            <li>
+              G13 warms a renderer, not a whole page: the tab's web view and its WebContents are still made when the page opens. A pre-made page the next tab
+              adopts would need the engine's adoption to take one; it isn't measured yet either, and the engine needs a rebuild for the call.
             </li>
           </ul>
         </section>

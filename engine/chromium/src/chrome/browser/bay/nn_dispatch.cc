@@ -59,6 +59,7 @@ NN_ENGINE_CALL(nn_site_settings_get);
 NN_ENGINE_CALL(nn_site_settings_origins);
 NN_ENGINE_CALL(nn_site_settings_reset);
 NN_ENGINE_CALL(nn_site_settings_set);
+NN_ENGINE_CALL(nn_spare_warmup);
 NN_ENGINE_CALL(nn_tab_restore_load);
 NN_ENGINE_CALL(nn_tab_restore_tag);
 NN_ENGINE_CALL(nn_tab_restore_take);
@@ -137,6 +138,7 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_site_settings_origins", &nn_site_settings_origins},
       {"nn_site_settings_reset", &nn_site_settings_reset},
       {"nn_site_settings_set", &nn_site_settings_set},
+      {"nn_spare_warmup", &nn_spare_warmup},
       {"nn_tab_restore_load", &nn_tab_restore_load},
       {"nn_tab_restore_tag", &nn_tab_restore_tag},
       {"nn_tab_restore_take", &nn_tab_restore_take},
@@ -171,6 +173,7 @@ bool IsWebEngineCall(std::string_view name) {
       "nn_prefs_get",
       "nn_prefs_set",
       "nn_search_suggestions",
+      "nn_spare_warmup",
       "nn_tab_restore_load",
   };
   for (auto allowed : names) {

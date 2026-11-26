@@ -738,3 +738,4 @@ export const permissionEvents = { fire: (name, value) => permissionListeners.get
 
 export const resolvePermission = () => Promise.resolve();
 export const checkSwitches = () => Promise.resolve(null);
+export const warmSpareRenderer = () => Promise.resolve({ warmed: false, reason: "failed" });

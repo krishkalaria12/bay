@@ -38,4 +38,6 @@ export * from "./siteCookies";
 
 export * from "./switches";
 
+export * from "./sparePage";
+
 export * from "./enginePrefs";

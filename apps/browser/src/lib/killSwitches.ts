@@ -18,6 +18,7 @@ export const SWITCHABLE = {
   webkit: "WebKit pages",
   signInCarry: "Carrying sign-ins between engines",
   askPage: "Ask About This Page",
+  sparePage: "Starting the next page early",
 } as const;
 
 export type SwitchFeature = keyof typeof SWITCHABLE;
