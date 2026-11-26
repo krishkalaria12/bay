@@ -386,15 +386,19 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
         app.dispatch(Action.MoveBookmark(app.activeSpaceId, id, place.parentId, place.index))
     }
 
-    Row(Modifier.fillMaxSize().testTag("bookmarks-drawer")) {
+    // The screen behind is dimmed whole, status bar included, and the panel starts below the status bar, so the bar's
+    // row is all the screen's rather than half screen, half panel (as the sheets leave it).
+    Row(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).testTag("bookmarks-drawer")) {
         Box(
-            Modifier.weight(1f - DRAWER_WIDTH).fillMaxHeight().background(Color.Black.copy(alpha = 0.35f)).testTag("drawer-close")
+            Modifier.weight(1f - DRAWER_WIDTH).fillMaxHeight().testTag("drawer-close")
                 .clearAndSetSemantics { contentDescription = strings.t("drawer.close"); role = Role.Button }
                 .pressFeedback(onClick = browser::closeDrawer),
         )
         bay.design.BayTheme(dark = true) {
             Box(
                 Modifier.weight(DRAWER_WIDTH).fillMaxHeight()
+                    .statusBarsPadding()
+                    .clip(RoundedCornerShape(topStart = bay.design.Radius.panel))
                     .background(Color(0xFF101012))
                     .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(wash.copy(alpha = 0.45f), wash.copy(alpha = 0.12f), Color.Transparent)))
                     .pointerInput(app.activeSpaceId) {
@@ -413,9 +417,9 @@ fun BookmarksDrawer(browser: BrowserModel, strings: Strings) {
                             onHorizontalDrag = { _, amount -> swipe += amount },
                         )
                     }
-                    .statusBarsPadding().navigationBarsPadding(),
+                    .navigationBarsPadding(),
             ) {
-                Column(Modifier.fillMaxSize().padding(top = Space.sm), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                Column(Modifier.fillMaxSize().padding(top = Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
                     DrawerToggle(strings, archive) {
                         browser.drawerArchive = it
                         query = null

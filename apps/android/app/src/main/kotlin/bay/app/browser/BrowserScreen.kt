@@ -82,7 +82,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val topColor = if (pageShows) pageColor(browser.shownColor(browser.pageColors[app.activeTabId])) else null
     val footColor = if (pageShows) pageColor(browser.shownColor(browser.pageBottomColors[app.activeTabId] ?: browser.pageColors[app.activeTabId])) else null
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-    // The bookmarks drawer is always dark, and reaches up under the status bar: light icons over it in any theme.
+    // The bookmarks drawer dims the whole screen, status bar included: light icons over it in any theme.
     val drawer = browser.drawerOpen
     SystemBarIcons(
         lightTop = !drawer && (topColor?.let { it.luminance() > 0.5f } ?: !systemDark),
