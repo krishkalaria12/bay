@@ -42,6 +42,8 @@ public class WebKitModule: Module {
     AsyncFunction("deleteProfileData") { (profile: String, promise: Promise) in
       WebKitHub.shared.deleteProfileData(profile) { promise.resolve($0) }
     }.runOnQueue(.main)
+    // A page moving here from Chromium keeps its zoom (lib/pageEngines.ts openPageIn).
+    Function("setZoom") { (profile: String, host: String, zoom: Double) in WebKitHub.shared.setZoom(zoom, profile: profile, host: host) }
     AsyncFunction("info") { () -> [String: Any] in
       [
         "safariVersion": WebKitHub.safariVersion, "userAgentSuffix": "Version/\(WebKitHub.safariVersion) Safari/605.1.15",

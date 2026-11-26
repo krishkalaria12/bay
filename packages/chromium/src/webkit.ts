@@ -25,6 +25,8 @@ type WebKitNative = {
   clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;
   deleteProfileData(profile: string): Promise<boolean>;
   info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;
+  // Optional: native code from before engine choice has no per-host zoom setter.
+  setZoom?(profile: string, host: string, zoom: number): void;
 };
 
 // Optional: a build without the module (older native code) keeps every page in Chromium.
@@ -55,3 +57,6 @@ export const setWebKitSiteSetting = (profile: string, origin: string, type: Site
   WebKit?.setSitePermission(profile, origin, type, value) ?? Promise.resolve();
 
 export const webKitInfo = () => WebKit?.info() ?? Promise.resolve(null);
+
+/** A host's page zoom in WebKit's pages of a profile, as Chromium's setZoom: a page switching engines keeps its zoom. */
+export const setWebKitZoom = (profile: string, host: string, zoom: number) => WebKit?.setZoom?.(profile, host, zoom);

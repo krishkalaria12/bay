@@ -1,5 +1,6 @@
-import { addHistoryVisits, hasWebKit, type PageEngine } from "@bay/chromium";
+import { addHistoryVisits, hasWebKit, setWebKitZoom, setZoom, type PageEngine } from "@bay/chromium";
 import * as Effect from "effect/Effect";
+import * as v from "valibot";
 import { PageWorkService } from "../components/site/pageWorkService";
 import { pageOf, patchPage } from "../components/window/pageState";
 import { runDesktop } from "../effect/runtime";
@@ -18,8 +19,11 @@ import {
   tabEngine,
   tabPick,
   visitRecorder,
+  wantedEngine,
   type WebKitPage,
 } from "../store/engines";
+import type { Settings } from "../store/settings";
+import { webviews } from "./webviews";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
 import { wantsPage } from "./tabNavigation";
@@ -37,6 +41,14 @@ const siteMoves = new Map<string, number>();
 // A redirect chain across sites with different engines can't bounce a tab between them.
 const SITE_MOVE_SPACING_MS = 10_000;
 const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "");
+
+const siteHost = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+};
 
 /** A tab keeps the engine its first view chose. */
 export function persistEngine(tabId: string, engine: PageEngine) {
@@ -107,9 +119,136 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
   if (!now || pageUrl(now) !== url) return false;
 
   if (tabEngine(store(), tabId) === engine) return true;
-  store().updateTab(tabId, wantsPage(now) ? { engine, adoptId: undefined, navigation: navigationTo(now.url || url, true) } : { engine });
+
+  if (wantsPage(now)) await carryPage(now, engine);
+  const moved = store().tabs[tabId];
+
+  if (!moved || pageUrl(moved) !== url) return false;
+  store().updateTab(tabId, wantsPage(moved) ? { engine, adoptId: undefined, navigation: navigationTo(moved.url || url, true) } : { engine });
 
   return true;
+}
+
+// MARK: Keeping the page in view
+
+// How long a switching page's picture covers it at most, while the other engine loads it.
+const HOLD_MS = 3000;
+const SCROLL_TIMEOUT_MS = 3000;
+const restoring = new Map<string, { engine: PageEngine; x: number; y: number }>();
+const holdTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const ScrollSchema = v.tuple([v.number(), v.number()]);
+
+/** Before a page switches engines: its zoom goes to the other engine's zoom for its host, and (Settings › Engines ›
+ *  Keep the page in view) a picture of it stays on screen, its scroll position to be restored once the other engine
+ *  has loaded it (engineViewLoaded). */
+async function carryPage(t: Tab, engine: PageEngine) {
+  const host = siteHost(pageUrl(t));
+  const profile = engineProfile(t.spaceId);
+
+  if (host && Math.abs(t.zoom - 1) > 0.001) {
+    if (engine === "webkit") setWebKitZoom(profile, host, t.zoom);
+    else await setZoom(profile, host, t.zoom).catch(() => {});
+  }
+
+  const view = webviews.get(t.id);
+
+  if (!store().settings.engineSwitchKeepsPage || !view) return;
+  const [picture, scroll] = await Promise.all([view.capturePicture(1).catch(() => null), view.evaluate("[window.scrollX, window.scrollY]").catch(() => null)]);
+  const position = v.safeParse(ScrollSchema, scroll);
+
+  if (position.success && (position.output[0] > 0 || position.output[1] > 0)) restoring.set(t.id, { engine, x: position.output[0], y: position.output[1] });
+
+  if (!picture) return;
+  patchPage(t.id, { engineHold: `data:image/jpeg;base64,${picture.data}` });
+  clearTimeout(holdTimers.get(t.id));
+  holdTimers.set(
+    t.id,
+    setTimeout(() => releaseHold(t.id), HOLD_MS),
+  );
+}
+
+function releaseHold(tabId: string) {
+  clearTimeout(holdTimers.get(tabId));
+  holdTimers.delete(tabId);
+
+  if (pageOf(tabId).engineHold) patchPage(tabId, { engineHold: null });
+}
+
+/** A tab's view in `engine` reported its page: once it has loaded, the page goes back to where it was scrolled and its
+ *  picture goes. */
+export function engineViewLoaded(tabId: string, engine: PageEngine, isLoading: boolean) {
+  const scroll = restoring.get(tabId);
+
+  if (isLoading || (!scroll && !holdTimers.has(tabId))) return;
+
+  if (scroll && scroll.engine === engine) {
+    restoring.delete(tabId);
+    // Pages that build themselves after load aren't tall enough at once: try until they are, for a few seconds.
+    void webviews
+      .get(tabId)
+      ?.executeJavaScript(
+        `(() => { const x = ${scroll.x}, y = ${scroll.y}, until = Date.now() + ${SCROLL_TIMEOUT_MS}; const go = () => { window.scrollTo(x, y); if (Math.abs(window.scrollY - y) > 2 && Date.now() < until) setTimeout(go, 100); }; go(); })()`,
+      )
+      .catch(() => {});
+  }
+
+  // Two frames after the load, so the page has painted under the picture.
+  requestAnimationFrame(() => requestAnimationFrame(() => releaseHold(tabId)));
+}
+
+// MARK: Following settings
+
+// Awake tabs in the background whose engine a settings change moved: they move when next shown, so a big session
+// doesn't reload at once.
+const pendingMoves = new Map<string, PageEngine>();
+let unwatchSettings: (() => void) | null = null;
+
+const sameEnginePrefs = (a: Settings, b: Settings) =>
+  a.engineMode === b.engineMode && a.defaultEngine === b.defaultEngine && a.siteEngines === b.siteEngines && a.streamingInWebKit === b.streamingInWebKit;
+
+/** Open tabs follow a change to Settings › Engines (the mode, the default engine, a site rule, the streaming list):
+ *  a tab in the engine the old settings wanted moves to the one the new settings want. A tab another engine for a
+ *  reason of its own (an opener's engine, a pick) stays. A sleeping tab just takes the new engine; a shown one moves
+ *  now, asking first if it holds unsaved work; one awake in the background moves when shown. Once, on a Mac. */
+export function followEngineSettings() {
+  if (!hasWebKit() || unwatchSettings) return;
+  unwatchSettings = useBrowser.subscribe((s, prev) => {
+    if (s.tabs !== prev.tabs)
+      for (const map of [pendingMoves, restoring]) {
+        for (const id of map.keys()) if (!s.tabs[id]) map.delete(id);
+      }
+
+    if (s.settings === prev.settings || sameEnginePrefs(s.settings, prev.settings)) return;
+    const before = { tabs: s.tabs, settings: prev.settings };
+
+    for (const id of Object.keys(s.tabs)) {
+      const t = s.tabs[id]!;
+      const was = wantedEngine(before, id);
+      const wanted = wantedEngine(s, id);
+
+      if (was === wanted || !t.engine || t.engine !== was) continue;
+
+      if (!webviews.get(id)) store().updateTab(id, { engine: wanted, wakeAdoptId: undefined });
+      else if (shownTabs.has(id)) void openPageIn(id, wanted);
+      else pendingMoves.set(id, wanted);
+    }
+  });
+}
+
+const shownTabs = new Set<string>();
+
+/** A tab's page is on screen (or not): a move a settings change left for it happens now. */
+export function engineTabShown(tabId: string, shown: boolean) {
+  if (!shown) return void shownTabs.delete(tabId);
+  shownTabs.add(tabId);
+  const engine = pendingMoves.get(tabId);
+
+  if (!engine) return;
+  pendingMoves.delete(tabId);
+
+  // Only if nothing has moved it since.
+  if (wantedEngine(store(), tabId) === engine && tabEngine(store(), tabId) !== engine) void openPageIn(tabId, engine);
 }
 
 /** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can

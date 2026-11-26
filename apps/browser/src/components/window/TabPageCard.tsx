@@ -17,7 +17,7 @@ import { layout } from "../../lib/constants";
 import { startChromeTabs } from "../../lib/chromeTabs";
 import { handOff, wantsPage } from "../../lib/tabNavigation";
 import { noteDiscarded, noteGone, noteReady } from "../../lib/tabLifecycle";
-import { followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";
+import { engineTabShown, engineViewLoaded, followEngineSettings, followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";
 import { webviewRef, webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useBrowser as legacyBrowser } from "../../store/browserStore";
@@ -46,7 +46,8 @@ import {
   type ToolbarGeometry,
 } from "./geometry";
 import { dismissPermissions, startPermissionPrompts } from "../site/permissions";
-import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./pageState";
+import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./pageState";
+import { Image } from "expo-image";
 import { useTabDrag } from "../tabStrip/tabStripDrag";
 import { BlockedPage, OpenElsewhere, SadTab, StatusBubble } from "./PaneOverlays";
 import { PeekLayer, startPeeks } from "../linkOverlay/PeekLayer";
@@ -473,6 +474,7 @@ const TabPane = memo(function TabPane({
           {visible && !fullscreen && <ShareBar tabId={tabId} />}
           <Animated.View style={[{ flex: 1 }, slide]}>
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
+            {visible && !newTabShown && <EngineHold tabId={tabId} />}
             {/* No toolbar to carry the load (the address in the sidebar, or full screen): the page's top shows it. */}
             {visible && (!toolbar || fullscreen) && !devBar && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
             {visible &&
@@ -530,8 +532,24 @@ type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean };
 // loads the page again.
 function TabWebView(props: TabWebViewProps) {
   const engine = useBrowserRead((s) => tabEngine(s, props.tabId));
+  // Settings › Engines changes move a background tab's page when it's next shown (lib/pageEngines.ts).
+  useEffect(() => {
+    followEngineSettings();
+    engineTabShown(props.tabId, props.visible);
+
+    return () => engineTabShown(props.tabId, false);
+  }, [props.visible]);
 
   return <EngineWebView key={engine} engine={engine} {...props} />;
+}
+
+// The page as it was, over it while it reloads in the other engine (Settings › Engines › Keep the page in view).
+function EngineHold({ tabId }: { tabId: string }) {
+  const picture = usePage(tabId, (p) => p.engineHold);
+
+  if (!picture) return null;
+
+  return <Image pointerEvents="none" source={{ uri: picture }} contentFit="fill" style={StyleSheet.absoluteFill} />;
 }
 
 function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { engine: PageEngine }) {
@@ -625,6 +643,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
 
         if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
+        engineViewLoaded(tabId, engine, isLoading);
 
         if (lastPage.current !== null && pageKey(url) !== lastPage.current) {
           // Like Chrome's tab-modal dialogs, the open-app prompt stays within a site.
