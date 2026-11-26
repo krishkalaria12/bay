@@ -10,6 +10,7 @@
 #include "chrome/browser/bay/nn_cli_token_policy_internal.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
@@ -38,8 +39,14 @@ bool IsWebOrigin(const url::Origin& origin) {
          tuple.scheme() == url::kHttpsScheme;
 }
 
+bool IsPrivateContext(content::BrowserContext* context) {
+  return !context || context->IsOffTheRecord();
+}
+
+// Bay's own views, and every page of a private window: the bay command and
+// the agents it serves never reach either.
 bool IsPrivilegedContents(content::WebContents* contents) {
-  if (!contents) {
+  if (!contents || IsPrivateContext(contents->GetBrowserContext())) {
     return true;
   }
   BrowserWindowInterface* browser =
@@ -167,6 +174,9 @@ bool IsWebHost(content::DevToolsAgentHost* host) {
   const std::string type = host->GetType();
   if (type == content::DevToolsAgentHost::kTypeBrowser) {
     return true;
+  }
+  if (IsPrivateContext(host->GetBrowserContext())) {
+    return false;
   }
   const GURL url = host->GetURL();
   if (type == content::DevToolsAgentHost::kTypePage ||
