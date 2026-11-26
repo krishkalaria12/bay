@@ -466,7 +466,8 @@
                   </td>
                   <td>
                     The Release app built and linked; <code>bay-desktop</code> exports the same 363 symbols as the old adblock archive; Python build tests; the
-                    Linux sync, service and import checks run on macOS; Windows and Linux Rust targets type-check. No Windows or Linux engine build yet.
+                    Linux sync, service and import checks run on macOS; Windows and Linux Rust targets type-check. The Windows and Linux engine builds
+                    (<code>windows-build-41</code>, <code>linux-build-13</code>) link it.
                   </td>
                 </tr>
                 <tr>
@@ -479,7 +480,7 @@
                   <td>
                     19 Rust tests; the native blocker harness (9 checks); the Release app blocks an ad request on a new data folder and loads its engine from
                     the cache on the next launch (300 → 27 ms). The Windows and Linux sources pass a Chromium syntax check with the macOS tree's flags, not a
-                    Windows or Linux build.
+                    Windows or Linux build; both engine builds compile and link them.
                   </td>
                 </tr>
                 <tr>
@@ -491,7 +492,7 @@
                   </td>
                   <td>
                     10 Rust tests, including the golden vector byte for byte; the Swift package tests; the Linux crypto, service, import and native data checks,
-                    run on macOS through the Rust library. No Windows or Linux build yet.
+                    run on macOS through the Rust library. Both engine builds link it.
                   </td>
                 </tr>
                 <tr>
@@ -508,7 +509,7 @@
                   <td>
                     21 Rust tests against the shared fixtures, including Zen's SHA-384 primary password and a non-UTF-8 cookie value byte for byte; the 70 Swift
                     import tests; the Linux secret, service and import fixtures and the portable import and data suites, run on macOS. Windows checks pass in
-                    CI. Engine builds <code>windows-build-38</code> and <code>linux-build-12</code> started.
+                    CI. The engine builds <code>windows-build-41</code> and <code>linux-build-13</code> pass.
                   </td>
                 </tr>
                 <tr>
@@ -523,7 +524,8 @@
                   </td>
                   <td>
                     Each file passes a Chromium syntax check with the macOS tree's flags; <code>bay_core_unittests</code> (page security, the page menu,
-                    permission kinds) covers shared code; the macOS blocker harness (9 checks). Engine builds started; no prompt tried by hand.
+                    permission kinds) covers shared code; the macOS blocker harness (9 checks). Both engine builds pass, and
+                    <code>bay_core_unittests</code> passes on Windows; no prompt tried by hand.
                   </td>
                 </tr>
                 <tr>
@@ -546,9 +548,10 @@
           <h3 id="gaps">Known gaps</h3>
           <ul class="prose">
             <li>
-              <strong>Windows and Linux engine builds</strong> <code>windows-build-38</code> and <code>linux-build-12</code> are running. Then check the blocker
-              on both (first launch offline, a list turning on, a paused site, Settings › Privacy), an import with saved passwords, cards and cookies, and each
-              moved prompt by hand.
+              <strong>Nothing tried by hand on Windows or Linux.</strong> The engine builds <code>windows-build-41</code> and <code>linux-build-13</code> pass
+              and the Windows build opens a window. Still to check on both: the blocker (first launch offline, a list turning on, a paused site, Settings ›
+              Privacy), an import with saved passwords, cards and cookies, and each moved prompt. The Windows build's other unit tests fail as they did before
+              this work (the same list as <code>windows-build-35</code>).
             </li>
             <li>
               <strong>WebUI contract coverage.</strong> The WebUI host reports only its optional methods at run time and binds every required one, and its
@@ -563,8 +566,8 @@
               lists profiles Local State names, keeps profiles inside the data folder, and reads Arc's tabs from its spaces only.
             </li>
             <li>
-              <strong>Phase 4 models have no unit tests in <code>//bay/core:portable</code></strong
-              >: only an engine build could run them.
+              <strong>Most Phase 4 models have no unit tests.</strong> <code>bay_core_unittests</code> covers page security, the page menu and permission kinds,
+              and runs only in the Windows engine build.
             </li>
             <li>
               <strong>Sync vaults stay per host.</strong> Most of the listing is OS file access (iCloud's download state and <code>NSFileCoordinator</code>,
