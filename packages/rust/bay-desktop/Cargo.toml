@@ -15,4 +15,5 @@ crate-type = ["staticlib"]
 bay-adblock.workspace = true
 bay-import.workspace = true
 bay-lists.workspace = true
+bay-switches.workspace = true
 bay-sync.workspace = true
