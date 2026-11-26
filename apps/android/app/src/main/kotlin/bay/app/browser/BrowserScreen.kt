@@ -76,9 +76,8 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
     val behind = browser.panel != null || browser.covered
     // The picker's card stays above the sheet it opened (Inspect's details), so it's reachable there.
     val pickerOnTop = browser.picking != null && browser.panel != null
-    // Over a page the screen takes its look from the page: the status bar's strip is the colour at its top, and the bar
-    // is light or dark as the page is along its foot, where the page runs on under it. The system's icons stay readable
-    // on either.
+    // Over a page the status bar's strip is the colour at the page's top, and the system's icons stay readable on the
+    // page's colours. The bar follows the phone's theme, as the sheets it opens do.
     val pageShows = browser.hasPage && browser.overlay != Overlay.TABS && !browser.covered
     val topColor = if (pageShows) pageColor(browser.shownColor(browser.pageColors[app.activeTabId])) else null
     val footColor = if (pageShows) pageColor(browser.shownColor(browser.pageBottomColors[app.activeTabId] ?: browser.pageColors[app.activeTabId])) else null
@@ -96,8 +95,7 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             // Off a fullscreen site, with the toast and the player. Over a page scrolling down the bar shrinks instead (BarRow).
             val onPage = browser.overlay == Overlay.NONE
             val away by animateFloatAsState(if (onPage && browser.fullscreen) 1f else 0f, tween(200), label = "bar")
-            val barDark = if (onPage && footColor != null) footColor.luminance() <= 0.4f else systemDark
-            bay.design.BayTheme(dark = barDark) {
+            bay.design.BayTheme(dark = systemDark) {
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                         .graphicsLayer { translationY = away * size.height }
