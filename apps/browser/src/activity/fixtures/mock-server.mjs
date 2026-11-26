@@ -121,6 +121,14 @@ createServer(async (req, res) => {
     if (p.endsWith("/statuses")) return send(res, 200, { values: [{ state: "SUCCESSFUL", name: "Pipeline #12", url: "https://bitbucket.org/acme/pipelines/pipelines/12" }] });
   }
 
+  if (p.startsWith("/gitlab/")) {
+    if (req.headers["private-token"] !== "glpat-mock") return send(res, 401, {});
+    const mr = { id: 501, iid: 12, project_id: 42, title: "GitLab: cache the runner images", state: "opened", draft: false, updated_at: "2026-09-25T07:00:00Z", web_url: "https://gitlab.com/acme/runners/-/merge_requests/12", source_branch: "cache", target_branch: "main", user_notes_count: 3, has_conflicts: false, detailed_merge_status: "not_approved", author: { name: "Octo Dev" }, references: { full: "acme/runners!12" } };
+    if (p === "/gitlab/api/v4/user") return send(res, 200, { id: 9, username: "octo", name: "Octo Dev" });
+    if (p === "/gitlab/api/v4/merge_requests") return send(res, 200, url.searchParams.get("scope") === "created_by_me" ? [mr] : []);
+    if (p === "/gitlab/api/v4/projects/42/merge_requests/12") return send(res, 200, { ...mr, head_pipeline: { status: "running", web_url: "https://gitlab.com/acme/runners/-/pipelines/77" }, changes_count: "4" });
+  }
+
   if (p === "/google/auth") {
     const redirect = `${url.searchParams.get("redirect_uri")}?code=mock-google-code&state=${encodeURIComponent(url.searchParams.get("state"))}`;
     return send(res, 200, `<!doctype html><title>Sign in - Google Accounts</title><body style="font:15px -apple-system;padding:40px"><h2>Mock Google consent</h2><a id=allow href="${redirect}">Allow</a></body>`, "text/html");

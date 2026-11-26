@@ -29,6 +29,7 @@ import {
   type GithubResponse,
 } from "./github";
 import { DETAILS_PAGE } from "./constants";
+import { gitlabBase, gitlabGone, gitlabIds, mapGitlab, mergeGitlabLists, type GitlabMergeRequest } from "./gitlab";
 import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
@@ -147,6 +148,67 @@ const bitbucket: LiveSource = {
   },
 };
 
+// MARK: GitLab
+
+async function gitlabAccess() {
+  const base = gitlabBase(live().config.gitlabSite);
+
+  if (!base) throw new LiveError("notConfigured", "No GitLab site");
+  const headers = { "PRIVATE-TOKEN": await secret("gitlab") };
+
+  return { api: endpoints.gitlab(base), headers };
+}
+
+const gitlab: LiveSource = {
+  id: "gitlab",
+  name: "GitLab",
+  kind: "pullRequests",
+  site: "https://gitlab.com",
+  async fetch(folder) {
+    const { api, headers } = await gitlabAccess();
+    const me = live().accounts.gitlab;
+
+    if (!me) throw new LiveError("signedOut", "Not signed in");
+    const list = (query: string) => request<GitlabMergeRequest[]>(`${api}/merge_requests?state=opened&per_page=50&${query}`, { headers });
+
+    const [authored, review] = await Promise.all([
+      folder.filters.authored ? list("scope=created_by_me") : [],
+      folder.filters.reviewRequests ? list(`scope=all&reviewer_username=${encodeURIComponent(me.login)}`) : [],
+    ]);
+
+    // The list leaves out the head pipeline and the size: each merge request's own answer has them.
+    return Promise.all(
+      mergeGitlabLists(authored, review).map(async ({ mr, section }) => {
+        const full = await request<GitlabMergeRequest>(`${api}/projects/${mr.project_id}/merge_requests/${mr.iid}`, { headers }).catch(() => null);
+
+        return mapGitlab(full ?? mr, section);
+      }),
+    );
+  },
+  async resolveGone(items) {
+    const gone = items.flatMap((item) => {
+      const ids = item.source === "gitlab" ? gitlabIds(item.id) : null;
+
+      return ids ? [{ item, ids }] : [];
+    });
+
+    if (!gone.length) return {};
+    const { api, headers } = await gitlabAccess();
+    const out: Record<string, CompletionState> = {};
+
+    await Promise.all(
+      gone.map(async ({ item, ids }) => {
+        const mr = await request<GitlabMergeRequest>(`${api}/projects/${ids.project}/merge_requests/${ids.iid}`, { headers }).catch(() => null);
+        const state = mr && gitlabGone(mr, item.section);
+
+        if (state) out[item.id] = state;
+      }),
+    );
+
+    return out;
+  },
+};
+
 // MARK: Notion
 
 const notion: LiveSource = {
@@ -203,10 +265,10 @@ const gdrive: LiveSource = {
   },
 };
 
-export const SOURCES: Record<LiveSourceId, LiveSource> = { github, bitbucket, notion, confluence, gdrive };
+export const SOURCES: Record<LiveSourceId, LiveSource> = { github, gitlab, bitbucket, notion, confluence, gdrive };
 
 // Compatibility entry points share the Effect connection implementation.
-export { connectGithub, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
+export { connectGithub, connectGitlab, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
 
 export type { DeviceSignIn as DeviceFlow } from "./connections";
 

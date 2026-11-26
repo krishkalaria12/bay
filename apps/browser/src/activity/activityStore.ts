@@ -10,6 +10,8 @@ import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 export type LiveConfig = {
   githubClientId: string;
   bitbucketUser: string;
+  /** The GitLab site the token is for: gitlab.com, or a self-managed one. */
+  gitlabSite: string;
   confluenceSite: string;
   confluenceEmail: string;
   googleClientId: string;
@@ -52,7 +54,14 @@ export type LiveState = {
   dismissedAlerts: string[];
 };
 
-export const DEFAULT_CONFIG: LiveConfig = { githubClientId: "", bitbucketUser: "", confluenceSite: "", confluenceEmail: "", googleClientId: "" };
+export const DEFAULT_CONFIG: LiveConfig = {
+  githubClientId: "",
+  bitbucketUser: "",
+  gitlabSite: "",
+  confluenceSite: "",
+  confluenceEmail: "",
+  googleClientId: "",
+};
 
 export const DEFAULT_CALENDAR: CalendarSettings = {
   alertLead: "1",

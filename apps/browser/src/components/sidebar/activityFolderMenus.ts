@@ -33,7 +33,7 @@ export function runNewLiveFolder(windowId: string, choice: string): boolean {
 }
 
 const SOURCE_GROUPS: Record<"pullRequests" | "documents", LiveSourceId[]> = {
-  pullRequests: ["github", "bitbucket"],
+  pullRequests: ["github", "gitlab", "bitbucket"],
   documents: ["notion", "confluence", "gdrive"],
 };
 

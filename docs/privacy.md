@@ -36,6 +36,7 @@ file that only name sites: `packages/core/src/bangList.ts` (search shortcuts, op
 | accounts.google.com, oauth2.googleapis.com, www.googleapis.com | Connecting Google Calendar or Drive | Sign-in and the calendar and Drive data the live folders and meeting groups show |
 | api.github.com, github.com | Connecting a GitHub live folder | Pull requests and their previews |
 | api.notion.com | Connecting a Notion live folder | Its pages |
+| gitlab.com | Connecting a GitLab live folder (or the self-managed GitLab site you enter instead) | Its merge requests and their pipelines |
 | api.bitbucket.org, bitbucket.org | Connecting a Bitbucket live folder | Its pull requests |
 | chrome.cloudflare-dns.com, dns.quad9.net, dns.google, dns.mullvad.net, dns.nextdns.io | Choosing that provider in Settings › Privacy › Secure DNS | DNS over HTTPS |
 

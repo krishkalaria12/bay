@@ -18,7 +18,16 @@ import { connectCalendar, refreshCalendar, setCalendarHidden, useCalendar } from
 import { dismiss } from "../activity/meetingAlerts";
 import { groupCallInStore, joinMeetingInStore } from "../activity/meetingGroups";
 import { joinLink } from "../activity/meetings";
-import { connectBitbucket, connectConfluence, connectGithub, connectNotion, disconnect, startGithubDeviceFlow, type DeviceFlow } from "../activity/sources";
+import {
+  connectBitbucket,
+  connectConfluence,
+  connectGithub,
+  connectGitlab,
+  connectNotion,
+  disconnect,
+  startGithubDeviceFlow,
+  type DeviceFlow,
+} from "../activity/sources";
 import { connectGoogleDrive } from "../activity/googleAuth";
 import * as sync from "../sync/engine";
 
@@ -234,6 +243,7 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
       if (id === "github") await connectGithub(a[0]!);
       else if (id === "bitbucket") await connectBitbucket(a[0]!, a[1]!);
+      else if (id === "gitlab") await connectGitlab(a[0]!, a[1]!);
       else if (id === "notion") await connectNotion(a[0]!);
       else if (id === "confluence") await connectConfluence(a[0]!, a[1]!, a[2]!);
       break;

@@ -91,7 +91,7 @@ export function newLiveFolder(windowId: string, kind: LiveFolderKind, browser: B
 
   const sources: LiveSourceId[] =
     kind === "pullRequests"
-      ? (["github", "bitbucket"] as const).filter((id) => s.accounts[id])
+      ? (["github", "gitlab", "bitbucket"] as const).filter((id) => s.accounts[id])
       : (["notion", "confluence", "gdrive"] as const).filter((id) => s.accounts[id]);
 
   const id = createFolder(w.spaceId, kind, sources.length ? sources : undefined);

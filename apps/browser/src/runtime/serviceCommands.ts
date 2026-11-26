@@ -74,7 +74,7 @@ const nullable = (value: JsonInput) => (value === null ? null : text(value));
 const choice = <T extends string>(value: JsonInput, choices: readonly T[]): T =>
   v.is(v.string(), value) && choices.includes(value as T) ? (value as T) : invalidCommand("invalid service option");
 
-const source = (value: JsonInput) => choice(value, ["github", "bitbucket", "notion", "confluence", "gdrive"] as const);
+const source = (value: JsonInput) => choice(value, ["github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"] as const);
 
 const folderPatch = (value: JsonInput) =>
   commandFields(commandObject(value, ["name", "icon", "collapsed", "sources", "filters"]), {
@@ -92,9 +92,10 @@ const folderPatch = (value: JsonInput) =>
 const configText = (value: JsonInput) => commandText(value, 4096, true);
 
 const configPatch = (value: JsonInput) =>
-  commandFields(commandObject(value, ["githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"]), {
+  commandFields(commandObject(value, ["githubClientId", "bitbucketUser", "gitlabSite", "confluenceSite", "confluenceEmail", "googleClientId"]), {
     githubClientId: configText,
     bitbucketUser: configText,
+    gitlabSite: configText,
     confluenceSite: configText,
     confluenceEmail: configText,
     googleClientId: configText,
@@ -259,7 +260,7 @@ export function parseServiceCommand(value: JsonInput): ServiceCommand {
   const read = readers[action].map((reader, index) => reader(args[index]));
 
   if (action === "liveConnect") {
-    const sizes = { github: 1, bitbucket: 2, notion: 1, confluence: 3 } satisfies Record<string, number>;
+    const sizes = { github: 1, gitlab: 2, bitbucket: 2, notion: 1, confluence: 3 } satisfies Record<string, number>;
 
     // SAFETY: the checks above established this shape.
     if ((read[1] as string[]).length !== (lookup(sizes, read[0] as string) ?? 0)) return invalidCommand("invalid account arguments");
