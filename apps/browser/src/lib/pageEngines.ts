@@ -98,12 +98,16 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
   return true;
 }
 
-/** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can play it. */
+/** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can
+ *  play it, unless the person chose Chromium mode or to stay. */
 export async function playInWebKit(tabId: string) {
   const s = store();
   const t = s.tabs[tabId];
 
-  if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit") return;
+  if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit" || s.settings.engineMode === "chromium") return;
+
+  // Settings › Engines › When protected video won't play.
+  if (s.settings.protectedVideoFallback === "stay") return;
   const site = siteOf(t.url);
 
   if (!site || declinedSites.has(site) || movingTabs.has(tabId)) return;

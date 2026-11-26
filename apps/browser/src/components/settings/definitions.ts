@@ -188,13 +188,50 @@ export const SETTINGS = {
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },
   liveFolders: { id: "liveFolders.liveFolders", pane: "liveFolders", title: "Live folders", words: "refresh" },
+  engineMode: {
+    id: "engines.engineMode",
+    pane: "engines",
+    title: "Pages open in",
+    words: "engine webkit chromium safari automatic browser engine rendering",
+  },
+  defaultEngine: { id: "engines.defaultEngine", pane: "engines", title: "Default engine", words: "engine webkit chromium safari" },
+  siteEngines: { id: "engines.siteEngines", pane: "engines", title: "Site rules", words: "engine webkit chromium safari website per site always open" },
   protectedMedia: {
     id: "engines.protectedMedia",
     pane: "engines",
     title: "Streaming sites",
-    words: "engine webkit chromium safari netflix disney prime video hulu max spotify apple tv drm protected media fairplay widevine",
+    words: "engine webkit safari netflix disney prime video hulu max spotify apple tv drm protected media fairplay widevine",
   },
-  engineSignIns: { id: "engines.engineSignIns", pane: "engines", title: "Separate sign-ins", words: "cookies site data sign in logged out webkit" },
+  protectedVideoFallback: {
+    id: "engines.protectedVideoFallback",
+    pane: "engines",
+    title: "When protected video won't play",
+    words: "drm widevine fairplay video move webkit ask",
+  },
+  engineSwitchKeepsPage: {
+    id: "engines.engineSwitchKeepsPage",
+    pane: "engines",
+    title: "Keep the page in view while the other engine loads",
+    words: "switch engine reopen scroll zoom",
+  },
+  engineSignIns: {
+    id: "engines.engineSignIns",
+    pane: "engines",
+    title: "Bring sign-ins along",
+    words: "cookies site data sign in logged out webkit carry copy",
+  },
+  webKitFraudWarnings: {
+    id: "engines.webKitFraudWarnings",
+    pane: "engines",
+    title: "Warn about deceptive sites",
+    words: "safe browsing phishing malware fraud webkit",
+  },
+  engineDifferences: {
+    id: "engines.engineDifferences",
+    pane: "engines",
+    title: "How engines differ",
+    words: "extensions ad blocking devtools passkeys sign ins webkit chromium",
+  },
 } as const satisfies Record<string, { id: string; pane: SettingsPane; title: string; topTabsTitle?: string; words?: string }>;
 
 export type SettingEntry = (typeof SETTINGS)[keyof typeof SETTINGS];

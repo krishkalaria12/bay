@@ -52,10 +52,10 @@ const SECTIONS: Item[][] = [
       ? [
           {
             id: "engines" as const,
-            title: "Protected Media",
+            title: "Engines",
             icon: "safari.fill",
             color: "#0A84FF",
-            words: "engine webkit chromium safari netflix streaming drm protected video",
+            words: "engine webkit chromium safari netflix streaming drm protected video protected media",
           },
         ]
       : []),
