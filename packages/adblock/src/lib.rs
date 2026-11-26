@@ -9,10 +9,9 @@
 mod adapt;
 mod blocker;
 mod body;
-mod ffi;
+/// The C ABI the engines call; public so a crate that links this one (the mobile core, plan D16) exports it too.
+pub mod ffi;
 mod html;
-#[cfg(target_os = "android")]
-mod jni_bridge;
 mod modifiers;
 mod preprocess;
 mod removeparam;

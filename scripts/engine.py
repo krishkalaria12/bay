@@ -196,7 +196,7 @@ def sha256(path):
 
 def source_digest(platform="win"):
     digest = hashlib.sha256(platform.encode() + b"\0")
-    for directory in ("engine/patches", "engine/chromium", "engine/nncore",
+    for directory in ("engine/patches", "engine/shared", "engine/chromium", "engine/nncore",
                       "packages/adblock/include", "packages/adblock/src",
                       "packages/import/windows", "packages/import/linux",
                       "packages/sync/windows", "packages/sync/linux"):

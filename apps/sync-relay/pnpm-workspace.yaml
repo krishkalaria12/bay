@@ -1,0 +1,9 @@
+# A standalone workspace: the repo root's excludes it (pnpm-workspace.yaml there), so the Worker's toolchain never
+# reaches the desktop app's node_modules.
+packages:
+  - .
+
+# Wrangler bundles with esbuild and runs Workers locally and in tests with workerd: both fetch their binary at install.
+allowBuilds:
+  esbuild: true
+  workerd: true

@@ -10,7 +10,7 @@ import {
   readNativeSnapshot,
   validateNativeHostInfo,
 } from "./nativeBridge.ts";
-import { nativeDocumentSave, nativeDocumentWrite, nativeRandomUUID, nativeSnapshot } from "./native.web.ts";
+import { nativeDocumentSave, nativeDocumentWrite, nativeRandomBytes, nativeRandomUUID, nativeSnapshot } from "./native.web.ts";
 import { nativeContracts } from "./nativeContracts.ts";
 
 const hostInfo = (overrides) => ({
@@ -361,6 +361,9 @@ test("Linux sync names use host snapshots and device IDs stay fresh without IPC"
     const first = nativeRandomUUID(fallback);
     assert.match(first, /^[a-f0-9-]{36}$/);
     assert.notEqual(nativeRandomUUID(fallback), first);
+    const bytes = nativeRandomBytes(32, fallback);
+    assert.equal(Buffer.from(bytes, "base64").length, 32);
+    assert.notEqual(nativeRandomBytes(32, fallback), bytes);
     assert.equal(invoked, 0);
   } finally {
     subscription.remove();

@@ -170,11 +170,18 @@ void Vault::createChain() const {
   safeDirectory(chainPath());
 }
 std::string Vault::write(const std::string &scope, const Bytes &payload) const {
+  auto id = base32(randomBytes(16));
+  write(scope, id, payload);
+  return id;
+}
+void Vault::write(const std::string &scope, const std::string &id,
+                  const Bytes &payload) const {
+  if (!isTag(id))
+    throw Failure("name", "Not a sync file's name");
   createChain();
   auto path = scopePath(scope);
   fs::create_directories(path);
   safeDirectory(path);
-  auto id = base32(randomBytes(16));
   auto sealed = keys_.seal(payload, keys_.scopeTag(scope), id);
   auto temporary = path / ("." + id + ".tmp");
   auto destination = path / (id + ".nns");
@@ -190,7 +197,7 @@ std::string Vault::write(const std::string &scope, const Bytes &payload) const {
               written == sealed.size() && FlushFileBuffers(file);
     CloseHandle(file);
     if (!ok || !MoveFileExW(temporary.c_str(), destination.c_str(),
-                            MOVEFILE_WRITE_THROUGH))
+                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
       throw Failure("write", "Could not commit sync data");
 #else
     {
@@ -207,7 +214,6 @@ std::string Vault::write(const std::string &scope, const Bytes &payload) const {
     fs::remove(temporary, ignored);
     throw;
   }
-  return id;
 }
 Listing Vault::read(const std::string &scope,
                     const std::set<std::string> &known) const {

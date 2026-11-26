@@ -1,5 +1,5 @@
 // Effect belongs to the desktop app and the bay CLI: only apps/browser and apps/cli depend on it, the shared packages
-// and the other apps stay free of it, the app's pure store code never reaches it, and no Node, Bun or DOM platform
+// and the other apps stay free of it, the desktop's pure state code never reaches it, and no Node, Bun or DOM platform
 // adapter goes into Hermes. The CLI is a standalone Bun tool with its own lockfile: its Bun platform layer is its own.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -34,6 +34,12 @@ function sources(dir) {
 
 const effectImports = (file) => [...readFileSync(file, "utf8").matchAll(IMPORT)].map((m) => m[1]);
 
+const DESKTOP = path.join("apps", "browser");
+const CLI = path.join("apps", "cli");
+
+/** The apps that run on Effect. */
+const EFFECT_APPS = new Set([DESKTOP, CLI]);
+
 const workspaces = () =>
   ["apps", "packages"].flatMap((group) =>
     readdirSync(path.join(ROOT, group))
@@ -42,6 +48,8 @@ const workspaces = () =>
   );
 
 test("only the desktop app and the CLI depend on effect", () => {
+  const pins = {};
+
   for (const dir of workspaces()) {
     let manifest;
 
@@ -55,19 +63,24 @@ test("only the desktop app and the CLI depend on effect", () => {
     const named = Object.keys(deps).filter((name) => name === "effect" || name.startsWith("@effect/"));
     const rel = path.relative(ROOT, dir);
 
-    if (rel === path.join("apps", "browser")) assert.deepEqual(named, ["effect"], "the desktop app pins effect alone");
-    else if (rel === path.join("apps", "cli")) {
+    if (named.includes("effect")) pins[rel] = deps.effect;
+
+    if (rel === DESKTOP) assert.deepEqual(named, ["effect"], "the desktop app pins effect alone");
+    else if (rel === CLI) {
       assert.deepEqual(named.sort(), ["@effect/platform-bun", "effect"], "the CLI pins effect and its Bun platform");
       assert.equal(deps.effect, deps["@effect/platform-bun"], "the CLI's effect and its Bun platform are one release");
     } else assert.deepEqual(named, [], `${rel} stays free of effect`);
   }
+
+  // The repo never runs two Effect releases: a version moves in one commit for every app.
+  assert.equal(new Set(Object.values(pins)).size, 1, `every app pins one effect release: ${JSON.stringify(pins)}`);
 });
 
 test("no shared package or other app imports effect", () => {
   for (const dir of workspaces()) {
     const rel = path.relative(ROOT, dir);
 
-    if (rel === path.join("apps", "browser") || rel === path.join("apps", "cli")) continue;
+    if (EFFECT_APPS.has(rel)) continue;
 
     for (const file of sources(dir)) assert.deepEqual(effectImports(file), [], path.relative(ROOT, file));
   }

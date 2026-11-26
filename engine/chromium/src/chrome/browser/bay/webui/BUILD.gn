@@ -127,6 +127,7 @@ source_set("impl") {
     ":window_placement",
     "resources:build_ts",
     "//bay/core:portable",
+    "//bay/filter",
     "//chrome/app:command_ids",
     "//chrome/browser:browser_process",
     "//chrome/browser/bay",

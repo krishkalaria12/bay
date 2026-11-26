@@ -191,7 +191,7 @@ engine/
   patches/            The patch series (series, series.py) and the source-build steps
 packages/
   chromium/           JS API over the engine (tab strips, autofill, extensions, content blocker)
-  adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app (and the mobile app)
+  adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app (and the phone apps' Rust core)
   desktop/            Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
   shaders/            Metal animations + grained OKLab window backdrop
   import/             Import from other browsers (bookmarks, history, passwords, Arc spaces)
@@ -209,6 +209,7 @@ Chrome's framework (the first build takes a few hours):
 
 ```bash
 engine/chromium/apply.sh
+engine/shared/apply.sh
 engine/nncore/apply.sh
 autoninja -C out/Release_GN_arm64 chrome_framework
 ```
@@ -284,7 +285,7 @@ Dusk: the sun going down over the bay, three lines of water under it. The source
 task manager. `macos/Bay-macOS/Assets.xcassets/AppIcon.appiconset/` is the macOS set: the small cut
 for the 16 and 32 slots, the full mark from 128 up. The alternates sit beside it as
 `AppIcon<Name>.imageset`, which the app and the Dock tile plug-in read by name. The same script
-writes the website's icons and the mobile app's (full-bleed for iOS, inside the safe zone for
+writes the website's icons and the phone apps' (full-bleed for iOS, inside the safe zone for
 Android's adaptive icon, one of each per alternate).
 
 Rebuild every PNG from the sources:

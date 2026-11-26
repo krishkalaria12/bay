@@ -1,0 +1,861 @@
+package bay.app.browser
+
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import android.net.Uri
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import bay.app.AppModel
+import bay.app.Strings
+import bay.core.PageErrorId
+import bay.core.PageErrorKind
+import bay.core.WallpaperId
+import bay.core.describePageError
+import bay.core.pageErrorId
+import bay.design.BayIcon
+import bay.design.BayIconView
+import bay.design.BayText
+import bay.design.Haptics
+import bay.design.IconSize
+import bay.design.PillButton
+import bay.design.Radius
+import bay.design.Space
+import bay.design.TextTone
+import bay.design.TextVariant
+import bay.design.Theme
+import bay.design.baySurface
+import bay.design.pressFeedback
+import bay.design.style
+import bay.design.wallpaperPalette
+import bay.engine.NavigationState
+
+/**
+ * The browser's pages: the loaded tabs' views in one container, the one showing on top. The views are kept across
+ * recompositions, so a page isn't reloaded when the screen around it changes. A page view is made only once the
+ * container is in a window, as on iOS. Under the tab switcher the host is transparent and no page is active.
+ */
+@Composable
+fun PagesHost(browser: BrowserModel, reachable: Boolean, modifier: Modifier = Modifier, visible: Boolean = reachable) {
+    // `visible`: the page shows (not under the switcher or Settings); `reachable`: TalkBack can reach it (no sheet over it).
+    val shown = visible
+    val mounted = browser.mounted
+    // Every space's: a page kept loaded from the space switched away from still gets hidden here.
+    val tabs = browser.app.allTabs
+    AndroidView(
+        factory = { context -> FrameLayout(context) },
+        modifier = modifier,
+        update = { container ->
+            container.importantForAccessibility =
+                if (reachable) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            fun sync() {
+                for ((index, id) in mounted.withIndex()) {
+                    val tab = tabs.firstOrNull { it.id == id } ?: continue
+                    val view = browser.view(tab)
+                    if (view.parent !== container) {
+                        (view.parent as? ViewGroup)?.removeView(view)
+                        container.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    }
+                    // Hidden pages stay visible to Android, only transparent: the tab on screen takes the window's one
+                    // compositor (isActive), and a page made INVISIBLE stops drawing for good.
+                    val showing = shown && index == 0
+                    view.alpha = if (showing) 1f else 0f
+                    view.isActive = showing
+                    if (showing) view.bringToFront()
+                }
+            }
+            if (container.isAttachedToWindow) sync() else container.post { sync() }
+        },
+    )
+}
+
+private val tints = listOf(0xFFDCE8F5, 0xFFF3E2D6, 0xFFE3EEDF, 0xFFECE1F2, 0xFFF5E9C9, 0xFFDDEEEE).map { Color(it) }
+
+/**
+ * The site's saved icon on a tile, else a monogram on a tint picked from its name. Icons are local files, so this
+ * never loads anything from the network. It always sits beside the site's name, so TalkBack skips it.
+ */
+@Composable
+fun SiteIcon(app: AppModel, url: String, size: Dp = 28.dp, bare: Boolean = false, color: Color? = null) {
+    val host = hostOf(url)
+    val file = app.favicons[host]
+    val pixels = with(LocalDensity.current) { size.roundToPx() }
+    // Decoded off the main thread: reading the file in the frame that drew the switcher's cards held it up. The tile
+    // shows empty for the frame that takes, not the monogram, which would flash.
+    val icon = rememberFileImageResult(file, pixels)
+    val bitmap = icon.image
+    val corner = RoundedCornerShape(size * 0.28f)
+    val modifier = Modifier.clearAndSetSemantics {}
+    val tile = if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color.White
+    if (bitmap == null && !icon.failed) {
+        Box(if (bare) modifier.size(size) else modifier.size(size).background(tile, corner))
+        return
+    }
+    if (bitmap != null) {
+        if (bare) {
+            Image(bitmap, null, modifier.size(size).clip(RoundedCornerShape(size * 0.14f)))
+        } else {
+            Box(
+                modifier.size(size).background(tile, corner)
+                    .border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(bitmap, null, Modifier.size(size * 0.72f).clip(RoundedCornerShape(size * 0.14f)))
+            }
+        }
+        return
+    }
+    val letter = host.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•"
+    // The monogram follows the tile's size, not the phone's font size, which would push it out of a small tile.
+    val density = LocalDensity.current
+    if (bare) {
+        Box(modifier.size(size), contentAlignment = Alignment.Center) {
+            Monogram(letter, with(density) { (size * 0.6f).toSp() }, color ?: Theme.colors.foreground)
+        }
+    } else {
+        var hash = 0
+        host.forEach { hash = hash * 31 + it.code }
+        Box(
+            modifier.size(size).background(tints[Math.floorMod(hash, tints.size)], corner).border(1.dp, Color.Black.copy(alpha = 0.05f), corner),
+            contentAlignment = Alignment.Center,
+        ) {
+            Monogram(letter, with(density) { (size * 0.46f).toSp() }, Color(0xFF26313D))
+        }
+    }
+}
+
+@Composable
+private fun Monogram(letter: String, fontSize: TextUnit, color: Color) {
+    BasicText(letter, style = TextVariant.FOOTNOTE.style(FontWeight.SemiBold, color).copy(fontSize = fontSize, lineHeight = fontSize), maxLines = 1, softWrap = false)
+}
+
+/** Bay's start-page wallpaper: a wash under a fine dot grid, the theme's background for Plain. */
+@Composable
+fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
+    val palette = wallpaperPalette(id.name.lowercase(), isSystemInDarkTheme())
+    if (palette == null) {
+        Box(modifier.fillMaxSize().background(Theme.colors.background).semantics { invisibleToUser() })
+        return
+    }
+    Canvas(modifier.fillMaxSize().semantics { invisibleToUser() }) {
+        drawRect(Brush.verticalGradient(0f to palette.top, 0.55f to palette.middle, 1f to palette.bottom))
+        val step = 14.dp.toPx()
+        val dot = palette.dot.copy(alpha = palette.dotOpacity)
+        var y = step / 2
+        while (y < size.height) {
+            var x = step / 2
+            while (x < size.width) {
+                drawCircle(dot, 0.9.dp.toPx(), Offset(x, y))
+                x += step
+            }
+            y += step
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+/**
+ * One of the bar's round buttons: flat and translucent with a hairline edge, as Arc Search draws them. `bare`, it's a
+ * segment of the bar's capsule instead, which draws the surface itself.
+ */
+@Composable
+private fun BarButton(
+    id: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 52.dp, bare: Boolean = false,
+    onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit,
+) {
+    val colors = Theme.colors
+    val button = modifier
+        .testTag(id)
+        .let { if (onLongClick == null) it.pressFeedback(onClick = onClick) else it.combinedClickable(onLongClick = onLongClick, onClick = onClick) }
+        // The label says what the button does; the icon or text inside it isn't read again.
+        .clearAndSetSemantics { contentDescription = label; role = Role.Button }
+        .size(width, BAR_HEIGHT)
+    Box(
+        if (bare) button else button.clip(CircleShape).background(colors.flatSurface, CircleShape).border(1.dp, colors.hairline, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+/** The floating bar: archive, search and settings over the start page; tabs, the site and more over a page. */
+@Composable
+fun BrowserBar(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier = Modifier, onChecks: () -> Unit = {}) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    // Dragging the bar sideways slides the page to the tab before (right) or after (left) under the finger, as Arc
+    // Search's bar does (TabSwipe); dragging it up opens the tab switcher.
+    val swipeable = browser.hasPage && browser.overlay == Overlay.NONE
+    val swipe = browser.tabSwipe
+    val dragged = if (!swipeable) modifier else modifier.pointerInput(app.activeTabId, app.tabs.size) {
+        val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+        var up = 0f
+        var sideways = 0f
+        // Which way the drag went once it moved far enough to tell: sideways slides tabs, up opens the switcher.
+        var axis = 0
+        val slop = viewConfiguration.touchSlop
+        detectDragGestures(
+            onDragStart = {
+                up = 0f
+                sideways = 0f
+                axis = 0
+                tracker.resetTracking()
+            },
+            onDragEnd = {
+                if (axis == 2 && up > 110.dp.toPx()) {
+                    Haptics.press(view)
+                    app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BAR))
+                    browser.showTabs()
+                } else if (axis == 1) {
+                    swipe.release(tracker.calculateVelocity().x)
+                }
+            },
+            onDragCancel = { if (axis == 1) swipe.cancel() },
+            onDrag = { change, amount ->
+                tracker.addPosition(change.uptimeMillis, change.position)
+                up -= amount.y
+                sideways += amount.x
+                if (axis == 0 && (kotlin.math.abs(sideways) > slop || up > slop)) axis = if (up > kotlin.math.abs(sideways)) 2 else 1
+                if (axis == 1) swipe.drag(amount.x)
+            },
+        )
+    }
+    val slide = remember { SpaceSlide() }
+    BarRow(browser, strings, onSettings, dragged, onChecks, slide)
+}
+
+/** Holding Tabs: whether the row of spaces is up, what's under the finger, and where things are. */
+private class SpaceSlide {
+    var sliding by mutableStateOf(false)
+    var target by mutableStateOf<SlideTarget?>(null)
+    /** The row's place in the window, and the Tabs button's, to turn the finger's drag into a place in the row. */
+    var row = androidx.compose.ui.geometry.Rect.Zero
+    var button = Offset.Zero
+    var moved = 0f
+}
+
+/** What a held Tabs button's finger is over in the row of spaces. */
+private sealed interface SlideTarget {
+    data class Space(val index: Int) : SlideTarget
+    data object Add : SlideTarget
+}
+
+private val SLIDE_CELL = 52.dp
+
+/** An opaque surface with the bar buttons' edge, so the page never shows through the spaces. */
+@Composable
+private fun Modifier.slideSurface(shape: androidx.compose.ui.graphics.Shape): Modifier {
+    val colors = Theme.colors
+    return shadow(12.dp, shape, clip = false).clip(shape).background(colors.background, shape).border(1.dp, colors.hairline, shape)
+}
+
+/**
+ * The column of spaces above a held Tabs button: each space's glyph in a cell of its own, the nearest space at the
+ * bottom, the one under the finger larger with its name over the column, the space showing on a soft circle, and a
+ * new space on top.
+ */
+@Composable
+private fun SpaceSlideColumn(browser: BrowserModel, strings: Strings, slide: SpaceSlide, modifier: Modifier) {
+    val spaces = browser.app.spaces
+    val targetName = when (val target = slide.target) {
+        is SlideTarget.Space -> spaces.getOrNull(target.index)?.let { spaceName(it, strings) }
+        SlideTarget.Add -> strings.t("tabsMenu.newSpace")
+        null -> null
+    }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+    // What's under the finger, named over the column: outside its rounded surface, which would cut it off.
+    if (targetName != null) {
+        BayText(
+            targetName, Modifier.slideSurface(CircleShape).padding(horizontal = Space.sm, vertical = 2.dp),
+            variant = TextVariant.FOOTNOTE, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
+        )
+    }
+    Column(
+        Modifier.width(SLIDE_CELL).slideSurface(RoundedCornerShape(SLIDE_CELL / 2)).padding(vertical = Space.sm)
+            .onGloballyPositioned { slide.row = it.boundsInWindow() }
+            .clearAndSetSemantics {}.testTag("space-slide-row"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(SLIDE_CELL), contentAlignment = Alignment.Center) {
+            val adding = slide.target == SlideTarget.Add
+            if (adding) Box(Modifier.size(44.dp).background(Theme.colors.fill, CircleShape))
+            BayIconView(BayIcon.ADD, size = if (adding) IconSize.control else IconSize.row, color = if (adding) Theme.colors.foreground else Theme.colors.muted)
+        }
+        spaces.withIndex().reversed().forEach { (index, space) ->
+            val hovered = slide.target == SlideTarget.Space(index)
+            val name = spaceName(space, strings)
+            Box(Modifier.size(SLIDE_CELL), contentAlignment = Alignment.Center) {
+                // The space showing sits on a soft circle; the one under the finger on a wash of its own colour.
+                if (hovered) Box(Modifier.size(44.dp).background(spaceColor(space.color).copy(alpha = 0.22f), CircleShape))
+                else if (space.id == browser.app.activeSpaceId) Box(Modifier.size(40.dp).background(Theme.colors.fill, CircleShape))
+                SpaceGlyph(space, name, if (hovered) 30.dp else 24.dp)
+            }
+        }
+    }
+    }
+}
+
+/** The cell under a point in the window, counting up from the column's bottom; nothing far to either side of it. */
+private fun SpaceSlide.targetAt(point: Offset, count: Int, cell: Float, inset: Float): SlideTarget? {
+    if (row.height <= 0f || point.x < row.left - cell || point.x > row.right + cell * 2) return null
+    val index = kotlin.math.floor((row.bottom - inset - point.y) / cell).toInt()
+    return when {
+        index == count -> SlideTarget.Add
+        index in 0 until count -> SlideTarget.Space(index)
+        else -> null
+    }
+}
+
+@Composable
+private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, modifier: Modifier, onChecks: () -> Unit, slide: SpaceSlide) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        if (browser.overlay == Overlay.TABS) {
+            BarButton("bar-archive", strings.t("bar.archive"), { browser.openDrawer(archive = true) }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
+            SpacesCapsule(browser, strings)
+            BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
+        } else {
+            BarCapsule(browser, strings, onSettings, onChecks, slide)
+        }
+    }
+}
+
+/**
+ * Tabs, with the open tabs' count. Holding it brings the column of spaces, the one showing on a soft grey circle: slide
+ * to one and lift to switch, or to + for a new one. Lifting without sliding puts it away. TalkBack, which can't hold and
+ * slide, gets each other space and a new one as actions.
+ */
+@Composable
+private fun TabsButton(browser: BrowserModel, strings: Strings, slide: SpaceSlide) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    val density = LocalDensity.current
+    // As the tab view counts them: a pinned site's open tab shows in Pinned, not among the tabs.
+    val count = browser.switcherTabs.size
+    val spaced = app.spaces.size > 1
+    val space = browser.activeSpace
+    val tabsLabel = if (count > 1) strings.t("bar.tabsOpen", mapOf("count" to "$count")) else strings.t("bar.tabs")
+    val label = if (spaced && space != null) strings.t("bar.inSpace", mapOf("label" to tabsLabel, "space" to spaceName(space, strings))) else tabsLabel
+    // When a hold last let go, so the click its lift also makes doesn't open the tab view.
+    var holdEnded by remember { mutableStateOf(0L) }
+    val cell = with(density) { SLIDE_CELL.toPx() }
+    val inset = with(density) { Space.sm.toPx() }
+    val hold = Modifier.pointerInput(app.spaces.size) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = {
+                slide.moved = 0f
+                slide.sliding = true
+                Haptics.tick(view)
+            },
+            onDrag = { change, amount ->
+                slide.moved += amount.getDistance()
+                val next = if (slide.moved > 12.dp.toPx()) slide.targetAt(slide.button + change.position, app.spaces.size, cell, inset) else null
+                if (next != slide.target) {
+                    slide.target = next
+                    if (next != null) Haptics.tick(view)
+                }
+            },
+            onDragEnd = {
+                // The row goes first: switching space can take this button away before the gesture ends.
+                val target = slide.target
+                slide.sliding = false
+                slide.target = null
+                holdEnded = android.os.SystemClock.uptimeMillis()
+                when (target) {
+                    is SlideTarget.Space -> browser.switchSpace(app.spaces[target.index].id)
+                    SlideTarget.Add -> browser.newSpace()
+                    null -> Unit
+                }
+            },
+            onDragCancel = {
+                slide.sliding = false
+                slide.target = null
+                holdEnded = android.os.SystemClock.uptimeMillis()
+            },
+        )
+    }
+    // A gesture cut short by the button leaving (the bar changing under it) never ends; the row goes with the button.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            slide.sliding = false
+            slide.target = null
+        }
+    }
+    Box(
+        Modifier.onGloballyPositioned { slide.button = it.positionInWindow() }.then(hold)
+            .semantics {
+                customActions = app.spaces.filter { it.id != app.activeSpaceId }.map { other ->
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabs.switchSpace", mapOf("name" to spaceName(other, strings)))) {
+                        browser.switchSpace(other.id)
+                        true
+                    }
+                } + androidx.compose.ui.semantics.CustomAccessibilityAction(strings.t("tabsMenu.newSpace")) {
+                    browser.newSpace()
+                    true
+                }
+            },
+    ) {
+        BarButton(
+            "bar-tabs", label,
+            {
+                // A hold's lift comes as a click too.
+                if (!slide.sliding && android.os.SystemClock.uptimeMillis() - holdEnded > 400) browser.showTabs()
+            },
+            width = SEGMENT_WIDTH, bare = true,
+        ) { TabStack(browser, count) }
+        // The spaces stand in a column above the button while it's held, the nearest first. It's placed without taking
+        // room in the bar.
+        if (slide.sliding) {
+            SpaceSlideColumn(
+                browser, strings, slide,
+                Modifier.align(Alignment.BottomCenter).layout { measurable, _ ->
+                    val column = measurable.measure(androidx.compose.ui.unit.Constraints())
+                    layout(0, 0) { column.place(-column.width / 2, -column.height - (52.dp + Space.md).roundToPx()) }
+                },
+            )
+        }
+    }
+}
+
+private val BAR_HEIGHT = 52.dp
+private val SEGMENT_WIDTH = 64.dp
+private val SEARCH_WIDTH = 136.dp
+private val CAPSULE_WIDTH = SEGMENT_WIDTH * 2 + SEARCH_WIDTH + 2.dp
+private val MINI_WIDTH = 88.dp
+private val MINI_HEIGHT = 36.dp
+
+/**
+ * Over a page or the start page, the bar is one capsule: tabs, search, and more (settings on the start page), split by
+ * thin lines. As a page scrolls down it shrinks, in step with the page (BrowserModel.barGone), to a small pill with the
+ * site's icon and the tabs' count, and grows back out of it as the page scrolls up or the pill is tapped.
+ */
+@Composable
+private fun BarCapsule(browser: BrowserModel, strings: Strings, onSettings: () -> Unit, onChecks: () -> Unit, slide: SpaceSlide) {
+    val app = browser.app
+    val colors = Theme.colors
+    val onPage = browser.hasPage && browser.overlay == Overlay.NONE
+    // 0 the whole bar, 1 the small pill: following the page as it scrolls (BrowserModel.barGone), on a spring so the bar
+    // called back grows out of the pill rather than jumping. It moves every frame of a scroll, so it's read only where
+    // layout and drawing need it, never in composition: a frame of scrolling re-measures and redraws the capsule
+    // without rebuilding it. Composition runs again only when something comes or goes.
+    val shrink = remember { Animatable(0f) }
+    LaunchedEffect(onPage) {
+        snapshotFlow { if (onPage) browser.barGone else 0f }.collectLatest { target ->
+            shrink.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f))
+        }
+    }
+    val showsWhole by remember { derivedStateOf { shrink.value < 0.99f } }
+    val showsMini by remember { derivedStateOf { shrink.value > 0.01f } }
+    val tapsBack by remember { derivedStateOf { shrink.value > 0.5f } }
+    val accent = colors.accent
+    val surface = colors.surface
+    val edge = colors.foreground
+    Box(
+        Modifier
+            .layout { measurable, _ ->
+                val whole = 1f - shrink.value
+                val width = androidx.compose.ui.unit.lerp(MINI_WIDTH, CAPSULE_WIDTH, whole).roundToPx()
+                val height = androidx.compose.ui.unit.lerp(MINI_HEIGHT, BAR_HEIGHT, whole).roundToPx()
+                val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(width, height))
+                layout(width, height) { placeable.place(0, 0) }
+            }
+            // The ring round the bar the bar tip means, a little outside it.
+            .then(if (browser.tip == bay.core.TipId.BAR) Modifier.drawWithContent { drawContent(); ring(accent) } else Modifier)
+            // A shadow only: it would clip to the capsule by default, cutting off the spaces a held Tabs raises above it.
+            .shadow(14.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f))
+            // The bar, and the pill it shrinks to, in the page's light or dark: one thing getting smaller, quiet over what's
+            // being read. A faint edge, a touch firmer on the small pill, holds the shape on a page of the same colour.
+            .drawBehind {
+                val value = shrink.value
+                val corner = androidx.compose.ui.geometry.CornerRadius(size.height / 2)
+                drawRoundRect(surface, cornerRadius = corner)
+                val stroke = 0.5.dp.toPx()
+                drawRoundRect(
+                    edge.copy(alpha = 0.08f + 0.06f * value),
+                    topLeft = Offset(stroke / 2, stroke / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = corner,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+            }
+            // Clipped only while it changes size, so the spaces a held Tabs raises above it are never cut off.
+            .graphicsLayer {
+                clip = shrink.value > 0.001f
+                shape = CircleShape
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (showsWhole) {
+            Row(
+                Modifier.requiredWidth(CAPSULE_WIDTH).graphicsLayer { alpha = ((0.65f - shrink.value) / 0.65f).coerceIn(0f, 1f) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TabsButton(browser, strings, slide)
+                SegmentLine()
+                SearchSegment(browser, strings)
+                SegmentLine()
+                if (browser.hasPage) {
+                    val blockingRing = browser.tip == bay.core.TipId.BLOCKING
+                    BarButton(
+                        "bar-more", strings.t("bar.more"),
+                        {
+                            app.dispatch(bay.core.Action.TipSeen(bay.core.TipId.BLOCKING))
+                            browser.panel = Panel.PAGE
+                        },
+                        // The ring round the button the blocking tip means.
+                        if (blockingRing) Modifier.drawWithContent { drawContent(); ring(accent, inset = 6.dp.toPx()) } else Modifier,
+                        width = SEGMENT_WIDTH, bare = true,
+                    ) { BayIconView(BayIcon.MORE, size = IconSize.control) }
+                } else {
+                    BarButton("bar-settings", strings.t("bar.settings"), onSettings, width = SEGMENT_WIDTH, bare = true, onLongClick = onChecks) {
+                        BayIconView(BayIcon.SETTINGS, size = IconSize.control)
+                    }
+                }
+            }
+        }
+        if (showsMini) {
+            Row(
+                Modifier.graphicsLayer { alpha = ((shrink.value - 0.35f) / 0.65f).coerceIn(0f, 1f) },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The site's icon and the tabs' count: which page this is, and the way to the others.
+                browser.activeTab?.url?.takeIf { browser.hasPage }?.let { url -> SiteIcon(app, url, 18.dp) }
+                TabStack(browser, browser.switcherTabs.size, small = true)
+            }
+        }
+        // Drawn over the capsule and sized by it, so loading never widens it; the pill keeps it too.
+        LoadProgress(if (browser.hasPage) browser.activeNavigation else NavigationState.EMPTY, app.activeTabId, Modifier.matchParentSize())
+        // Shrunk, the whole pill is one button that brings the bar back.
+        if (tapsBack) {
+            Box(
+                Modifier.matchParentSize().testTag("bar-mini")
+                    .clearAndSetSemantics { contentDescription = strings.t("bar.showBar"); role = Role.Button }
+                    .pressFeedback(onClick = browser::bringBarBack),
+            )
+        }
+    }
+}
+
+/** The thin line between the capsule's segments. */
+@Composable
+private fun SegmentLine() {
+    Box(Modifier.size(1.dp, 22.dp).background(Theme.colors.foreground.copy(alpha = 0.12f)))
+}
+
+/** The accent ring a tip draws round what it means, `inset` inside the bounds (a little outside them by default). */
+private fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.ring(color: Color, inset: Float = -4.dp.toPx()) {
+    val stroke = 2.5.dp.toPx()
+    drawRoundRect(
+        color,
+        topLeft = Offset(inset, inset),
+        size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius((size.height - inset * 2) / 2),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+    )
+}
+
+/** The capsule's search: just the magnifying glass, with a mark beside it on a page that isn't sent encrypted. */
+@Composable
+private fun SearchSegment(browser: BrowserModel, strings: Strings) {
+    val url = browser.activeTab?.url.orEmpty()
+    val site = if (browser.hasPage) hostOf(url).removePrefix("www.") else ""
+    val insecure = url.startsWith("http:")
+    val label = if (site.isEmpty()) strings.t("bar.search") else strings.t(if (insecure) "bar.searchOrEnterInsecure" else "bar.searchOrEnter", mapOf("site" to site))
+    BarButton("bar-search", label, browser::searchFromBar, width = SEARCH_WIDTH, bare = true) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
+            if (insecure && site.isNotEmpty()) BayIconView(BayIcon.ERROR, size = 16.dp, color = Theme.colors.danger)
+            BayIconView(BayIcon.SEARCH, size = IconSize.control)
+        }
+    }
+}
+
+/** The tab view's spaces between archive and new tab: each space's emoji or a dot in its colour, the one showing larger. */
+@Composable
+private fun SpacesCapsule(browser: BrowserModel, strings: Strings) {
+    val app = browser.app
+    val view = androidx.compose.ui.platform.LocalView.current
+    val colors = Theme.colors
+    // Hold the spaces, then slide: the space under the finger shows, with a tick as each one comes and its name above.
+    var scrubLabel by remember { mutableStateOf<String?>(null) }
+    var scrubbed by remember { mutableStateOf(-1) }
+    Box {
+    scrubLabel?.let { label ->
+        BayText(
+            label,
+            Modifier.align(Alignment.TopCenter).offset(y = (-44).dp).baySurface(RoundedCornerShape(Radius.control))
+                .padding(horizontal = Space.md, vertical = Space.xs).testTag("bar-space-scrub-label"),
+            variant = TextVariant.FOOTNOTE,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+    Row(
+        Modifier.height(52.dp).clip(CircleShape).background(colors.flatSurface, CircleShape).border(1.dp, colors.hairline, CircleShape)
+            .padding(horizontal = Space.sm).testTag("bar-spaces"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.widthIn(max = SPACE_TARGET * 5).horizontalScroll(rememberScrollState()).pointerInput(app.spaces.size) {
+                fun reach(x: Float) {
+                    val index = (x / size.width * app.spaces.size).toInt().coerceIn(0, app.spaces.size - 1)
+                    if (index == scrubbed) return
+                    scrubbed = index
+                    Haptics.press(view)
+                    scrubLabel = spaceName(app.spaces[index], strings)
+                    browser.selectSpace(app.spaces[index].id)
+                }
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { if (app.spaces.size > 1) reach(it.x) },
+                    onDrag = { change, _ -> if (app.spaces.size > 1) reach(change.position.x) },
+                    onDragEnd = { scrubbed = -1; scrubLabel = null },
+                    onDragCancel = { scrubbed = -1; scrubLabel = null },
+                )
+            },
+        ) {
+            app.spaces.forEach { space ->
+                val active = space.id == app.activeSpaceId
+                // A tab card dragged over it lights it in its colour: let go, and the tab moves here.
+                val dropping = browser.cardDropSpace == space.id
+                val grow by androidx.compose.animation.core.animateFloatAsState(if (dropping) 1.25f else 1f, label = "drop")
+                Box(
+                    Modifier.size(SPACE_TARGET).testTag("bar-space-${space.id}")
+                        .onGloballyPositioned { browser.spaceDropFrames[space.id] = it.boundsInWindow() }
+                        .graphicsLayer { scaleX = grow; scaleY = grow }
+                        .background(if (dropping) spaceColor(space.color).copy(alpha = 0.35f) else Color.Transparent, CircleShape)
+                        .pressFeedback {
+                            Haptics.press(view)
+                            browser.selectSpace(space.id)
+                        }
+                        .clearAndSetSemantics { contentDescription = strings.t("tabs.switchSpace", mapOf("name" to spaceName(space, strings))); role = Role.Button; selected = active },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val icon = space.icon
+                    if (icon != null) {
+                        BayText(icon, Modifier.alpha(if (active) 1f else 0.55f), variant = if (active) TextVariant.TITLE else TextVariant.CALLOUT)
+                    } else {
+                        Box(Modifier.size(if (active) 16.dp else 9.dp).background(spaceColor(space.color), if (active) RoundedCornerShape(4.dp) else CircleShape))
+                    }
+                }
+            }
+        }
+        Box(
+            Modifier.size(SPACE_TARGET).testTag("bar-new-space")
+                .pressFeedback { browser.newSpace() }
+                .clearAndSetSemantics { contentDescription = strings.t("tabsMenu.newSpace"); role = Role.Button },
+            contentAlignment = Alignment.Center,
+        ) { BayIconView(BayIcon.ADD, size = IconSize.small, color = colors.muted) }
+    }
+    }
+}
+
+/** Each space's button in the capsule, and the new-space button: Android's smallest touch target. */
+private val SPACE_TARGET = 48.dp
+
+/**
+ * The Tabs button's face, as Arc Search draws it: the tabs used last before the one showing, as two small fanned cards
+ * of their pictures, with the open tabs' count on a badge at their corner from two tabs on. The button's label says the
+ * count, so TalkBack skips it.
+ */
+@Composable
+private fun TabStack(browser: BrowserModel, count: Int, small: Boolean = false) {
+    val colors = Theme.colors
+    val scale = if (small) 0.8f else 1f
+    val cards = browser.recentTabs
+    Box(Modifier.size(26.dp * scale, 30.dp * scale).testTag("tab-count").clearAndSetSemantics {}) {
+        cards.reversed().forEachIndexed { index, tab ->
+            val front = index == cards.size - 1
+            TabStackCard(
+                browser.app, tab, 19.dp * scale, 26.dp * scale,
+                Modifier.offset(x = (if (front && cards.size > 1) 7.dp else 3.5.dp) * scale, y = (if (front) 1.dp else 3.dp) * scale)
+                    .graphicsLayer { rotationZ = if (cards.size == 1) 0f else if (front) 6f else -9f },
+            )
+        }
+        if (count > 1) {
+            Box(
+                // On one line however many there are: the badge grows past the cards rather than wrapping inside them.
+                Modifier.align(Alignment.TopEnd).offset(x = 12.dp * scale, y = (-8).dp * scale)
+                    .wrapContentSize(Alignment.TopEnd, unbounded = true)
+                    .sizeIn(minWidth = 16.dp * scale, minHeight = 16.dp * scale)
+                    .border(1.5.dp, colors.surface, CircleShape)
+                    .background(colors.foreground, CircleShape).padding(horizontal = 4.dp * scale),
+                contentAlignment = Alignment.Center,
+            ) {
+                BayText(if (count > 99) "99+" else "$count", variant = TextVariant.MICRO, weight = FontWeight.Bold, color = colors.background, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** One of the Tabs button's small cards: the tab's picture from its top, else its site's icon on the card. */
+@Composable
+private fun TabStackCard(app: bay.app.AppModel, tab: bay.core.BrowserTab, width: Dp, height: Dp, modifier: Modifier) {
+    val colors = Theme.colors
+    val shape = RoundedCornerShape(4.dp)
+    val picture = rememberFileImage(tab.snapshot, with(LocalDensity.current) { (width * 3).roundToPx() })
+    Box(
+        modifier.size(width, height).shadow(2.dp, shape).background(colors.surface, shape)
+            .border(1.dp, colors.foreground.copy(alpha = 0.18f), shape).clip(shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            picture != null -> Image(picture, null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            tab.url.isNotEmpty() -> SiteIcon(app, tab.url, width * 0.55f)
+        }
+    }
+}
+
+/**
+ * The thin line along the capsule's edge: it fills as the page loads, runs to the end and fades once the page is there.
+ * Chromium's progress starts over on each redirect and frame, and a load can stop and start again within a moment, so
+ * within one load the line only moves forward, and a stop only finishes it once it has lasted. A tab switch starts a
+ * line of its own.
+ */
+@Composable
+fun LoadProgress(state: NavigationState, tabId: String, modifier: Modifier = Modifier) {
+    val fill = remember(tabId) { Animatable(if (state.isLoading) maxOf(state.progress.toFloat(), LOAD_START) else 0f) }
+    val shown = remember(tabId) { Animatable(if (state.isLoading) 1f else 0f) }
+    val loading = state.isLoading
+    LaunchedEffect(tabId, loading) {
+        if (loading) {
+            // A new load after the last one finished starts the line again; one that resumes keeps its place.
+            if (shown.value == 0f || fill.value >= 1f) fill.snapTo(0f)
+            shown.animateTo(1f, tween(120))
+        } else if (shown.value > 0f) {
+            delay(LOAD_SETTLE_MS)
+            fill.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+            shown.animateTo(0f, tween(220))
+            fill.snapTo(0f)
+        }
+    }
+    val progress = state.progress.toFloat()
+    LaunchedEffect(tabId, loading, progress) {
+        if (!loading) return@LaunchedEffect
+        val target = maxOf(progress, LOAD_START, fill.value)
+        // Eases towards what's loaded, then creeps on while the page is still busy, never quite reaching the end.
+        fill.animateTo(target, tween(320, easing = LinearOutSlowInEasing))
+        while (true) {
+            delay(400)
+            fill.animateTo(fill.value + (LOAD_CREEP_LIMIT - fill.value).coerceAtLeast(0f) * 0.08f, tween(380, easing = LinearEasing))
+        }
+    }
+    if (shown.value == 0f) return
+    Box(modifier.graphicsLayer { alpha = shown.value }.testTag("page-progress").clearAndSetSemantics {}) {
+        Box(Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 2.dp).fillMaxWidth().height(2.dp)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth().graphicsLayer {
+                scaleX = fill.value.coerceIn(0f, 1f)
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+            }.background(Theme.colors.accent, RoundedCornerShape(1.dp)))
+        }
+    }
+}
+
+/** Where the line starts, so a load shows at once. */
+private const val LOAD_START = 0.08f
+
+/** How far the line creeps on its own while the page says nothing new. */
+private const val LOAD_CREEP_LIMIT = 0.92f
+
+/** How long a stopped load waits before finishing the line, for the load that often follows at once (a redirect). */
+private const val LOAD_SETTLE_MS = 160L
+
+/** A page that failed to load, in plain words, and a way to try again. */
+@Composable
+fun PageError(message: String, strings: Strings, retry: () -> Unit, modifier: Modifier = Modifier) {
+    val id = pageErrorId(message)
+    val key = when (id) {
+        PageErrorId.OFFLINE -> "offline"
+        PageErrorId.NOT_FOUND -> "notFound"
+        PageErrorId.TIMEOUT -> "timeout"
+        PageErrorId.REFUSED -> "refused"
+        PageErrorId.CERTIFICATE -> "certificate"
+        PageErrorId.UNKNOWN -> "unknown"
+    }
+    Column(
+        modifier.fillMaxSize().background(Theme.colors.background).padding(Space.xl).testTag("page-error"),
+        verticalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        BayIconView(if (describePageError(message).kind == PageErrorKind.OFFLINE) BayIcon.OFFLINE else BayIcon.ERROR, size = 40.dp, color = Theme.colors.muted)
+        BayText(strings.t("pageError.$key.title"), variant = TextVariant.HEADLINE, textAlign = TextAlign.Center)
+        BayText(if (id == PageErrorId.UNKNOWN) message else strings.t("pageError.$key.detail"), variant = TextVariant.CALLOUT, tone = TextTone.MUTED, textAlign = TextAlign.Center)
+        PillButton(strings.t("pageError.tryAgain"), Modifier.testTag("page-error-retry"), onClick = retry)
+    }
+}
