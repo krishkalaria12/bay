@@ -33,8 +33,10 @@ import { gitlabBase, gitlabGone, gitlabIds, mapGitlab, mergeGitlabLists, type Gi
 import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
-import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
+import { LiveError, type BuiltInSourceId, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId, type PluginSourceId } from "./types";
 import { retireConnections } from "./connections";
+import { pluginSourceItems } from "../lib/plugins/pluginService";
+import { parsePluginSourceId, usePlugins } from "../lib/plugins/pluginStore";
 
 export type LiveSource = {
   id: LiveSourceId;
@@ -265,7 +267,62 @@ const gdrive: LiveSource = {
   },
 };
 
-export const SOURCES: Record<LiveSourceId, LiveSource> = { github, gitlab, bitbucket, notion, confluence, gdrive };
+export const SOURCES: Record<BuiltInSourceId, LiveSource> = { github, gitlab, bitbucket, notion, confluence, gdrive };
+
+// MARK: Plugins
+
+const pluginSources = new Map<string, LiveSource>();
+
+/** A plugin's live source (lib/plugins): its plugin answers, through its sandbox, in the coordinator. */
+function pluginSource(id: PluginSourceId): LiveSource {
+  const parsed = parsePluginSourceId(id);
+  const plugin = parsed && usePlugins.getState().plugins.find((p) => p.manifest.id === parsed.pluginId);
+  const spec = plugin?.manifest.contributes.liveSources.find((s) => s.id === parsed?.sourceId);
+  const name = spec ? `${spec.name} (${plugin!.manifest.name})` : "A plugin";
+  const known = pluginSources.get(id);
+
+  if (known?.name === name) return known;
+
+  const source: LiveSource = {
+    id,
+    name,
+    kind: spec?.kind ?? "documents",
+    site: spec?.site ?? "",
+    async fetch() {
+      if (!parsed || !plugin?.enabled) throw new LiveError("notConfigured", "The plugin is off");
+
+      const items = await pluginSourceItems(parsed.pluginId, parsed.sourceId).catch((error: Error) => {
+        throw new LiveError("other", error.message);
+      });
+
+      return items.map((item) => ({
+        id: `${id}:${item.id}`,
+        source: id,
+        url: item.url,
+        title: item.title,
+        subtitle: item.subtitle ?? "",
+        icon: item.icon ?? null,
+        updatedAt: item.updatedAt ?? Date.now(),
+      }));
+    },
+  };
+
+  pluginSources.set(id, source);
+
+  return source;
+}
+
+const isBuiltIn = (id: LiveSourceId): id is BuiltInSourceId => Object.hasOwn(SOURCES, id);
+
+/** A live folder's source: one of Bay's own, or a plugin's. */
+export const liveSource = (id: LiveSourceId): LiveSource => (isBuiltIn(id) ? SOURCES[id] : pluginSource(id));
+
+/** The live sources the turned-on plugins add for a kind of folder. */
+export const pluginSourcesFor = (kind: LiveFolder["kind"]): PluginSourceId[] =>
+  usePlugins
+    .getState()
+    .plugins.filter((p) => p.enabled)
+    .flatMap((p) => p.manifest.contributes.liveSources.filter((s) => s.kind === kind).map((s): PluginSourceId => `plugin:${p.manifest.id}:${s.id}`));
 
 // Compatibility entry points share the Effect connection implementation.
 export { connectGithub, connectGitlab, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";

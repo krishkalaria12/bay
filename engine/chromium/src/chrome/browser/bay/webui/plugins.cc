@@ -13,19 +13,40 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "chrome/browser/bay/webui/bay_plugins.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
+#include "net/base/load_flags.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 
 namespace bay {
 namespace {
 
 constexpr char kRootName[] = "BayPlugins";
+constexpr size_t kMaxFetchBody = 5 * 1024 * 1024;
+
+constexpr net::NetworkTrafficAnnotationTag kFetchAnnotation =
+    net::DefineNetworkTrafficAnnotation("bay_plugin_fetch", R"(
+      semantics { sender: "Bay plugins"
+        description: "A request a plugin the user added and turned on makes, to one of the hosts its manifest lists."
+        trigger: "A plugin's script calls bay.fetch."
+        data: "Whatever the plugin sends; never the user's cookies." destination: OTHER }
+      policy { cookies_allowed: NO setting: "Settings > Plugins turns each plugin on or off."
+        policy_exception_justification: "Only plugins the user added run." })");
 
 std::string Success(base::Value value = {}) {
   return base::WriteJson(base::DictValue().Set("value", std::move(value)))
@@ -94,11 +115,96 @@ scoped_refptr<base::RefCountedMemory> ReadFile(const std::string& request) {
   return base::MakeRefCounted<base::RefCountedString>(std::move(bytes));
 }
 
+// bay.fetch for a plugin (the app has checked its manifest's hosts): no
+// cookies, no cache, the network stack's own headers kept. Answers {status,
+// url, headers, body}.
+void Fetch(const base::ListValue& args, Plugins::Response response) {
+  const GURL url = args.size() == 4 && args[0].is_string()
+                       ? GURL(args[0].GetString())
+                       : GURL();
+  const std::string* method =
+      args.size() == 4 ? args[1].GetIfString() : nullptr;
+  const base::DictValue* headers =
+      args.size() == 4 ? args[2].GetIfDict() : nullptr;
+  const std::string* body = args.size() == 4 ? args[3].GetIfString() : nullptr;
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || !method ||
+      !net::HttpUtil::IsValidHeaderName(*method) || !headers ||
+      (!body && !args[3].is_none()) || (body && body->size() > kMaxFetchBody)) {
+    std::move(response).Run(Failure("invalid_args", "Invalid plugin request"));
+    return;
+  }
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url;
+  request->method = *method;
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->load_flags = net::LOAD_DISABLE_CACHE;
+  std::string content_type = "text/plain;charset=UTF-8";
+  for (const auto [name, value] : *headers) {
+    if (!value.is_string() || !net::HttpUtil::IsValidHeaderName(name) ||
+        !net::HttpUtil::IsValidHeaderValue(value.GetString()) ||
+        !net::HttpUtil::IsSafeHeader(name, value.GetString()))
+      continue;
+    if (base::EqualsCaseInsensitiveASCII(name, "content-type"))
+      content_type = value.GetString();
+    else
+      request->headers.SetHeader(name, value.GetString());
+  }
+  auto loader =
+      network::SimpleURLLoader::Create(std::move(request), kFetchAnnotation);
+  if (body)
+    loader->AttachStringForUpload(*body, content_type);
+  loader->SetAllowHttpErrorResults(true);
+  loader->SetTimeoutDuration(base::Seconds(60));
+  auto* raw = loader.get();
+  raw->DownloadToString(
+      g_browser_process->system_network_context_manager()
+          ->GetSharedURLLoaderFactory()
+          .get(),
+      base::BindOnce(
+          [](std::unique_ptr<network::SimpleURLLoader> loader, GURL requested,
+             Plugins::Response response, std::optional<std::string> text) {
+            const auto* head = loader->ResponseInfo();
+            if (!head || !head->headers) {
+              std::move(response).Run(Failure(
+                  "network", "The plugin's request didn't reach its host"));
+              return;
+            }
+            if (!text) {
+              std::move(response).Run(
+                  Failure("too_big", "The answer is bigger than 5 MB"));
+              return;
+            }
+            base::DictValue headers;
+            size_t iterator = 0;
+            std::string name;
+            std::string value;
+            while (
+                head->headers->EnumerateHeaderLines(&iterator, &name, &value)) {
+              const std::string key = base::ToLowerASCII(name);
+              if (key == "set-cookie" || key == "set-cookie2")
+                continue;
+              const std::string* earlier = headers.FindString(key);
+              headers.Set(key, earlier ? *earlier + ", " + value : value);
+            }
+            const GURL final_url = loader->GetFinalURL().is_valid()
+                                       ? loader->GetFinalURL()
+                                       : requested;
+            std::move(response).Run(Success(
+                base::Value(base::DictValue()
+                                .Set("status", head->headers->response_code())
+                                .Set("url", final_url.spec())
+                                .Set("headers", std::move(headers))
+                                .Set("body", std::move(*text)))));
+          },
+          std::move(loader), url, std::move(response)),
+      kMaxFetchBody);
+}
+
 }  // namespace
 
 base::ListValue Plugins::SupportedMethods() {
   base::ListValue methods;
-  for (const char* method : {"list", "install", "remove", "reveal"})
+  for (const char* method : {"list", "install", "remove", "reveal", "fetch"})
     methods.Append(std::string("BayPlugins.") + method);
   return methods;
 }
@@ -125,6 +231,10 @@ bool Plugins::Dispatch(const std::string& module,
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, disk, base::BindOnce([] { return base::Value(List()); }),
         base::BindOnce(answer, std::move(response)));
+    return true;
+  }
+  if (method == "fetch") {
+    Fetch(args, std::move(response));
     return true;
   }
   if (method == "remove") {

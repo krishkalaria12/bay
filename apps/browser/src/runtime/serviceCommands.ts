@@ -4,7 +4,7 @@ import * as v from "valibot";
 import type * as sync from "../sync/engine";
 import { commandBoolean as boolean, commandFields, commandIds, commandNullableText, commandObject, commandText, invalidCommand } from "./commandValidation";
 import type { CalendarSettings, LiveConfig } from "../activity/activityStore";
-import type { LiveFolder, LiveFolderKind, LiveSourceId } from "../activity/types";
+import type { BuiltInSourceId, LiveFolder, LiveFolderKind, LiveSourceId } from "../activity/types";
 import type { CaptureSource, LibraryMedia } from "../components/library/model";
 import type { ClearRequest } from "../components/settings/workflows";
 
@@ -19,8 +19,8 @@ export type ServiceArgs = {
   liveConfig: [Partial<LiveConfig>];
   liveRefresh: [string];
   liveOpen: [string, string, string, boolean];
-  liveConnect: [LiveSourceId, string[]];
-  liveDisconnect: [LiveSourceId];
+  liveConnect: [BuiltInSourceId, string[]];
+  liveDisconnect: [BuiltInSourceId];
   githubStart: [string];
   githubWait: [string];
   githubCancel: [string];
@@ -59,6 +59,15 @@ export type ServiceArgs = {
   sharedFolderBind: [string, string, string];
   sharedFolderUnbind: [string];
   sharedFolderSync: [string];
+  // Plugins (lib/plugins/pluginService.ts): the folder read again, a plugin on or off or removed, its settings, and
+  // a command or a sidebar view's item run in it.
+  pluginsReload: [];
+  pluginEnable: [string, boolean];
+  pluginRemove: [string];
+  pluginSetting: [string, string, string | boolean];
+  pluginSecret: [string, string, string | null];
+  pluginRun: [string, string, string, "commandBar" | "toolbar" | "tabMenu", string | null];
+  pluginSelect: [string, string, string];
 };
 
 export type ServiceAction = keyof ServiceArgs;
@@ -79,12 +88,27 @@ const choice = <T extends string>(value: JsonInput, choices: readonly T[]): T =>
 
 const source = (value: JsonInput) => choice(value, ["github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"] as const);
 
+// A live folder's source: one of Bay's own, or a plugin's (`plugin:<plugin>:<source>`).
+// SAFETY: the pattern is LiveSourceId's plugin form.
+const liveSource = (value: JsonInput): LiveSourceId =>
+  v.is(v.pipe(v.string(), v.regex(/^plugin:[a-z][a-z0-9-]{1,39}:[A-Za-z][\w-]{0,39}$/)), value) ? (value as LiveSourceId) : source(value);
+
+const pluginId = (value: JsonInput) => {
+  const id = commandText(value, 40);
+
+  return /^[a-z][a-z0-9-]{1,39}$/.test(id) ? id : invalidCommand("invalid plugin id");
+};
+
+const pluginItem = (value: JsonInput) => commandText(value, 100);
+
+const settingInput = (value: JsonInput) => (v.is(v.boolean(), value) ? value : commandText(value, 4096, true));
+
 const folderPatch = (value: JsonInput) =>
   commandFields(commandObject(value, ["name", "icon", "collapsed", "sources", "filters"]), {
     name: (name) => commandText(name, 1024, true),
     icon: commandNullableText,
     collapsed: boolean,
-    sources: (sources) => commandIds(sources).map(source),
+    sources: (sources) => commandIds(sources).map(liveSource),
     filters: (filters) => {
       const o = commandObject(filters, ["authored", "reviewRequests"]);
 
@@ -247,6 +271,13 @@ const readers: Record<ServiceAction, ((value: JsonInput) => ServiceValue)[]> = {
   sharedFolderBind: [text, text, (name) => commandText(name, 1024)],
   sharedFolderUnbind: [text],
   sharedFolderSync: [text],
+  pluginsReload: [],
+  pluginEnable: [pluginId, boolean],
+  pluginRemove: [pluginId],
+  pluginSetting: [pluginId, pluginItem, settingInput],
+  pluginSecret: [pluginId, pluginItem, (secret) => (secret === null ? null : commandText(secret, 65536))],
+  pluginRun: [text, pluginId, pluginItem, (from) => choice(from, ["commandBar", "toolbar", "tabMenu"] as const), nullable],
+  pluginSelect: [pluginId, pluginItem, pluginItem],
 };
 
 // SAFETY: the checks above established this shape.

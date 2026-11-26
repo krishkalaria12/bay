@@ -21,7 +21,7 @@ import { errorText, openLiveItem, refreshFolder, statusText } from "../../activi
 import { COMPLETION_MS } from "../../activity/constants";
 import { prBadge } from "../../activity/github";
 import { folderRows, type FolderRow } from "../../activity/rows";
-import { SOURCES } from "../../activity/sources";
+import { liveSource, SOURCES } from "../../activity/sources";
 import { setLiveView, updateFolder, useLive, profileFolders } from "../../activity/activityStore";
 import type { CompletedItem, LiveItem } from "../../activity/types";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -156,7 +156,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
 
   if (!folder) return null;
   const updating = status?.state === "updating" || status?.state === "initializing";
-  const sourceSite = SOURCES[folder.sources[0] ?? "github"].site;
+  const sourceSite = liveSource(folder.sources[0] ?? "github").site;
   const icon = folder.icon ?? (folder.sources.length > 1 && folder.kind === "documents" ? "symbol:doc.text" : null);
 
   return (

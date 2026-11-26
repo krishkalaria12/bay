@@ -15,6 +15,7 @@ import type { ActiveSwitch, CliAgents, CliControlStatus } from "@bay/chromium";
 import { useKillSwitches } from "../lib/killSwitches";
 import { useCliAgents } from "../components/cli/agentApprovals";
 import { useSharedFolders, type SharedFolderStatus } from "../lib/sharedFolderService";
+import { usePlugins, type PluginsState } from "../lib/plugins/pluginStore";
 
 /** UI state only. OAuth tokens and the sync document never enter this value. */
 export type ServiceState = {
@@ -30,6 +31,8 @@ export type ServiceState = {
   switches: { active: ActiveSwitch[]; checkedAt: number | null };
   agents: CliAgents;
   sharedFolders: { folders: Record<string, SharedFolderStatus> };
+  // Plugins: what they are, whether they run, and what their buttons and views show (never a secret's value).
+  plugins: PluginsState;
 };
 
 // What a window's settings pane shows of terminal control. The engine's status also names its control file, which
@@ -67,6 +70,7 @@ export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) 
   install("switches", (value) => useKillSwitches.setState(value, true));
   install("agents", (value) => useCliAgents.setState(value, true));
   install("sharedFolders", (value) => useSharedFolders.setState(value, true));
+  install("plugins", (value) => usePlugins.setState(value, true));
 }
 
 export function startServiceStateOwner(store: BrowserStore, { restore = true } = {}): () => void {
@@ -85,6 +89,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       switches: { active: [...useKillSwitches.getState().active], checkedAt: useKillSwitches.getState().checkedAt },
       agents: useCliAgents.getState(),
       sharedFolders: { folders: { ...useSharedFolders.getState().folders } },
+      plugins: usePlugins.getState(),
     };
 
     store.setState({ services });
@@ -101,6 +106,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
     useKillSwitches.subscribe(publish),
     useCliAgents.subscribe(publish),
     useSharedFolders.subscribe(publish),
+    usePlugins.subscribe(publish),
   );
   publish();
 

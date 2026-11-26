@@ -764,3 +764,12 @@ export const forgetSharedFolder = () => Promise.resolve();
 export const revealSharedFolder = () => Promise.resolve(true);
 export const shareSharedFolder = () => Promise.resolve(false);
 export const onSharedFolderChange = () => ({ remove() {} });
+// Plugins (lib/plugins): no plugins folder and no sandboxes unless a test brings its own host.
+
+export const PluginsNative = null;
+export const pluginsAvailable = () => false;
+export const listPlugins = () => Promise.resolve({ plugins: [], problems: [] });
+export const installPlugin = () => Promise.resolve(null);
+export const removePlugin = () => Promise.resolve(true);
+export const revealPlugins = () => Promise.resolve();
+export const startPluginSandbox = () => null;

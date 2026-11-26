@@ -313,6 +313,7 @@ inline constexpr Method methods[] = {
   {"BayPlugins", "install", true, 0, 0},
   {"BayPlugins", "remove", true, 1, 1},
   {"BayPlugins", "reveal", true, 0, 0},
+  {"BayPlugins", "fetch", true, 4, 4},
   {"BayPlugins", "start", true, 1, 1},
   {"BayPlugins", "stop", true, 1, 1},
   {"BayPlugins", "post", true, 2, 2},

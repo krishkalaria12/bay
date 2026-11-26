@@ -6,6 +6,8 @@ import { AUTO_CLEAN_EVERY_MS } from "../lib/constants";
 import { startKillSwitches } from "../lib/killSwitches";
 import { startAgentApprovals } from "../components/cli/agentApprovals";
 import { startSharedFolders } from "../lib/sharedFolderService";
+import { startPlugins } from "../lib/plugins/pluginService";
+import { appPluginHost } from "../lib/plugins/pluginHost";
 import { startLive } from "../activity/index";
 import { flushLivePersistence, resumeLivePersistence, startLivePersistence } from "../activity/activityStore";
 import type { BrowserStore } from "../store/browserStore";
@@ -148,6 +150,8 @@ export function startCoordinatorServices({
     stops.push(startAgentApprovals());
     // Pinned folders kept in a shared folder of link files (lib/sharedFolderService.ts).
     stops.push(startSharedFolders(store));
+    // Plugins (lib/plugins): the turned-on ones run in their sandboxes for the coordinator's life.
+    stops.push(startPlugins(appPluginHost(store)));
     const timer = setInterval(() => store.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
     stops.push(() => clearInterval(timer));
 

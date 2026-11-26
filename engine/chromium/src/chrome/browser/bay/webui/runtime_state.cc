@@ -188,6 +188,28 @@ bool LocalFileDescriptor(const base::DictValue& file) {
     return false;
   return AbsoluteLocalPath(*path);
 }
+// A plugin's id as bay-plugins checks it: 2-40 of a-z, 0-9 and -, from a letter.
+bool PluginId(const base::Value& value) {
+  if (!value.is_string()) return false;
+  const std::string& id = value.GetString();
+  if (id.size() < 2 || id.size() > 40 || !base::IsAsciiLower(id[0]) || id.back() == '-')
+    return false;
+  for (char c : id)
+    if (!base::IsAsciiLower(c) && !base::IsAsciiDigit(c) && c != '-') return false;
+  return true;
+}
+// A plugin's live folder source: plugin:<plugin id>:<source id>.
+bool PluginSource(const base::Value& value) {
+  if (!value.is_string() || !value.GetString().starts_with("plugin:")) return false;
+  const std::string rest = value.GetString().substr(7);
+  const size_t colon = rest.find(':');
+  if (colon == std::string::npos || !PluginId(base::Value(rest.substr(0, colon)))) return false;
+  const std::string source = rest.substr(colon + 1);
+  if (source.empty() || source.size() > 40 || !base::IsAsciiAlpha(source[0])) return false;
+  for (char c : source)
+    if (!base::IsAsciiAlphaNumeric(c) && c != '-' && c != '_') return false;
+  return true;
+}
 // Service snapshots contain UI data only. Every record shape is allowlisted so
 // adding a credential or recovery field cannot silently publish it to windows.
 bool ServiceFields(const base::DictValue& value,
@@ -278,12 +300,49 @@ bool SafeServiceRecord(const base::Value& value, const char* shape) {
   if (kind == "agentRequest") return ServiceFields(d, {"agent", "name", "at"});
   if (kind == "sharedFolder")
     return ServiceFields(d, {"path", "name", "status", "syncedAt"});
+  // Plugins (lib/plugins/pluginStore.ts): each one's checked manifest
+  // (bay-plugins), whether it runs, and what its buttons and views show. No
+  // secret's value is ever part of it.
+  if (kind == "plugin")
+    return ServiceFields(d, {"manifest", "enabled", "status", "error"}) &&
+           d.Find("manifest") && SafeServiceRecord(*d.Find("manifest"), "pluginManifest");
+  if (kind == "pluginManifest")
+    return ServiceFields(d, {"id", "name", "version", "description", "author",
+                             "main", "permissions", "settings", "contributes"}) &&
+           d.Find("permissions") &&
+           SafeServiceRecord(*d.Find("permissions"), "pluginPermissions") &&
+           ServiceChildren(d, "settings", "pluginSetting") && d.Find("contributes") &&
+           SafeServiceRecord(*d.Find("contributes"), "pluginContributes");
+  if (kind == "pluginPermissions") return ServiceFields(d, {"hosts", "tabs", "links"});
+  if (kind == "pluginSetting")
+    return ServiceFields(d, {"key", "title", "description", "type", "default", "options"}) &&
+           ServiceChildren(d, "options", "pluginOption");
+  if (kind == "pluginOption") return ServiceFields(d, {"value", "title"});
+  if (kind == "pluginContributes")
+    return ServiceFields(d, {"commands", "toolbar", "tabMenu", "sidebarViews",
+                             "liveSources", "themes"}) &&
+           ServiceChildren(d, "commands", "pluginCommand") &&
+           ServiceChildren(d, "toolbar", "pluginButton") &&
+           ServiceChildren(d, "tabMenu", "pluginMenuItem") &&
+           ServiceChildren(d, "sidebarViews", "pluginView") &&
+           ServiceChildren(d, "liveSources", "pluginSource") &&
+           ServiceChildren(d, "themes", "pluginTheme");
+  if (kind == "pluginCommand") return ServiceFields(d, {"id", "title", "icon", "keywords", "page"});
+  if (kind == "pluginButton") return ServiceFields(d, {"id", "title", "icon", "command", "view"});
+  if (kind == "pluginMenuItem") return ServiceFields(d, {"id", "title", "command"});
+  if (kind == "pluginView") return ServiceFields(d, {"id", "title", "icon"});
+  if (kind == "pluginSource") return ServiceFields(d, {"id", "name", "kind", "site"});
+  if (kind == "pluginTheme") return ServiceFields(d, {"id", "name", "colors"});
+  if (kind == "pluginProblem") return ServiceFields(d, {"folder", "error"});
+  if (kind == "pluginButtonState") return ServiceFields(d, {"badge", "title"});
+  if (kind == "pluginViewItem")
+    return ServiceFields(d, {"id", "title", "subtitle", "icon", "url"});
   return false;
 }
 bool SafeServices(const base::DictValue& services) {
   if (!ServiceFields(services, {"live", "calendar", "alerts", "sync", "telemetry",
                                 "onboarding", "cli", "switches", "agents",
-                                "sharedFolders"}))
+                                "sharedFolders", "plugins"}))
     return false;
   for (const auto [name, value] : services) {
     // The terminal control server is null until it first reports.
@@ -318,6 +377,38 @@ bool SafeServices(const base::DictValue& services) {
           !ServiceChildren(d, "agents", "agent") ||
           !ServiceChildren(d, "requests", "agentRequest"))
         return false;
+    } else if (name == "plugins") {
+      if (!ServiceFields(d, {"loaded", "plugins", "problems", "toolbar", "views",
+                             "settings", "secrets"}) ||
+          !ServiceChildren(d, "plugins", "plugin") ||
+          !ServiceChildren(d, "problems", "pluginProblem") ||
+          !ServiceChildren(d, "toolbar", "pluginButtonState", true))
+        return false;
+      if (const auto* views = d.Find("views")) {
+        if (!views->is_dict()) return false;
+        for (const auto [key, items] : views->GetDict()) {
+          if (!items.is_list()) return false;
+          for (const auto& item : items.GetList())
+            if (!SafeServiceRecord(item, "pluginViewItem")) return false;
+        }
+      }
+      // Settings' values are text or switches; secrets are only their keys.
+      if (const auto* settings = d.Find("settings")) {
+        if (!settings->is_dict()) return false;
+        for (const auto [id, values] : settings->GetDict()) {
+          if (!values.is_dict()) return false;
+          for (const auto [key, setting] : values.GetDict())
+            if (!setting.is_string() && !setting.is_bool()) return false;
+        }
+      }
+      if (const auto* secrets = d.Find("secrets")) {
+        if (!secrets->is_dict()) return false;
+        for (const auto [id, keys] : secrets->GetDict()) {
+          if (!keys.is_list()) return false;
+          for (const auto& key : keys.GetList())
+            if (!key.is_string() || key.GetString().size() > 40) return false;
+        }
+      }
     } else if (name == "sharedFolders") {
       if (!ServiceFields(d, {"folders"}) ||
           !ServiceChildren(d, "folders", "sharedFolder", true))
@@ -595,7 +686,8 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
         (p.contains("collapsed") && !p.FindBool("collapsed").has_value())) return false;
     if (const auto* sources = p.Find("sources")) {
       if (!strings(*sources)) return false;
-      for (const auto& s : sources->GetList()) if (!Choice(s, {"github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"})) return false;
+      for (const auto& s : sources->GetList())
+        if (!Choice(s, {"github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"}) && !PluginSource(s)) return false;
     }
     if (const auto* filters = p.Find("filters"))
       return filters->is_dict() && CommandFields(filters->GetDict(), {"authored", "reviewRequests"}) &&
@@ -657,6 +749,20 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
   };
   if (action == "sharedFolderBind") return v.size() == 3 && pinned_folder(0) && text(1) && text(2, 1024);
   if (action == "sharedFolderUnbind" || action == "sharedFolderSync") return v.size() == 1 && pinned_folder(0);
+  // Plugins (lib/plugins/pluginService.ts), by the ids bay-plugins checked.
+  const auto plugin = [&](size_t i) { return i < v.size() && PluginId(v[i]); };
+  const auto plugin_item = [&](size_t i) { return text(i, 100); };
+  if (action == "pluginsReload") return v.empty();
+  if (action == "pluginEnable") return v.size() == 2 && plugin(0) && boolean(1);
+  if (action == "pluginRemove") return v.size() == 1 && plugin(0);
+  if (action == "pluginSetting")
+    return v.size() == 3 && plugin(0) && plugin_item(1) &&
+           (v[2].is_bool() || (v[2].is_string() && v[2].GetString().size() <= 4096));
+  if (action == "pluginSecret") return v.size() == 3 && plugin(0) && plugin_item(1) && text(2, 65536, true);
+  if (action == "pluginRun")
+    return v.size() == 5 && own_window(0) && plugin(1) && plugin_item(2) &&
+           Choice(v[3], {"commandBar", "toolbar", "tabMenu"}) && text(4, 4096, true);
+  if (action == "pluginSelect") return v.size() == 3 && plugin(0) && plugin_item(1) && plugin_item(2);
   return false;
 }
 // A bookmark tree to add: pages and folders, bounded in depth and count.

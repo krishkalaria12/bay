@@ -35,6 +35,7 @@ const MAC_ABSENT = {
   "BayShell.windowButtonLayout": WINDOWS_AND_LINUX,
   "BayShell.setWindowCaption": WINDOWS_AND_LINUX,
   "BayShell.setKeyShortcuts": "macOS takes shortcuts from its menus",
+  "BayPlugins.fetch": "a chrome:// document's fetch meets CORS; macOS's own fetch doesn't",
   "BayApp.documentSpecks": WINDOWS_AND_LINUX,
   "BayEasel.requestShare": WINDOWS_AND_LINUX,
   "BayEasel.readImage": WINDOWS_AND_LINUX,

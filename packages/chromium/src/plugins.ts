@@ -49,6 +49,8 @@ const InstallSchema = v.variant("ok", [v.object({ ok: v.literal(true), manifest:
 
 export type PluginInstall = v.InferOutput<typeof InstallSchema>;
 
+export type PluginFetchAnswer = { status: number; url: string; headers: Record<string, string>; body: string };
+
 export type PluginSandboxEvent = { id: string; message?: string; reason?: string };
 
 type PluginsNative = {
@@ -57,6 +59,9 @@ type PluginsNative = {
   install(): Promise<string | null>;
   remove(id: string): Promise<boolean>;
   reveal(): Promise<void>;
+  // Windows and Linux: bay.fetch through the engine, as a chrome:// document's own fetch meets CORS. macOS's fetch
+  // has none.
+  fetch?(url: string, method: string, headers: Record<string, string>, body: string | null): Promise<PluginFetchAnswer>;
   // macOS: the sandbox is the host's WebKit page (Windows and Linux frame it in the document).
   start?(id: string): Promise<boolean>;
   stop?(id: string): Promise<void>;

@@ -21,9 +21,9 @@ import {
 } from "../../../activity/connections";
 import { GITLAB_SITE } from "../../../activity/gitlab";
 import { isMocked } from "../../../activity/net";
-import { SOURCES } from "../../../activity/sources";
+import { liveSource, SOURCES } from "../../../activity/sources";
 import { live, updateConfig, useLive } from "../../../activity/activityStore";
-import type { LiveAccount, LiveSourceId } from "../../../activity/types";
+import type { BuiltInSourceId, LiveAccount } from "../../../activity/types";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { Favicon } from "../../ui/primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
@@ -31,7 +31,7 @@ import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 
-const DESCRIPTIONS: Record<LiveSourceId, string> = {
+const DESCRIPTIONS: Record<BuiltInSourceId, string> = {
   github: "Your open pull requests and the ones waiting for your review, with checks and conflicts.",
   gitlab: "Your open merge requests and the ones waiting for your review, on GitLab.com or your own site, with pipelines.",
   bitbucket: "Your open pull requests on Bitbucket Cloud, with build status.",
@@ -58,7 +58,7 @@ export function LiveFoldersPane() {
             <Row
               key={f.id}
               title={f.name}
-              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => liveSource(s).name).join(", ")} · ${statusText(f.id)}`}
             >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
@@ -87,13 +87,13 @@ export function LiveFoldersPane() {
   );
 }
 
-function connectedAs(id: LiveSourceId, account: LiveAccount): string {
+function connectedAs(id: BuiltInSourceId, account: LiveAccount): string {
   if (!account.name || account.name === account.login) return account.login;
 
   return id === "github" || id === "gdrive" ? `${account.name} (${account.login})` : account.name;
 }
 
-function SourceRow({ id }: { id: LiveSourceId }) {
+function SourceRow({ id }: { id: BuiltInSourceId }) {
   const account = useLive((s) => s.accounts[id]);
   const source = SOURCES[id];
 
@@ -138,7 +138,7 @@ async function attempt(task: () => Promise<void>): Promise<string | null> {
   }
 }
 
-function ConnectSheet({ id }: { id: LiveSourceId }) {
+function ConnectSheet({ id }: { id: BuiltInSourceId }) {
   const theme = useTheme();
   const source = SOURCES[id];
   const [busy, setBusy] = useState(false);

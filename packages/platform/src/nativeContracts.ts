@@ -2323,6 +2323,13 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "reveal(): Promise<void>;"
         },
+        "fetch": {
+          "async": true,
+          "optional": true,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "fetch?(url: string, method: string, headers: Record<string, string>, body: string | null): Promise<PluginFetchAnswer>;"
+        },
         "start": {
           "async": true,
           "optional": true,
@@ -3021,8 +3028,9 @@ export const nativeContracts = {
       "PluginSetting": "PluginManifest[\"settings\"][number]",
       "PluginListing": "v.InferOutput<typeof ListSchema>",
       "PluginInstall": "v.InferOutput<typeof InstallSchema>",
+      "PluginFetchAnswer": "{ status: number; url: string; headers: Record<string, string>; body: string }",
       "PluginSandboxEvent": "{ id: string; message?: string; reason?: string }",
-      "PluginsNative": "{\n  list(): Promise<string>;\n  // The person picks a plugin folder, which is copied in: bay_plugins_install's JSON, or null when cancelled.\n  install(): Promise<string | null>;\n  remove(id: string): Promise<boolean>;\n  reveal(): Promise<void>;\n  // macOS: the sandbox is the host's WebKit page (Windows and Linux frame it in the document).\n  start?(id: string): Promise<boolean>;\n  stop?(id: string): Promise<void>;\n  post?(id: string, message: string): Promise<void>;\n  addListener?(name: \"onMessage\" | \"onExit\", listener: (event: PluginSandboxEvent) => void): EventSubscription;\n}"
+      "PluginsNative": "{\n  list(): Promise<string>;\n  // The person picks a plugin folder, which is copied in: bay_plugins_install's JSON, or null when cancelled.\n  install(): Promise<string | null>;\n  remove(id: string): Promise<boolean>;\n  reveal(): Promise<void>;\n  // Windows and Linux: bay.fetch through the engine, as a chrome:// document's own fetch meets CORS. macOS's fetch\n  // has none.\n  fetch?(url: string, method: string, headers: Record<string, string>, body: string | null): Promise<PluginFetchAnswer>;\n  // macOS: the sandbox is the host's WebKit page (Windows and Linux frame it in the document).\n  start?(id: string): Promise<boolean>;\n  stop?(id: string): Promise<void>;\n  post?(id: string, message: string): Promise<void>;\n  addListener?(name: \"onMessage\" | \"onExit\", listener: (event: PluginSandboxEvent) => void): EventSubscription;\n}"
     },
     "sync/src/native.ts": {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",

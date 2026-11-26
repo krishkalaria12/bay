@@ -1,4 +1,9 @@
-export type LiveSourceId = "github" | "gitlab" | "bitbucket" | "notion" | "confluence" | "gdrive";
+export type BuiltInSourceId = "github" | "gitlab" | "bitbucket" | "notion" | "confluence" | "gdrive";
+
+/** A plugin's live source (lib/plugins): `plugin:<plugin id>:<source id>`. */
+export type PluginSourceId = `plugin:${string}`;
+
+export type LiveSourceId = BuiltInSourceId | PluginSourceId;
 
 export type LiveFolderKind = "pullRequests" | "documents";
 

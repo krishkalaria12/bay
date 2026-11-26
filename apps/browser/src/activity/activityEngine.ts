@@ -4,7 +4,7 @@ import { useBrowser, type BrowserStore } from "../store/browserStore";
 import { viewTabIds } from "../store/model";
 import { runForStore } from "../effect/runtime";
 import { startStoreService } from "../effect/storeService";
-import { SOURCES } from "./sources";
+import { liveSource } from "./sources";
 import { bindLiveStoreBrowser, createFolder, live, markRead, removeFolder } from "./activityStore";
 import { ActivityService } from "./activityService";
 import { LiveError, type LiveFolderKind, type LiveItem, type LiveSourceId } from "./types";
@@ -62,7 +62,7 @@ export function statusText(folderId: string, now = Date.now()): string {
 }
 
 export function errorText(kind: LiveError["kind"], source: LiveSourceId): string {
-  const name = SOURCES[source].name;
+  const name = liveSource(source).name;
 
   switch (kind) {
     case "notConfigured":
