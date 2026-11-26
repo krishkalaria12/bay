@@ -30,6 +30,12 @@ class SequencedTaskRunner;
 
 namespace bay {
 
+// Moves a removed link to the Recycle Bin or the freedesktop.org Trash, as the
+// Mac's go to its Trash; false when there's nowhere to move it (a disk other
+// than the home folder's), when the caller deletes it. Blocks on the disk.
+// shared_folders_trash_win.cc and shared_folders_trash_linux.cc.
+bool MoveToTrash(const base::FilePath& path);
+
 class SharedFolders {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;

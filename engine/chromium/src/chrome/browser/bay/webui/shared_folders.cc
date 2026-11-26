@@ -265,7 +265,7 @@ bool SharedFolders::Remove(const base::FilePath& folder,
   }
   const base::FilePath path =
       folder.Append(base::FilePath::FromUTF8Unsafe(name));
-  return !base::PathExists(path) || base::DeleteFile(path);
+  return !base::PathExists(path) || MoveToTrash(path) || base::DeleteFile(path);
 }
 
 void SharedFolders::Forget(const base::FilePath& folder) {

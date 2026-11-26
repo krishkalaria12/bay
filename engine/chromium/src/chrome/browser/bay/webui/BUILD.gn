@@ -263,7 +263,10 @@ source_set("impl") {
     ]
   }
   if (is_linux) {
-    sources += [ "quit_shortcut_linux.h" ]
+    sources += [
+      "quit_shortcut_linux.h",
+      "shared_folders_trash_linux.cc",
+    ]
     deps += [
       ":app_services_linux",
       ":autostart_linux",
@@ -282,6 +285,7 @@ source_set("impl") {
     ]
   }
   if (is_win) {
+    sources += [ "shared_folders_trash_win.cc" ]
     deps += [
       ":platform_services_win",
       "//chrome/browser/win",
