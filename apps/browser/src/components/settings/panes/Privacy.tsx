@@ -38,6 +38,7 @@ import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
 import { OwnFilters } from "./OwnFilters";
+import { SecureDnsSection } from "./SecureDns";
 import { platformWords } from "../../../lib/platformWords";
 
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
@@ -151,6 +152,7 @@ export function PrivacyPane() {
         </>
       )}
 
+      <SecureDnsSection />
       <SitePermissions />
       <AppLinks />
       <ZoomLevels />

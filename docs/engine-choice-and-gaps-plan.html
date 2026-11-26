@@ -1123,6 +1123,21 @@
                     <code>webui/content_blocker.cc</code>. Settings › Privacy › Your lists and filters, with import and export of My Filters.
                   </td>
                 </tr>
+                <tr>
+                  <td>G4</td>
+                  <td>
+                    Done in source, all three platforms: <code>nn_prefs</code> takes the browser's <code>dns_over_https.mode</code> and
+                    <code>.templates</code> (local state); Settings › Privacy › Secure DNS offers Automatic, Off, Cloudflare, Quad9, Google, Mullvad, NextDNS
+                    and a custom template.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G15</td>
+                  <td>
+                    Done in source, all three platforms: Settings › General › Spelling turns spell checking on or off in every space; Windows and Linux pick
+                    languages (<code>spellcheck.dictionaries</code>), macOS uses its own.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1146,6 +1161,10 @@
             <li>
               G3's Windows and Linux dispatch (<code>engine_services.cc</code>) isn't syntax checked on the Mac (it needs generated mojom headers);
               <code>content_blocker.cc</code> is.
+            </li>
+            <li>
+              Spelling has no custom dictionary editor yet, and on Linux a language's dictionary downloads from Google's servers the first time, which the
+              ungoogled engine may block.
             </li>
           </ul>
         </section>

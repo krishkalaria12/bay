@@ -26,6 +26,7 @@ export const SETTINGS = {
     title: "Tidy Downloads",
     words: "tidy downloads rename readable file name apple intelligence arc max on device",
   },
+  spellCheck: { id: "general.spellCheck", pane: "general", title: "Check spelling as you type", words: "spelling spell check dictionary languages typos" },
   importBrowser: {
     id: "general.importBrowser",
     pane: "general",
@@ -153,6 +154,12 @@ export const SETTINGS = {
     pane: "passwords",
     title: "Password manager",
     words: "save fill autofill offer extension 1password bitwarden none",
+  },
+  secureDns: {
+    id: "privacy.secureDns",
+    pane: "privacy",
+    title: "Secure DNS",
+    words: "dns over https doh encrypted dns cloudflare quad9 nextdns mullvad resolver",
   },
   ownFilterLists: {
     id: "privacy.ownFilterLists",

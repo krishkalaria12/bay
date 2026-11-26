@@ -175,6 +175,13 @@ let webKitAvailable = true;
 export const hasWebKit = () => webKitAvailable;
 export const setWebKitAvailable = (on) => void (webKitAvailable = on);
 export const setWebKitZoom = () => {};
+// Chrome preferences through nn_prefs (components/settings/panes/SecureDns.tsx, Spelling).
+
+export const getSecureDns = () => Promise.resolve({ mode: "automatic", templates: "", managed: false });
+export const setSecureDns = () => Promise.resolve();
+export const getSpellCheck = () => Promise.resolve({ enabled: true, languages: [] });
+export const setSpellCheckEnabled = () => Promise.resolve();
+export const setSpellCheckLanguages = () => Promise.resolve();
 // The person's own filter lists (components/settings/panes/OwnFilters.tsx).
 
 export const MY_FILTERS_ID = "my-filters";

@@ -35,3 +35,5 @@ export * from "./tabStripBridge";
 export * from "./webkit";
 
 export * from "./siteCookies";
+
+export * from "./enginePrefs";
