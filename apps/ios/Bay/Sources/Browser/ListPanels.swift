@@ -758,8 +758,10 @@ struct BookmarksDrawer: View {
     let rows = app.store.bookmarkTreeRows(spaceId: app.activeSpaceId, open: Array(open))
     let needle = query.trimmingCharacters(in: .whitespaces)
     GeometryReader { geometry in
+      // The screen behind is dimmed whole, status bar included, and the panel starts below the status bar, so the bar's
+      // row is all the screen's rather than half screen, half panel (as the sheets leave it).
       HStack(spacing: 0) {
-        Color.black.opacity(0.35)
+        Color.clear
           .contentShape(Rectangle())
           .onTapGesture(perform: browser.closeDrawer)
           .accessibilityLabel(Text(verbatim: strings.t("drawer.close")))
@@ -807,7 +809,7 @@ struct BookmarksDrawer: View {
             if top > Self.pullToSearch { showSearch() }
           }
         }
-        .padding(.top, geometry.safeAreaInsets.top + Space.sm)
+        .padding(.top, Space.lg)
         .frame(width: geometry.size.width * Self.width)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(
@@ -816,7 +818,9 @@ struct BookmarksDrawer: View {
             LinearGradient(colors: [color.opacity(0.45), color.opacity(0.12), .clear], startPoint: .top, endPoint: .bottom)
           }
           .animation(.easeOut(duration: 0.25), value: app.activeSpaceId)
+          .clipShape(RoundedCornerShape(radius: Radius.panel, corners: [.topLeft]))
         )
+        .padding(.top, geometry.safeAreaInsets.top)
         .overlay(alignment: .bottomTrailing) {
           if !browser.drawerArchive { saveButton(bottom: geometry.safeAreaInsets.bottom) }
         }
@@ -825,6 +829,7 @@ struct BookmarksDrawer: View {
         .simultaneousGesture(spaceSwipe)
         .environment(\.colorScheme, .dark)
       }
+      .background(Color.black.opacity(0.55))
       .ignoresSafeArea()
     }
     .accessibilityElement(children: .contain)

@@ -658,12 +658,12 @@ private struct SuggestionRow: View {
   }
 }
 
-/// A shape with only its top corners rounded, for sheets (iOS 15 has no UnevenRoundedRectangle).
+/// A shape with only some corners rounded, the top ones unless told (iOS 15 has no UnevenRoundedRectangle).
 struct RoundedCornerShape: Shape {
   let radius: CGFloat
+  var corners: UIRectCorner = [.topLeft, .topRight]
 
   func path(in rect: CGRect) -> Path {
-    Path(
-      UIBezierPath(roundedRect: rect, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: radius, height: radius)).cgPath)
+    Path(UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius)).cgPath)
   }
 }
