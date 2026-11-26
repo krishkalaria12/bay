@@ -9,6 +9,8 @@ import { canGoBack, canGoForward } from "../components/window/historyMenu";
 import type { Bookmarks, BookmarkNode } from "../store/types";
 import { startTidyDownloads } from "./tidyDownloads";
 import { isInternalTab } from "../components/pages/pageUrls";
+import { canAskPage } from "../components/ask/askPage";
+import { ENGINE_NAMES, engineSwitchFor } from "../store/engines";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls, openLittleBay } from "../components/littleBay/actions";
@@ -354,6 +356,13 @@ export function menuState(s: BrowserState): MenuState {
   }
 
   if (!s.settings.openLinksInLittleBay) titles.toggleOpenLinksInLittleBay = "Open Links from Other Apps in Little Bay";
+  // Reopen in… names the other engine, where the page has a choice (a Mac's Automatic mode).
+  const engines = tab ? engineSwitchFor(s, tab.id) : null;
+
+  if (engines) titles.reopenInEngine = `Reopen in ${ENGINE_NAMES[engines.other]}`;
+  else disabled.push("reopenInEngine");
+
+  if (!tab?.url || isInternalTab(tab) || !canAskPage()) disabled.push("askPage");
   const meeting = meetingToJoin();
 
   if (meeting) titles.joinMeeting = `Join “${meeting.title || "Untitled event"}”`;

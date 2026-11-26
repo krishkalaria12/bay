@@ -16,6 +16,7 @@ import {
 import { markdownLink } from "@bay/core";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import { alwaysOpenSiteIn, reopenIn } from "./pageEngines";
+import { engineSwitchFor } from "../store/engines";
 import { canAskPage, openAskPage } from "../components/ask/askPage";
 import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
@@ -219,8 +220,13 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "askPage":
       return page && canAskPage() ? openAskPage(page.id) : undefined;
     // Reopen in WebKit or Chromium, and Always Open <site> in… (lib/pageEngines.ts); the argument is the engine.
-    case "reopenInEngine":
-      return page && (arg === "webkit" || arg === "chromium") ? void reopenIn(page.id, arg) : undefined;
+    case "reopenInEngine": {
+      // The menu bar's item has no engine of its own: it's the other one.
+      const engine = arg === "webkit" || arg === "chromium" ? arg : page ? engineSwitchFor(browserRead.getState(), page.id)?.other : undefined;
+
+      return page && engine ? void reopenIn(page.id, engine) : undefined;
+    }
+
     case "alwaysOpenSiteIn":
       return page && (arg === "webkit" || arg === "chromium") ? void alwaysOpenSiteIn(page.id, arg) : undefined;
     case "emailPageLocation":
