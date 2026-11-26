@@ -1,0 +1,14 @@
+[package]
+name = "bay-plugins"
+version = "0.1.0"
+description = "Plugins on the desktops: the manifest, a plugin's folder, and the runtime its sandbox loads."
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

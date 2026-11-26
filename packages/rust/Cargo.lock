@@ -124,6 +124,7 @@ dependencies = [
  "bay-adblock",
  "bay-import",
  "bay-lists",
+ "bay-plugins",
  "bay-switches",
  "bay-sync",
 ]
@@ -152,6 +153,15 @@ dependencies = [
  "bay-adblock",
  "memmap2",
  "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "bay-plugins"
+version = "0.1.0"
+dependencies = [
  "serde",
  "serde_json",
  "tempfile",

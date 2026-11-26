@@ -2,7 +2,7 @@
 //! (`webui/BUILD.gn`). It carries every shared crate's C functions; each crate keeps its own header, which the hosts
 //! include directly (`packages/adblock/include/bay_adblock.h`, `packages/rust/bay-lists/include/bay_lists.h`,
 //! `packages/rust/bay-sync/include/bay_sync.h`, `packages/rust/bay-import/include/bay_import.h`,
-//! `packages/rust/bay-switches/include/bay_switches.h`).
+//! `packages/rust/bay-switches/include/bay_switches.h`, `packages/rust/bay-plugins/include/bay_plugins.h`).
 
 /// The content blocker (`bay_blocker_*`, `bay_tracking_*`, `bay_content_blocking_rules`).
 pub use bay_adblock::ffi::*;
@@ -18,3 +18,6 @@ pub use bay_import::ffi::*;
 
 /// Remote kill switches: Bay's signed feed, checked and matched to this release (`bay_switches_*`).
 pub use bay_switches::ffi::*;
+
+/// Plugins: the manifest, the plugins folder and the files a plugin's sandbox reads (`bay_plugins_*`).
+pub use bay_plugins::ffi::*;
