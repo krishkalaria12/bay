@@ -36,4 +36,6 @@ export * from "./webkit";
 
 export * from "./siteCookies";
 
+export * from "./switches";
+
 export * from "./enginePrefs";

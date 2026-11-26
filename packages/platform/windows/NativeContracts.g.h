@@ -222,6 +222,7 @@ inline constexpr Method methods[] = {
   {"BayCEF", "isContentBlockerAllowed", true, 1, 1},
   {"BayCEF", "setContentBlockerAllowed", true, 2, 2},
   {"BayCEF", "setBlockedPageAllowed", true, 3, 3},
+  {"BayCEF", "checkSwitches", true, 3, 3},
   {"BayCEF", "setSiteSetting", true, 4, 4},
   {"BayCEF", "getSiteSettings", true, 2, 2},
   {"BayCEF", "getSiteSettingsOrigins", true, 1, 1},

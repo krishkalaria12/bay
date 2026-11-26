@@ -110,6 +110,9 @@ export const Cef = requireNativeModule<{
   isContentBlockerAllowed(host: string): Promise<boolean>;
   setContentBlockerAllowed(host: string, allowed: boolean): Promise<void>;
   setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;
+  // Remote kill switches (bay-switches): which switches in the signed feed apply to this release, as JSON. Optional:
+  // native code from before them.
+  checkSwitches?(feed: string, signature: string, lastIssued: number): Promise<string>;
 
   setSiteSetting(profile: string, origin: string, type: SiteSettingType, value: SiteSettingValue): Promise<void>;
   getSiteSettings(profile: string, origin: string): Promise<SiteSettings>;

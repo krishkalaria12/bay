@@ -1,4 +1,5 @@
-import { addHistoryVisits, hasWebKit, setWebKitFraudWarnings, setWebKitZoom, setZoom, type PageEngine } from "@bay/chromium";
+import { addHistoryVisits, hasWebKit, setWebKitFraudWarnings, setWebKitZoom, setZoom, type ActiveSwitch, type PageEngine } from "@bay/chromium";
+import { useKillSwitches } from "./killSwitches";
 import * as Effect from "effect/Effect";
 import * as v from "valibot";
 import { PageWorkService } from "../components/site/pageWorkService";
@@ -248,7 +249,8 @@ const sameEnginePrefs = (a: Settings, b: Settings) =>
 export function followEngineSettings() {
   if (!hasWebKit() || unwatchSettings) return;
   setWebKitFraudWarnings(store().settings.webKitFraudWarnings);
-  unwatchSettings = useBrowser.subscribe((s, prev) => {
+
+  const unwatchBrowser = useBrowser.subscribe((s, prev) => {
     if (s.settings.webKitFraudWarnings !== prev.settings.webKitFraudWarnings) setWebKitFraudWarnings(s.settings.webKitFraudWarnings);
 
     if (s.tabs !== prev.tabs)
@@ -276,6 +278,20 @@ export function followEngineSettings() {
       else pendingMoves.set(id, wanted);
     }
   });
+  // Bay switched WebKit off remotely (lib/killSwitches.ts): its pages reopen in Chromium.
+
+  const webKitSwitchedOff = (active: readonly ActiveSwitch[]) => active.some((k) => k.feature === "webkit");
+
+  const unwatchSwitches = useKillSwitches.subscribe((k, prev) => {
+    if (!webKitSwitchedOff(k.active) || webKitSwitchedOff(prev.active)) return;
+
+    for (const [id, t] of Object.entries(store().tabs)) if (t.engine === "webkit") store().updateTab(id, { engine: "chromium", wakeAdoptId: undefined });
+  });
+
+  unwatchSettings = () => {
+    unwatchBrowser();
+    unwatchSwitches();
+  };
 }
 
 const shownTabs = new Set<string>();

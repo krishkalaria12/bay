@@ -12,7 +12,7 @@ file that only name sites: `packages/core/src/bangList.ts` (search shortcuts, op
 
 | Host | When | Why |
 | --- | --- | --- |
-| baybrowser.in | Sharing a folder, split or Easel; sending diagnostics when you've turned sharing on | Bay's website: shared links and the opt-in usage and error collector |
+| baybrowser.in | Sharing a folder, split or Easel; sending diagnostics when you've turned sharing on; at launch and every six hours | Bay's website: shared links, the opt-in usage and error collector, and the signed list of features a release turned off (`switches.json`) |
 | bay.krishkalaria.in | Opening an old shared link | Bay's former website address, for links shared before the move |
 | github.com | Checking for updates | Bay's releases and its update feed (appcast) |
 

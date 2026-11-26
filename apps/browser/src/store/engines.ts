@@ -1,4 +1,5 @@
 import { hasWebKit, type PageEngine } from "@bay/chromium";
+import { switchedOff } from "../lib/killSwitches";
 import { registrableDomain } from "../lib/siteDomain";
 import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
@@ -11,7 +12,7 @@ import type { Tab } from "./types";
 // engine, rules for single sites and a pick on any tab. A page's links stay on its engine, so a sign-in that crosses
 // sites comes back signed in; a typed address leaves for its own site's engine.
 // WebKit is macOS's: a build without the BayWebKit module (Windows, Linux) keeps every page in Chromium, whatever the
-// (synced) settings say.
+// (synced) settings say, and so does one where Bay switched WebKit off remotely (lib/killSwitches.ts).
 
 export const ENGINE_NAMES: Record<PageEngine, string> = { chromium: "Chromium", webkit: "WebKit" };
 export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", webkit: "safari" };
@@ -66,8 +67,11 @@ export function siteDomainOf(url: string | undefined | null): string | null {
   return parsedSite(url)?.domain ?? null;
 }
 
-/** A page WebKit can show: a web page or a file, on a build that has WebKit. */
-export const canUseWebKit = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
+/** WebKit is there to open pages in: the build has it, and Bay hasn't switched it off. */
+export const webKitOn = () => hasWebKit() && !switchedOff("webkit");
+
+/** A page WebKit can show: a web page or a file, while WebKit is on. */
+export const canUseWebKit = (url: string | undefined | null) => webKitOn() && !!url && /^(https?|file):/i.test(url);
 
 /** Bay's and Chrome's own pages, extensions and DevTools exist only in Chromium. */
 const chromiumOnly = (url: string | undefined | null) => !!url && /^(bay|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
@@ -103,7 +107,7 @@ export function protectedVideoSite(url: string | undefined | null): boolean {
 const singleEngine = (prefs: Prefs): PageEngine | undefined => (prefs.engineMode === "automatic" ? undefined : prefs.engineMode);
 
 /** The engine pages open in when nothing else decides: the mode's, else the default engine. */
-export const defaultEngineOf = (prefs: Prefs): PageEngine => (hasWebKit() ? (singleEngine(prefs) ?? prefs.defaultEngine) : "chromium");
+export const defaultEngineOf = (prefs: Prefs): PageEngine => (webKitOn() ? (singleEngine(prefs) ?? prefs.defaultEngine) : "chromium");
 
 /** The person's rule for a page's site, if there is one. */
 export const siteRule = (prefs: Prefs, url: string | undefined | null): PageEngine | undefined => {
@@ -148,7 +152,7 @@ const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): Page
 const pageAddress = (t: DeepReadonly<Tab>) => t.navigation?.url ?? t.url;
 
 function engineOf(s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine {
-  if (!hasWebKit() || chromiumOnly(pageAddress(t))) return "chromium";
+  if (!webKitOn() || chromiumOnly(pageAddress(t))) return "chromium";
 
   if (t.engine) return t.engine;
   const adopted = fromAdoption(s, t, depth);

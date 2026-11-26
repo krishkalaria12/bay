@@ -1,6 +1,7 @@
 import { askPageModel } from "@bay/desktop";
 import * as v from "valibot";
 import { create } from "zustand";
+import { switchedOff } from "../../lib/killSwitches";
 import { webviews } from "../../lib/webviews";
 import { browserRead } from "../../store/read";
 
@@ -19,7 +20,7 @@ export const askStateOf = (tabId: string) => useAskPage.getState()[tabId] ?? CLO
 const patch = (tabId: string, next: Partial<AskState>) => useAskPage.setState({ [tabId]: { ...askStateOf(tabId), ...next } });
 
 /** Whether this Mac can answer questions about pages now. */
-export const canAskPage = () => askPageModel?.status() === "available";
+export const canAskPage = () => !switchedOff("askPage") && askPageModel?.status() === "available";
 
 export const openAskPage = (tabId: string) => patch(tabId, { open: true });
 

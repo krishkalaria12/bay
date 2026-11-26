@@ -1,5 +1,6 @@
 import { applySiteCookies, canCarrySiteCookies, getSiteSettings, siteCookies, type CookieName, type PageEngine, type SiteCookie } from "@bay/chromium";
 import * as v from "valibot";
+import { switchedOff } from "./killSwitches";
 
 // Bringing sign-ins along (Settings › Engines): a page switching engines takes its site's cookies and storage from the
 // engine it leaves to the one it opens in, so the switch doesn't sign the person out. Each engine keeps its own store;
@@ -52,7 +53,7 @@ export function carrySignIns(from: PageEngine, to: PageEngine, profile: string, 
   if (running) return running;
 
   const carry = (async () => {
-    if (from === to || profile.startsWith("incognito") || !canCarrySiteCookies()) return false;
+    if (from === to || profile.startsWith("incognito") || !canCarrySiteCookies() || switchedOff("signInCarry")) return false;
     const settings = await getSiteSettings(profile, origin).catch(() => null);
 
     if (settings?.cookies?.value === "block") return false;

@@ -138,4 +138,14 @@ extern NSNotificationName const NNCoreContentBlockerChangedNotification;
 + (void)devDelayNextLoad:(double)ms;
 @end
 
+// Remote kill switches (bay-switches, packages/rust/bay-switches): which switches in Bay's signed feed apply to this
+// platform and release, as bay_switches_check's JSON ({"ok":true,"issued":N,"switches":[…]} or {"ok":false,"error":…}).
+@interface NNCoreSwitches : NSObject
++ (NSString *)check:(NSString *)feed
+          signature:(NSString *)signature
+            version:(NSString *)version
+                now:(int64_t)now
+         lastIssued:(int64_t)lastIssued NS_SWIFT_NAME(check(feed:signature:version:now:lastIssued:));
+@end
+
 NS_ASSUME_NONNULL_END

@@ -121,6 +121,11 @@ public class CefModule: Module {
       NNCoreEngineBridge.callWithSecret("nn_cookies_apply", profile: profile, args: NSMutableData(data: bytes)) { promise.resolve($0) }
     }.runOnQueue(.main)
 
+    // Remote kill switches: what in Bay's signed feed applies to this release (NNCoreSwitches, bay-switches).
+    AsyncFunction("checkSwitches") { (feed: String, signature: String, lastIssued: Double) -> String in
+      let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+      return NNCoreSwitches.check(feed: feed, signature: signature, version: version, now: Int64(Date().timeIntervalSince1970), lastIssued: Int64(lastIssued))
+    }
     AsyncFunction("getContentBlocker") { (promise: Promise) in
       NNCoreContentBlocker.state { promise.resolve($0) }
     }.runOnQueue(.main)

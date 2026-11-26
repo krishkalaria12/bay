@@ -1619,6 +1619,13 @@ export const nativeContracts = {
           "maxArgs": 3,
           "signature": "setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;"
         },
+        "checkSwitches": {
+          "async": true,
+          "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "checkSwitches?(feed: string, signature: string, lastIssued: number): Promise<string>;"
+        },
         "setSiteSetting": {
           "async": true,
           "optional": false,

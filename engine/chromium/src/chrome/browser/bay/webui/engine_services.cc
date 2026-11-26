@@ -15,8 +15,10 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/bay_switches.h"
 #include "chrome/browser/bay/webui/content_blocker.h"
 #include "chrome/browser/bay/webui/auto_picture_in_picture.h"
 #include "chrome/browser/bay/webui/context_search.h"
@@ -44,6 +46,7 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -607,7 +610,7 @@ base::ListValue EngineServices::SupportedMethods() const {
                              "setFilterListEnabled", "isContentBlockerAllowed",
                              "setContentBlockerAllowed", "addFilterList",
                              "removeFilterList",    "getUserFilters",
-                             "setUserFilters",
+                             "setUserFilters",      "checkSwitches",
                              "setBlockedPageAllowed",
                              "resolvePermission",   "resolveExternalApp"})
     methods.Append(std::string("BayCEF.") + method);
@@ -732,6 +735,32 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
     return true;
   if (module == "BayCEF" && DispatchContentBlocker(method, args, response))
     return true;
+  if (module == "BayCEF" && method == "checkSwitches") {
+    // Remote kill switches: what in Bay's signed feed applies to this release
+    // (bay-switches, packages/rust/bay-switches; the Mac's NNCoreSwitches.mm).
+    const auto* feed = At(args, 0);
+    const auto* signature = At(args, 1);
+    const auto* last_issued = At(args, 2);
+    if (!feed || !feed->is_string() || !signature || !signature->is_string() ||
+        !last_issued || (!last_issued->is_double() && !last_issued->is_int())) {
+      invalid();
+      return true;
+    }
+#if BUILDFLAG(IS_WIN)
+    constexpr char kPlatform[] = "windows";
+#else
+    constexpr char kPlatform[] = "linux";
+#endif
+    const std::string version(version_info::GetVersionNumber());
+    char* result = bay_switches_check(
+        feed->GetString().c_str(), signature->GetString().c_str(), kPlatform,
+        version.c_str(), base::Time::Now().InSecondsFSinceUnixEpoch(),
+        static_cast<int64_t>(last_issued->GetDouble()));
+    std::string text = result ? result : R"({"ok":false,"error":"format"})";
+    bay_switches_string_free(result);
+    std::move(response).Run(Success(base::Value(std::move(text))));
+    return true;
+  }
   if (module == "BayCEF" && method == "systemState") {
     std::move(response).Run(
         Success(base::Value(SystemState::Get().Snapshot())));

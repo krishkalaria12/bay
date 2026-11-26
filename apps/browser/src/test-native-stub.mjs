@@ -737,3 +737,4 @@ export const onPermissionDismissed = permissionListener("onPermissionDismissed")
 export const permissionEvents = { fire: (name, value) => permissionListeners.get(name)?.(value) };
 
 export const resolvePermission = () => Promise.resolve();
+export const checkSwitches = () => Promise.resolve(null);

@@ -3,6 +3,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { createBrowserPersistence, type PersistenceOwner } from "../lib/persist";
 import { AUTO_CLEAN_EVERY_MS } from "../lib/constants";
+import { startKillSwitches } from "../lib/killSwitches";
 import { startLive } from "../activity/index";
 import { flushLivePersistence, resumeLivePersistence, startLivePersistence } from "../activity/activityStore";
 import type { BrowserStore } from "../store/browserStore";
@@ -139,6 +140,8 @@ export function startCoordinatorServices({
     });
 
     stops.push(() => events.remove());
+    // Bay's remote kill switches (lib/killSwitches.ts), checked at launch and every few hours.
+    stops.push(startKillSwitches());
     const timer = setInterval(() => store.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
     stops.push(() => clearInterval(timer));
 

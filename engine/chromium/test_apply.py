@@ -51,6 +51,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
             sync = checkout / "packages/rust/bay-sync/include"
             sync.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
@@ -122,6 +125,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
             sync = checkout / "packages/rust/bay-sync/include"
             sync.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
@@ -168,6 +174,9 @@ class ChromiumLayerTests(unittest.TestCase):
             lists = checkout / "packages/rust/bay-lists/include"
             lists.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
             sync = checkout / "packages/rust/bay-sync/include"
             sync.mkdir(parents=True)
             shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)

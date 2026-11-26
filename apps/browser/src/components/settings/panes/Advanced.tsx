@@ -11,6 +11,7 @@ import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
+import { switchTitle, useKillSwitches } from "../../../lib/killSwitches";
 import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/driverControl";
 
 export function AdvancedPane() {
@@ -31,6 +32,7 @@ export function AdvancedPane() {
 
   return (
     <View>
+      <SwitchedOff />
       <SectionHeader title="Browsing" />
       <Group>
         <Row settingId={SETTINGS.showFullUrl.id} title={SETTINGS.showFullUrl.title} description="Instead of the site alone.">
@@ -125,5 +127,23 @@ function BoostsRow() {
         <Toggle value={on} onChange={setBoostsOn} />
       </View>
     </Row>
+  );
+}
+
+/** What Bay turned off remotely for this release (lib/killSwitches.ts), and why. Nothing when nothing is. */
+function SwitchedOff() {
+  const active = useKillSwitches((k) => k.active);
+
+  if (!active.length) return null;
+
+  return (
+    <>
+      <SectionHeader title="Turned Off by Bay" description="Until a fix ships, these are off in this version. They come back by themselves." />
+      <Group>
+        {active.map((s) => (
+          <Row key={s.id} title={switchTitle(s)} description={s.reason} />
+        ))}
+      </Group>
+    </>
   );
 }
