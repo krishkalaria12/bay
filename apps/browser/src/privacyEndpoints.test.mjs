@@ -72,7 +72,7 @@ function listedHosts() {
 
 test("every host Bay's code names is in docs/privacy.md", () => {
   const listed = listedHosts();
-  const missing = [...namedHosts()].filter(([host]) => !listed.has(host)).map(([host, file]) => `${host} (${file})`);
+  const missing = [...namedHosts()].flatMap(([host, file]) => (listed.has(host) ? [] : [`${host} (${file})`]));
   assert.deepEqual(missing, [], "add these to docs/privacy.md, with when and why Bay contacts them");
 });
 
