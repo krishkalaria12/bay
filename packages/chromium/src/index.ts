@@ -43,3 +43,7 @@ export * from "./sparePage";
 export * from "./cliAgents";
 
 export * from "./enginePrefs";
+
+export * from "./plugins";
+
+export * from "./pluginSandbox";

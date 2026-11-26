@@ -2292,6 +2292,62 @@ export const nativeContracts = {
       ],
       "constants": {}
     },
+    "BayPlugins": {
+      "source": "chromium/src/plugins.ts",
+      "methods": {
+        "list": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "list(): Promise<string>;"
+        },
+        "install": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "install(): Promise<string | null>;"
+        },
+        "remove": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "remove(id: string): Promise<boolean>;"
+        },
+        "reveal": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "reveal(): Promise<void>;"
+        },
+        "start": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "start?(id: string): Promise<boolean>;"
+        },
+        "stop": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "stop?(id: string): Promise<void>;"
+        },
+        "post": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "post?(id: string, message: string): Promise<void>;"
+        }
+      },
+      "events": [],
+      "constants": {}
+    },
     "BaySync": {
       "source": "sync/src/native.ts",
       "methods": {
@@ -2959,6 +3015,14 @@ export const nativeContracts = {
       "PageEngine": "\"chromium\" | \"webkit\"",
       "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.\n  setZoom?(profile: string, host: string, zoom: number): void;\n  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;\n  setFraudWarnings?(on: boolean): void;\n  passkeyAccess(): Promise<PasskeyAccess>;\n  requestPasskeyAccess(): Promise<PasskeyAccess>;\n  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;\n}",
       "PasskeyAccess": "{ entitled: boolean; status: \"entitlementRequired\" | \"deviceNotConfigured\" | \"notDetermined\" | \"denied\" | \"authorized\" }"
+    },
+    "chromium/src/plugins.ts": {
+      "PluginManifest": "v.InferOutput<typeof PluginManifestSchema>",
+      "PluginSetting": "PluginManifest[\"settings\"][number]",
+      "PluginListing": "v.InferOutput<typeof ListSchema>",
+      "PluginInstall": "v.InferOutput<typeof InstallSchema>",
+      "PluginSandboxEvent": "{ id: string; message?: string; reason?: string }",
+      "PluginsNative": "{\n  list(): Promise<string>;\n  // The person picks a plugin folder, which is copied in: bay_plugins_install's JSON, or null when cancelled.\n  install(): Promise<string | null>;\n  remove(id: string): Promise<boolean>;\n  reveal(): Promise<void>;\n  // macOS: the sandbox is the host's WebKit page (Windows and Linux frame it in the document).\n  start?(id: string): Promise<boolean>;\n  stop?(id: string): Promise<void>;\n  post?(id: string, message: string): Promise<void>;\n  addListener?(name: \"onMessage\" | \"onExit\", listener: (event: PluginSandboxEvent) => void): EventSubscription;\n}"
     },
     "sync/src/native.ts": {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",

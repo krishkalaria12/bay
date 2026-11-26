@@ -97,6 +97,8 @@ source_set("impl") {
     "page_menu.h",
     "permission_prompts.cc",
     "permission_prompts.h",
+    "plugins.cc",
+    "plugins.h",
     "profile_data.cc",
     "profile_data.h",
     "profiling_watch.cc",

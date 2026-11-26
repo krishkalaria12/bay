@@ -25,6 +25,7 @@ const files = [
   "chromium/src/ChromiumView.tsx",
   "chromium/src/NativeWebView.tsx",
   "chromium/src/webkit.ts",
+  "chromium/src/plugins.ts",
   "sync/src/native.ts",
   "import/src/index.ts",
   "shaders/src/types.ts",

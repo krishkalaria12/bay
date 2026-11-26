@@ -1,5 +1,5 @@
-# The web engine's native side (Expo modules BayCEF, BayExtensions, BaySwipe, BayChromeUI and
-# BayWebKit, the names the JS in ../src uses), on our own Chromium layer (engine/nncore), and WebKit
+# The web engine's native side (Expo modules BayCEF, BayExtensions, BaySwipe, BayChromeUI, BayWebKit and
+# BayPlugins, the names the JS in ../src uses), on our own Chromium layer (engine/nncore), and WebKit
 # (WKWebView) for the pages that open there (WebKit*.swift).
 #
 # The engine is Chrome's framework built with engine/nncore ("Chromium Framework.framework"). The app
@@ -30,7 +30,7 @@ Pod::Spec.new do |s|
   s.resources      = 'page_script.js', 'filter_lists.json'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => "\"#{engine_public}\" \"#{adblock}/include\" \"#{rust}/bay-lists/include\" \"#{rust}/bay-switches/include\"",
+    'HEADER_SEARCH_PATHS' => "\"#{engine_public}\" \"#{adblock}/include\" \"#{rust}/bay-lists/include\" \"#{rust}/bay-switches/include\" \"#{rust}/bay-plugins/include\"",
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
   }
   # A search path and -l, not the archive's path in OTHER_LDFLAGS: CocoaPods drops the quotes when it merges that, and the

@@ -148,4 +148,17 @@ extern NSNotificationName const NNCoreContentBlockerChangedNotification;
          lastIssued:(int64_t)lastIssued NS_SWIFT_NAME(check(feed:signature:version:now:lastIssued:));
 @end
 
+// Plugins (bay-plugins, packages/rust/bay-plugins): the plugins folder, and the files a plugin's sandbox may read
+// (PluginsModule.swift). JSON as bay_plugins_list and bay_plugins_install answer it.
+@interface NNCorePlugins : NSObject
++ (NSString *)listIn:(NSString *)root NS_SWIFT_NAME(list(root:));
++ (NSString *)install:(NSString *)source into:(NSString *)root NS_SWIFT_NAME(install(source:root:));
++ (BOOL)remove:(NSString *)pluginId from:(NSString *)root NS_SWIFT_NAME(remove(id:root:));
+// {"data": NSData, "mime": NSString}, or nil for a file the sandbox may not read.
++ (nullable NSDictionary<NSString *, id> *)file:(NSString *)path
+                                       ofPlugin:(NSString *)pluginId
+                                             in:(NSString *)root NS_SWIFT_NAME(file(path:id:root:));
++ (NSString *)contentSecurityPolicy;
+@end
+
 NS_ASSUME_NONNULL_END
