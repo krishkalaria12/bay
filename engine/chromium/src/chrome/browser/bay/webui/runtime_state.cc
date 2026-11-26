@@ -270,11 +270,20 @@ bool SafeServiceRecord(const base::Value& value, const char* shape) {
   if (kind == "remoteTabs")
     return ServiceFields(d, {"deviceId", "name", "tabs"}) && ServiceChildren(d, "tabs", "tab");
   if (kind == "tab") return ServiceFields(d, {"url", "title"});
+  // A remote kill switch (lib/killSwitches.ts), a coding agent with its own
+  // access and one waiting for an answer (components/cli/agentApprovals.ts),
+  // and a folder kept in a shared folder (lib/sharedFolderService.ts).
+  if (kind == "switch") return ServiceFields(d, {"id", "feature", "reason", "until"});
+  if (kind == "agent") return ServiceFields(d, {"id", "name", "created", "profiles"});
+  if (kind == "agentRequest") return ServiceFields(d, {"agent", "name", "at"});
+  if (kind == "sharedFolder")
+    return ServiceFields(d, {"path", "name", "status", "syncedAt"});
   return false;
 }
 bool SafeServices(const base::DictValue& services) {
   if (!ServiceFields(services, {"live", "calendar", "alerts", "sync", "telemetry",
-                                "onboarding", "cli"}))
+                                "onboarding", "cli", "switches", "agents",
+                                "sharedFolders"}))
     return false;
   for (const auto [name, value] : services) {
     // The terminal control server is null until it first reports.
@@ -299,6 +308,19 @@ bool SafeServices(const base::DictValue& services) {
     } else if (name == "cli") {
       if (!ServiceFields(d, {"state", "connections", "generation", "port", "reason"}) ||
           !d.FindString("state"))
+        return false;
+    } else if (name == "switches") {
+      if (!ServiceFields(d, {"active", "checkedAt"}) ||
+          !ServiceChildren(d, "active", "switch"))
+        return false;
+    } else if (name == "agents") {
+      if (!ServiceFields(d, {"agents", "requests", "loaded"}) ||
+          !ServiceChildren(d, "agents", "agent") ||
+          !ServiceChildren(d, "requests", "agentRequest"))
+        return false;
+    } else if (name == "sharedFolders") {
+      if (!ServiceFields(d, {"folders"}) ||
+          !ServiceChildren(d, "folders", "sharedFolder", true))
         return false;
     } else if (name == "telemetry") {
       if (!ServiceFields(d, {"sharing", "decided", "askDone"})) return false;
@@ -325,7 +347,7 @@ bool SafeServices(const base::DictValue& services) {
           }
       }
       const auto* config = d.FindDict("config");
-      if (d.contains("config") && (!config || !ServiceFields(*config, {"githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"})))
+      if (d.contains("config") && (!config || !ServiceFields(*config, {"githubClientId", "bitbucketUser", "gitlabSite", "confluenceSite", "confluenceEmail", "googleClientId"})))
         return false;
       const auto* calendar = d.FindDict("calendar");
       if (d.contains("calendar") && (!calendar || !ServiceFields(*calendar, {"alertLead", "alertCondition", "showPreview", "showTimeToNext", "hiddenCalendarIds", "prompted"})))
@@ -481,7 +503,7 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
     return i < v.size() && ((nullable && v[i].is_none()) || (v[i].is_string() && !v[i].GetString().empty() && v[i].GetString().size() <= max));
   };
   const auto boolean = [&](size_t i) { return i < v.size() && v[i].is_bool(); };
-  const auto source = [&](size_t i) { return i < v.size() && Choice(v[i], {"github", "bitbucket", "notion", "confluence", "gdrive"}); };
+  const auto source = [&](size_t i) { return i < v.size() && Choice(v[i], {"github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"}); };
   const auto own_window = [&](size_t i) { return text(i) && acts_for(v[i].GetString()); };
   const auto public_space = [&](const std::string& id) { return !PrivateSpace(id) && state.FindDict("spaces")->contains(id); };
   const auto* services = state.FindDict("services");
@@ -573,7 +595,7 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
         (p.contains("collapsed") && !p.FindBool("collapsed").has_value())) return false;
     if (const auto* sources = p.Find("sources")) {
       if (!strings(*sources)) return false;
-      for (const auto& s : sources->GetList()) if (!Choice(s, {"github", "bitbucket", "notion", "confluence", "gdrive"})) return false;
+      for (const auto& s : sources->GetList()) if (!Choice(s, {"github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"})) return false;
     }
     if (const auto* filters = p.Find("filters"))
       return filters->is_dict() && CommandFields(filters->GetDict(), {"authored", "reviewRequests"}) &&
@@ -586,14 +608,14 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
   if (action == "liveOpen") return v.size() == 4 && own_window(0) && folder(1) && text(2) && boolean(3);
   if (action == "liveView") return v.size() == 3 && Choice(v[0], {"expandedStacks", "showAll"}) && text(1) && boolean(2);
   if (action == "liveConfig") {
-    if (v.size() != 1 || !patch(0, {"githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"})) return false;
+    if (v.size() != 1 || !patch(0, {"githubClientId", "bitbucketUser", "gitlabSite", "confluenceSite", "confluenceEmail", "googleClientId"})) return false;
     for (const auto [key, value] : v[0].GetDict()) if (!value.is_string() || value.GetString().size() > 4096) return false;
     return true;
   }
   if (action == "liveConnect") {
     if (v.size() != 2 || !source(0) || !strings(v[1], 65536)) return false;
     const auto& id = v[0].GetString();
-    return v[1].GetList().size() == (id == "github" || id == "notion" ? 1u : id == "bitbucket" ? 2u : id == "confluence" ? 3u : 99u);
+    return v[1].GetList().size() == (id == "github" || id == "notion" ? 1u : id == "bitbucket" || id == "gitlab" ? 2u : id == "confluence" ? 3u : 99u);
   }
   if (action == "liveDisconnect") return v.size() == 1 && source(0);
   if (action == "githubStart" || action == "githubWait" || action == "githubCancel" || action == "alertDismiss" ||
@@ -625,6 +647,16 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
       (!v[0].GetDict().contains("deleteData") || v[0].GetDict().FindBool("deleteData").has_value());
   if (action == "setTypeSynced") return v.size() == 2 && Choice(v[0], {"bookmarks", "history", "tabs", "pinned", "passwords", "settings"}) && boolean(1);
   if (action == "setProfileSynced") return v.size() == 2 && text(0) && public_space(v[0].GetString()) && boolean(1);
+  // A pinned folder of a public space kept in a shared folder
+  // (lib/sharedFolderService.ts); the folder's path is granted natively.
+  const auto pinned_folder = [&](size_t i) {
+    const auto* all = state.FindDict("pinnedFolders");
+    const auto* d = text(i) && all ? all->FindDict(v[i].GetString()) : nullptr;
+    const auto* space = d ? d->FindString("spaceId") : nullptr;
+    return space && public_space(*space);
+  };
+  if (action == "sharedFolderBind") return v.size() == 3 && pinned_folder(0) && text(1) && text(2, 1024);
+  if (action == "sharedFolderUnbind" || action == "sharedFolderSync") return v.size() == 1 && pinned_folder(0);
   return false;
 }
 // A bookmark tree to add: pages and folders, bounded in depth and count.
