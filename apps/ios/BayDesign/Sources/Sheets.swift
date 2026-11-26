@@ -118,8 +118,21 @@ private struct FittedSheet<Content: View>: View {
         .onPreferenceChange(SheetContentHeight.self) { height = $0 }
         .presentationDetents([.height(fitted)])
         .presentationDragIndicator(.visible)
+        .themedSheetBackground()
     } else {
       content()
+    }
+  }
+}
+
+extension View {
+  /// The sheet in the theme's surface colour. Left to the system, iOS 26's glass takes its light or dark from what's
+  /// behind it, so in dark mode over a white page the sheet went pale grey under white text, with the bar showing through.
+  @ViewBuilder fileprivate func themedSheetBackground() -> some View {
+    if #available(iOS 16.4, *) {
+      presentationBackground(BayColor.surface)
+    } else {
+      self
     }
   }
 }
