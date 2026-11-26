@@ -1172,9 +1172,9 @@
                   <td>
                     Done in source, all three platforms: the <code>bay-switches</code> crate checks the signed feed (Ed25519 over
                     <code>apps/web/public/switches.json</code>, signed by <code>scripts/release/sign-switches.mjs</code>) and matches each switch's platforms,
-                    releases and end date; the Mac reaches it through <code>NNCoreSwitches</code>, Windows and Linux through <code>engine_services.cc</code>. The
-                    app keeps the last feed it accepted and refuses an older one (<code>lib/killSwitches.ts</code>, tested), and can switch off WebKit, sign-in
-                    carrying and Ask About This Page. Settings › Advanced lists what's off and why.
+                    releases and end date; the Mac reaches it through <code>NNCoreSwitches</code>, Windows and Linux through <code>engine_services.cc</code>.
+                    The app keeps the last feed it accepted and refuses an older one (<code>lib/killSwitches.ts</code>, tested), and can switch off WebKit,
+                    sign-in carrying and Ask About This Page. Settings › Advanced lists what's off and why.
                   </td>
                 </tr>
               </tbody>
@@ -1215,9 +1215,9 @@
               token policy (<code>nn_cli_token_policy</code>) to filter targets by profile per token, with an approval sheet in the app.
             </li>
             <li>
-              G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the
-              website deploy. Only three features can be switched off so far; a switch for anything else shows in Settings but turns nothing off. The
-              Windows and Linux <code>checkSwitches</code> dispatch is unbuilt, like G3's.
+              G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the website
+              deploy. Only three features can be switched off so far; a switch for anything else shows in Settings but turns nothing off. The Windows and Linux
+              <code>checkSwitches</code> dispatch is unbuilt, like G3's.
             </li>
           </ul>
         </section>
