@@ -142,6 +142,17 @@ pending for them and what changed on things they finished or are waiting on sinc
 their priorities, keep it short, and deliver it the way they asked. Keep enough state between runs to tell new from
 old.
 
+## Reacting to Bay
+
+`bay on EVENT -- COMMAND` runs a program each time a tab opens, navigates, finishes loading or closes, until Bay
+quits or the user stops it. The program gets `BAY_EVENT`, `BAY_TAB_ID`, `BAY_URL` and `BAY_TITLE`, and the same as
+JSON on stdin. `--match` takes a Chrome match pattern; `--once` stops after the first run. Hooks only watch: they
+can't stop or change a page.
+
+```sh
+bay on page-loaded --match 'https://github.com/*' -- ./log-visit.sh
+```
+
 ## Gotchas
 
 - Every tab and element method returns a promise: `await tab.title()`, `await el.text()`. `Promise.all` runs

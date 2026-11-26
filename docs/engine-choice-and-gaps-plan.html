@@ -1192,6 +1192,15 @@
                     its head pipeline, and says which were merged, closed or reviewed once they leave.
                   </td>
                 </tr>
+                <tr>
+                  <td>G6</td>
+                  <td>
+                    Watching hooks done, all three platforms: <code>bay on EVENT -- COMMAND</code> (<code>apps/cli/src/hooks.ts</code>, tested) runs a program
+                    when a web page tab opens, navigates, finishes loading or closes, with <code>--match</code>, <code>--once</code> and
+                    <code>--parallel</code>, over the bay command's own connection and permission. The program gets the event in its environment and as JSON on
+                    stdin. The agent skill documents it.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1238,6 +1247,12 @@
             <li>
               G7's GitLab items have no line counts, and approval shows only as required, not who approved. Sources from plugins wait on G9; Outlook, Notion,
               Confluence, Figma and Linear previews stay deferred.
+            </li>
+            <li>
+              G6 has no decide hooks yet: the bay command's token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code> domain, so a
+              hook can't hold, rewrite or stop a navigation or pick its space. Window focus and finished downloads aren't events the bay command can see either
+              (no focus event over DevTools; <code>Browser.setDownloadBehavior</code> isn't allowed). Scheduled hooks and command bar results from a hook aren't
+              built; a hook runs while <code>bay on</code> does, so keeping one running is the system's job (launchd, systemd, Task Scheduler).
             </li>
           </ul>
         </section>
