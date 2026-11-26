@@ -32,7 +32,7 @@ import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } fr
 import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
 import { mainWindowFor } from "./littleBay";
-import { tabEngine, typedNavigationEngine } from "./engines";
+import { tabEngine, tabPick, typedNavigationEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
 import { MAX_CLOSED_TABS } from "./constants";
@@ -560,12 +560,14 @@ export const createTabsSlice =
       const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
       // A typed address opens in its site's engine (store/engines.ts); moving engines drops the page the tab adopted.
       const engine = userInitiated ? typedNavigationEngine(s, tab, url) : undefined;
-      const page = engine ? { engine, ...(engine !== tabEngine(s, id) ? { adoptId: undefined } : undefined) } : {};
+      const page = engine ? { engine, ...(engine !== tabEngine(s, id) ? { adoptId: undefined } : undefined) } : undefined;
+      // A pick (Reopen in…) holds for its site: an address on another site drops it.
+      const pick = tab.enginePick && !tabPick(tab, url) ? { enginePick: undefined } : undefined;
       set(
         apply(base, {
           tabs: {
             ...base.tabs,
-            [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url, ...page },
+            [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url, ...page, ...pick },
           },
         }),
       );

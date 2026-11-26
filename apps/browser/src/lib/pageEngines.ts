@@ -136,7 +136,7 @@ export function followSiteChoice(tabId: string, engine: PageEngine, url: string,
   const t = store().tabs[tabId];
 
   if (!t || t.openerId) return;
-  const chosen = chosenEngine(url);
+  const chosen = chosenEngine(store().settings, url);
 
   if (!chosen || chosen === engine) return;
   const now = Date.now();

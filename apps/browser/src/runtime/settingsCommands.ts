@@ -59,6 +59,9 @@ const choices: Partial<Record<keyof Settings, readonly string[]>> = {
   windowMaterial: ["solid", "glass"],
   addressBar: ["toolbar", "sidebar"],
   libraryIn: ["sidebar", "page"],
+  engineMode: ["automatic", "chromium", "webkit"],
+  defaultEngine: ["chromium", "webkit"],
+  protectedVideoFallback: ["ask", "move", "stay"],
 };
 
 /** Renderer preferences cannot replace engines reported by native extensions or
@@ -97,6 +100,11 @@ function patchFrom(value: JsonInput): Partial<Settings> {
 
       if (normalized.length !== item.length) invalid();
       patch[key] = normalized.map((rule) => ({ ...rule, destination: { ...rule.destination } }));
+    } else if (key === "siteEngines") {
+      const rules = Object.entries(record(item)).map(([site, engine]) => [text(site, false), text(engine)] as const);
+
+      if (rules.some(([, engine]) => engine !== "chromium" && engine !== "webkit")) invalid();
+      patch[key] = Object.fromEntries(rules);
     } else if (key === "shortcuts" || key === "neverTranslateSites") {
       patch[key] = Object.fromEntries(Object.entries(record(item)).map(([name, values]) => [text(name, false), strings(values)]));
     } else if (Array.isArray(fallback)) patch[key] = strings(item);

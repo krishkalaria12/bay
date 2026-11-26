@@ -64,6 +64,15 @@ export const SYNCED_SETTINGS = [
   "addressBar",
   "sidebarPosition",
   "shortcuts",
+  // Engine choice: only a Mac reads these (store/engines.ts); Windows and Linux keep every page in Chromium.
+  "engineMode",
+  "defaultEngine",
+  "siteEngines",
+  "streamingInWebKit",
+  "protectedVideoFallback",
+  "engineSwitchKeepsPage",
+  "engineSwitchCarriesSignIns",
+  "webKitFraudWarnings",
 ] as const satisfies readonly (keyof Settings)[];
 
 export const settingsAdapter: Adapter = {

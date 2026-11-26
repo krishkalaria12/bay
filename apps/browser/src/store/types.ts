@@ -97,6 +97,9 @@ export type Tab = {
   unloaded?: boolean;
   // The engine its page runs in (store/engines.ts), once it has one: it keeps it until moved to the other.
   engine?: PageEngine;
+  // The engine the person picked for this tab with Reopen in… (store/engines.ts › tabPick), for the site it was on
+  // (its registrable domain): it holds while the tab stays on that site, relaunches included.
+  enginePick?: { engine: PageEngine; site: string };
   createdAt: number;
   lastActiveAt: number;
 };
@@ -173,7 +176,7 @@ export type Bookmarks = {
 };
 
 export type TabSnapshot = Pick<Tab, "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "spaceId"> &
-  Partial<Pick<Tab, "pinnedUrl" | "pinnedRow" | "engine">>;
+  Partial<Pick<Tab, "pinnedUrl" | "pinnedRow" | "engine" | "enginePick">>;
 
 export type ClosedTab = {
   kind: "tab";

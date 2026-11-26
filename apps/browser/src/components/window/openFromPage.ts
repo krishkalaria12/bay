@@ -65,9 +65,10 @@ export function openFromPage({ url, adoptId, disposition, point }: OpenWindowReq
   }
 
   const background = disposition === "background";
-  // A site that needs the other engine (a streaming site) loads afresh there, instead of in the page the opener's
-  // engine made for it. Only a build with WebKit (macOS) chooses another engine: Windows and Linux keep Chromium.
-  const engine = from.tabId && disposition !== "popup" ? chosenEngine(url) : undefined;
+  // A site that asks for the other engine (a site rule, a streaming site, the single-engine mode) loads afresh there,
+  // instead of in the page the opener's engine made for it. Only a build with WebKit (macOS) chooses another engine:
+  // Windows and Linux keep Chromium.
+  const engine = from.tabId && disposition !== "popup" ? chosenEngine(s.settings, url) : undefined;
 
   if (engine && engine !== tabEngine(s, from.tabId!)) {
     const id = legacyBrowser.getState().newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background });

@@ -1,21 +1,30 @@
 import { hasWebKit, type PageEngine } from "@bay/chromium";
+import { registrableDomain } from "../lib/siteDomain";
 import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
+import type { Settings } from "./settings";
 import type { Tab } from "./types";
 
-// Which engine a tab's page runs in. Bay chooses it; there is no switch. Chromium is Bay's engine; it has no Widevine, so
-// streaming sites (Netflix, Disney+, Prime Video…) open in WebKit, whose FairPlay plays them, and any other page whose
-// protected video won't play moves there (lib/pageEngines.ts). A page's links stay on its engine, so a sign-in that
-// crosses sites comes back signed in; a typed address leaves for its own site's engine.
-// WebKit is macOS's: a build without the BayWebKit module (Windows, Linux) keeps every page in Chromium.
+// Which engine a tab's page runs in: Chromium or WebKit. Chromium is Bay's engine; it has no Widevine, so streaming
+// sites (Netflix, Disney+, Prime Video…) open in WebKit, whose FairPlay plays them, and a page whose protected video
+// won't play can move there (lib/pageEngines.ts). The person can change that: a mode for the whole browser, a default
+// engine, rules for single sites and a pick on any tab. A page's links stay on its engine, so a sign-in that crosses
+// sites comes back signed in; a typed address leaves for its own site's engine.
+// WebKit is macOS's: a build without the BayWebKit module (Windows, Linux) keeps every page in Chromium, whatever the
+// (synced) settings say.
 
 export const ENGINE_NAMES: Record<PageEngine, string> = { chromium: "Chromium", webkit: "WebKit" };
 export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", webkit: "safari" };
 
-// Read-only, so the coordinator's store and a window's projection (runtime/projection.ts) both answer.
-type EngineState = DeepReadonly<Pick<BrowserState, "tabs">>;
+/** The settings engine choice reads. */
+export type EnginePrefs = Pick<Settings, "engineMode" | "defaultEngine" | "siteEngines" | "streamingInWebKit">;
 
-type Site = { key: string; host: string };
+// Read-only, so the coordinator's store and a window's projection (runtime/projection.ts) both answer.
+type EngineState = DeepReadonly<Pick<BrowserState, "tabs">> & { readonly settings: DeepReadonly<EnginePrefs> };
+
+type Prefs = DeepReadonly<EnginePrefs>;
+
+type Site = { key: string; host: string; domain: string };
 
 // Every tab icon asks on every store update. URL parsing in Hermes otherwise repeats for all rows even when only
 // another page's progress changed. Cache only address-derived facts, so opener changes still apply.
@@ -32,7 +41,10 @@ function parsedSite(url: string | undefined | null): Site | null {
   try {
     const u = new URL(url);
 
-    if (u.protocol === "http:" || u.protocol === "https:") site = { key: `${u.protocol}//${u.host}`.toLowerCase(), host: u.hostname.toLowerCase() };
+    if (u.protocol === "http:" || u.protocol === "https:") {
+      const host = u.hostname.toLowerCase();
+      site = { key: `${u.protocol}//${u.host}`.toLowerCase(), host, domain: registrableDomain(host) };
+    }
   } catch {}
 
   // Don't retain unusually large query strings after their tabs close.
@@ -49,6 +61,11 @@ export function siteOf(url: string | undefined | null): string | null {
   return parsedSite(url)?.key ?? null;
 }
 
+/** A web page's registrable domain, which site rules key by: "accounts.example.com" → "example.com". */
+export function siteDomainOf(url: string | undefined | null): string | null {
+  return parsedSite(url)?.domain ?? null;
+}
+
 /** A page WebKit can show: a web page or a file, on a build that has WebKit. */
 export const canUseWebKit = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
 
@@ -56,7 +73,7 @@ export const canUseWebKit = (url: string | undefined | null) => hasWebKit() && !
 const chromiumOnly = (url: string | undefined | null) => !!url && /^(bay|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
 
 /** Sites whose video is DRM-protected (Widevine in Chrome, FairPlay in Safari), subdomains included. */
-const PROTECTED_VIDEO_SITES: readonly string[] = [
+export const PROTECTED_VIDEO_SITES: readonly string[] = [
   "netflix.com",
   "disneyplus.com",
   "max.com",
@@ -82,10 +99,33 @@ export function protectedVideoSite(url: string | undefined | null): boolean {
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
-/** The engine a site needs, if it needs one: WebKit for a streaming site, from its first visit. */
-export const chosenEngine = (url: string | undefined | null): PageEngine | undefined => (hasWebKit() && protectedVideoSite(url) ? "webkit" : undefined);
+/** The one engine every page opens in, in Chromium or WebKit mode. */
+const singleEngine = (prefs: Prefs): PageEngine | undefined => (prefs.engineMode === "automatic" ? undefined : prefs.engineMode);
 
-export const engineForUrl = (url: string | undefined | null): PageEngine => chosenEngine(url) ?? "chromium";
+/** The engine pages open in when nothing else decides: the mode's, else the default engine. */
+export const defaultEngineOf = (prefs: Prefs): PageEngine => (hasWebKit() ? (singleEngine(prefs) ?? prefs.defaultEngine) : "chromium");
+
+/** The person's rule for a page's site, if there is one. */
+export const siteRule = (prefs: Prefs, url: string | undefined | null): PageEngine | undefined => {
+  const domain = siteDomainOf(url);
+
+  return domain ? prefs.siteEngines[domain] : undefined;
+};
+
+/** The engine a page's site asks for, if anything does: the mode's single engine, the site's rule, then WebKit for a
+ *  streaming site. A link to it moves there; a site with no answer keeps the linking page's engine. */
+export function chosenEngine(prefs: Prefs, url: string | undefined | null): PageEngine | undefined {
+  if (!canUseWebKit(url)) return undefined;
+
+  return singleEngine(prefs) ?? siteRule(prefs, url) ?? (prefs.streamingInWebKit && protectedVideoSite(url) ? "webkit" : undefined);
+}
+
+/** A fresh page's engine at an address: Chromium for Bay's own pages, else its site's choice, else the default. */
+export function engineForUrl(prefs: Prefs, url: string | undefined | null): PageEngine {
+  if (!canUseWebKit(url)) return "chromium";
+
+  return chosenEngine(prefs, url) ?? defaultEngineOf(prefs);
+}
 
 const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
@@ -105,45 +145,73 @@ const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): Page
   return undefined;
 };
 
+const pageAddress = (t: DeepReadonly<Tab>) => t.navigation?.url ?? t.url;
+
 function engineOf(s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine {
-  if (!hasWebKit() || chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
+  if (!hasWebKit() || chromiumOnly(pageAddress(t))) return "chromium";
 
   if (t.engine) return t.engine;
   const adopted = fromAdoption(s, t, depth);
 
   if (adopted) return adopted;
+  const single = singleEngine(s.settings);
+
+  if (single) return single;
   const opener = t.openerId ? s.tabs[t.openerId] : undefined;
 
   if (opener?.engine && (opener.url || opener.navigation)) return opener.engine;
 
-  return engineForUrl(t.navigation?.url ?? t.url);
+  return engineForUrl(s.settings, pageAddress(t));
 }
 
-/** The tab's engine: the one it has, else its adopted page's, its opener's, then its address's. */
+/** The tab's engine now: the one its page has, else its adopted page's, the mode's, its opener's, then its address's.
+ *  A page keeps its engine until it's moved (lib/pageEngines.ts), so a settings change moves pages when they're
+ *  shown instead of reloading every tab at once. */
 export function tabEngine(s: EngineState, tabId: string): PageEngine {
   const t = s.tabs[tabId];
 
   return t ? engineOf(s, t, 0) : "chromium";
 }
 
-/** An address the user typed follows its site's engine, else keeps the page's engine. */
-export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
-  if (chromiumOnly(url)) return "chromium";
-  const chosen = chosenEngine(url);
+/** A tab whose page Chromium made for it (an extension's tab, a pop-up from Chromium's page) keeps Chromium even in
+ *  WebKit mode: extensions exist only there, and a pop-up needs its opener. */
+const chromiumDriven = (t: DeepReadonly<Tab>) => !!t.adoptId && /^(nncore|tab):/.test(t.adoptId);
 
-  if (chosen) return chosen;
+/** The engine the person picked for the tab with Reopen in…, while the tab stays on that site. */
+export const tabPick = (t: DeepReadonly<Tab>, url = pageAddress(t)): PageEngine | undefined =>
+  t.enginePick && t.enginePick.site === siteDomainOf(url) ? t.enginePick.engine : undefined;
 
-  return tab.url || tab.navigation ? tabEngine(s, tab.id) : "chromium";
+/** The engine the settings want the tab in, first answer winning: Chromium-only pages, the single-engine mode, the
+ *  tab's own pick, the site's rule, streaming sites, the default engine. (A link's tab starts in its opener's engine,
+ *  so the opener isn't asked here: tabEngine answers for it.) */
+export function wantedEngine(s: EngineState, tabId: string): PageEngine {
+  const t = s.tabs[tabId];
+  const url = t && pageAddress(t);
+
+  if (!t || !canUseWebKit(url)) return "chromium";
+  const single = singleEngine(s.settings);
+
+  if (single) return single === "webkit" && chromiumDriven(t) ? "chromium" : single;
+
+  return tabPick(t, url) ?? engineForUrl(s.settings, url);
 }
 
-/** The engine a tab's icon is marked with: only a web page away from Chromium. */
+/** An address the user typed: its site's choice (the tab's pick while it stays on the site), else the default
+ *  engine. It doesn't follow the page it replaces. */
+export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
+  if (!canUseWebKit(url)) return "chromium";
+
+  return (!singleEngine(s.settings) && tabPick(tab, url)) || engineForUrl(s.settings, url);
+}
+
+/** The engine a tab's icon is marked with: a web page in the engine other pages don't open in. */
 export function engineMark(s: EngineState, tabId: string): PageEngine | null {
   const t = s.tabs[tabId];
 
   if (!t || !canUseWebKit(t.url || t.navigation?.url)) return null;
   const engine = tabEngine(s, tabId);
 
-  return engine === "chromium" ? null : engine;
+  return engine === defaultEngineOf(s.settings) ? null : engine;
 }
 
 export type WebKitPage = { url: string; title: string; isLoading: boolean; committedUrl: string };
