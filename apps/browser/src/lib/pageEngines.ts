@@ -1,4 +1,4 @@
-import { addHistoryVisits, hasWebKit, setWebKitZoom, setZoom, type PageEngine } from "@bay/chromium";
+import { addHistoryVisits, hasWebKit, setWebKitFraudWarnings, setWebKitZoom, setZoom, type PageEngine } from "@bay/chromium";
 import * as Effect from "effect/Effect";
 import * as v from "valibot";
 import { PageWorkService } from "../components/site/pageWorkService";
@@ -24,6 +24,7 @@ import {
 } from "../store/engines";
 import type { Settings } from "../store/settings";
 import { webviews } from "./webviews";
+import { capture } from "../telemetry/client";
 import { carrySignIns, READ_STORAGE, storageFrom, writeStorageScript, type CarriedStorage } from "./engineSiteData";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
@@ -99,7 +100,9 @@ export async function goBackAcrossEngines(tabId: string): Promise<boolean> {
 }
 
 /** Reloads the tab's page in `engine`, first asking when the page has input that would be lost. */
-async function openPageIn(tabId: string, engine: PageEngine, options: { checkWork?: boolean } = {}): Promise<boolean> {
+type SwitchReason = "person" | "protectedVideo" | "siteLink" | "settings";
+
+async function openPageIn(tabId: string, engine: PageEngine, options: { checkWork?: boolean; reason?: SwitchReason } = {}): Promise<boolean> {
   const t = store().tabs[tabId];
 
   if (!t) return false;
@@ -126,6 +129,8 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
 
   if (!moved || pageUrl(moved) !== url) return false;
   store().updateTab(tabId, wantsPage(moved) ? { engine, adoptId: undefined, navigation: navigationTo(moved.url || url, true) } : { engine });
+  // Only when the person shares usage (Settings › Privacy): which way pages move, and why.
+  capture("engine_switch", { to: engine, reason: options.reason ?? "person" });
 
   return true;
 }
@@ -242,7 +247,10 @@ const sameEnginePrefs = (a: Settings, b: Settings) =>
  *  now, asking first if it holds unsaved work; one awake in the background moves when shown. Once, on a Mac. */
 export function followEngineSettings() {
   if (!hasWebKit() || unwatchSettings) return;
+  setWebKitFraudWarnings(store().settings.webKitFraudWarnings);
   unwatchSettings = useBrowser.subscribe((s, prev) => {
+    if (s.settings.webKitFraudWarnings !== prev.settings.webKitFraudWarnings) setWebKitFraudWarnings(s.settings.webKitFraudWarnings);
+
     if (s.tabs !== prev.tabs)
       for (const map of [pendingMoves, restoring, carriedStorage]) {
         for (const id of map.keys()) if (!s.tabs[id]) map.delete(id);
@@ -264,7 +272,7 @@ export function followEngineSettings() {
 
         if (s.settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId))
           void carrySignIns(was, wanted, engineProfile(t.spaceId), site, siteOf(pageUrl(t)) ?? "");
-      } else if (shownTabs.has(id)) void openPageIn(id, wanted);
+      } else if (shownTabs.has(id)) void openPageIn(id, wanted, { reason: "settings" });
       else pendingMoves.set(id, wanted);
     }
   });
@@ -282,7 +290,7 @@ export function engineTabShown(tabId: string, shown: boolean) {
   pendingMoves.delete(tabId);
 
   // Only if nothing has moved it since.
-  if (wantedEngine(store(), tabId) === engine && tabEngine(store(), tabId) !== engine) void openPageIn(tabId, engine);
+  if (wantedEngine(store(), tabId) === engine && tabEngine(store(), tabId) !== engine) void openPageIn(tabId, engine, { reason: "settings" });
 }
 
 /** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can
@@ -307,7 +315,7 @@ async function moveForProtectedVideo(tabId: string, site: string) {
   movingTabs.add(tabId);
 
   try {
-    if (!(await openPageIn(tabId, "webkit"))) {
+    if (!(await openPageIn(tabId, "webkit", { reason: "protectedVideo" }))) {
       declinedSites.add(site);
 
       return;
@@ -391,7 +399,7 @@ export function followSiteChoice(tabId: string, engine: PageEngine, url: string,
 
   if (now - (siteMoves.get(tabId) ?? 0) < SITE_MOVE_SPACING_MS) return;
   siteMoves.set(tabId, now);
-  void openPageIn(tabId, chosen, { checkWork: false }).then((moved) => {
+  void openPageIn(tabId, chosen, { checkWork: false, reason: "siteLink" }).then((moved) => {
     if (moved && canUseWebKit(previousUrl)) patchPage(tabId, { engineBack: { engine, url: previousUrl } });
   });
 }

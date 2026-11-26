@@ -9,6 +9,7 @@ public class WebKitModule: Module {
 
     OnCreate {
       WebKitHub.shared.events = { [weak self] name, payload in self?.sendEvent(name, payload) }
+      DispatchQueue.main.async { WebKitHub.shared.downloads.removeLeftoverStaging() }
     }
 
     Function("prepareTransfer") { (key: String) in WebKitHub.shared.prepareTransfer(key) }
@@ -48,6 +49,7 @@ public class WebKitModule: Module {
     AsyncFunction("applySiteCookies") { (profile: String, set: [[String: Any]], remove: [[String: Any]], promise: Promise) in
       WebKitHub.shared.applySiteCookies(profile: profile, set: set, remove: remove) { promise.resolve($0) }
     }.runOnQueue(.main)
+    Function("setFraudWarnings") { (on: Bool) in WebKitHub.fraudWarnings = on }
     // A page moving here from Chromium keeps its zoom (lib/pageEngines.ts openPageIn).
     Function("setZoom") { (profile: String, host: String, zoom: Double) in WebKitHub.shared.setZoom(zoom, profile: profile, host: host) }
     AsyncFunction("info") { () -> [String: Any] in

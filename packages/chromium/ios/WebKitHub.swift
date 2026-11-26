@@ -186,6 +186,8 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     })();
     """
 
+  static var fraudWarnings = true
+
   func configuration(profile: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = dataStore(for: profile)
@@ -203,7 +205,8 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     config.preferences.isElementFullscreenEnabled = !Self.background
     Self.allowPictureInPicture(config.preferences)
     config.preferences.javaScriptCanOpenWindowsAutomatically = false
-    config.preferences.isFraudulentWebsiteWarningEnabled = false
+    // Settings › Engines › Warn about deceptive sites (WebKitModule setFraudWarnings); pages opened after a change take it.
+    config.preferences.isFraudulentWebsiteWarningEnabled = Self.fraudWarnings
     config.defaultWebpagePreferences.preferredContentMode = .desktop
     return config
   }
@@ -707,6 +710,28 @@ final class WebKitDownloads: NSObject, WKDownloadDelegate {
   static func makeStaging(in folder: URL, uuid: String) -> URL? {
     let staging = folder.appendingPathComponent(stagingPrefix + uuid, isDirectory: true)
     return mkdir(staging.path, 0o700) == 0 ? staging : nil
+  }
+
+  /// Staging folders a crash or a forced quit left in the Downloads folder: a day old or more and not a running
+  /// download's. Their partial files go with them.
+  static func removeLeftoverStaging(in folder: URL, active: Set<String>, now: Date = Date()) {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
+    for name in names where name.hasPrefix(stagingPrefix) {
+      let uuid = String(name.dropFirst(stagingPrefix.count))
+      let path = folder.appendingPathComponent(name).path
+      guard UUID(uuidString: uuid) != nil, !active.contains(path),
+        let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date,
+        now.timeIntervalSince(modified) > 24 * 60 * 60
+      else { continue }
+      _ = removeStaging(path, uuid: uuid, folder: folder.path)
+    }
+  }
+
+  /// Once a launch: the Downloads folder's leftover staging folders.
+  func removeLeftoverStaging() {
+    let active = Set(items.values.compactMap { $0.staging?.path })
+    let folder = fallbackFolder
+    DispatchQueue.global(qos: .utility).async { Self.removeLeftoverStaging(in: folder, active: active) }
   }
 
   static func plainAbsolute(_ path: String) -> Bool {

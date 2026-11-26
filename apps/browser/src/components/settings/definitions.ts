@@ -226,6 +226,7 @@ export const SETTINGS = {
     title: "Warn about deceptive sites",
     words: "safe browsing phishing malware fraud webkit",
   },
+  passkeys: { id: "engines.passkeys", pane: "engines", title: "Passkeys", words: "passkey webauthn sign in webkit security key" },
   engineDifferences: {
     id: "engines.engineDifferences",
     pane: "engines",

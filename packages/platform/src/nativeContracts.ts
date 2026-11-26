@@ -2135,6 +2135,27 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;"
         },
+        "setFraudWarnings": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setFraudWarnings?(on: boolean): Promise<void>;"
+        },
+        "passkeyAccess": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "passkeyAccess(): Promise<PasskeyAccess>;"
+        },
+        "requestPasskeyAccess": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "requestPasskeyAccess(): Promise<PasskeyAccess>;"
+        },
         "applySiteCookies": {
           "async": true,
           "optional": true,
@@ -2808,7 +2829,8 @@ export const nativeContracts = {
     },
     "chromium/src/webkit.ts": {
       "PageEngine": "\"chromium\" | \"webkit\"",
-      "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.\n  setZoom?(profile: string, host: string, zoom: number): void;\n  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;\n  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;\n}"
+      "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.\n  setZoom?(profile: string, host: string, zoom: number): void;\n  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;\n  setFraudWarnings?(on: boolean): void;\n  passkeyAccess(): Promise<PasskeyAccess>;\n  requestPasskeyAccess(): Promise<PasskeyAccess>;\n  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;\n}",
+      "PasskeyAccess": "{ entitled: boolean; status: \"entitlementRequired\" | \"deviceNotConfigured\" | \"notDetermined\" | \"denied\" | \"authorized\" }"
     },
     "sync/src/native.ts": {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",

@@ -175,6 +175,9 @@ let webKitAvailable = true;
 export const hasWebKit = () => webKitAvailable;
 export const setWebKitAvailable = (on) => void (webKitAvailable = on);
 export const setWebKitZoom = () => {};
+export const setWebKitFraudWarnings = () => {};
+export const webKitPasskeyAccess = () => Promise.resolve(null);
+export const requestWebKitPasskeyAccess = () => Promise.resolve(null);
 // Sign-ins carried between engines (lib/engineSiteData.ts): no native stores here.
 
 export const canCarrySiteCookies = () => false;

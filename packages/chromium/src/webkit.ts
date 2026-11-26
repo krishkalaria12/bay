@@ -29,6 +29,9 @@ type WebKitNative = {
   // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.
   setZoom?(profile: string, host: string, zoom: number): void;
   siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;
+  setFraudWarnings?(on: boolean): void;
+  passkeyAccess(): Promise<PasskeyAccess>;
+  requestPasskeyAccess(): Promise<PasskeyAccess>;
   applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;
 };
 
@@ -63,3 +66,12 @@ export const webKitInfo = () => WebKit?.info() ?? Promise.resolve(null);
 
 /** A host's page zoom in WebKit's pages of a profile, as Chromium's setZoom: a page switching engines keeps its zoom. */
 export const setWebKitZoom = (profile: string, host: string, zoom: number) => WebKit?.setZoom?.(profile, host, zoom);
+
+/** Settings › Engines › Warn about deceptive sites, for WebKit pages opened from now on. */
+export const setWebKitFraudWarnings = (on: boolean) => WebKit?.setFraudWarnings?.(on);
+
+/** Whether WebKit pages can use the Mac's passkeys: Apple's browser entitlement, then the person's permission. */
+export type PasskeyAccess = { entitled: boolean; status: "entitlementRequired" | "deviceNotConfigured" | "notDetermined" | "denied" | "authorized" };
+
+export const webKitPasskeyAccess = () => WebKit?.passkeyAccess() ?? Promise.resolve(null);
+export const requestWebKitPasskeyAccess = () => WebKit?.requestPasskeyAccess() ?? Promise.resolve(null);
