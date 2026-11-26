@@ -5,7 +5,21 @@ import { pageOf, patchPage } from "../components/window/pageState";
 import { runDesktop } from "../effect/runtime";
 import { showToast } from "../components/ui/toasts";
 import { useBrowser } from "../store/browserStore";
-import { canUseWebKit, chosenEngine, ENGINE_NAMES, siteOf, tabEngine, visitRecorder, type WebKitPage } from "../store/engines";
+import { reportBrowserCommand } from "../runtime/commands";
+import { updateSettings } from "../runtime/settingsActions";
+import {
+  canUseWebKit,
+  chosenEngine,
+  ENGINE_NAMES,
+  engineForUrl,
+  siteDomainOf,
+  siteOf,
+  siteRule,
+  tabEngine,
+  tabPick,
+  visitRecorder,
+  type WebKitPage,
+} from "../store/engines";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
 import { wantsPage } from "./tabNavigation";
@@ -99,18 +113,24 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
 }
 
 /** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can
- *  play it, unless the person chose Chromium mode or to stay. */
+ *  play it, or offers to, as Settings › Engines › When protected video won't play says. A site or tab the person put
+ *  in Chromium stays there. */
 export async function playInWebKit(tabId: string) {
   const s = store();
   const t = s.tabs[tabId];
 
   if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit" || s.settings.engineMode === "chromium") return;
 
-  // Settings › Engines › When protected video won't play.
-  if (s.settings.protectedVideoFallback === "stay") return;
+  if (s.settings.protectedVideoFallback === "stay" || siteRule(s.settings, t.url) === "chromium" || tabPick(t) === "chromium") return;
   const site = siteOf(t.url);
 
   if (!site || declinedSites.has(site) || movingTabs.has(tabId)) return;
+
+  if (s.settings.protectedVideoFallback === "ask") return patchPage(tabId, { engineOffer: hostLabel(site) });
+  await moveForProtectedVideo(tabId, site);
+}
+
+async function moveForProtectedVideo(tabId: string, site: string) {
   movingTabs.add(tabId);
 
   try {
@@ -129,6 +149,57 @@ export async function playInWebKit(tabId: string) {
     showToast(moved.windowId, "Opened in Safari's engine for protected media", `${hostLabel(site)} plays here. You may need to sign in once.`, {
       icon: "play.rectangle",
     });
+}
+
+/** The person's answer to "Play <site> in WebKit?": stay this time, open it there, or keep the site in Chromium. */
+export function answerEngineOffer(tabId: string, answer: "stay" | "open" | "never") {
+  const t = store().tabs[tabId];
+  const site = siteOf(t?.url);
+  patchPage(tabId, { engineOffer: null });
+
+  if (!t || !site) return;
+
+  if (answer === "open") return void moveForProtectedVideo(tabId, site);
+  declinedSites.add(site);
+
+  if (answer === "never") void alwaysOpenSiteIn(tabId, "chromium");
+}
+
+/** Reopen in…: the tab's page reloads in `engine`, which stays the tab's while it's on this site. */
+export async function reopenIn(tabId: string, engine: PageEngine): Promise<boolean> {
+  const t = store().tabs[tabId];
+  const site = siteDomainOf(pageUrl(t));
+
+  if (!t || !site || !(await openPageIn(tabId, engine))) return false;
+  const now = store().tabs[tabId];
+
+  if (!now) return false;
+  // A pick the site's own choice already makes isn't kept, so a later rule still reaches the tab.
+  const follows = engineForUrl(store().settings, pageUrl(now)) === engine;
+  store().updateTab(tabId, { enginePick: follows ? undefined : { engine, site } });
+
+  return true;
+}
+
+/** Always Open <site> in…: a site rule, and the tab moves there now. */
+export async function alwaysOpenSiteIn(tabId: string, engine: PageEngine): Promise<void> {
+  const s = store();
+  const t = s.tabs[tabId];
+  const site = siteDomainOf(pageUrl(t));
+
+  if (!t || !site) return;
+  reportBrowserCommand(updateSettings({ siteEngines: { ...s.settings.siteEngines, [site]: engine } }));
+
+  if (t.enginePick) store().updateTab(tabId, { enginePick: undefined });
+
+  if (tabEngine(store(), tabId) !== engine) await openPageIn(tabId, engine);
+}
+
+/** Forgets a site's rule; its pages follow the default engine again. */
+export function forgetSiteRule(site: string) {
+  const rules = { ...store().settings.siteEngines };
+  delete rules[site];
+  reportBrowserCommand(updateSettings({ siteEngines: rules }));
 }
 
 /** A link followed in the tab to a site that needs another engine (a streaming site): the page moves there once it

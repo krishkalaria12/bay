@@ -21,6 +21,7 @@ import { Popover, PopoverRow, PopoverSeparator, PromptButton } from "../toolbar/
 import { Checkbox } from "../settings/controls";
 import { patchPage, pageOf, setPopover, usePage } from "../window/pageState";
 import { answerPermission, describePermission } from "./permissions";
+import { answerEngineOffer } from "../../lib/pageEngines";
 
 const hostOf = (origin: string) => {
   try {
@@ -423,5 +424,26 @@ function UsernameChoice({ name, selected, onPress }: { name: string; selected: b
         </View>
       </Pressable>
     </View>
+  );
+}
+
+// "Play netflix.com in WebKit?": a Chromium page's protected video stalled, and Settings › Engines asks first
+// (lib/pageEngines.ts playInWebKit).
+export function EngineOfferPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {
+  const host = usePage(tabId, (p) => p.engineOffer);
+
+  if (!host) return null;
+
+  return (
+    <Popover width={340} top={top} left={left} modal={false}>
+      <View style={{ paddingBottom: 4 }}>
+        <PromptBody icons={["play.rectangle"]} title={`Play ${host} in WebKit?`} message="This site's protected video doesn't play in Chromium.">
+          <PromptButton title="Stay on Page" onPress={() => answerEngineOffer(tabId, "stay")} />
+          <PromptButton title="Open in WebKit" primary onPress={() => answerEngineOffer(tabId, "open")} />
+        </PromptBody>
+        <PopoverSeparator />
+        <PopoverRow icon="nosign" title="Don't Ask Again for This Site" onPress={() => answerEngineOffer(tabId, "never")} />
+      </View>
+    </Popover>
   );
 }

@@ -150,6 +150,8 @@ export type BrowserCommand =
   | "printWithSystemDialog"
   | "stop"
   | "caretBrowsing"
+  | "reopenInEngine"
+  | "alwaysOpenSiteIn"
   | "moveTabDown"
   | "moveTabUp"
   | "closeTabGroup"

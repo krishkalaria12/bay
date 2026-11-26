@@ -1,4 +1,6 @@
 import { capabilities } from "@bay/platform";
+import { alwaysOpenSiteIn, forgetSiteRule, reopenIn } from "../../lib/pageEngines";
+import { ENGINE_NAMES, ENGINE_SYMBOLS, engineSwitchFor } from "../../store/engines";
 import { boostHost } from "../../lib/boosts";
 import { shareCollection } from "../../lib/sharedLinkEncoding";
 import { boostsAvailable } from "../boosts/state";
@@ -201,6 +203,8 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const site = normalizeAwakeSite(tab.url);
   const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
+  // Reopen in WebKit or Chromium, and a rule for the site (Settings › Engines). Only on a Mac, in Automatic mode.
+  const engines = engineSwitchFor(s, tab.id);
 
   // The everyday actions up top; the rest under More, so the menu stays short.
   const more: MenuItem[] = [
@@ -217,6 +221,22 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
+    ...(engines
+      ? [
+          sep,
+          { id: `reopenIn:${engines.other}`, title: `Reopen in ${ENGINE_NAMES[engines.other]}`, symbol: ENGINE_SYMBOLS[engines.other] },
+          {
+            id: "alwaysOpenIn",
+            title: `Always Open ${engines.site} in`,
+            symbol: "safari",
+            children: (["chromium", "webkit"] as const).map((engine) => ({
+              id: `alwaysIn:${engine}`,
+              title: ENGINE_NAMES[engine],
+              checked: engines.rule === engine,
+            })),
+          },
+        ]
+      : []),
     sep,
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
@@ -307,7 +327,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
       updateSettings({ awakeSites: siteKeptAwake(tab.url, sites) ? sites.filter((entry) => !siteKeptAwake(tab.url, [entry])) : [...sites, site] }),
     );
   } else if (choice === "sleep") void sleepTab(tab.id);
-  else if (choice === "icon") void openIconPicker(windowId, t);
+  else if (choice === "reopenIn:webkit" || choice === "reopenIn:chromium") void reopenIn(tab.id, choice === "reopenIn:webkit" ? "webkit" : "chromium");
+  else if ((choice === "alwaysIn:webkit" || choice === "alwaysIn:chromium") && engines) {
+    const engine = choice === "alwaysIn:webkit" ? "webkit" : "chromium";
+
+    if (engines.rule === engine) forgetSiteRule(engines.site);
+    else void alwaysOpenSiteIn(tab.id, engine);
+  } else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") reportBrowserCommand(updateTabDetails(tab.id, { customIcon: null }));
   else if (choice === "mute") toggleMute(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.

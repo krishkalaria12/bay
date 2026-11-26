@@ -214,6 +214,22 @@ export function engineMark(s: EngineState, tabId: string): PageEngine | null {
   return engine === defaultEngineOf(s.settings) ? null : engine;
 }
 
+export type EngineSwitch = { engine: PageEngine; other: PageEngine; site: string; rule: PageEngine | undefined };
+
+/** What a tab's engine switch offers (Site Controls, the tab menu, the command bar): its page's engine and the other
+ *  one, its site and the site's rule. Only for a web page in Automatic mode on a build with WebKit; in a single-engine
+ *  mode, on Bay's own pages and on Windows and Linux there's nothing to switch. */
+export function engineSwitchFor(s: EngineState, tabId: string): EngineSwitch | null {
+  const t = s.tabs[tabId];
+  const url = t && (t.url || t.navigation?.url);
+  const site = siteDomainOf(url);
+
+  if (!t || !site || !canUseWebKit(url) || s.settings.engineMode !== "automatic") return null;
+  const engine = tabEngine(s, tabId);
+
+  return { engine, other: engine === "webkit" ? "chromium" : "webkit", site, rule: siteRule(s.settings, url) };
+}
+
 export type WebKitPage = { url: string; title: string; isLoading: boolean; committedUrl: string };
 
 export type RecordedVisit = { url: string; title: string; at: number };

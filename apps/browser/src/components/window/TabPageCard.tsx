@@ -61,6 +61,7 @@ import { InternalPage } from "../pages/index";
 import {
   AutofillPrompt,
   BlockedPopupsPrompt,
+  EngineOfferPrompt,
   ExternalAppPrompt,
   PasswordPrompt,
   PermissionPrompt,
@@ -492,6 +493,7 @@ const TabPane = memo(function TabPane({
                 {/* A page's own prompts go with its page: not over the New Tab page shown in its place (Back to it). */}
                 {!newTabShown && <DeveloperOffer tabId={tabId} left={pageStart} top={4} paneWidth={frame.width} />}
                 {!newTabShown && <PermissionPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 308))} top={4} />}
+                {!newTabShown && <EngineOfferPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
                 <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
@@ -634,6 +636,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           const blocked = pageOf(tabId).blockedPage;
           patchPage(tabId, {
             popups: [],
+            engineOffer: null,
             passwordPrompt: null,
             crashed: null,
             status: "",

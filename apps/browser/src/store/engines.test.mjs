@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   chosenEngine,
   engineForUrl,
+  engineSwitchFor,
   engineMark,
   protectedVideoSite,
   siteDomainOf,
@@ -373,4 +374,23 @@ test("saved and synced engine settings keep only valid values", () => {
   assert.equal(restored.defaultEngine, "webkit");
   assert.deepEqual(restored.siteEngines, { "figma.com": "webkit" });
   assert.equal(restoreSettings({}).protectedVideoFallback, "move");
+});
+
+test("a tab offers the other engine and its site's rule, only for a web page in Automatic mode", () => {
+  const tabs = [tab("w", { url: "https://www.figma.com/file/1", engine: "webkit" }), tab("b", { url: "bay://settings" })];
+  assert.deepEqual(engineSwitchFor(state(tabs, { siteEngines: { "figma.com": "webkit" } }), "w"), {
+    engine: "webkit",
+    other: "chromium",
+    site: "figma.com",
+    rule: "webkit",
+  });
+  assert.equal(engineSwitchFor(state(tabs), "b"), null);
+  assert.equal(engineSwitchFor(state(tabs, { engineMode: "chromium" }), "w"), null);
+  setWebKitAvailable(false);
+
+  try {
+    assert.equal(engineSwitchFor(state(tabs), "w"), null);
+  } finally {
+    setWebKitAvailable(true);
+  }
 });

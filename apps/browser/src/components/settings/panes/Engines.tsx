@@ -39,6 +39,7 @@ const MODE_DESCRIPTIONS: Record<EngineMode, string> = {
 
 const FALLBACK_OPTIONS: Option<Settings["protectedVideoFallback"]>[] = [
   { value: "move", title: "Move to WebKit" },
+  { value: "ask", title: "Ask" },
   { value: "stay", title: "Stay in Chromium" },
 ];
 

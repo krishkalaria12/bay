@@ -15,6 +15,9 @@ import { LITTLE_BAY_DISABLED_COMMANDS } from "../littleBay/menu";
 import { boostHost } from "../../lib/boosts";
 import { libraryAvailable } from "../library/availability";
 import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
+import { ENGINE_NAMES, engineSwitchFor } from "../../store/engines";
+
+const engineSwitch = ({ s, tab }: Context) => (tab ? engineSwitchFor(s, tab.id) : null);
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
@@ -234,6 +237,24 @@ const WINDOW_MENU_DEFS: ActionDef[] = [
     available: ({ tab }) => !!tab && /^(https?|file):/i.test(tab.url),
   },
   { command: "caretBrowsing", title: "Caret Browsing", icon: "doc", available: nativePage },
+  ...(["webkit", "chromium"] as const).flatMap((engine): ActionDef[] => [
+    {
+      command: "reopenInEngine",
+      arg: engine,
+      title: `Reopen in ${ENGINE_NAMES[engine]}`,
+      icon: engine === "webkit" ? "safari" : "globe",
+      keywords: ["engine", "webkit", "safari", "chromium", "switch engine"],
+      available: (c) => engineSwitch(c)?.other === engine,
+    },
+    {
+      command: "alwaysOpenSiteIn",
+      arg: engine,
+      title: (c) => `Always Open ${engineSwitch(c)?.site ?? "This Site"} in ${ENGINE_NAMES[engine]}`,
+      icon: engine === "webkit" ? "safari" : "globe",
+      keywords: ["engine", "webkit", "safari", "chromium", "site rule"],
+      available: (c) => !!engineSwitch(c) && engineSwitch(c)?.rule !== engine,
+    },
+  ]),
   {
     command: "toggleTabLayout",
     title: ({ s, windowId }) => ((s.windows[windowId]?.tabLayout ?? s.settings.tabLayout) === "top" ? "Show Tabs in Sidebar" : "Show Tabs on Top"),
