@@ -124,8 +124,6 @@ final class BrowserModel: ObservableObject {
   @Published private(set) var mounted: [String] = []
   /// The colour at the top of each page, for the strip behind the status bar ([r, g, b]); nil when it has none.
   @Published private(set) var pageColors: [String: [Double]] = [:]
-  /// The colour along each page's bottom edge, under the bar, which the bar takes its light or dark from.
-  @Published private(set) var pageBottomColors: [String: [Double]] = [:]
   /// The reads of each page's edge colours under way (refreshPageColors).
   private var colorReads: [String: Task<Void, Never>] = [:]
   /// Find on page, while it is open over the page showing.
@@ -258,7 +256,6 @@ final class BrowserModel: ObservableObject {
     visited = [:]
     media = [:]
     pageColors = [:]
-    pageBottomColors = [:]
     failure = nil
     mounted = []
     Engine.setMediaSession(title: nil, site: "", playing: false)
@@ -1269,18 +1266,14 @@ final class BrowserModel: ObservableObject {
     }
   }
 
-  /// The colours along a page's top and bottom edges: as it draws them, else as its styles say (before it has drawn).
+  /// The colour along a page's top edge: as it draws it, else as its styles say (before it has drawn).
   private func readPageColors(_ tabId: String, _ view: EngineView) async {
-    func read(_ args: [String: Any]?) async -> [Double]? {
-      (try? await view.runScript(.pageColor, args: args)).flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
-    }
     if let drawn = await view.edgeColors() {
       pageColors[tabId] = drawn.top
-      pageBottomColors[tabId] = drawn.bottom
       return
     }
-    pageColors[tabId] = await read(nil)
-    pageBottomColors[tabId] = await read(["edge": "bottom"])
+    pageColors[tabId] = (try? await view.runScript(.pageColor, args: nil))
+      .flatMap { try? JSONDecoder().decode([Double]?.self, from: Data($0.utf8)) } ?? nil
   }
 
   /// Reads a page's edge colours now and again a moment later, once a page that fetches what it shows has drawn it.

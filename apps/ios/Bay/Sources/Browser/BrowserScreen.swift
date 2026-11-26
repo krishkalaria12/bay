@@ -106,9 +106,6 @@ struct BrowserScreen: View {
         }
         .padding(.horizontal, Space.edge)
         .padding(.bottom, Space.xs)
-        // Over a page the bar (and what stands on it) is light or dark as the page is along its foot, where it runs on
-        // under the bar, as on Android.
-        .environment(\.colorScheme, barScheme)
         // Out of sight on a fullscreen site, with the toast and the player. Over a page scrolling down the bar shrinks
         // instead (BrowserBar).
         .offset(y: browser.fullscreen ? 140 : 0)
@@ -250,14 +247,6 @@ struct BrowserScreen: View {
 
   /// The gap between the page and the tab coming in beside it.
   private static let swipeGap: CGFloat = 12
-
-  /// The bar's light or dark: the page's along its foot (else its top) while a page shows, the app's otherwise.
-  private var barScheme: ColorScheme {
-    guard browser.hasPage, browser.overlay == .none,
-      let rgb = browser.pageBottomColors[app.activeTabId] ?? browser.pageColors[app.activeTabId], rgb.count >= 3
-    else { return scheme }
-    return isDarkColor(red: rgb[0], green: rgb[1], blue: rgb[2]) ? .dark : .light
-  }
 
   /// Search opened over a dark page is dark too, so the sheet doesn't glare over it.
   private var searchOverDarkPage: Bool {
