@@ -363,3 +363,17 @@ for (const kind of ["automatic", "action"]) {
     }
   });
 }
+
+test("a tab dropped on another makes a group in that tab's place, and Undo takes it back", () => {
+  const { w, a, b, c } = setup();
+  const d = S().newTab(w, { url: "https://d.test", background: true });
+  const before = viewTabIds(S(), w);
+  // d dropped on b: the group holds b then d, where b was.
+  const group = S().groupTabs([b, d], { pinned: false, inOrder: true });
+  assert.deepEqual(S().groups[group].tabIds, [b, d]);
+  assert.deepEqual(viewTabIds(S(), w), [a, b, d, c]);
+  assert.equal(S().groups[group].pinned, false);
+  S().undoSidebarEdit(w);
+  assert.equal(S().groups[group], undefined);
+  assert.deepEqual(viewTabIds(S(), w), before);
+});

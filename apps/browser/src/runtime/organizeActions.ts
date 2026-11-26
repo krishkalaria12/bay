@@ -6,7 +6,9 @@ import type { FolderPatch, GroupPatch, NewFolderOptions } from "./organizeComman
 export const createGroup = (tabIds: string[], options?: { name?: string; icon?: string | null; color?: GroupColor | null }) =>
   dispatchBrowserCommand({ method: "createGroup", tabIds, options });
 
-export const groupTabs = (tabIds: string[], options?: { pinned?: boolean; name?: string }) => dispatchBrowserCommand({ method: "groupTabs", tabIds, options });
+export const groupTabs = (tabIds: string[], options?: { pinned?: boolean; name?: string; inOrder?: boolean }) =>
+  dispatchBrowserCommand({ method: "groupTabs", tabIds, options });
+
 export const updateGroup = (groupId: string, patch: GroupPatch) => dispatchBrowserCommand({ method: "updateGroup", groupId, patch });
 export const addTabsToGroup = (groupId: string, tabIds: string[]) => dispatchBrowserCommand({ method: "addTabsToGroup", groupId, tabIds });
 export const removeTabsFromGroup = (tabIds: string[]) => dispatchBrowserCommand({ method: "removeTabsFromGroup", tabIds });

@@ -59,7 +59,8 @@ export type OrganizeSlice = {
   setMuted(ids: string[], muted: boolean): void;
   setSiteMuted(tabId: string, muted: boolean): void;
 
-  groupTabs(ids: string[], options?: { pinned?: boolean; name?: string }): string;
+  /** `inOrder`: the group takes the first tab's place, its tabs in the order given (a tab dropped on another). */
+  groupTabs(ids: string[], options?: { pinned?: boolean; name?: string; inOrder?: boolean }): string;
   moveGroup(groupId: string, placement: GroupPlacement): void;
   duplicateGroup(groupId: string): string;
   newTabInGroup(groupId: string, url?: string): string;
@@ -231,7 +232,7 @@ function joinGroup(s: BrowserState, w: TabList, group: TabGroup, tabId: string):
 export function withGroup(
   s: BrowserState,
   ids: string[],
-  o: { name?: string; pinned?: boolean; autoUngroup?: boolean; pinnedOpenerId?: string } = {},
+  o: { name?: string; pinned?: boolean; autoUngroup?: boolean; pinnedOpenerId?: string; inOrder?: boolean } = {},
 ): [BrowserState, string] {
   const tabs = ids.flatMap((id) => {
     const t = s.tabs[id];
@@ -245,10 +246,16 @@ export function withGroup(
   if (!first || !w || tabs.some((t) => t.spaceId !== first.spaceId || !w.tabIds.includes(t.id))) return [s, ""];
   const members = new Set(tabs.map((t) => t.id));
 
-  let tabIds = placeBlock(
-    w.tabIds,
-    w.tabIds.filter((id) => members.has(id)),
-  );
+  let tabIds = o.inOrder
+    ? placeBlock(
+        w.tabIds,
+        tabs.map((t) => t.id),
+        first.id,
+      )
+    : placeBlock(
+        w.tabIds,
+        w.tabIds.filter((id) => members.has(id)),
+      );
 
   const group: TabGroup = {
     id: newId("g"),
@@ -873,8 +880,8 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     get().updateSettings({ mutedSites: [...sites] });
   },
 
-  groupTabs(ids, { pinned = true, name } = {}) {
-    const [next, id] = withGroup(get(), ids, { pinned, name });
+  groupTabs(ids, { pinned = true, name, inOrder } = {}) {
+    const [next, id] = withGroup(get(), ids, { pinned, name, inOrder });
 
     if (!id) return id;
     // The windows that had them selected select nothing.
