@@ -1201,6 +1201,14 @@
                     stdin. The agent skill documents it.
                   </td>
                 </tr>
+                <tr>
+                  <td>G10</td>
+                  <td>
+                    Done in source, Mac (Raycast is): <code>apps/raycast</code>, a standalone npm project <code>ray build</code> builds. Search Tabs (every
+                    space, private windows aside), Switch Space, New Tab (optionally at an address) and New Window use Bay's AppleScript dictionary; Search
+                    History asks the bay command's <code>history()</code>. No site icons, so no favicon service sees your tabs.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1253,6 +1261,11 @@
               hook can't hold, rewrite or stop a navigation or pick its space. Window focus and finished downloads aren't events the bay command can see either
               (no focus event over DevTools; <code>Browser.setDownloadBehavior</code> isn't allowed). Scheduled hooks and command bar results from a hook aren't
               built; a hook runs while <code>bay on</code> does, so keeping one running is the system's job (launchd, systemd, Task Scheduler).
+            </li>
+            <li>
+              G10's AppleScript calls weren't run against a live Bay (that would read the tabs and ask for Automation access); they follow
+              <code>Bay.sdef</code>. New Tab takes addresses only, since a search from Raycast would skip the engine chosen in Bay. Not in the Raycast Store
+              yet.
             </li>
           </ul>
         </section>

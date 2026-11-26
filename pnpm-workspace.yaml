@@ -9,6 +9,8 @@ packages:
   - "!apps/videos"
   # The mobile app is a standalone Expo project on a newer React Native (apps/mobile).
   - "!apps/mobile"
+  # The Raycast extension is a standalone npm project, as Raycast builds it (apps/raycast).
+  - "!apps/raycast"
 
 # React Native + CocoaPods expect a flat node_modules (the Podfile and Metro
 # resolve react-native-macos by path), so hoist instead of pnpm's symlink store.
