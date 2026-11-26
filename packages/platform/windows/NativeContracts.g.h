@@ -77,6 +77,8 @@ inline constexpr Method methods[] = {
   {"BayTidyNames", "suggest", true, 3, 3},
   {"BayTidyTabs", "modelStatus", true, 0, 0},
   {"BayTidyTabs", "group", true, 1, 1},
+  {"BayAskPage", "status", true, 0, 0},
+  {"BayAskPage", "ask", true, 4, 4},
   {"BayApp", "updaterState", true, 0, 0},
   {"BayApp", "checkForUpdates", true, 0, 0},
   {"BayApp", "installPendingUpdate", true, 0, 0},

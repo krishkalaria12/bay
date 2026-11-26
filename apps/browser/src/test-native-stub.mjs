@@ -554,6 +554,9 @@ export const tidyNames = {
 // Tidy Tabs' model: a test sets `answer` (a function of the prompt) and `status`.
 export const tidyTabsAnswers = { status: "off", answer: async () => null, prompts: [] };
 
+// Ask on Page (components/ask): no model in tests.
+export const askPageModel = null;
+
 export const tidyTabsModel = {
   modelStatus: () => tidyTabsAnswers.status,
   group: (prompt) => (tidyTabsAnswers.prompts.push(prompt), tidyTabsAnswers.answer(prompt)),

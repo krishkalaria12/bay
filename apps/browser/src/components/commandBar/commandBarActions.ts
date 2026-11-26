@@ -16,6 +16,7 @@ import { boostHost } from "../../lib/boosts";
 import { libraryAvailable } from "../library/availability";
 import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
 import { ENGINE_NAMES, engineSwitchFor } from "../../store/engines";
+import { canAskPage } from "../ask/askPage";
 
 const engineSwitch = ({ s, tab }: Context) => (tab ? engineSwitchFor(s, tab.id) : null);
 
@@ -237,6 +238,13 @@ const WINDOW_MENU_DEFS: ActionDef[] = [
     available: ({ tab }) => !!tab && /^(https?|file):/i.test(tab.url),
   },
   { command: "caretBrowsing", title: "Caret Browsing", icon: "doc", available: nativePage },
+  {
+    command: "askPage",
+    title: "Ask About This Page",
+    icon: "sparkles",
+    keywords: ["ask", "question", "summarize", "summary", "apple intelligence", "ai", "explain"],
+    available: (c) => nativePage(c) && canAskPage(),
+  },
   ...(["webkit", "chromium"] as const).flatMap((engine): ActionDef[] => [
     {
       command: "reopenInEngine",

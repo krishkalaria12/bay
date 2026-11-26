@@ -150,6 +150,7 @@ export type BrowserCommand =
   | "printWithSystemDialog"
   | "stop"
   | "caretBrowsing"
+  | "askPage"
   | "reopenInEngine"
   | "alwaysOpenSiteIn"
   | "moveTabDown"
@@ -688,6 +689,15 @@ type TidyTabsModule = {
 
 // Optional: a platform or a build without it groups tabs by site.
 export const tidyTabsModel = requireOptionalNativeModule<TidyTabsModule>("BayTidyTabs");
+
+type AskPageModule = {
+  status(): TidyModelStatus | "unavailable";
+  /** The model's answer to a question about a page, or null when it couldn't answer. */
+  ask(title: string, url: string, text: string, question: string): Promise<string | null>;
+};
+
+// Ask on Page: Apple Intelligence on the Mac, so Windows and Linux (and Macs without the module) have none.
+export const askPageModel = requireOptionalNativeModule<AskPageModule>("BayAskPage");
 
 export type TidySquiggleProps = ViewProps & { running: boolean; color: string };
 

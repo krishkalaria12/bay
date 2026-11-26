@@ -1138,6 +1138,13 @@
                     languages (<code>spellcheck.dictionaries</code>), macOS uses its own.
                   </td>
                 </tr>
+                <tr>
+                  <td>G2</td>
+                  <td>
+                    Done in source, Mac only: <code>BayAskPage</code> (<code>AskPageModule.swift</code>, FoundationModels, weakly linked) and the Ask card over
+                    the page, opened from the command bar's Ask About This Page. The page's text (first 9,000 characters) goes only to the on-device model.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1165,6 +1172,10 @@
             <li>
               Spelling has no custom dictionary editor yet, and on Linux a language's dictionary downloads from Google's servers the first time, which the
               ungoogled engine may block.
+            </li>
+            <li>
+              Ask on Page needs <code>pod install</code> before the Mac build, so Expo registers the new <code>BayAskPage</code> module. It has no keyboard
+              shortcut or menu item yet, and long pages are cut to fit the model's context.
             </li>
           </ul>
         </section>

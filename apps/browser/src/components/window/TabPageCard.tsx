@@ -48,6 +48,7 @@ import {
 import { dismissPermissions, startPermissionPrompts } from "../site/permissions";
 import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./pageState";
 import { Image } from "expo-image";
+import { AskPageCard } from "../ask/AskPageCard";
 import { useTabDrag } from "../tabStrip/tabStripDrag";
 import { BlockedPage, OpenElsewhere, SadTab, StatusBubble } from "./PaneOverlays";
 import { PeekLayer, startPeeks } from "../linkOverlay/PeekLayer";
@@ -485,6 +486,7 @@ const TabPane = memo(function TabPane({
             {visible && (
               <>
                 <FindBar tabId={tabId} />
+                <AskPageCard tabId={tabId} />
                 {/* Above the part of the page that's under the card's edge while the bar is shown. */}
                 <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, autoLayout && motion.bottomStyle]}>
                   <StatusBubble tabId={tabId} maxWidth={Math.max(160, frame.width / 2)} />

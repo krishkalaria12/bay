@@ -16,6 +16,7 @@ import {
 import { markdownLink } from "@bay/core";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import { alwaysOpenSiteIn, reopenIn } from "./pageEngines";
+import { canAskPage, openAskPage } from "../components/ask/askPage";
 import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
 import { useClearDataRequest } from "../components/pages/ClearDataDialog";
@@ -215,6 +216,8 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return page ? toggleSiteBoosts(page.id) : undefined;
     case "caretBrowsing":
       return void web?.runPageCommand("caretBrowsing");
+    case "askPage":
+      return page && canAskPage() ? openAskPage(page.id) : undefined;
     // Reopen in WebKit or Chromium, and Always Open <site> in… (lib/pageEngines.ts); the argument is the engine.
     case "reopenInEngine":
       return page && (arg === "webkit" || arg === "chromium") ? void reopenIn(page.id, arg) : undefined;
