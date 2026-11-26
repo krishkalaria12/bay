@@ -2,6 +2,7 @@ import { requireOptionalNativeModule, type EventSubscription } from "@bay/platfo
 import type { ExternalAppAllowance } from "./externalApps";
 import type { BrowsingDataType, Download, PermissionRequest, PermissionResult } from "./nativeModule";
 import type { SiteSettings, SiteSettingType, SiteSettingValue } from "./siteSettings";
+import type { CookieName, CookiesApplied, SiteCookie } from "./siteCookies";
 
 // The engine a tab's page runs in. Chromium (NNCore) has no Widevine, so DRM video (Netflix, Disney+…) plays only in
 // WebKit (WKWebView, ../ios/WebKit*.swift, Expo module BayWebKit), which has FairPlay. Each engine keeps its own
@@ -25,8 +26,10 @@ type WebKitNative = {
   clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;
   deleteProfileData(profile: string): Promise<boolean>;
   info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;
-  // Optional: native code from before engine choice has no per-host zoom setter.
+  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.
   setZoom?(profile: string, host: string, zoom: number): void;
+  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;
+  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;
 };
 
 // Optional: a build without the module (older native code) keeps every page in Chromium.

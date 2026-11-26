@@ -92,6 +92,9 @@ export const Cef = requireNativeModule<{
   fetchFavicon(url: string, profile: string): Promise<FaviconImage | FaviconSvg | null>;
   removeLegacyFavicons(profile: string): Promise<void>;
   engineCall(name: string, profile: string, args: string | null): Promise<string>;
+  // Optional: native code from before engine choice can't carry sign-ins (siteCookies.ts).
+  siteCookies?(profile: string, site: string): Promise<string>;
+  applySiteCookies?(profile: string, args: string): Promise<string>;
   releaseProfile(profile: string): Promise<void>;
   deleteProfileData(profile: string): Promise<{ remaining: string[] }>;
 

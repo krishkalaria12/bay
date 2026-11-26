@@ -15,7 +15,9 @@ NN_ENGINE_CALL(nn_bookmarks_watch);
 NN_ENGINE_CALL(nn_browsing_data_clear);
 NN_ENGINE_CALL(nn_cli_control);
 NN_ENGINE_CALL(nn_components_list);
+NN_ENGINE_CALL(nn_cookies_apply);
 NN_ENGINE_CALL(nn_cookies_import);
+NN_ENGINE_CALL(nn_cookies_site);
 NN_ENGINE_CALL(nn_downloads_cancel);
 NN_ENGINE_CALL(nn_downloads_keep);
 NN_ENGINE_CALL(nn_downloads_list);
@@ -91,7 +93,9 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_browsing_data_clear", &nn_browsing_data_clear},
       {"nn_cli_control", &nn_cli_control},
       {"nn_components_list", &nn_components_list},
+      {"nn_cookies_apply", &nn_cookies_apply},
       {"nn_cookies_import", &nn_cookies_import},
+      {"nn_cookies_site", &nn_cookies_site},
       {"nn_downloads_cancel", &nn_downloads_cancel},
       {"nn_downloads_keep", &nn_downloads_keep},
       {"nn_downloads_list", &nn_downloads_list},

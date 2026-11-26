@@ -24,6 +24,7 @@ import {
 } from "../store/engines";
 import type { Settings } from "../store/settings";
 import { webviews } from "./webviews";
+import { carrySignIns, READ_STORAGE, storageFrom, writeStorageScript, type CarriedStorage } from "./engineSiteData";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
 import { wantsPage } from "./tabNavigation";
@@ -133,6 +134,10 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
 
 // How long a switching page's picture covers it at most, while the other engine loads it.
 const HOLD_MS = 3000;
+// How long a switch waits for the site's cookies to reach the other engine.
+
+const CARRY_DEADLINE_MS = 1500;
+const carriedStorage = new Map<string, CarriedStorage & { engine: PageEngine }>();
 const SCROLL_TIMEOUT_MS = 3000;
 const restoring = new Map<string, { engine: PageEngine; x: number; y: number }>();
 const holdTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -152,8 +157,21 @@ async function carryPage(t: Tab, engine: PageEngine) {
   }
 
   const view = webviews.get(t.id);
+  const settings = store().settings;
+  const site = siteDomainOf(pageUrl(t));
 
-  if (!store().settings.engineSwitchKeepsPage || !view) return;
+  // Bringing sign-ins along: the site's cookies are in the other engine before it loads the page, unless the copy is
+  // slow, when the page loads signed out and the copy finishes for next time. Storage follows once the page commits.
+  if (settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId)) {
+    const from = tabEngine(store(), t.id);
+    const origin = siteOf(pageUrl(t)) ?? "";
+    const storage = view ? storageFrom(await view.evaluate<string>(READ_STORAGE).catch(() => null)) : null;
+
+    if (storage?.length) carriedStorage.set(t.id, { origin, entries: storage, engine });
+    await Promise.race([carrySignIns(from, engine, profile, site, origin), new Promise((done) => setTimeout(done, CARRY_DEADLINE_MS))]);
+  }
+
+  if (!settings.engineSwitchKeepsPage || !view) return;
   const [picture, scroll] = await Promise.all([view.capturePicture(1).catch(() => null), view.evaluate("[window.scrollX, window.scrollY]").catch(() => null)]);
   const position = v.safeParse(ScrollSchema, scroll);
 
@@ -179,6 +197,17 @@ function releaseHold(tabId: string) {
  *  picture goes. */
 export function engineViewLoaded(tabId: string, engine: PageEngine, isLoading: boolean) {
   const scroll = restoring.get(tabId);
+  const storage = carriedStorage.get(tabId);
+
+  if (!isLoading && storage?.engine === engine) {
+    carriedStorage.delete(tabId);
+
+    if (siteOf(pageUrl(store().tabs[tabId])) === storage.origin)
+      void webviews
+        .get(tabId)
+        ?.executeJavaScript(writeStorageScript(storage.entries))
+        .catch(() => {});
+  }
 
   if (isLoading || (!scroll && !holdTimers.has(tabId))) return;
 
@@ -215,7 +244,7 @@ export function followEngineSettings() {
   if (!hasWebKit() || unwatchSettings) return;
   unwatchSettings = useBrowser.subscribe((s, prev) => {
     if (s.tabs !== prev.tabs)
-      for (const map of [pendingMoves, restoring]) {
+      for (const map of [pendingMoves, restoring, carriedStorage]) {
         for (const id of map.keys()) if (!s.tabs[id]) map.delete(id);
       }
 
@@ -229,8 +258,13 @@ export function followEngineSettings() {
 
       if (was === wanted || !t.engine || t.engine !== was) continue;
 
-      if (!webviews.get(id)) store().updateTab(id, { engine: wanted, wakeAdoptId: undefined });
-      else if (shownTabs.has(id)) void openPageIn(id, wanted);
+      if (!webviews.get(id)) {
+        store().updateTab(id, { engine: wanted, wakeAdoptId: undefined });
+        const site = siteDomainOf(pageUrl(t));
+
+        if (s.settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId))
+          void carrySignIns(was, wanted, engineProfile(t.spaceId), site, siteOf(pageUrl(t)) ?? "");
+      } else if (shownTabs.has(id)) void openPageIn(id, wanted);
       else pendingMoves.set(id, wanted);
     }
   });

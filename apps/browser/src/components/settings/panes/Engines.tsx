@@ -9,7 +9,7 @@ import { ENGINE_NAMES, PROTECTED_VIDEO_SITES } from "../../../store/engines";
 import { useBrowserRead } from "../../../store/read";
 import type { EngineMode, Settings } from "../../../store/settings";
 import { Favicon, IconButton } from "../../ui/primitives";
-import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
+import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Sheet, TextField, Toggle, type Option } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
@@ -122,6 +122,22 @@ export function EnginesPane() {
         </Row>
       </Group>
 
+      <SectionHeader title="Switching engines" />
+      <Group>
+        <SettingToggle
+          setting="engineSwitchKeepsPage"
+          settingId={SETTINGS.engineSwitchKeepsPage.id}
+          title={SETTINGS.engineSwitchKeepsPage.title}
+          description="The page stays on screen until the other engine shows it, at the same scroll position and zoom."
+        />
+        <SettingToggle
+          setting="engineSwitchCarriesSignIns"
+          settingId={SETTINGS.engineSignIns.id}
+          title={SETTINGS.engineSignIns.title}
+          description="Copies the site's cookies and storage to the other engine, so you stay signed in. Never in private windows."
+        />
+      </Group>
+
       <SectionHeader title="WebKit pages" />
       <Group>
         <Row settingId={SETTINGS.engineDifferences.id} title={SETTINGS.engineDifferences.title} onPress={() => showSettingsSheet(<DifferencesSheet />)} />
@@ -164,7 +180,10 @@ function RuleSheet({ rules, site }: { rules: Readonly<Record<string, PageEngine>
 }
 
 const DIFFERENCES: [string, string][] = [
-  ["Sign-ins", "Each engine keeps its own cookies and site data in every space, so you sign in once more after a switch."],
+  [
+    "Sign-ins",
+    "Each engine keeps its own cookies and site data in every space. With Bring sign-ins along on, a switch copies the site's sign-in to the other engine.",
+  ],
   ["Extensions", "Extensions run only in Chromium. Pages they open stay in Chromium in every mode."],
   ["Ad blocking", "Runs only on Chromium pages for now."],
   ["DevTools", "DevTools open only on Chromium pages."],

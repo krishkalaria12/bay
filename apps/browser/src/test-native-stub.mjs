@@ -45,6 +45,7 @@ export const saveDocument = (name, contents) =>
   });
 
 export const setZoom = () => Promise.resolve();
+export const getSiteSettings = () => Promise.resolve({});
 export const launchEnvironment = () => null;
 export const jsReload = { on: false };
 export const isJsReload = () => jsReload.on;
@@ -173,6 +174,12 @@ export const cancelDownload = () => Promise.resolve();
 let webKitAvailable = true;
 export const hasWebKit = () => webKitAvailable;
 export const setWebKitAvailable = (on) => void (webKitAvailable = on);
+export const setWebKitZoom = () => {};
+// Sign-ins carried between engines (lib/engineSiteData.ts): no native stores here.
+
+export const canCarrySiteCookies = () => false;
+export const siteCookies = () => Promise.resolve(null);
+export const applySiteCookies = () => Promise.resolve(null);
 export const endedWebKitSessions = [];
 export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(session), Promise.resolve());
 export const WEBKIT_SITE_SETTINGS = ["camera", "microphone"];

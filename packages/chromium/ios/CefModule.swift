@@ -106,6 +106,21 @@ public class CefModule: Module {
       NNCoreEngineBridge.call(name, profile: profile, args: args) { promise.resolve($0) }
     }.runOnQueue(.main)
 
+    // A site's sign-in carried to WebKit and back when a page switches engines (engine nn_cookies_site, nn_cookies_apply;
+    // apps/browser lib/engineSiteData.ts). Never for a private window. The arguments carry cookie values, so they go as
+    // a secret the engine zeroes once parsed.
+    AsyncFunction("siteCookies") { (profile: String, site: String, promise: Promise) in
+      if profile.hasPrefix("incognito") { return promise.resolve(#"{"error":"private profile"}"#) }
+      let args = (try? JSONSerialization.data(withJSONObject: ["site": site])).flatMap { String(data: $0, encoding: .utf8) }
+      NNCoreEngineBridge.call("nn_cookies_site", profile: profile, args: args) { promise.resolve($0) }
+    }.runOnQueue(.main)
+    AsyncFunction("applySiteCookies") { (profile: String, args: String, promise: Promise) in
+      if profile.hasPrefix("incognito") { return promise.resolve(#"{"error":"private profile"}"#) }
+      var bytes = Data(args.utf8)
+      bytes.append(0)
+      NNCoreEngineBridge.callWithSecret("nn_cookies_apply", profile: profile, args: NSMutableData(data: bytes)) { promise.resolve($0) }
+    }.runOnQueue(.main)
+
     AsyncFunction("getContentBlocker") { (promise: Promise) in
       NNCoreContentBlocker.state { promise.resolve($0) }
     }.runOnQueue(.main)

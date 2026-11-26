@@ -42,6 +42,12 @@ public class WebKitModule: Module {
     AsyncFunction("deleteProfileData") { (profile: String, promise: Promise) in
       WebKitHub.shared.deleteProfileData(profile) { promise.resolve($0) }
     }.runOnQueue(.main)
+    AsyncFunction("siteCookies") { (profile: String, site: String, promise: Promise) in
+      WebKitHub.shared.siteCookies(profile: profile, site: site) { promise.resolve($0) }
+    }.runOnQueue(.main)
+    AsyncFunction("applySiteCookies") { (profile: String, set: [[String: Any]], remove: [[String: Any]], promise: Promise) in
+      WebKitHub.shared.applySiteCookies(profile: profile, set: set, remove: remove) { promise.resolve($0) }
+    }.runOnQueue(.main)
     // A page moving here from Chromium keeps its zoom (lib/pageEngines.ts openPageIn).
     Function("setZoom") { (profile: String, host: String, zoom: Double) in WebKitHub.shared.setZoom(zoom, profile: profile, host: host) }
     AsyncFunction("info") { () -> [String: Any] in
