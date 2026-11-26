@@ -69,7 +69,7 @@ jobs:
           python -m unittest engine/chromium/test_apply.py -v
       - name: Test engine tooling
         run: |
-          python -m unittest scripts/test_engine_driver.py -v
+          python -m unittest scripts/test_engine_driver.py scripts/test_web_features.py -v
           python -m unittest discover -s scripts/windows -p 'test_*.py' -v
       - name: Validate Linux patch selection
         run: python engine/patches/series.py files --platform linux

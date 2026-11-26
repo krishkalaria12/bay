@@ -581,6 +581,11 @@ def compile_changes_first(src, output_directory, targets, jobs, env, minutes):
     return run_until([*command, "bay_changes"], src, env, minutes)
 
 
+def check_web_features(src, env):
+    """Every way a page reaches the browser is covered (engine/web-features.json) before this Chromium builds."""
+    run([sys.executable, str(REPO / "scripts/web-features.py"), "check", "--src", str(src)], env=env)
+
+
 def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     lock = platform_lock(platform)
     require_linux_integration(env, platform)
@@ -594,6 +599,7 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     series(root, env, "check")
     generate_gn(root, env, platform)
     src = pathlib.Path(env["CHROMIUM_SRC"])
+    check_web_features(src, env)
     require_tools(("cargo",), env)
     build_rust(src, lock["outputDirectory"], env, platform)
     targets = targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])

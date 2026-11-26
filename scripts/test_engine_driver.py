@@ -528,7 +528,7 @@ class BuildTests(unittest.TestCase):
                  mock.patch.object(engine.time, "monotonic", side_effect=[212.18, 212.18 + elapsed]), \
                  mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
                  mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-                 mock.patch.object(engine, "build_rust"), \
+                 mock.patch.object(engine, "build_rust"), mock.patch.object(engine, "check_web_features"), \
                  mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
                  mock.patch.object(engine, "run_until", return_value=False) as run_until:
                 root = Path(directory)
@@ -547,7 +547,7 @@ class BuildTests(unittest.TestCase):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory, \
                  mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
                  mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-                 mock.patch.object(engine, "build_rust"), \
+                 mock.patch.object(engine, "build_rust"), mock.patch.object(engine, "check_web_features"), \
                  mock.patch.object(engine, "compile_changes_first", side_effect=[outcome]), \
                  mock.patch.object(engine, "run_until") as run_until:
                 root = Path(directory)
@@ -608,7 +608,7 @@ class BuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-             mock.patch.object(engine, "build_rust"), \
+             mock.patch.object(engine, "build_rust"), mock.patch.object(engine, "check_web_features"), \
              mock.patch.object(engine, "compile_changes_first", return_value=True), \
              mock.patch.object(engine, "run_until", side_effect=subprocess.CalledProcessError(1, ["autoninja"])):
             root = Path(directory)

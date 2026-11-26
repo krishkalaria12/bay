@@ -1209,6 +1209,15 @@
                     History asks the bay command's <code>history()</code>. No site icons, so no favicon service sees your tabs.
                   </td>
                 </tr>
+                <tr>
+                  <td>G8</td>
+                  <td>
+                    Done: <code>engine/web-features.json</code> ties each of Chromium's 132 <code>WebContentsDelegate</code> methods, its 40 permission types
+                    and 18 other ways in (choosers, payments, sharing, credentials, DRM) to an acceptance check, a release checklist line, or why nothing of
+                    Bay's is involved. <code>scripts/web-features.py check</code> (tested) runs before both engine builds and stops one whose Chromium
+                    disagrees; <code>checklist</code> prints the 32 lines done by hand, a step of <code>docs/releasing.md</code>.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1266,6 +1275,10 @@
               G10's AppleScript calls weren't run against a live Bay (that would read the tabs and ask for Automation access); they follow
               <code>Bay.sdef</code>. New Tab takes addresses only, since a search from Raycast would skip the engine chosen in Bay. Not in the Raycast Store
               yet.
+            </li>
+            <li>
+              G8's checklist lines are by hand: 32 features (file and color pickers, dialogs, pointer and keyboard lock, payments, Web Share, passkeys…) have no
+              automated scenario yet, and the map follows the Mac's Chromium tree, so a Windows or Linux pin on another Chromium may need rows of its own.
             </li>
           </ul>
         </section>
