@@ -1549,6 +1549,34 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "setFilterListEnabled(id: string, enabled: boolean): Promise<void>;"
         },
+        "addFilterList": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "addFilterList?(url: string, title: string): Promise<string>;"
+        },
+        "removeFilterList": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "removeFilterList?(id: string): Promise<void>;"
+        },
+        "getUserFilters": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "getUserFilters?(): Promise<string>;"
+        },
+        "setUserFilters": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setUserFilters?(text: string): Promise<void>;"
+        },
         "isContentBlockerAllowed": {
           "async": true,
           "optional": false,

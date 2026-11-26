@@ -1114,6 +1114,15 @@
                     entitlement.
                   </td>
                 </tr>
+                <tr>
+                  <td>G3</td>
+                  <td>
+                    Done in source, all three platforms: lists added by URL and My Filters live in bay-lists (Rust; <code>bay_lists_add_custom</code>,
+                    <code>bay_lists_remove_custom</code>, <code>bay_lists_user_filters</code>, <code>bay_lists_set_user_filters</code>, tested), so building,
+                    caching, updates and WebKit's content rules take them like any list. Hosts: <code>NNCoreContentBlocker.mm</code> and
+                    <code>webui/content_blocker.cc</code>. Settings › Privacy › Your lists and filters, with import and export of My Filters.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1134,6 +1143,10 @@
             <li>Deceptive-site warnings apply to WebKit pages opened after the setting changes.</li>
             <li>WebKit pages show no blocked count in Site Controls: content rules count nothing.</li>
             <li>The Objective-C++ and Swift for E5–E7 are parse-checked only; the first Mac build may need small fixes.</li>
+            <li>
+              G3's Windows and Linux dispatch (<code>engine_services.cc</code>) isn't syntax checked on the Mac (it needs generated mojom headers);
+              <code>content_blocker.cc</code> is.
+            </li>
           </ul>
         </section>
       </main>

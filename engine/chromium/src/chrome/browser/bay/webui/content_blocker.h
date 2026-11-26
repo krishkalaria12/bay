@@ -61,6 +61,14 @@ class ContentBlocker {
   base::DictValue State();
   void SetEnabled(bool enabled, Done done);
   void SetListEnabled(const std::string& id, bool enabled, Done done);
+  // The person's own lists: added by URL (done once the engine has it, with
+  // its id or the error), removed by id; and My Filters, their own rules.
+  using Added = base::OnceCallback<void(std::optional<std::string> id,
+                                        std::optional<std::string> error)>;
+  void AddList(const std::string& url, const std::string& title, Added done);
+  void RemoveList(const std::string& id, Done done);
+  std::string UserFilters();
+  void SetUserFilters(const std::string& text, Done done);
   bool IsAllowed(const std::string& host);
   void SetAllowed(const std::string& host, bool allowed, Done done);
   void SetPageAllowed(const std::string& host,

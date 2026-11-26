@@ -49,6 +49,13 @@ bool bay_lists_is_allowed(const BayLists *lists, const char *host);
 bool bay_lists_set_allowed(const BayLists *lists, const char *host, bool allowed);
 // Visit Anyway, for this session or always (`remember`); taking it back ends both. False when `host` has no host.
 bool bay_lists_set_page_allowed(const BayLists *lists, const char *host, bool allowed, bool remember);
+// The person's own lists (Settings › Privacy): added by URL (http or https; `title` may be null) and turned on, its id
+// or null for a URL that isn't one; removed with its file. My Filters, the person's own rules in adblock syntax: read,
+// and written (turned on, or off when blank; false when the file couldn't be written). Save and rebuild after each.
+char *bay_lists_add_custom(const BayLists *lists, const char *url, const char *title);
+bool bay_lists_remove_custom(const BayLists *lists, const char *id);
+char *bay_lists_user_filters(const BayLists *lists);
+bool bay_lists_set_user_filters(const BayLists *lists, const char *text);
 // Writes settings.json. Blocks on the disk.
 bool bay_lists_save(const BayLists *lists);
 

@@ -120,6 +120,13 @@ extern NSNotificationName const NNCoreContentBlockerChangedNotification;
 + (void)state:(void (^)(NSDictionary<NSString *, id> *state))completion NS_SWIFT_NAME(state(_:));
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setEnabled(_:completion:));
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setList(_:enabled:completion:));
+// The person's own lists: added by URL (http or https; title may be empty), done once the engine has it (its id, or
+// the error), removed by id; and My Filters, their own rules in adblock syntax.
++ (void)addListWithURL:(NSString *)url title:(NSString *)title completion:(void (^)(NSString *_Nullable listId, NSString *_Nullable error))completion
+    NS_SWIFT_NAME(addList(url:title:completion:));
++ (void)removeList:(NSString *)listId completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(removeList(_:completion:));
++ (NSString *)userFilters NS_SWIFT_NAME(userFilters());
++ (void)setUserFilters:(NSString *)text completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setUserFilters(_:completion:));
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL allowed))completion NS_SWIFT_NAME(isAllowed(host:completion:));
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setAllowed(_:host:completion:));
 // Visit Anyway on a page the blocker stops: for this run of the app, or kept (remember). The site's requests are still

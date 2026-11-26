@@ -66,6 +66,11 @@ unsafe fn read_ids(text: *const c_char) -> Vec<String> {
 }
 
 impl BayLists {
+    /// The catalogue and the person's own lists (added by URL, then My Filters).
+    fn full_catalogue(&self) -> crate::Catalogue {
+        self.lock().settings.catalogue(&self.catalogue)
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state
             .lock()
@@ -166,7 +171,7 @@ pub unsafe extern "C" fn bay_lists_known(lists: *const BayLists, id: *const c_ch
     // SAFETY: as the caller's.
     let lists = unsafe { &*lists };
     // SAFETY: as the caller's.
-    unsafe { read(id) }.is_some_and(|id| lists.catalogue.list(&id).is_some())
+    unsafe { read(id) }.is_some_and(|id| lists.full_catalogue().list(&id).is_some())
 }
 
 /// The chosen lists in catalogue order, for `bay_lists_build`: `[{"id": "…", "hosts": bool}]`.
@@ -179,7 +184,7 @@ pub unsafe extern "C" fn bay_lists_selected(lists: *const BayLists) -> *mut c_ch
     let lists = unsafe { &*lists };
     let selected = lists.lock().settings.selected.clone();
     let chosen: Vec<Value> = lists
-        .catalogue
+        .full_catalogue()
         .in_order(&selected)
         .map(|list| json!({ "id": list.id, "hosts": list.hosts }))
         .collect();
@@ -209,7 +214,8 @@ pub unsafe extern "C" fn bay_lists_urls(lists: *const BayLists, id: *const c_cha
     // SAFETY: as the caller's.
     let lists = unsafe { &*lists };
     // SAFETY: as the caller's.
-    let Some(list) = unsafe { read(id) }.and_then(|id| lists.catalogue.list(&id).cloned()) else {
+    let Some(list) = unsafe { read(id) }.and_then(|id| lists.full_catalogue().list(&id).cloned())
+    else {
         return std::ptr::null_mut();
     };
     give_json(&json!(list.urls))
@@ -259,7 +265,8 @@ pub unsafe extern "C" fn bay_lists_set_list(
     // SAFETY: as the caller's.
     let lists = unsafe { &*lists };
     // SAFETY: as the caller's.
-    let Some(id) = unsafe { read(id) }.filter(|id| lists.catalogue.list(id).is_some()) else {
+    let Some(id) = unsafe { read(id) }.filter(|id| lists.full_catalogue().list(id).is_some())
+    else {
         return -1;
     };
     i32::from(lists.lock().settings.set_list(&id, enabled))
@@ -367,9 +374,9 @@ pub unsafe extern "C" fn bay_lists_state(
     let timing = unsafe { read(timing) }
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or(Value::Null);
+    let catalogue = lists.full_catalogue();
     let state = lists.lock();
-    let rows: Vec<Value> = lists
-        .catalogue
+    let rows: Vec<Value> = catalogue
         .lists
         .iter()
         .map(|list| {
@@ -380,14 +387,22 @@ pub unsafe extern "C" fn bay_lists_state(
                 .map_or(0.0, |(_, count)| {
                     f64::from(count.network_filters) + f64::from(count.cosmetic_filters)
                 });
-            json!({
-                "id": list.id,
-                "title": list.title,
-                "category": list.category,
-                "enabled": state.settings.selected.contains(&list.id),
-                "defaultOn": list.on_by_default(&lists.languages),
-                "filters": filters,
-            })
+            {
+                let mut row = json!({
+                    "id": list.id,
+                    "title": list.title,
+                    "category": list.category,
+                    "enabled": state.settings.selected.contains(&list.id),
+                    "defaultOn": list.on_by_default(&lists.languages),
+                    "filters": filters,
+                });
+                if list.category == "custom"
+                    && let Some(url) = list.urls.first()
+                {
+                    row["url"] = json!(url);
+                }
+                row
+            }
         })
         .collect();
     give_json(&json!({
@@ -663,6 +678,94 @@ unsafe fn sources_of(lists: *const c_char) -> Vec<ListSource> {
         .collect()
 }
 
+/// Adds a list by URL (http or https) and turns it on; `title` may be null or empty (the URL's host then). Its id,
+/// or null for a URL that isn't one. Save and rebuild after, as for `bay_lists_set_list`: its file downloads on the
+/// rebuild.
+///
+/// # Safety
+/// `lists` must be live; `url` a valid string; `title` null or a valid string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_add_custom(
+    lists: *const BayLists,
+    url: *const c_char,
+    title: *const c_char,
+) -> *mut c_char {
+    // SAFETY: as the caller's.
+    let lists = unsafe { &*lists };
+    // SAFETY: as the caller's.
+    let (Some(url), title) = (unsafe { read(url) }, unsafe { read(title) }) else {
+        return std::ptr::null_mut();
+    };
+    lists
+        .lock()
+        .settings
+        .add_custom(&url, &title.unwrap_or_default())
+        .map_or(std::ptr::null_mut(), |list| give(list.id))
+}
+
+/// Removes a list added by URL, and its file. Whether there was one.
+///
+/// # Safety
+/// `lists` must be live; `id` a valid string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_remove_custom(
+    lists: *const BayLists,
+    id: *const c_char,
+) -> bool {
+    // SAFETY: as the caller's.
+    let lists = unsafe { &*lists };
+    // SAFETY: as the caller's.
+    let Some(id) = (unsafe { read(id) }) else {
+        return false;
+    };
+    let removed = lists.lock().settings.remove_custom(&id);
+    if removed {
+        let _ = std::fs::remove_file(files::list_path(&lists.directory, &id));
+    }
+    removed
+}
+
+/// The person's own rules (My Filters), as they wrote them; empty when there are none.
+///
+/// # Safety
+/// `lists` must be live.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_user_filters(lists: *const BayLists) -> *mut c_char {
+    // SAFETY: as the caller's.
+    let lists = unsafe { &*lists };
+    let text =
+        std::fs::read(files::list_path(&lists.directory, crate::MY_FILTERS)).unwrap_or_default();
+    give(String::from_utf8_lossy(&text).into_owned())
+}
+
+/// Writes the person's own rules and turns My Filters on, or off when `text` is blank. False when the file couldn't be
+/// written. Save and rebuild after.
+///
+/// # Safety
+/// `lists` must be live; `text` a valid string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bay_lists_set_user_filters(
+    lists: *const BayLists,
+    text: *const c_char,
+) -> bool {
+    // SAFETY: as the caller's.
+    let lists = unsafe { &*lists };
+    // SAFETY: as the caller's.
+    let text = unsafe { read(text) }.unwrap_or_default();
+    let path = files::list_path(&lists.directory, crate::MY_FILTERS);
+    let written = path
+        .parent()
+        .is_some_and(|folder| std::fs::create_dir_all(folder).is_ok())
+        && std::fs::write(&path, text.as_bytes()).is_ok();
+    if written {
+        lists
+            .lock()
+            .settings
+            .set_list(crate::MY_FILTERS, !text.trim().is_empty());
+    }
+    written
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -803,6 +906,65 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_persons_own_lists_and_filters_build_with_the_rest() {
+        let directory = tempfile::tempdir().unwrap();
+        let catalogue = directory.path().join("filter_lists.json");
+        std::fs::write(
+            &catalogue,
+            r#"{"lists":[{"id":"a","urls":["https://a.test/a.txt"],"defaultOn":true}]}"#,
+        )
+        .unwrap();
+        let dir = text(directory.path().to_str().unwrap());
+        let catalogue = text(catalogue.to_str().unwrap());
+        // SAFETY: every pointer below is a live CString or a handle this test owns.
+        unsafe {
+            let lists = bay_lists_open(dir.as_ptr(), catalogue.as_ptr(), std::ptr::null());
+            assert!(
+                bay_lists_add_custom(lists, text("not a url").as_ptr(), std::ptr::null()).is_null()
+            );
+            let raw = bay_lists_add_custom(
+                lists,
+                text("https://mine.test/list.txt").as_ptr(),
+                text("Mine").as_ptr(),
+            );
+            let id = CStr::from_ptr(raw).to_string_lossy().into_owned();
+            bay_adblock::ffi::bay_string_free(raw);
+            assert!(bay_lists_known(lists, text(&id).as_ptr()));
+            assert_eq!(
+                take(bay_lists_urls(lists, text(&id).as_ptr())),
+                json!(["https://mine.test/list.txt"])
+            );
+            assert!(bay_lists_set_user_filters(
+                lists,
+                text("||own.test^\n").as_ptr()
+            ));
+            assert_eq!(
+                take(bay_lists_selected_ids(lists)),
+                json!(["a", id, "my-filters"])
+            );
+            assert_eq!(
+                CStr::from_ptr(bay_lists_user_filters(lists)).to_string_lossy(),
+                "||own.test^\n"
+            );
+            let state = take(bay_lists_state(lists, std::ptr::null()));
+            assert_eq!(
+                state["lists"][1]["url"],
+                json!("https://mine.test/list.txt")
+            );
+            assert_eq!(state["lists"][2]["id"], json!("my-filters"));
+            assert!(bay_lists_save(lists));
+            bay_lists_free(lists);
+
+            let lists = bay_lists_open(dir.as_ptr(), catalogue.as_ptr(), std::ptr::null());
+            assert!(bay_lists_known(lists, text(&id).as_ptr()));
+            assert!(bay_lists_set_user_filters(lists, text("  ").as_ptr()));
+            assert!(bay_lists_remove_custom(lists, text(&id).as_ptr()));
+            assert_eq!(take(bay_lists_selected_ids(lists)), json!(["a"]));
+            bay_lists_free(lists);
+        }
+    }
+
     /// Every C function here is declared in the header the hosts include, and the header declares nothing else.
     #[test]
     fn the_header_declares_exactly_these_functions() {
@@ -820,7 +982,7 @@ mod tests {
             r"\b(bay_lists_\w+)\(",
             include_str!("../include/bay_lists.h"),
         );
-        assert_eq!(defined.len(), 29);
+        assert_eq!(defined.len(), 33);
         assert_eq!(declared, defined);
     }
 }

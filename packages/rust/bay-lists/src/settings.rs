@@ -1,10 +1,10 @@
-//! The person's blocker settings (`settings.json`): on or off, the chosen lists, and the sites it's paused on. They
-//! apply to every profile, private ones included.
+//! The person's blocker settings (`settings.json`): on or off, the chosen lists, the lists they added by URL, and the
+//! sites it's paused on. They apply to every profile, private ones included.
 
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::catalogue::Catalogue;
+use crate::catalogue::{Catalogue, CatalogueList};
 use crate::hosts::{covers, host_of};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -19,6 +19,77 @@ pub struct Settings {
     pub allowed_pages: Vec<String>,
     /// Visit Anyway for this session. Not saved.
     pub session_pages: Vec<String>,
+    /// Lists the person added by URL (Settings › Privacy › Add List), updated like the built-in ones.
+    pub custom_lists: Vec<CustomList>,
+}
+
+/// A list added by URL. Its id is `custom-` and a hash of the URL, so adding the same URL twice adds it once.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CustomList {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+}
+
+/// The person's own rules (Settings › Privacy › My Filters), kept as a list file of their own.
+pub const MY_FILTERS: &str = "my-filters";
+
+const CUSTOM_PREFIX: &str = "custom-";
+
+impl CustomList {
+    /// A list for `url` (http or https), titled `title` or the URL's host. `None` for anything else.
+    pub fn new(url: &str, title: &str) -> Option<Self> {
+        let url = url.trim();
+        let rest = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))?;
+        let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        if host.is_empty() || url.chars().any(char::is_whitespace) {
+            return None;
+        }
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in url.bytes() {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3);
+        }
+        let title = title.trim();
+        Some(Self {
+            id: format!("{CUSTOM_PREFIX}{hash:016x}"),
+            title: if title.is_empty() {
+                host.to_owned()
+            } else {
+                title.to_owned()
+            },
+            url: url.to_owned(),
+        })
+    }
+
+    fn as_list(&self) -> CatalogueList {
+        CatalogueList {
+            id: self.id.clone(),
+            title: self.title.clone(),
+            category: "custom".to_owned(),
+            urls: vec![self.url.clone()],
+            default_on: false,
+            lang: None,
+            hosts: false,
+        }
+    }
+}
+
+/// The catalogue with the person's lists after it: their lists by URL, then My Filters.
+pub fn with_custom(catalogue: &Catalogue, custom: &[CustomList]) -> Catalogue {
+    let mut lists = catalogue.lists.clone();
+    lists.extend(custom.iter().map(CustomList::as_list));
+    lists.push(CatalogueList {
+        id: MY_FILTERS.to_owned(),
+        title: "My filters".to_owned(),
+        category: "custom".to_owned(),
+        urls: Vec::new(),
+        default_on: false,
+        lang: None,
+        hosts: false,
+    });
+    Catalogue { lists }
 }
 
 /// What the request filter needs, read on any thread.
@@ -36,6 +107,8 @@ pub struct LiveSettings {
 struct Saved<'a> {
     allowed_hosts: &'a [String],
     allowed_pages: &'a [String],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    custom_lists: &'a [CustomList],
     enabled: bool,
     lists: &'a [String],
 }
@@ -64,6 +137,20 @@ impl Settings {
             .and_then(|text| serde_json::from_str::<Value>(text).ok())
             .filter(Value::is_object);
         let field = |key: &str| saved.as_ref().and_then(|saved| saved.get(key));
+        let mut custom_lists: Vec<CustomList> = Vec::new();
+        for entry in field("customLists")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let text = |key: &str| entry.get(key).and_then(Value::as_str).unwrap_or_default();
+            if let Some(list) = CustomList::new(text("url"), text("title"))
+                && !custom_lists.iter().any(|known| known.id == list.id)
+            {
+                custom_lists.push(list);
+            }
+        }
+        let catalogue = &with_custom(catalogue, &custom_lists);
         let mut selected = Vec::new();
         if field("lists").is_some_and(Value::is_array) {
             for id in strings(field("lists")) {
@@ -92,7 +179,32 @@ impl Settings {
             allowed_hosts: hosts("allowedHosts"),
             allowed_pages: hosts("allowedPages"),
             session_pages: Vec::new(),
+            custom_lists,
         }
+    }
+
+    /// The catalogue and the person's own lists, for every lookup by id.
+    pub fn catalogue(&self, built_in: &Catalogue) -> Catalogue {
+        with_custom(built_in, &self.custom_lists)
+    }
+
+    /// Adds a list by URL and turns it on. The list, or `None` for a URL that isn't one (an added one again is the
+    /// same list).
+    pub fn add_custom(&mut self, url: &str, title: &str) -> Option<CustomList> {
+        let list = CustomList::new(url, title)?;
+        if !self.custom_lists.iter().any(|known| known.id == list.id) {
+            self.custom_lists.push(list.clone());
+        }
+        self.set_list(&list.id, true);
+        Some(list)
+    }
+
+    /// Removes a list added by URL. Whether there was one.
+    pub fn remove_custom(&mut self, id: &str) -> bool {
+        let before = self.custom_lists.len();
+        self.custom_lists.retain(|list| list.id != id);
+        self.selected.retain(|selected| selected != id);
+        self.custom_lists.len() != before
     }
 
     /// `settings.json`'s text for these settings.
@@ -100,15 +212,16 @@ impl Settings {
         let saved = Saved {
             allowed_hosts: &self.allowed_hosts,
             allowed_pages: &self.allowed_pages,
+            custom_lists: &self.custom_lists,
             enabled: self.enabled,
             lists: &self.selected,
         };
         serde_json::to_string_pretty(&saved).unwrap_or_default()
     }
 
-    /// The chosen lists in catalogue order.
+    /// The chosen lists in catalogue order, the person's own last.
     pub fn selected_in_order(&self, catalogue: &Catalogue) -> Vec<String> {
-        catalogue
+        self.catalogue(catalogue)
             .in_order(&self.selected)
             .map(|list| list.id.clone())
             .collect()
@@ -292,5 +405,47 @@ mod tests {
             .set_page_allowed("www.kept.test", false, true)
             .unwrap();
         assert!(settings.live().pages.is_empty());
+    }
+
+    #[test]
+    fn lists_added_by_url_save_select_and_remove() {
+        let mut settings = Settings::load(None, &catalogue(), &[]);
+        assert!(settings.add_custom("ftp://x.test/list.txt", "").is_none());
+        assert!(settings.add_custom("https://", "").is_none());
+        let list = settings
+            .add_custom(" https://lists.test/mine.txt ", "")
+            .unwrap();
+        assert_eq!(list.title, "lists.test");
+        assert!(list.id.starts_with("custom-"));
+        assert_eq!(
+            settings.add_custom("https://lists.test/mine.txt", "Again"),
+            Some(CustomList {
+                title: "Again".to_owned(),
+                ..list.clone()
+            })
+        );
+        assert_eq!(settings.custom_lists.len(), 1);
+        assert_eq!(
+            settings.selected_in_order(&catalogue()),
+            vec!["a".to_owned(), list.id.clone()]
+        );
+        let saved = Settings::load(Some(&settings.to_json()), &catalogue(), &[]);
+        assert_eq!(saved.custom_lists, settings.custom_lists);
+        assert!(saved.selected.contains(&list.id));
+        assert!(settings.remove_custom(&list.id));
+        assert!(!settings.remove_custom(&list.id));
+        assert_eq!(settings.selected, ids(&["a"]));
+    }
+
+    #[test]
+    fn my_filters_is_a_list_of_its_own_after_the_rest() {
+        let mut settings = Settings::load(None, &catalogue(), &[]);
+        assert!(settings.set_list(MY_FILTERS, true));
+        assert_eq!(
+            settings.selected_in_order(&catalogue()),
+            ids(&["a", MY_FILTERS])
+        );
+        let saved = Settings::load(Some(&settings.to_json()), &catalogue(), &[]);
+        assert!(saved.selected.contains(&MY_FILTERS.to_owned()));
     }
 }

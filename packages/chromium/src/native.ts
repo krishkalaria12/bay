@@ -102,6 +102,11 @@ export const Cef = requireNativeModule<{
   getContentBlocker(): Promise<ContentBlockerState>;
   setContentBlockerEnabled(enabled: boolean): Promise<void>;
   setFilterListEnabled(id: string, enabled: boolean): Promise<void>;
+  // Optional: native code from before the person's own lists.
+  addFilterList?(url: string, title: string): Promise<string>;
+  removeFilterList?(id: string): Promise<void>;
+  getUserFilters?(): Promise<string>;
+  setUserFilters?(text: string): Promise<void>;
   isContentBlockerAllowed(host: string): Promise<boolean>;
   setContentBlockerAllowed(host: string, allowed: boolean): Promise<void>;
   setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;

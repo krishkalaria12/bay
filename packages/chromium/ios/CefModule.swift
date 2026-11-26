@@ -130,6 +130,18 @@ public class CefModule: Module {
     AsyncFunction("setFilterListEnabled") { (id: String, enabled: Bool, promise: Promise) in
       NNCoreContentBlocker.setList(id, enabled: enabled) { CefModule.settle(promise, $0) }
     }.runOnQueue(.main)
+    AsyncFunction("addFilterList") { (url: String, title: String, promise: Promise) in
+      NNCoreContentBlocker.addList(url: url, title: title) { id, error in
+        if let error { promise.reject("ERR_CONTENT_BLOCKER", error) } else { promise.resolve(id) }
+      }
+    }.runOnQueue(.main)
+    AsyncFunction("removeFilterList") { (id: String, promise: Promise) in
+      NNCoreContentBlocker.removeList(id) { CefModule.settle(promise, $0) }
+    }.runOnQueue(.main)
+    AsyncFunction("getUserFilters") { () -> String in NNCoreContentBlocker.userFilters() }.runOnQueue(.main)
+    AsyncFunction("setUserFilters") { (text: String, promise: Promise) in
+      NNCoreContentBlocker.setUserFilters(text) { CefModule.settle(promise, $0) }
+    }.runOnQueue(.main)
     AsyncFunction("isContentBlockerAllowed") { (host: String, promise: Promise) in
       NNCoreContentBlocker.isAllowed(host: host) { promise.resolve($0) }
     }.runOnQueue(.main)

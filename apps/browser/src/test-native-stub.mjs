@@ -175,6 +175,14 @@ let webKitAvailable = true;
 export const hasWebKit = () => webKitAvailable;
 export const setWebKitAvailable = (on) => void (webKitAvailable = on);
 export const setWebKitZoom = () => {};
+// The person's own filter lists (components/settings/panes/OwnFilters.tsx).
+
+export const MY_FILTERS_ID = "my-filters";
+export const canAddFilterLists = () => false;
+export const addFilterList = () => Promise.reject(new Error("unavailable"));
+export const removeFilterList = () => Promise.resolve();
+export const getUserFilters = () => Promise.resolve("");
+export const setUserFilters = () => Promise.resolve();
 export const setWebKitFraudWarnings = () => {};
 export const webKitPasskeyAccess = () => Promise.resolve(null);
 export const requestWebKitPasskeyAccess = () => Promise.resolve(null);

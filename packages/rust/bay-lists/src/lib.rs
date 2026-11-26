@@ -18,7 +18,7 @@ mod settings;
 pub use catalogue::{Catalogue, CatalogueList};
 pub use files::{Built, ListSource, Stored};
 pub use hosts::{covers, host_of};
-pub use settings::{LiveSettings, Settings};
+pub use settings::{CustomList, LiveSettings, MY_FILTERS, Settings};
 
 /// adblock-rust's version, shown in Settings › Privacy.
 pub const VERSION: &str = "adblock-rust 0.13.5";

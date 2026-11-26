@@ -154,6 +154,13 @@ export const SETTINGS = {
     title: "Password manager",
     words: "save fill autofill offer extension 1password bitwarden none",
   },
+  ownFilterLists: {
+    id: "privacy.ownFilterLists",
+    pane: "privacy",
+    title: "Your lists and filters",
+    words: "custom filter list url subscribe adblock add list",
+  },
+  myFilters: { id: "privacy.myFilters", pane: "privacy", title: "My filters", words: "custom rules adblock syntax own filters user filters import export" },
   importPasswords: { id: "passwords.importPasswords", pane: "passwords", title: "Import passwords", words: "csv" },
   exportPasswords: { id: "passwords.exportPasswords", pane: "passwords", title: "Export passwords", words: "csv" },
   passwordManagerApps: { id: "passwords.passwordManagerApps", pane: "passwords", title: "Password manager apps", words: "1password bitwarden" },

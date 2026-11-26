@@ -37,6 +37,7 @@ import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } fro
 import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
+import { OwnFilters } from "./OwnFilters";
 import { platformWords } from "../../../lib/platformWords";
 
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
@@ -121,6 +122,8 @@ export function PrivacyPane() {
           <Button title="Advanced…" disabled={!blocker} onPress={() => showSettingsSheet(<FilterListsSheet />)} />
         </Row>
       </Group>
+
+      <OwnFilters blocker={blocker} refresh={refresh} />
 
       {!!blocker?.allowedHosts.length && (
         <>

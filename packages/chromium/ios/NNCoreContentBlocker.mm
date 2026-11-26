@@ -457,6 +457,41 @@ NSNotificationName const NNCoreContentBlockerChangedNotification = @"NNCoreConte
   });
 }
 
++ (void)addListWithURL:(NSString *)url title:(NSString *)title completion:(void (^)(NSString *, NSString *))completion {
+  if (NSString *error = FailedForTest()) return completion(nil, error);
+  NSString *listId = StringFrom(bay_lists_add_custom(Lists(), url.UTF8String, title.UTF8String));
+  if (!listId) return completion(nil, @"not a list address");
+  SaveSettings();
+  completion = [completion copy];
+  // Done when the engine has it; a list that couldn't be downloaded is turned off again, as setList: does.
+  Rebuild(YES, ^(NSArray<NSString *> *missing) {
+    if (![missing containsObject:listId]) return completion(listId, nil);
+    bay_lists_set_list(Lists(), listId.UTF8String, NO);
+    SaveSettings();
+    Rebuild(YES, nil);
+    completion(listId, [@"couldn't download " stringByAppendingString:url]);
+  });
+}
+
++ (void)removeList:(NSString *)listId completion:(void (^)(NSString *))completion {
+  if (!bay_lists_remove_custom(Lists(), listId.UTF8String)) return completion(@"no such list");
+  SaveSettings();
+  Rebuild(YES, nil);
+  completion(nil);
+}
+
++ (NSString *)userFilters {
+  return StringFrom(bay_lists_user_filters(Lists())) ?: @"";
+}
+
++ (void)setUserFilters:(NSString *)text completion:(void (^)(NSString *))completion {
+  if (NSString *error = FailedForTest()) return completion(error);
+  if (!bay_lists_set_user_filters(Lists(), text.UTF8String)) return completion(@"couldn't save your filters");
+  SaveSettings();
+  completion = [completion copy];
+  Rebuild(NO, ^(NSArray<NSString *> *) { completion(nil); });
+}
+
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL))completion {
   completion(bay_lists_is_allowed(Lists(), host.UTF8String));
 }

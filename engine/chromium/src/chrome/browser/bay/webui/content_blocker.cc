@@ -521,6 +521,56 @@ void ContentBlocker::SetListEnabled(const std::string& id,
                     },
                     base::Unretained(this), id, enabled, std::move(done)));
 }
+void ContentBlocker::AddList(const std::string& url,
+                             const std::string& title,
+                             Added done) {
+  char* raw = bay_lists_add_custom(lists_, url.c_str(), title.c_str());
+  if (!raw) {
+    std::move(done).Run(std::nullopt, "not a list address");
+    return;
+  }
+  std::string id = TextFrom(raw);
+  SaveSettings();
+  // Done when the engine has it; one that couldn't be downloaded is turned off
+  // again, as SetListEnabled does.
+  Rebuild(true, base::BindOnce(
+                    [](ContentBlocker* self, std::string id, std::string url,
+                       Added done, std::vector<std::string> missing) {
+                      if (!std::ranges::contains(missing, id)) {
+                        std::move(done).Run(id, std::nullopt);
+                        return;
+                      }
+                      bay_lists_set_list(self->lists_, id.c_str(), false);
+                      self->SaveSettings();
+                      self->Rebuild(true, base::DoNothing());
+                      std::move(done).Run(id, "couldn't download " + url);
+                    },
+                    base::Unretained(this), id, url, std::move(done)));
+}
+void ContentBlocker::RemoveList(const std::string& id, Done done) {
+  if (!bay_lists_remove_custom(lists_, id.c_str())) {
+    std::move(done).Run("no such list");
+    return;
+  }
+  SaveSettings();
+  Rebuild(true, base::DoNothing());
+  std::move(done).Run(std::nullopt);
+}
+std::string ContentBlocker::UserFilters() {
+  return TextFrom(bay_lists_user_filters(lists_));
+}
+void ContentBlocker::SetUserFilters(const std::string& text, Done done) {
+  if (!bay_lists_set_user_filters(lists_, text.c_str())) {
+    std::move(done).Run("couldn't save your filters");
+    return;
+  }
+  SaveSettings();
+  Rebuild(false, base::BindOnce(
+                     [](Done done, std::vector<std::string>) {
+                       std::move(done).Run(std::nullopt);
+                     },
+                     std::move(done)));
+}
 bool ContentBlocker::IsAllowed(const std::string& host) {
   return bay_lists_is_allowed(lists_, host.c_str());
 }

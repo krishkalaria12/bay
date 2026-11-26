@@ -605,7 +605,9 @@ base::ListValue EngineServices::SupportedMethods() const {
                              "removeLegacyFavicons", "systemState",
                              "getContentBlocker", "setContentBlockerEnabled",
                              "setFilterListEnabled", "isContentBlockerAllowed",
-                             "setContentBlockerAllowed",
+                             "setContentBlockerAllowed", "addFilterList",
+                             "removeFilterList",    "getUserFilters",
+                             "setUserFilters",
                              "setBlockedPageAllowed",
                              "resolvePermission",   "resolveExternalApp"})
     methods.Append(std::string("BayCEF.") + method);
@@ -620,7 +622,9 @@ bool EngineServices::DispatchContentBlocker(const std::string& method,
   static constexpr const char* kMethodNames[] = {
       "getContentBlocker",       "setContentBlockerEnabled",
       "setFilterListEnabled",    "isContentBlockerAllowed",
-      "setContentBlockerAllowed", "setBlockedPageAllowed"};
+      "setContentBlockerAllowed", "setBlockedPageAllowed",
+      "addFilterList",           "removeFilterList",
+      "getUserFilters",          "setUserFilters"};
   if (!std::ranges::contains(kMethodNames, method))
     return false;
   auto& blocker = ContentBlocker::Get();
@@ -674,6 +678,29 @@ bool EngineServices::DispatchContentBlocker(const std::string& method,
     if (!text(0) || !flag(1) || !flag(2))
       return invalid();
     blocker.SetPageAllowed(*text(0), *flag(1), *flag(2), settled());
+  } else if (method == "addFilterList") {
+    if (!text(0) || !text(1))
+      return invalid();
+    blocker.AddList(
+        *text(0), *text(1),
+        base::BindOnce(
+            [](Response response, std::optional<std::string> id,
+               std::optional<std::string> error) {
+              std::move(response).Run(
+                  error ? Failure("content_blocker_failed", error->c_str())
+                        : Success(base::Value(id.value_or(""))));
+            },
+            std::move(response)));
+  } else if (method == "removeFilterList") {
+    if (!text(0))
+      return invalid();
+    blocker.RemoveList(*text(0), settled());
+  } else if (method == "getUserFilters") {
+    std::move(response).Run(Success(base::Value(blocker.UserFilters())));
+  } else if (method == "setUserFilters") {
+    if (!text(0))
+      return invalid();
+    blocker.SetUserFilters(*text(0), settled());
   }
   return true;
 }
