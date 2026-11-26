@@ -1,3 +1,4 @@
+import { confirm, readDocument, writeDocument } from "@bay/desktop";
 import { addHistoryVisits, hasWebKit, setWebKitFraudWarnings, setWebKitZoom, setZoom, type ActiveSwitch, type PageEngine } from "@bay/chromium";
 import { useKillSwitches } from "./killSwitches";
 import * as Effect from "effect/Effect";
@@ -29,6 +30,7 @@ import { capture } from "../telemetry/client";
 import { carrySignIns, READ_STORAGE, storageFrom, writeStorageScript, type CarriedStorage } from "./engineSiteData";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
+import { parseJson } from "./json";
 import { wantsPage } from "./tabNavigation";
 
 // Moving pages between Chromium and WebKit (store/engines.ts decides which a tab is in). A move reloads the page in the
@@ -235,9 +237,34 @@ export function engineViewLoaded(tabId: string, engine: PageEngine, isLoading: b
 // MARK: Following settings
 
 // Awake tabs in the background whose engine a settings change moved: they move when next shown, so a big session
-// doesn't reload at once.
+// doesn't reload at once. Kept in a document, so a move Bay quits before survives: after the relaunch the tab (asleep
+// until shown) takes its engine at once.
+const MOVES_DOC = "engine-moves.json";
+const MovesSchema = v.record(v.string(), v.picklist(["chromium", "webkit"]));
 const pendingMoves = new Map<string, PageEngine>();
 let unwatchSettings: (() => void) | null = null;
+
+function saveMoves() {
+  try {
+    writeDocument(MOVES_DOC, JSON.stringify(Object.fromEntries(pendingMoves)));
+  } catch {}
+}
+
+/** The moves left from the last run: a tab still wanting that engine takes it, asleep, or when next shown. */
+function resumeMoves() {
+  const parsed = v.safeParse(MovesSchema, parseJson(readDocument(MOVES_DOC) ?? "null"));
+
+  if (!parsed.success) return;
+
+  for (const [id, engine] of Object.entries(parsed.output)) {
+    if (!store().tabs[id] || wantedEngine(store(), id) !== engine || tabEngine(store(), id) === engine) continue;
+
+    if (webviews.get(id)) pendingMoves.set(id, engine);
+    else store().updateTab(id, { engine, wakeAdoptId: undefined });
+  }
+
+  saveMoves();
+}
 
 const sameEnginePrefs = (a: Settings, b: Settings) =>
   a.engineMode === b.engineMode && a.defaultEngine === b.defaultEngine && a.siteEngines === b.siteEngines && a.streamingInWebKit === b.streamingInWebKit;
@@ -249,17 +276,24 @@ const sameEnginePrefs = (a: Settings, b: Settings) =>
 export function followEngineSettings() {
   if (!hasWebKit() || unwatchSettings) return;
   setWebKitFraudWarnings(store().settings.webKitFraudWarnings);
+  resumeMoves();
 
   const unwatchBrowser = useBrowser.subscribe((s, prev) => {
     if (s.settings.webKitFraudWarnings !== prev.settings.webKitFraudWarnings) setWebKitFraudWarnings(s.settings.webKitFraudWarnings);
 
-    if (s.tabs !== prev.tabs)
+    if (s.tabs !== prev.tabs) {
+      const moves = pendingMoves.size;
+
       for (const map of [pendingMoves, restoring, carriedStorage]) {
         for (const id of map.keys()) if (!s.tabs[id]) map.delete(id);
       }
 
+      if (pendingMoves.size !== moves) saveMoves();
+    }
+
     if (s.settings === prev.settings || sameEnginePrefs(s.settings, prev.settings)) return;
     const before = { tabs: s.tabs, settings: prev.settings };
+    const shownMoves: [string, PageEngine][] = [];
 
     for (const id of Object.keys(s.tabs)) {
       const t = s.tabs[id]!;
@@ -274,9 +308,12 @@ export function followEngineSettings() {
 
         if (s.settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId))
           void carrySignIns(was, wanted, engineProfile(t.spaceId), site, siteOf(pageUrl(t)) ?? "");
-      } else if (shownTabs.has(id)) void openPageIn(id, wanted, { reason: "settings" });
+      } else if (shownTabs.has(id)) shownMoves.push([id, wanted]);
       else pendingMoves.set(id, wanted);
     }
+
+    saveMoves();
+    void moveShownTabs(shownMoves);
   });
   // Bay switched WebKit off remotely (lib/killSwitches.ts): its pages reopen in Chromium.
 
@@ -296,6 +333,44 @@ export function followEngineSettings() {
 
 const shownTabs = new Set<string>();
 
+function unsavedWork(tabId: string): Promise<boolean> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const pageWork = yield* PageWorkService;
+
+      return yield* pageWork.unsavedWork(tabId);
+    }),
+  ).catch(() => false);
+}
+
+/** The pages on screen a settings change moves: asked about once, naming the ones holding unsaved work. */
+async function moveShownTabs(moves: [string, PageEngine][]) {
+  if (!moves.length) return;
+  const unsaved = await Promise.all(moves.map(([id]) => unsavedWork(id)));
+  const holding = moves.flatMap(([id], i) => (unsaved[i] && store().tabs[id] ? [store().tabs[id]!] : []));
+  let kept = new Set<string>();
+
+  if (holding.length) {
+    const one = holding.length === 1;
+
+    const { confirmed } = await confirm({
+      title: one ? "Reload this page in the other engine?" : `Reload ${holding.length} pages in other engines?`,
+      message: `Your Engines settings now open ${one ? "it" : "them"} elsewhere, which reloads ${one ? "it" : "them"}, so changes you made may not be saved:\n${holding
+        .map((t) => `• ${t.customTitle || t.title || siteHost(pageUrl(t))}`)
+        .join("\n")}`,
+      confirmTitle: one ? "Reload Page" : "Reload Pages",
+      cancelTitle: one ? "Keep It as It Is" : "Keep Them as They Are",
+      windowId: holding[0]!.windowId,
+    }).catch(() => ({ confirmed: false }));
+
+    if (!confirmed) kept = new Set(holding.map((t) => t.id));
+  }
+
+  for (const [id, engine] of moves) {
+    if (!kept.has(id) && wantedEngine(store(), id) === engine) void openPageIn(id, engine, { reason: "settings", checkWork: false });
+  }
+}
+
 /** A tab's page is on screen (or not): a move a settings change left for it happens now. */
 export function engineTabShown(tabId: string, shown: boolean) {
   if (!shown) return void shownTabs.delete(tabId);
@@ -304,6 +379,7 @@ export function engineTabShown(tabId: string, shown: boolean) {
 
   if (!engine) return;
   pendingMoves.delete(tabId);
+  saveMoves();
 
   // Only if nothing has moved it since.
   if (wantedEngine(store(), tabId) === engine && tabEngine(store(), tabId) !== engine) void openPageIn(tabId, engine, { reason: "settings" });

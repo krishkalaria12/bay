@@ -58,3 +58,23 @@ test("storage carries as entries, and the write leaves the page's other keys alo
     delete globalThis.localStorage;
   }
 });
+
+test("the ledger outlives the app, so a sign-out still carries after a relaunch", async () => {
+  const { cookieCarry, docs } = await import("@bay/desktop");
+  const cookie = (name) => ({ name, value: "1", domain: ".a.example", path: "/", secure: true, httpOnly: false, sameSite: "lax" });
+
+  cookieCarry.can = true;
+  cookieCarry.cookies = { chromium: [cookie("session"), cookie("prefs")], webkit: [] };
+  const first = await import("./engineSiteData.ts?run=1");
+  assert.equal(await first.carrySignIns("chromium", "webkit", "", "a.example", "https://a.example"), true);
+  assert.ok(docs.get("engine-sign-ins.json").includes("session|.a.example|/"));
+  assert.ok(!docs.get("engine-sign-ins.json").includes('"1"'), "no cookie values are kept");
+
+  // Signed out in Chromium, then Bay restarts: WebKit's copy of the session goes on the next switch.
+  cookieCarry.cookies = { chromium: [cookie("prefs")], webkit: [cookie("session"), cookie("prefs")] };
+  cookieCarry.applied = [];
+  const relaunched = await import("./engineSiteData.ts?run=2");
+  assert.equal(await relaunched.carrySignIns("chromium", "webkit", "", "a.example", "https://a.example"), true);
+  assert.deepEqual(cookieCarry.applied[0].remove, [{ name: "session", domain: ".a.example", path: "/" }]);
+  cookieCarry.can = false;
+});

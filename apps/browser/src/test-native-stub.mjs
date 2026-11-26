@@ -195,9 +195,17 @@ export const webKitPasskeyAccess = () => Promise.resolve(null);
 export const requestWebKitPasskeyAccess = () => Promise.resolve(null);
 // Sign-ins carried between engines (lib/engineSiteData.ts): no native stores here.
 
-export const canCarrySiteCookies = () => false;
-export const siteCookies = () => Promise.resolve(null);
-export const applySiteCookies = () => Promise.resolve(null);
+// Each engine's cookies for the sign-in carry (lib/engineSiteData.ts): off unless a test turns it on.
+export const cookieCarry = { can: false, cookies: {}, applied: [] };
+export const canCarrySiteCookies = () => cookieCarry.can;
+export const siteCookies = (engine) => Promise.resolve(cookieCarry.cookies[engine] ?? null);
+
+export const applySiteCookies = (engine, _profile, set, remove) => {
+  cookieCarry.applied.push({ engine, set, remove });
+
+  return Promise.resolve(true);
+};
+
 export const endedWebKitSessions = [];
 export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(session), Promise.resolve());
 export const WEBKIT_SITE_SETTINGS = ["camera", "microphone"];

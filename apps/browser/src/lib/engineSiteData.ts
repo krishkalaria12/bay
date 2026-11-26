@@ -1,5 +1,7 @@
 import { applySiteCookies, canCarrySiteCookies, getSiteSettings, siteCookies, type CookieName, type PageEngine, type SiteCookie } from "@bay/chromium";
+import { readDocument, writeDocument } from "@bay/desktop";
 import * as v from "valibot";
+import { parseJson } from "./json";
 import { switchedOff } from "./killSwitches";
 
 // Bringing sign-ins along (Settings › Engines): a page switching engines takes its site's cookies and storage from the
@@ -38,8 +40,36 @@ export function planCarry(source: readonly SiteCookie[], target: readonly SiteCo
   return { set, remove, known: sourceKeys };
 }
 
-// The ledger, per profile and site, for the app's run: after a relaunch the first carry removes nothing.
-const ledger = new Map<string, Set<string>>();
+// The ledger, per profile and site: which cookies both engines had after the site's last carry. It's kept in a
+// document of this computer's own (cookie names, domains and paths; never a value), so a sign-out carries after a
+// relaunch too. The sites carried most recently are kept.
+const LEDGER_DOC = "engine-sign-ins.json";
+const MAX_LEDGER_SITES = 500;
+const LedgerSchema = v.record(v.string(), v.array(v.string()));
+let ledger: Map<string, Set<string>> | null = null;
+
+function ledgerOf(): Map<string, Set<string>> {
+  if (ledger) return ledger;
+  const parsed = v.safeParse(LedgerSchema, parseJson(readDocument(LEDGER_DOC) ?? "null"));
+
+  ledger = new Map(parsed.success ? Object.entries(parsed.output).map(([key, keys]) => [key, new Set(keys)]) : []);
+
+  return ledger;
+}
+
+function remember(key: string, known: Set<string>) {
+  const all = ledgerOf();
+
+  all.delete(key);
+  all.set(key, known);
+
+  for (const oldest of [...all.keys()].slice(0, Math.max(0, all.size - MAX_LEDGER_SITES))) all.delete(oldest);
+
+  try {
+    writeDocument(LEDGER_DOC, JSON.stringify(Object.fromEntries([...all].map(([site, keys]) => [site, [...keys]]))));
+  } catch {}
+}
+
 const carrying = new Map<string, Promise<boolean>>();
 
 const MAX_CARRIED = 1000;
@@ -60,7 +90,7 @@ export function carrySignIns(from: PageEngine, to: PageEngine, profile: string, 
     const [source, target] = await Promise.all([siteCookies(from, profile, site), siteCookies(to, profile, site)]);
 
     if (!source || !target) return false;
-    const plan = planCarry(source.slice(0, MAX_CARRIED), target, ledger.get(`${profile}|${site}`) ?? new Set());
+    const plan = planCarry(source.slice(0, MAX_CARRIED), target, ledgerOf().get(`${profile}|${site}`) ?? new Set());
 
     if (plan.set.length || plan.remove.length) {
       const applied = await applySiteCookies(to, profile, plan.set, plan.remove.slice(0, MAX_CARRIED - plan.set.length));
@@ -68,7 +98,7 @@ export function carrySignIns(from: PageEngine, to: PageEngine, profile: string, 
       if (!applied) return false;
     }
 
-    ledger.set(`${profile}|${site}`, plan.known);
+    remember(`${profile}|${site}`, plan.known);
 
     return true;
   })().finally(() => carrying.delete(key));
