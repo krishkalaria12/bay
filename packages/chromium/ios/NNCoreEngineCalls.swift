@@ -9,6 +9,6 @@ extension CefModule {
     "nn_prefs_get", "nn_prefs_set",
     "nn_search_suggestions",
     "nn_spare_warmup",
-    "nn_cli_control",
+    "nn_cli_control", "nn_cli_agents", "nn_cli_agent_answer", "nn_cli_agent_revoke",
   ]
 }

@@ -110,8 +110,10 @@ describe("installing", () => {
 
   test("Codex's TOML gets one Bay table, replacing an old one and keeping the rest", () => {
     const before = 'model = "o3"\n\n[mcp_servers.bay]\ncommand = "old"\n\n[mcp_servers.other]\ncommand = "x"\n';
-    expect(withTomlEntry(before)).toBe('model = "o3"\n\n[mcp_servers.other]\ncommand = "x"\n\n[mcp_servers.bay]\ncommand = "bay"\nargs = ["mcp", "serve"]\n');
-    expect(withTomlEntry("")).toBe('[mcp_servers.bay]\ncommand = "bay"\nargs = ["mcp", "serve"]\n');
+    expect(withTomlEntry(before)).toBe(
+      'model = "o3"\n\n[mcp_servers.other]\ncommand = "x"\n\n[mcp_servers.bay]\ncommand = "bay"\nargs = ["mcp", "serve", "--agent", "codex"]\n',
+    );
+    expect(withTomlEntry("")).toBe('[mcp_servers.bay]\ncommand = "bay"\nargs = ["mcp", "serve", "--agent", "codex"]\n');
   });
 
   test("install writes each agent's own file", () => {
@@ -121,7 +123,11 @@ describe("installing", () => {
     expect(installMcp("cursor", home)).toBe(mcpConfigPath("cursor", home));
     expect(JSON.parse(readFileSync(join(home, ".cursor/mcp.json"), "utf8")).mcpServers.keep).toEqual({ command: "k" });
     installMcp("claude-code", home);
-    expect(JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")).mcpServers.bay.type).toBe("stdio");
+    expect(JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")).mcpServers.bay).toEqual({
+      type: "stdio",
+      command: "bay",
+      args: ["mcp", "serve", "--agent", "claude-code"],
+    });
     installMcp("codex", home);
     expect(readFileSync(join(home, ".codex/config.toml"), "utf8")).toContain("[mcp_servers.bay]");
   });

@@ -20,6 +20,7 @@
 class GURL;
 
 namespace content {
+class BrowserContext;
 class DevToolsAgentHostClient;
 class RenderFrameHost;
 }
@@ -56,7 +57,8 @@ std::map<content::DevToolsAgentHostClient*, TokenClient*>& Registry();
 class TokenClient : public BayDevToolsTokenClient {
  public:
   TokenClient(content::DevToolsAgentHostClient* client,
-              content::DevToolsAgentHost* host);
+              content::DevToolsAgentHost* host,
+              std::string agent);
   ~TokenClient() override;
 
   bool FilterCommand(std::string& message, std::string* reply) override;
@@ -64,6 +66,12 @@ class TokenClient : public BayDevToolsTokenClient {
   bool ShouldClose() const override;
   bool MayAttachToURL(const GURL& url, bool is_webui) override;
   bool MayAttachToRenderFrameHost(content::RenderFrameHost* frame) override;
+
+  // Within the connection's reach: a web page or worker (IsWebHost) and, for
+  // a coding agent's token, of a space it was given.
+  bool InScope(content::BrowserContext* context) const;
+  bool ScopedHost(content::DevToolsAgentHost* host) const;
+  bool ScopedTarget(const std::string* target_id) const;
 
  private:
   struct Contexts {
@@ -90,7 +98,13 @@ class TokenClient : public BayDevToolsTokenClient {
   bool FilterTargetEvent(std::string_view method, const std::string& message);
   bool FilterPageEvent(const std::string& message);
 
+  // Bay.requestAgentAccess: answered here, never sent to the browser.
+  std::string AgentAccessReply(int id,
+                               const std::string& session,
+                               const base::DictValue& params);
+
   const raw_ptr<content::DevToolsAgentHostClient> client_;
+  const std::string agent_;
   const scoped_refptr<content::DevToolsAgentHost> root_host_;
   std::map<std::string, std::string> targets_;
   std::map<std::string, Contexts> sessions_;

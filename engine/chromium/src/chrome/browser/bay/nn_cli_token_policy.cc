@@ -13,9 +13,11 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/values.h"
+#include "chrome/browser/bay/nn_cli_agents.h"
 #include "chrome/browser/bay/nn_cli_token_policy_internal.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/render_frame_host.h"
 #include "url/gurl.h"
 
 namespace bay {
@@ -45,8 +47,9 @@ std::map<content::DevToolsAgentHostClient*, TokenClient*>& Registry() {
 }
 
 TokenClient::TokenClient(content::DevToolsAgentHostClient* client,
-                         content::DevToolsAgentHost* host)
-    : client_(client), root_host_(host) {
+                         content::DevToolsAgentHost* host,
+                         std::string agent)
+    : client_(client), agent_(std::move(agent)), root_host_(host) {
   Registry()[client_] = this;
 }
 
@@ -83,6 +86,12 @@ bool TokenClient::FilterCommand(std::string& message, std::string* reply) {
   if (session_id && !targets_.contains(session)) {
     *reply = ErrorReply(*id, std::string(), kInvalidRequest,
                         "bay: no attached session has that sessionId");
+    return false;
+  }
+  if (*method == "Bay.requestAgentAccess") {
+    static const base::NoDestructor<base::DictValue> none;
+    const base::DictValue* params = command.FindDict("params");
+    *reply = AgentAccessReply(*id, session, params ? *params : *none);
     return false;
   }
   if (!AllowedMethods().contains(*method)) {
@@ -124,7 +133,43 @@ bool TokenClient::FilterCommand(std::string& message, std::string* reply) {
 }
 
 bool TokenClient::ShouldClose() const {
-  return wedged_;
+  // A coding agent whose access was taken back goes at its next message.
+  return wedged_ || (!agent_.empty() && !cli_agents::HasAccess(agent_));
+}
+
+bool TokenClient::InScope(content::BrowserContext* context) const {
+  return agent_.empty() || cli_agents::Allows(agent_, context);
+}
+
+bool TokenClient::ScopedHost(content::DevToolsAgentHost* host) const {
+  return host && IsWebHost(host) &&
+         (host->GetType() == content::DevToolsAgentHost::kTypeBrowser ||
+          InScope(host->GetBrowserContext()));
+}
+
+bool TokenClient::ScopedTarget(const std::string* target_id) const {
+  return target_id &&
+         ScopedHost(content::DevToolsAgentHost::GetForId(*target_id).get());
+}
+
+std::string TokenClient::AgentAccessReply(int id,
+                                          const std::string& session,
+                                          const base::DictValue& params) {
+  if (!session.empty() || !agent_.empty()) {
+    return ErrorReply(id, session, kRefused,
+                      "bay: only the bay command's own connection can ask "
+                      "for a coding agent's access");
+  }
+  std::string error;
+  base::DictValue result = cli_agents::Request(params, &error);
+  if (!error.empty()) {
+    return ErrorReply(id, session, kInvalidRequest,
+                      base::StrCat({"bay: ", error}));
+  }
+  base::DictValue answer;
+  answer.Set("id", id);
+  answer.Set("result", std::move(result));
+  return base::WriteJson(answer).value_or("{}");
 }
 
 bool TokenClient::MayAttachToURL(const GURL& url, bool is_webui) {
@@ -132,7 +177,7 @@ bool TokenClient::MayAttachToURL(const GURL& url, bool is_webui) {
 }
 
 bool TokenClient::MayAttachToRenderFrameHost(content::RenderFrameHost* frame) {
-  return IsWebFrame(frame);
+  return IsWebFrame(frame) && InScope(frame->GetBrowserContext());
 }
 
 std::string TokenClient::Refusal(const std::string& method,
@@ -159,7 +204,7 @@ std::string TokenClient::Refusal(const std::string& method,
     if (params.FindBool("flatten") != true) {
       return "without flatten";
     }
-    if (!IsWebTarget(params.FindString("targetId"))) {
+    if (!ScopedTarget(params.FindString("targetId"))) {
       return "to that target";
     }
   } else if (method == "Target.setAutoAttach") {
@@ -177,12 +222,12 @@ std::string TokenClient::Refusal(const std::string& method,
     }
   } else if (method == "Target.activateTarget" ||
              method == "Target.closeTarget") {
-    if (!IsWebTarget(params.FindString("targetId"))) {
+    if (!ScopedTarget(params.FindString("targetId"))) {
       return "on that target";
     }
   } else if (method == "Target.getTargetInfo") {
     if (params.Find("targetId") &&
-        !IsWebTarget(params.FindString("targetId"))) {
+        !ScopedTarget(params.FindString("targetId"))) {
       return "on that target";
     }
   } else if (method == "Page.navigate") {
@@ -220,21 +265,31 @@ std::string TokenClient::Refusal(const std::string& method,
 
 std::unique_ptr<BayDevToolsTokenClient> CreateTokenClient(
     content::DevToolsAgentHostClient* client,
-    content::DevToolsAgentHost* host) {
-  return std::make_unique<cli_token_policy_internal::TokenClient>(client, host);
+    content::DevToolsAgentHost* host,
+    const std::string& agent) {
+  return std::make_unique<cli_token_policy_internal::TokenClient>(client, host,
+                                                                  agent);
 }
 
 bool TokenClientMayAttach(content::DevToolsAgentHostClient* root_client,
                           content::DevToolsAgentHost* host) {
-  return !cli_token_policy_internal::Registry().contains(root_client) ||
-         cli_token_policy_internal::IsWebHost(host) ||
-         cli_token_policy_internal::IsPendingWebFrameHost(host);
+  auto& registry = cli_token_policy_internal::Registry();
+  auto it = registry.find(root_client);
+  if (it == registry.end()) {
+    return true;
+  }
+  return it->second->ScopedHost(host) ||
+         (cli_token_policy_internal::IsPendingWebFrameHost(host) &&
+          it->second->InScope(host->GetBrowserContext()));
 }
 
 bool TokenClientMayInput(content::DevToolsAgentHostClient* root_client,
                          content::RenderFrameHost* frame) {
-  return !cli_token_policy_internal::Registry().contains(root_client) ||
-         cli_token_policy_internal::IsWebFrame(frame);
+  auto& registry = cli_token_policy_internal::Registry();
+  auto it = registry.find(root_client);
+  return it == registry.end() ||
+         (cli_token_policy_internal::IsWebFrame(frame) &&
+          it->second->InScope(frame->GetBrowserContext()));
 }
 
 }

@@ -1227,6 +1227,17 @@
                     At most every ten seconds a profile, never for a private window, and a kill switch can turn it off (<code>lib/sparePage.ts</code>, tested).
                   </td>
                 </tr>
+                <tr>
+                  <td>G1, second part</td>
+                  <td>
+                    Done in source, all three platforms. The bay command, <code>bay exec</code> and agents never reach a private window's pages or workers
+                    (<code>nn_cli_token_policy_web_targets.cc</code>). Each agent gets its own token: <code>bay mcp install</code> writes
+                    <code>bay mcp serve --agent …</code>, which asks over the bay command's connection (<code>Bay.requestAgentAccess</code>). Bay asks once in
+                    the window in use, "Allow in ‹space›" or not, and the token policy keeps that agent's connection to its spaces
+                    (<code>nn_cli_agents.cc</code>, grants in an owner-only <code>BayAgents.json</code>). Settings › Advanced lists agents, changes their spaces
+                    and removes them; a removed agent's connection closes at its next message.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1260,9 +1271,9 @@
               shortcut or menu item yet, and long pages are cut to fit the model's context.
             </li>
             <li>
-              G1's per-agent approval and per-space reach aren't built: every agent shares the bay command's one permission and sees every web page tab the
-              token policy allows, private windows' included (the policy has no rule for them, for <code>bay exec</code> either). Scoping by space needs the
-              token policy (<code>nn_cli_token_policy</code>) to filter targets by profile per token, with an approval sheet in the app.
+              G1's agent access limits what an agent's MCP tools reach; it isn't a sandbox. An agent that can run programs as you can still read the bay
+              command's own token and run <code>bay exec</code>. A space-limited agent's <code>open_tab</code> works only when the new tab lands in one of its
+              spaces (it opens in the front window's). The engine needs a rebuild for the policy changes; they are syntax checked only.
             </li>
             <li>
               G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the website

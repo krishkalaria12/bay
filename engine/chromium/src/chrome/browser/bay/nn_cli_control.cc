@@ -34,6 +34,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/bay/nn_cli_agents.h"
 #include "chrome/browser/bay/nn_cli_token_policy.h"
 #include "chrome/browser/bay/nn_cli_token_policy_internal.h"
 #include "chrome/browser/bay/nn_engine.h"
@@ -112,62 +113,15 @@ base::FilePath ControlFilePath() {
   return dir.AppendASCII(kControlFileName);
 }
 
+bool IsLiveGeneration(uint64_t generation) {
+  return g_live_generation == generation;
+}
+
 std::string WriteControlFile(const base::FilePath& path,
                              const std::string& contents,
                              uint64_t generation) {
-  if (path.empty())
-    return "Bay has no data folder.";
-  const base::FilePath temp = path.DirName().AppendASCII(
-      ".BayControl." + base::HexEncode(base::RandBytesAsVector(8)));
-#if BUILDFLAG(IS_WIN)
-  auto token = base::win::AccessToken::FromCurrentProcess();
-  auto descriptor = base::win::SecurityDescriptor::CreateWithEmptyDacl();
-  descriptor.set_dacl_protected(true);
-  if (!token || !descriptor.SetDaclEntry(
-                    *token, base::win::SecurityAccessMode::kGrant,
-                    GENERIC_ALL, 0))
-    return "Couldn't protect the terminal control file.";
-  descriptor.set_owner(token->User());
-  auto absolute = descriptor.ToAbsolute();
-  SECURITY_ATTRIBUTES security = {sizeof(SECURITY_ATTRIBUTES), &absolute, FALSE};
-  // Supply the private DACL when creating the file. A handle opened only with
-  // GENERIC_WRITE cannot later change a DACL through SetSecurityInfo.
-  base::File file(CreateFileW(temp.value().c_str(), GENERIC_WRITE,
-                              FILE_SHARE_READ, &security, CREATE_NEW,
-                              FILE_ATTRIBUTE_NORMAL, nullptr));
-  const bool protected_file = file.IsValid();
-#else
-  base::File file(temp, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
-  const bool protected_file = file.IsValid() &&
-                              base::SetPosixFilePermissions(temp, 0600);
-#endif
-  const bool written = protected_file &&
-      file.WriteAtCurrentPosAndCheck(base::as_byte_span(contents)) && file.Flush();
-  file.Close();
-  if (!written) {
-    base::DeleteFile(temp);
-    return "Couldn't protect and write the terminal control file.";
-  }
-  base::AutoLock hold(PublishLock());
-  if (g_live_generation != generation) {
-    base::DeleteFile(temp);
-    return "The control server stopped.";
-  }
-#if BUILDFLAG(IS_WIN)
-  // ReplaceFileW deliberately carries the old destination's DACL onto the new
-  // file. MoveFileExW keeps our protected DACL, even if an old control file had
-  // inherited broader permissions.
-  const bool published = MoveFileExW(temp.value().c_str(), path.value().c_str(),
-                                    MOVEFILE_REPLACE_EXISTING |
-                                        MOVEFILE_WRITE_THROUGH);
-#else
-  const bool published = base::ReplaceFile(temp, path, nullptr);
-#endif
-  if (!published) {
-    base::DeleteFile(temp);
-    return "Couldn't publish the terminal control file.";
-  }
-  return {};
+  return WriteOwnerOnlyFile(path, contents, "the terminal control file",
+                            &PublishLock(), &IsLiveGeneration, generation);
 }
 
 void DeleteControlFile(const base::FilePath& path) {
@@ -233,6 +187,7 @@ class ControlServer {
     }
     ++generation_;
     SetLiveGeneration(generation_);
+    cli_agents::Load();
     error_.clear();
     std::vector<uint8_t> secret = base::RandBytesAsVector(32);
     token_.clear();
@@ -320,19 +275,37 @@ class ControlServer {
         self.state_ != State::kRunning) {
       return nullptr;
     }
-    return CreateTokenClient(client, host);
+    return CreateTokenClient(client, host, std::exchange(AcceptedAgent(), {}));
+  }
+
+  // The coding agent whose token the request just accepted carried, empty for
+  // the bay command's own (nn_cli_agents.h). The DevTools handler checks a
+  // request's token and makes its connection's policy in one go on the UI
+  // thread, so the policy takes it from here.
+  static std::string& AcceptedAgent() {
+    static base::NoDestructor<std::string> agent;
+    return *agent;
   }
 
   static bool Accepts(const content::DevToolsSocketFactory* factory,
                       std::string_view token) {
     ControlServer& self = Get();
+    AcceptedAgent().clear();
     if (!factory || factory != self.factory_ ||
-        self.state_ != State::kRunning || self.token_.empty() ||
-        token.size() != self.token_.size()) {
+        self.state_ != State::kRunning || self.token_.empty()) {
       return false;
     }
-    return crypto::SecureMemEqual(base::as_byte_span(token),
-                                  base::as_byte_span(self.token_));
+    if (token.size() == self.token_.size() &&
+        crypto::SecureMemEqual(base::as_byte_span(token),
+                               base::as_byte_span(self.token_))) {
+      return true;
+    }
+    std::optional<std::string> agent = cli_agents::AgentForToken(token);
+    if (!agent) {
+      return false;
+    }
+    AcceptedAgent() = *agent;
+    return true;
   }
 
  public:
@@ -362,6 +335,7 @@ class ControlServer {
     if (!Accepts(factory, token)) {
       return false;
     }
+    const std::string agent = std::exchange(AcceptedAgent(), {});
     target_id->clear();
     if (content::WebContents* contents = Get().active_.get()) {
       BrowserWindowInterface* browser =
@@ -369,7 +343,9 @@ class ControlServer {
       const ui::BaseWindow* window = browser ? browser->GetWindow() : nullptr;
       if (window && window->IsVisible() && !window->IsMinimized() &&
           contents->GetVisibility() != content::Visibility::HIDDEN &&
-          cli_token_policy_internal::IsWebFrame(contents->GetPrimaryMainFrame())) {
+          cli_token_policy_internal::IsWebFrame(contents->GetPrimaryMainFrame()) &&
+          (agent.empty() ||
+           cli_agents::Allows(agent, contents->GetBrowserContext()))) {
         *target_id =
             content::DevToolsAgentHost::GetOrCreateFor(contents)->GetId();
       }

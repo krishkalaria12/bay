@@ -12,6 +12,7 @@ import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
 import { switchTitle, useKillSwitches } from "../../../lib/killSwitches";
+import { CodingAgents } from "./CodingAgents";
 import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/driverControl";
 
 export function AdvancedPane() {
@@ -82,9 +83,10 @@ export function AdvancedPane() {
             <Row
               settingId={SETTINGS.mcpAgents.id}
               title={SETTINGS.mcpAgents.title}
-              description="Coding agents can list, read and use your web page tabs over MCP while the control above is on. In a terminal: bay mcp install --agent claude-code (or codex, cursor, vscode)."
+              description="Coding agents can list, read and use your web page tabs over MCP while the control above is on, never private windows. In a terminal: bay mcp install --agent claude-code (or codex, cursor, vscode). Bay asks the first time an agent connects, and lets it use only the spaces you allow."
             />
           </Group>
+          <CodingAgents />
         </>
       ) : null}
 

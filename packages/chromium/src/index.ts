@@ -40,4 +40,6 @@ export * from "./switches";
 
 export * from "./sparePage";
 
+export * from "./cliAgents";
+
 export * from "./enginePrefs";

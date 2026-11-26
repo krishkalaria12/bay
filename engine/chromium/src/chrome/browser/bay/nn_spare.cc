@@ -16,9 +16,8 @@ NN_ENGINE_CALL(nn_spare_warmup) {
     return call.TakeReply().Send(
         base::DictValue().Set("warmed", false).Set("reason", "batterySaver"));
   }
-  const bool warmed =
-      content::SpareRenderProcessHostManager::Get().WarmupSpare(
-          call.profile()) != nullptr;
+  const bool warmed = content::SpareRenderProcessHostManager::Get().WarmupSpare(
+                          call.profile()) != nullptr;
   base::DictValue result;
   result.Set("warmed", warmed);
   if (!warmed) {

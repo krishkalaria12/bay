@@ -1,8 +1,9 @@
 // `bay mcp`: Bay as a Model Context Protocol server for the coding agents people already run (Claude Code, Codex,
 // Cursor, VS Code). It speaks MCP over stdio (JSON-RPC 2.0, one message a line) and drives Bay through the same
 // DevTools connection `bay exec` uses, so it needs the same permission (Settings › Advanced › Let the bay command
-// control Bay) and reaches only what that connection may: web page tabs, never Bay's own pages. macOS, Windows and
-// Linux alike.
+// control Bay) and reaches only what that connection may: web page tabs, never Bay's own pages or private windows.
+// With --agent (what `bay mcp install` writes) the agent asks for its own access, which the person allows in some
+// spaces or all of them (agentAccess.ts). macOS, Windows and Linux alike.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -246,7 +247,8 @@ export const MCP_AGENTS = ["claude-code", "codex", "cursor", "vscode"] as const;
 
 export type McpAgent = (typeof MCP_AGENTS)[number];
 
-const ENTRY = { command: "bay", args: ["mcp", "serve"] };
+/** Bay's entry in an agent's config: `bay mcp serve --agent <agent>`, so the agent asks for its own access. */
+const entry = (agent: McpAgent) => ({ command: "bay", args: ["mcp", "serve", "--agent", agent] });
 
 function vscodeConfig(home: string): string {
   if (process.platform === "darwin") return join(home, "Library/Application Support/Code/User/mcp.json");
@@ -279,7 +281,7 @@ export function withJsonEntry(existing: string, key: "mcpServers" | "servers", e
 }
 
 /** Codex's TOML with a `[mcp_servers.bay]` table, replacing Bay's old one and leaving every other line alone. */
-export function withTomlEntry(existing: string): string {
+export function withTomlEntry(existing: string, agent: McpAgent = "codex"): string {
   const lines = existing.split("\n");
   const kept: string[] = [];
   let inBay = false;
@@ -294,7 +296,7 @@ export function withTomlEntry(existing: string): string {
 
   const body = kept.join("\n").replace(/\n+$/, "");
 
-  return `${body ? `${body}\n\n` : ""}[mcp_servers.bay]\ncommand = "bay"\nargs = ["mcp", "serve"]\n`;
+  return `${body ? `${body}\n\n` : ""}[mcp_servers.bay]\ncommand = "bay"\nargs = ${JSON.stringify(entry(agent).args).replaceAll(",", ", ")}\n`;
 }
 
 /** Adds Bay to an agent's MCP servers; the file's path. */
@@ -303,9 +305,9 @@ export function installMcp(agent: McpAgent, home = homedir()): string {
   const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
   let next: string;
 
-  if (agent === "codex") next = withTomlEntry(existing);
-  else if (agent === "vscode") next = withJsonEntry(existing, "servers", { type: "stdio", ...ENTRY });
-  else next = withJsonEntry(existing, "mcpServers", agent === "claude-code" ? { type: "stdio", ...ENTRY } : ENTRY);
+  if (agent === "codex") next = withTomlEntry(existing, agent);
+  else if (agent === "vscode") next = withJsonEntry(existing, "servers", { type: "stdio", ...entry(agent) });
+  else next = withJsonEntry(existing, "mcpServers", agent === "claude-code" ? { type: "stdio", ...entry(agent) } : entry(agent));
 
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, next);

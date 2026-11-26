@@ -739,3 +739,7 @@ export const permissionEvents = { fire: (name, value) => permissionListeners.get
 export const resolvePermission = () => Promise.resolve();
 export const checkSwitches = () => Promise.resolve(null);
 export const warmSpareRenderer = () => Promise.resolve({ warmed: false, reason: "failed" });
+export const cliAgents = () => Promise.resolve({ agents: [], requests: [], loaded: true });
+export const answerCliAgent = () => Promise.resolve({ ok: true });
+export const revokeCliAgent = () => Promise.resolve({ ok: true });
+export const onCliAgentsChanged = () => ({ remove() {} });

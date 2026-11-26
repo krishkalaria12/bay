@@ -19,6 +19,7 @@ import { scripts } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
 import { installMcp, MCP_AGENTS, serveMcp } from "./mcp.ts";
+import { AGENT_ID, requestAgentAccess, withToken } from "./agentAccess.ts";
 import { HOOK_EVENTS, hookFilter, watchHooks } from "./hooks.ts";
 import { Session } from "./browser.ts";
 import { homedir } from "node:os";
@@ -185,25 +186,53 @@ export const skills = Command.make("skills").pipe(
 
 export const MCP_DESCRIPTION = `Bay as an MCP server for coding agents: list, open and read tabs, click, type and take screenshots.
 
-  bay mcp serve                     speak MCP on stdin and stdout (what an agent runs)
+  bay mcp serve [--agent AGENT]     speak MCP on stdin and stdout (what an agent runs)
   bay mcp install --agent AGENT     add Bay to an agent's MCP servers, changing nothing else there
 
 Agents: ${MCP_AGENTS.join(", ")}. Needs Settings › Advanced › Let the bay command control Bay, as bay exec does,
-and reaches only web page tabs.`;
+and reaches only web page tabs, never private windows. With --agent (what install writes), Bay asks you the
+first time whether the agent may use it and in which spaces; Settings › Advanced changes or takes that back.`;
 
-const mcpServe = Command.make("serve", { dataDir: dataDirFlag, port: portFlag, ws: wsFlag }, (input) =>
-  Effect.promise(() =>
-    serveMcp(async () => {
-      const endpoint = await Effect.runPromise(
-        resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir: Option.getOrUndefined(input.dataDir) }),
-      );
+const mcpServe = Command.make(
+  "serve",
+  {
+    agent: Flag.String("agent").pipe(
+      Flag.filter(
+        (agent) => AGENT_ID.test(agent),
+        () => "--agent must be a short lowercase name, like claude-code",
+      ),
+      Flag.withDescription("ask Bay for this agent's own access, kept to the spaces you allow"),
+      Flag.optional,
+    ),
+    dataDir: dataDirFlag,
+    port: portFlag,
+    ws: wsFlag,
+  },
+  (input) =>
+    Effect.promise(() =>
+      serveMcp(async () => {
+        const endpoint = await Effect.runPromise(
+          resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir: Option.getOrUndefined(input.dataDir) }),
+        );
 
-      const session = new Session(endpoint);
-      await session.connect();
+        const session = new Session(endpoint);
+        await session.connect();
+        const agent = Option.getOrUndefined(input.agent);
 
-      return session;
-    }, VERSION),
-  ),
+        if (!agent) return session;
+
+        // The bay command's own connection asks; the agent's tools run on a connection with the agent's token.
+        try {
+          const token = await requestAgentAccess(session.cdp, agent, { notice: (message) => void process.stderr.write(`bay: ${message}\n`) });
+          const own = new Session(withToken(endpoint, token));
+          await own.connect();
+
+          return own;
+        } finally {
+          await session.close();
+        }
+      }, VERSION),
+    ),
 ).pipe(Command.withDescription("Serve MCP on stdin and stdout."), Command.withShortDescription("serve MCP to an agent"));
 
 const mcpInstall = Command.make(

@@ -216,9 +216,9 @@ bool TokenClient::FilterResponse(int id,
   }
   if (method == "Target.getTargets") {
     if (base::ListValue* infos = result->FindList("targetInfos")) {
-      infos->EraseIf([](const base::Value& info) {
+      infos->EraseIf([this](const base::Value& info) {
         return !info.is_dict() ||
-               !IsWebTarget(info.GetDict().FindString("targetId"));
+               !ScopedTarget(info.GetDict().FindString("targetId"));
       });
       message = base::WriteJson(response).value_or(std::string());
     }
@@ -226,7 +226,7 @@ bool TokenClient::FilterResponse(int id,
   }
   if (method == "Target.getTargetInfo") {
     const base::DictValue* info = result->FindDict("targetInfo");
-    if (info && !IsWebTarget(info->FindString("targetId"))) {
+    if (info && !ScopedTarget(info->FindString("targetId"))) {
       message = ErrorReply(id, session, kRefused,
                            "bay: Target.getTargetInfo on that target "
                            "isn't allowed for the bay command");
@@ -353,7 +353,7 @@ bool TokenClient::FilterTargetEvent(std::string_view method,
     targets_[*child] = *target_id;
     return true;
   }
-  return IsWebTarget(target_id);
+  return ScopedTarget(target_id);
 }
 
 bool TokenClient::FilterPageEvent(const std::string& message) {
