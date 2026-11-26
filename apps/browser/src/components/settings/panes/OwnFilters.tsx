@@ -88,9 +88,9 @@ function AddListSheet({ onDone }: { onDone: () => void }) {
     } catch (failure) {
       setError(failure instanceof Error && failure.message ? failure.message : "Couldn't add the list.");
       onDone();
-    } finally {
-      setAdding(false);
     }
+
+    setAdding(false);
   };
 
   return (
@@ -147,9 +147,9 @@ function MyFiltersSheet({ onDone }: { onDone: () => void }) {
       closeSettingsSheet();
     } catch (failure) {
       setStatus(failure instanceof Error && failure.message ? failure.message : "Couldn't save your filters.");
-    } finally {
-      setSaving(false);
     }
+
+    setSaving(false);
   };
 
   const importFile = async () => {
