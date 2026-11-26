@@ -1086,6 +1086,34 @@
                     now works on WebKit pages.
                   </td>
                 </tr>
+                <tr>
+                  <td>K1</td>
+                  <td>
+                    Done: Settings › Passwords › Password manager (Bay, or None when an extension handles logins), per space, on all three platforms. It sets
+                    Chromium's <code>credentials_enable_service</code> for the space's profile, and says which other spaces share it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K2</td>
+                  <td>
+                    Not started: filling from the Mac's AutoFill panel needs a spike on a real build first (AppKit internals); until then the Passwords app
+                    isn't offered as a choice.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K3</td>
+                  <td>
+                    Export to Passwords done (CSV, then the Passwords app opens to import it). Verification-code links handed to Passwords wait for K2's page
+                    hooks.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K4</td>
+                  <td>
+                    Passkeys row in Settings › Passwords and Settings › Engines, with Allow and Open System Settings. Passkeys themselves wait for Apple's
+                    entitlement.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>

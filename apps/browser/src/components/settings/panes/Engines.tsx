@@ -1,5 +1,5 @@
-import { requestWebKitPasskeyAccess, webKitPasskeyAccess, type PageEngine, type PasskeyAccess } from "@bay/chromium";
-import { useEffect, useState } from "react";
+import type { PageEngine } from "@bay/chromium";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
@@ -12,6 +12,7 @@ import { Favicon, IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Sheet, TextField, Toggle, type Option } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { PasskeysRow } from "../PasskeysRow";
 
 // Which engine pages open in (store/engines.ts): the mode, the default engine, site rules, streaming sites and what
 // a stalled protected video does. Shown only on a build with WebKit (macOS). Site Controls' "Learn more" comes here.
@@ -146,35 +147,6 @@ export function EnginesPane() {
         <Row settingId={SETTINGS.engineDifferences.id} title={SETTINGS.engineDifferences.title} onPress={() => showSettingsSheet(<DifferencesSheet />)} />
       </Group>
     </View>
-  );
-}
-
-const PASSKEY_STATUS: Record<PasskeyAccess["status"], string> = {
-  entitlementRequired: "Waiting for Apple to grant Bay its browser passkey entitlement. Sign in another way meanwhile.",
-  deviceNotConfigured: "Set up passkeys on this Mac (iCloud Keychain or a password manager) to use them here.",
-  notDetermined: "WebKit pages ask before they use this Mac's passkeys.",
-  denied: "Turned off in System Settings › Privacy & Security › Passkeys Access for Web Browsers.",
-  authorized: "WebKit pages can sign in with this Mac's passkeys.",
-};
-
-// Passkeys on WebKit pages: Apple's browser entitlement, then the Mac's permission for Bay.
-function PasskeysRow() {
-  const [access, setAccess] = useState<PasskeyAccess | null>(null);
-  useEffect(() => {
-    let live = true;
-    void webKitPasskeyAccess().then((a) => live && setAccess(a));
-
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  if (!access) return null;
-
-  return (
-    <Row settingId={SETTINGS.passkeys.id} title={SETTINGS.passkeys.title} description={PASSKEY_STATUS[access.status]}>
-      {access.status === "notDetermined" && <Button title="Allow…" onPress={() => void requestWebKitPasskeyAccess().then((a) => a && setAccess(a))} />}
-    </Row>
   );
 }
 

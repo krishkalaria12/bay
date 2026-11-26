@@ -2,6 +2,7 @@ import {
   deletePassword,
   getPassword,
   getPasswordAutofill,
+  hasWebKit,
   secretStorage,
   setNeverSavePasswords,
   setPasswordAutofill,
@@ -9,7 +10,7 @@ import {
   type SavedPassword,
   type SecretStorageKind,
 } from "@bay/chromium";
-import { confirm, copyText, Symbol, systemInfo } from "@bay/desktop";
+import { confirm, copyText, openFile, Symbol, systemInfo } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { platformOS, View } from "@bay/platform";
 import { Text } from "react-native";
@@ -19,13 +20,24 @@ import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon, IconButton } from "../../ui/primitives";
-import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
+import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { usePasswordsUnlocked, withWorkflows } from "../settingsCommands";
 import { passwordStorageDescription, secretStorageWarning } from "../secretStorage";
 import { platformWords } from "../../../lib/platformWords";
+import { PasskeysRow } from "../PasskeysRow";
+
+const PASSWORDS_APP = "/System/Applications/Passwords.app";
+
+/** Spaces that share a space's website data share its password manager. */
+function sharedNote(names: string[]): string | null {
+  if (!names.length) return null;
+  const others = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names[0]} and ${names.length - 1} others`;
+
+  return `Also applies to ${others}, which ${names.length === 1 ? "shares" : "share"} this space's website data.`;
+}
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
@@ -115,6 +127,19 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     else setExportStatus("");
   };
 
+  // The Mac's Passwords app (iCloud Keychain) imports Chrome's CSV: File › Import Passwords.
+  const exportToPasswords = async () => {
+    const { status, path } = await withWorkflows((w) => w.exportCsv(profile));
+
+    if (status !== "succeeded" || !path) return setExportStatus(status === "writeFailed" ? "Couldn't write the file. Try another folder." : "");
+    const opened = await openFile(PASSWORDS_APP).catch(() => false);
+    setExportStatus(
+      opened
+        ? "In Passwords, choose File › Import Passwords and pick the file Bay saved, then delete the file."
+        : "Saved. Import it in Safari › Settings › Passwords › ⋯ › Import Passwords, then delete the file.",
+    );
+  };
+
   const shown = (list ?? []).filter((p) => matchesQuery(query, p.origin, p.username));
 
   return (
@@ -135,10 +160,26 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
           />
         ) : null}
         <Row
-          title="Offer to save and fill passwords"
-          description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
+          settingId={SETTINGS.passwordManager.id}
+          title={SETTINGS.passwordManager.title}
+          description={[
+            autofill
+              ? "Bay offers to save a login after you sign in, and suggests saved ones when you click a login field."
+              : "Bay doesn't offer to save or fill logins here, so your password manager extension's own prompts are the only ones.",
+            sharedNote(profiles.filter((p) => p.id !== spaceId && engineProfile(p.id) === profile).map((p) => p.name)),
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
-          <Toggle value={autofill} onChange={(v) => void setPasswordAutofill(v, profile).then(() => setAutofill(v))} />
+          <PopUp
+            value={autofill ? "bay" : "none"}
+            options={[
+              { value: "bay", title: "Bay" },
+              { value: "none", title: "None (an extension handles logins)", separatorBefore: true },
+            ]}
+            onChange={(manager) => void setPasswordAutofill(manager === "bay", profile).then(() => setAutofill(manager === "bay"))}
+            minWidth={230}
+          />
         </Row>
         <Row
           settingId={SETTINGS.importPasswords.id}
@@ -153,7 +194,9 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
           description={exportStatus || "To a CSV file. Anyone who can open the file can read your passwords."}
         >
           <Button title="Export CSV…" onPress={() => void exportCsv()} />
+          {hasWebKit() && <Button title="Export to Passwords…" onPress={() => void exportToPasswords()} />}
         </Row>
+        {hasWebKit() && <PasskeysRow />}
         <Row settingId={SETTINGS.passwordManagerApps.id} title={SETTINGS.passwordManagerApps.title} description={passwordManagerAppsNote()} />
       </Group>
 

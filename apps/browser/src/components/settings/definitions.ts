@@ -148,6 +148,12 @@ export const SETTINGS = {
     title: `${platformWords.optionShift}-click opens tab in group`,
     words: "option shift click split",
   },
+  passwordManager: {
+    id: "passwords.passwordManager",
+    pane: "passwords",
+    title: "Password manager",
+    words: "save fill autofill offer extension 1password bitwarden none",
+  },
   importPasswords: { id: "passwords.importPasswords", pane: "passwords", title: "Import passwords", words: "csv" },
   exportPasswords: { id: "passwords.exportPasswords", pane: "passwords", title: "Export passwords", words: "csv" },
   passwordManagerApps: { id: "passwords.passwordManagerApps", pane: "passwords", title: "Password manager apps", words: "1password bitwarden" },
