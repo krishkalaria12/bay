@@ -1200,9 +1200,9 @@
               shortcut or menu item yet, and long pages are cut to fit the model's context.
             </li>
             <li>
-              G1's per-agent approval and per-space reach aren't built: every agent shares the bay command's one permission and sees every web page tab outside
-              private windows (the token policy's rule). Scoping by space needs the token policy (<code>nn_cli_token_policy</code>) to filter targets by profile
-              per token, with an approval sheet in the app.
+              G1's per-agent approval and per-space reach aren't built: every agent shares the bay command's one permission and sees every web page tab the
+              token policy allows, private windows' included (the policy has no rule for them, for <code>bay exec</code> either). Scoping by space needs the
+              token policy (<code>nn_cli_token_policy</code>) to filter targets by profile per token, with an approval sheet in the app.
             </li>
           </ul>
         </section>
