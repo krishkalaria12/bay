@@ -41,6 +41,8 @@ export type PullRequestInfo = {
   additions: number;
   deletions: number;
   changedFiles: number;
+  // Who approved it, where the source says (GitLab).
+  approvedBy?: string[];
   stack?: { id: string; position: number; size: number };
 };
 

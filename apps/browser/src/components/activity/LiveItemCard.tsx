@@ -151,7 +151,9 @@ function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; fold
           color={pr.review === "approved" ? colors.success : pr.review === "changesRequested" ? colors.failure : theme.textSecondary}
           text={
             pr.review === "approved"
-              ? "Approved"
+              ? pr.approvedBy?.length
+                ? `Approved by ${pr.approvedBy.join(", ")}`
+                : "Approved"
               : pr.review === "changesRequested"
                 ? "Changes Requested"
                 : item.section === "authored"

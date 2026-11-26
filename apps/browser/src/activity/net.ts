@@ -16,6 +16,7 @@ export const endpoints = {
   githubWeb: mock ? `${mock}/github` : "https://github.com",
   bitbucket: mock ? `${mock}/bitbucket/2.0` : "https://api.bitbucket.org/2.0",
   gitlab: (site: string) => (mock ? `${mock}/gitlab/api/v4` : `${site}/api/v4`),
+  gitlabGraphql: (site: string) => (mock ? `${mock}/gitlab/api/graphql` : `${site}/api/graphql`),
   notion: mock ? `${mock}/notion/v1` : "https://api.notion.com/v1",
   confluence: (site: string) => (mock ? `${mock}/confluence` : site.replace(/\/$/, "")),
   googleAuth: mock ? `${mock}/google/auth` : "https://accounts.google.com/o/oauth2/v2/auth",

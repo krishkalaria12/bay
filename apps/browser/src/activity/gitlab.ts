@@ -1,4 +1,6 @@
 import { lookup } from "@bay/core";
+import * as v from "valibot";
+import type { JsonValue } from "../lib/json";
 import type { CheckState, CompletionState, LiveItem, PullRequestInfo, PullRequestSection } from "./types";
 
 // GitLab merge requests (REST v4) on gitlab.com or a self-managed site: the person's own open ones and the ones
@@ -65,8 +67,61 @@ function projectOf(mr: GitlabMergeRequest): string {
   return mr.web_url.replace(/^https?:\/\/[^/]+\//, "").replace(/\/-\/merge_requests\/\d+.*$/, "");
 }
 
-function review(mr: GitlabMergeRequest): PullRequestInfo["review"] {
+/** What REST leaves out of a merge request: its line counts and who approved it (GitLab's GraphQL has both). */
+export type GitlabStats = { additions: number; deletions: number; approved: boolean; approvedBy: string[] };
+
+/** One GraphQL query for every merge request's stats, each under its own alias (m0, m1…). */
+export function gitlabStatsQuery(mrs: readonly GitlabMergeRequest[]): string {
+  const parts = mrs.map(
+    (mr, i) =>
+      `m${i}: project(fullPath: ${JSON.stringify(projectOf(mr))}) { mergeRequest(iid: ${JSON.stringify(String(mr.iid))}) { approved approvedBy { nodes { name } } diffStatsSummary { additions deletions } } }`,
+  );
+
+  return `query { ${parts.join(" ")} }`;
+}
+
+const StatsAnswerSchema = v.object({
+  data: v.nullish(
+    v.record(
+      v.string(),
+      v.nullish(
+        v.object({
+          mergeRequest: v.nullish(
+            v.object({
+              approved: v.nullish(v.boolean()),
+              approvedBy: v.nullish(v.object({ nodes: v.array(v.object({ name: v.string() })) })),
+              diffStatsSummary: v.nullish(v.object({ additions: v.number(), deletions: v.number() })),
+            }),
+          ),
+        }),
+      ),
+    ),
+  ),
+});
+
+/** The answer to gitlabStatsQuery, in the merge requests' order; null for one GitLab didn't answer for. */
+export function gitlabStats(answer: JsonValue, count: number): (GitlabStats | null)[] {
+  const parsed = v.safeParse(StatsAnswerSchema, answer);
+  const data = parsed.success ? parsed.output.data : null;
+
+  return Array.from({ length: count }, (_, i) => {
+    const mr = data?.[`m${i}`]?.mergeRequest;
+
+    if (!mr) return null;
+
+    return {
+      additions: mr.diffStatsSummary?.additions ?? 0,
+      deletions: mr.diffStatsSummary?.deletions ?? 0,
+      approved: !!mr.approved,
+      approvedBy: mr.approvedBy?.nodes.map((n) => n.name) ?? [],
+    };
+  });
+}
+
+function review(mr: GitlabMergeRequest, stats: GitlabStats | null): PullRequestInfo["review"] {
   if (mr.detailed_merge_status === "requested_changes") return "changesRequested";
+
+  if (stats?.approved && stats.approvedBy.length) return "approved";
 
   if (mr.detailed_merge_status === "not_approved") return "required";
 
@@ -80,7 +135,7 @@ function mergeable(mr: GitlabMergeRequest): PullRequestInfo["mergeable"] {
 }
 
 /** A merge request as a live folder item, in the authored or the review section. */
-export function mapGitlab(mr: GitlabMergeRequest, section: PullRequestSection): LiveItem {
+export function mapGitlab(mr: GitlabMergeRequest, section: PullRequestSection, stats: GitlabStats | null = null): LiveItem {
   const repo = projectOf(mr);
   const pipeline = mr.head_pipeline;
 
@@ -101,14 +156,15 @@ export function mapGitlab(mr: GitlabMergeRequest, section: PullRequestSection): 
       draft: !!(mr.draft ?? mr.work_in_progress),
       headRef: mr.source_branch,
       baseRef: mr.target_branch,
-      review: review(mr),
+      review: review(mr, stats),
       mergeable: mergeable(mr),
       checks: pipeline ? [{ name: "Pipeline", state: lookup(PIPELINE_STATES, pipeline.status) ?? "neutral", url: pipeline.web_url }] : [],
       comments: mr.user_notes_count,
       unresolvedThreads: mr.blocking_discussions_resolved === false ? 1 : 0,
-      additions: 0,
-      deletions: 0,
+      additions: stats?.additions ?? 0,
+      deletions: stats?.deletions ?? 0,
       changedFiles: Number.parseInt(mr.changes_count ?? "", 10) || 0,
+      ...(stats?.approvedBy.length ? { approvedBy: stats.approvedBy } : undefined),
     },
   };
 }

@@ -29,13 +29,14 @@ import {
   type GithubResponse,
 } from "./github";
 import { DETAILS_PAGE } from "./constants";
-import { gitlabBase, gitlabGone, gitlabIds, mapGitlab, mergeGitlabLists, type GitlabMergeRequest } from "./gitlab";
+import { gitlabBase, gitlabGone, gitlabIds, gitlabStats, gitlabStatsQuery, mapGitlab, mergeGitlabLists, type GitlabMergeRequest } from "./gitlab";
 import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
 import { LiveError, type BuiltInSourceId, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId, type PluginSourceId } from "./types";
 import { retireConnections } from "./connections";
 import { pluginSourceItems } from "../lib/plugins/pluginService";
+import type { JsonValue } from "../lib/json";
 import { parsePluginSourceId, usePlugins } from "../lib/plugins/pluginStore";
 
 export type LiveSource = {
@@ -156,9 +157,9 @@ async function gitlabAccess() {
   const base = gitlabBase(live().config.gitlabSite);
 
   if (!base) throw new LiveError("notConfigured", "No GitLab site");
-  const headers = { "PRIVATE-TOKEN": await secret("gitlab") };
+  const token = await secret("gitlab");
 
-  return { api: endpoints.gitlab(base), headers };
+  return { api: endpoints.gitlab(base), graphql: endpoints.gitlabGraphql(base), headers: { "PRIVATE-TOKEN": token }, token };
 }
 
 const gitlab: LiveSource = {
@@ -167,7 +168,7 @@ const gitlab: LiveSource = {
   kind: "pullRequests",
   site: "https://gitlab.com",
   async fetch(folder) {
-    const { api, headers } = await gitlabAccess();
+    const { api, graphql, headers, token } = await gitlabAccess();
     const me = live().accounts.gitlab;
 
     if (!me) throw new LiveError("signedOut", "Not signed in");
@@ -178,14 +179,27 @@ const gitlab: LiveSource = {
       folder.filters.reviewRequests ? list(`scope=all&reviewer_username=${encodeURIComponent(me.login)}`) : [],
     ]);
 
-    // The list leaves out the head pipeline and the size: each merge request's own answer has them.
-    return Promise.all(
-      mergeGitlabLists(authored, review).map(async ({ mr, section }) => {
-        const full = await request<GitlabMergeRequest>(`${api}/projects/${mr.project_id}/merge_requests/${mr.iid}`, { headers }).catch(() => null);
+    // The list leaves out the head pipeline and the size: each merge request's own answer has them. Line counts and
+    // approvals come from one GraphQL query for them all; without it the items still show.
+    const lists = mergeGitlabLists(authored, review);
 
-        return mapGitlab(full ?? mr, section);
-      }),
-    );
+    const [full, stats] = await Promise.all([
+      Promise.all(
+        lists.map(({ mr }) => request<GitlabMergeRequest>(`${api}/projects/${mr.project_id}/merge_requests/${mr.iid}`, { headers }).catch(() => null)),
+      ),
+      lists.length
+        ? request<JsonValue>(graphql, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ query: gitlabStatsQuery(lists.map(({ mr }) => mr)) }),
+          }).then(
+            (answer) => gitlabStats(answer, lists.length),
+            () => [],
+          )
+        : [],
+    ]);
+
+    return lists.map(({ mr, section }, i) => mapGitlab(full[i] ?? mr, section, stats[i] ?? null));
   },
   async resolveGone(items) {
     const gone = items.flatMap((item) => {

@@ -258,7 +258,7 @@ bool SafeServiceRecord(const base::Value& value, const char* shape) {
     return ServiceFields(d, {"number", "repo", "author", "authorAvatar", "draft",
                              "headRef", "baseRef", "review", "mergeable", "checks",
                              "comments", "unresolvedThreads", "additions",
-                             "deletions", "changedFiles", "stack"}) &&
+                             "deletions", "changedFiles", "approvedBy", "stack"}) &&
            ServiceChildren(d, "checks", "check") &&
            (!d.contains("stack") || SafeServiceRecord(*d.Find("stack"), "stack"));
   if (kind == "check") return ServiceFields(d, {"name", "state", "url"});

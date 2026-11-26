@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gitlabBase, gitlabGone, gitlabIds, mapGitlab, mergeGitlabLists } from "./gitlab.ts";
+import { gitlabBase, gitlabGone, gitlabIds, gitlabStats, gitlabStatsQuery, mapGitlab, mergeGitlabLists } from "./gitlab.ts";
 
 const mr = (over = {}) => ({
   id: 501,
@@ -67,4 +67,29 @@ test("what became of one that left the lists", () => {
   assert.equal(gitlabGone({ state: "opened" }, "authored"), null);
   assert.deepEqual(gitlabIds("gitlab:42!12"), { project: 42, iid: 12 });
   assert.equal(gitlabIds("github:abc"), null);
+});
+
+test("GraphQL fills in line counts and who approved, by alias", () => {
+  const mrs = [mr({ references: { full: "acme/infra/runners!12" } }), mr({ id: 502, iid: 13, references: { full: 'acme/"odd"!13' } })];
+  const query = gitlabStatsQuery(mrs);
+
+  assert.match(query, /m0: project\(fullPath: "acme\/infra\/runners"\) \{ mergeRequest\(iid: "12"\)/);
+  assert.match(query, /m1: project\(fullPath: "acme\/\\"odd\\""\)/);
+
+  const stats = gitlabStats(
+    {
+      data: {
+        m0: { mergeRequest: { approved: true, approvedBy: { nodes: [{ name: "Ada" }, { name: "Lin" }] }, diffStatsSummary: { additions: 40, deletions: 2 } } },
+        m1: null,
+      },
+    },
+    2,
+  );
+
+  assert.deepEqual(stats, [{ additions: 40, deletions: 2, approved: true, approvedBy: ["Ada", "Lin"] }, null]);
+  const item = mapGitlab(mrs[0], "authored", stats[0]);
+  assert.equal(item.pr.review, "approved");
+  assert.deepEqual([item.pr.additions, item.pr.deletions, item.pr.approvedBy], [40, 2, ["Ada", "Lin"]]);
+  assert.equal(mapGitlab(mr({ detailed_merge_status: "requested_changes" }), "authored", stats[0]).pr.review, "changesRequested");
+  assert.deepEqual(gitlabStats({ errors: [{ message: "nope" }] }, 1), [null]);
 });
