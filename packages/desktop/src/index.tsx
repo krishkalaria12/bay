@@ -27,6 +27,8 @@ export * from "./cli";
 
 export * from "./userScripts";
 
+export * from "./sharedFolders";
+
 export type BrowserCommand =
   | "focusSidebar"
   | "sidebarKey"

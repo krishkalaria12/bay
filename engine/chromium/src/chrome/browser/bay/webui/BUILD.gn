@@ -115,6 +115,8 @@ source_set("impl") {
     "tab_strip_mirror.h",
     "tracing_session.cc",
     "tracing_session.h",
+    "shared_folders.cc",
+    "shared_folders.h",
     "user_scripts.cc",
     "user_scripts.h",
     "window_registry.cc",

@@ -5,7 +5,16 @@ import { boostHost } from "../../lib/boosts";
 import { shareCollection } from "../../lib/sharedLinkEncoding";
 import { boostsAvailable } from "../boosts/state";
 import { openBoostEditor } from "../boosts/editor";
-import { showMenu, type MenuItem } from "@bay/desktop";
+import { platformWords } from "../../lib/platformWords";
+import { canShareFolderSheet, sharedFoldersAvailable, showMenu, type MenuItem } from "@bay/desktop";
+import {
+  inviteToSharedFolder,
+  keepInSharedFolder,
+  showSharedFolder,
+  stopSharingFolder,
+  syncSharedFolderNow,
+  useSharedFolders,
+} from "../../lib/sharedFolderService";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { withFolderMoveUndo } from "../../lib/folderUndo";
 import { normalizeAwakeSite, siteKeptAwake } from "../../lib/keptAwakeSites";
@@ -481,6 +490,40 @@ function firstAfterFolder(folderId: string): string | null {
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
 
+// A folder kept in a shared folder of link files (lib/sharedFolderService.ts), on hosts that have them.
+function sharedFolderItems(folderId: string) {
+  if (!sharedFoldersAvailable()) return [];
+  const shared = useSharedFolders.getState().folders[folderId];
+
+  if (!shared) return [{ id: "shared:keep", title: "Keep in a Shared Folder…", symbol: "person.2" }];
+  const missing = shared.status === "missing" || shared.status === "inaccessible";
+
+  return [
+    {
+      id: "shared",
+      title: missing ? `Shared Folder Missing: ${shared.name}` : `Shared Folder: ${shared.name}`,
+      symbol: missing ? "folder.badge.questionmark" : "person.2",
+      children: [
+        { id: "shared:show", title: platformWords.revealTitle, symbol: "folder", enabled: !missing },
+        ...(canShareFolderSheet() ? [{ id: "shared:invite", title: "Invite People…", symbol: "person.crop.circle.badge.plus", enabled: !missing }] : []),
+        { id: "shared:sync", title: "Sync Now", symbol: "arrow.triangle.2.circlepath" },
+        sep,
+        { id: "shared:stop", title: "Stop Keeping in Shared Folder", symbol: "xmark.circle" },
+      ],
+    },
+  ];
+}
+
+function runSharedFolderItem(folderId: string, choice: string) {
+  const failed = (error: Error) => console.error("Shared folder", choice, error);
+
+  if (choice === "shared:keep") void keepInSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:show") void showSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:invite") void inviteToSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:sync") void syncSharedFolderNow(folderId).catch(failed);
+  else if (choice === "shared:stop") void stopSharingFolder(folderId).catch(failed);
+}
+
 // Folder operations apply to its descendant tabs too.
 export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
@@ -501,7 +544,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
     ...(!isIncognitoSpace(f.spaceId) && !s.windows[windowId]?.incognito
-      ? [{ id: "share", title: "Share Folder…", symbol: "square.and.arrow.up", enabled: members.length > 0 }]
+      ? [{ id: "share", title: "Share Folder…", symbol: "square.and.arrow.up", enabled: members.length > 0 }, ...sharedFolderItems(folderId)]
       : []),
     sep,
     // Its tabs stay pinned, loose, where they were.
@@ -518,6 +561,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   else if (choice === "copy") copyUrls(members, false);
   else if (choice === "copyMd") copyUrls(members, true);
   else if (choice === "share") void shareCollection(windowId, { kind: "folder", id: folderId });
+  else if (choice.startsWith("shared:")) runSharedFolderItem(folderId, choice);
   else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId, [], folderId));
   else if (choice === "moveOut")
     withFolderMoveUndo(windowId, () => movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));

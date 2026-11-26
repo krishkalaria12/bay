@@ -51,3 +51,4 @@ file that only name sites: `packages/core/src/bangList.ts` (search shortcuts, op
 | en.wikipedia.org | Settings › Search | A placeholder |
 | learn.microsoft.com, mozilla.org, www.w3.org, url.spec.whatwg.org | Code comments, the SVG namespace | References |
 | a.com, b.com | An engine comment | Examples |
+| www.apple.com | The .webloc files a shared folder holds | Their XML names Apple's property list DTD, as every .webloc does; nothing fetches it |

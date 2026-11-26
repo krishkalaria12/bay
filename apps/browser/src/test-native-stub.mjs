@@ -743,3 +743,24 @@ export const cliAgents = () => Promise.resolve({ agents: [], requests: [], loade
 export const answerCliAgent = () => Promise.resolve({ ok: true });
 export const revokeCliAgent = () => Promise.resolve({ ok: true });
 export const onCliAgentsChanged = () => ({ remove() {} });
+// Shared folders (lib/sharedFolderService.ts): a fake folder of link files tests fill in.
+
+export const sharedFolderFiles = new Map();
+export const sharedFoldersAvailable = () => true;
+export const canShareFolderSheet = () => false;
+export const pickSharedFolder = () => Promise.resolve(null);
+
+export const readSharedFolder = (path) =>
+  Promise.resolve(
+    sharedFolderFiles.has(path)
+      ? { status: "available", entries: [...sharedFolderFiles.get(path)].map(([name, text]) => ({ name, text, modified: 0 })) }
+      : { status: "missing" },
+  );
+
+export const writeSharedLink = (path, name, text) => (sharedFolderFiles.get(path)?.set(name, text), Promise.resolve(true));
+export const removeSharedLink = (path, name) => (sharedFolderFiles.get(path)?.delete(name), Promise.resolve(true));
+export const watchSharedFolder = () => Promise.resolve();
+export const forgetSharedFolder = () => Promise.resolve();
+export const revealSharedFolder = () => Promise.resolve(true);
+export const shareSharedFolder = () => Promise.resolve(false);
+export const onSharedFolderChange = () => ({ remove() {} });

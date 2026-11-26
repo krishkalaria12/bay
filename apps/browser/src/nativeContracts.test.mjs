@@ -21,7 +21,7 @@ test("every registered desktop native module and view has a written contract", (
     }
   }
 
-  assert.equal(registered.size, 36);
+  assert.equal(registered.size, 37);
 });
 
 // What macOS doesn't register, and why. Anything else in a contract must be in a Swift module.

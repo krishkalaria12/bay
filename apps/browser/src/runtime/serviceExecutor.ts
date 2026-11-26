@@ -30,6 +30,7 @@ import {
 } from "../activity/sources";
 import { connectGoogleDrive } from "../activity/googleAuth";
 import * as sync from "../sync/engine";
+import { bindSharedFolder, syncSharedFolder, unbindSharedFolder } from "../lib/sharedFolderService";
 
 const flows = new Map<string, DeviceFlow>();
 let nextFlow = 0;
@@ -251,6 +252,16 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
     case "liveDisconnect":
       await disconnect(...command.args);
+      break;
+    case "sharedFolderBind":
+      requireCommandSpace(browser.getState(), browser.getState().pinnedFolders[command.args[0]]?.spaceId ?? "");
+      await bindSharedFolder(...command.args);
+      break;
+    case "sharedFolderUnbind":
+      await unbindSharedFolder(command.args[0]);
+      break;
+    case "sharedFolderSync":
+      await syncSharedFolder(command.args[0]);
       break;
     case "githubStart": {
       if (flows.size >= 8) return invalidCommand("too many account requests");

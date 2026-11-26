@@ -15,6 +15,7 @@ const files = [
   "desktop/src/easel.tsx",
   "desktop/src/cli.ts",
   "desktop/src/userScripts.ts",
+  "desktop/src/sharedFolders.ts",
   "desktop/src/localFiles.tsx",
   "desktop/src/localFilesNative.ts",
   "chromium/src/native.ts",

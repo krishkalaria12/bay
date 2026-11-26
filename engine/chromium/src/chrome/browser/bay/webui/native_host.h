@@ -43,6 +43,7 @@ class DefaultBrowser;
 class Autostart;
 class AppServicesLinux;
 class WindowButtonLayoutLinux;
+class SharedFolders;
 class UserScripts;
 class EaselSharing;
 class CliInstallerService;
@@ -159,6 +160,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // Reconnecting a pin's file asks in its own picker (shell_ui.h).
   std::unique_ptr<ShellUI> local_files_ui_;
   std::unique_ptr<UserScripts> user_scripts_;
+  std::unique_ptr<SharedFolders> shared_folders_;
   std::unique_ptr<EaselSharing> easel_sharing_;
   std::unique_ptr<CliInstallerService> cli_installer_;
 #endif

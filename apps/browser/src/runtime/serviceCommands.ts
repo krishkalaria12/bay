@@ -56,6 +56,9 @@ export type ServiceArgs = {
   settingsExportCsv: [string];
   settingsClearData: [string, ClearRequest];
   librarySaveMedia: [string, { path: string; width: number; height: number }, string, CaptureSource | null];
+  sharedFolderBind: [string, string, string];
+  sharedFolderUnbind: [string];
+  sharedFolderSync: [string];
 };
 
 export type ServiceAction = keyof ServiceArgs;
@@ -241,6 +244,9 @@ const readers: Record<ServiceAction, ((value: JsonInput) => ServiceValue)[]> = {
   settingsExportCsv: [text],
   settingsClearData: [text, clearRequest],
   librarySaveMedia: [text, mediaImage, (value) => commandText(value, 16384, true), captureSource],
+  sharedFolderBind: [text, text, (name) => commandText(name, 1024)],
+  sharedFolderUnbind: [text],
+  sharedFolderSync: [text],
 };
 
 // SAFETY: the checks above established this shape.

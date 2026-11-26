@@ -1203,6 +1203,71 @@ export const nativeContracts = {
       ],
       "constants": {}
     },
+    "BaySharedFolders": {
+      "source": "desktop/src/sharedFolders.ts",
+      "methods": {
+        "pick": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "pick(): Promise<SharedFolderPick | null>;"
+        },
+        "read": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "read(path: string): Promise<SharedFolderRead>;"
+        },
+        "write": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "write(path: string, name: string, text: string): Promise<boolean>;"
+        },
+        "remove": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "remove(path: string, name: string): Promise<boolean>;"
+        },
+        "watch": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "watch(path: string, on: boolean): Promise<void>;"
+        },
+        "forget": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "forget(path: string): Promise<void>;"
+        },
+        "reveal": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "reveal(path: string): Promise<boolean>;"
+        },
+        "share": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "share?(path: string): Promise<boolean>;"
+        }
+      },
+      "events": [
+        "onChange"
+      ],
+      "constants": {}
+    },
     "BayLocalFiles": {
       "source": "desktop/src/localFilesNative.ts",
       "methods": {
@@ -2784,6 +2849,12 @@ export const nativeContracts = {
     "desktop/src/userScripts.ts": {
       "UserScriptsFolder": "{ token?: string } & (\n  | { state: \"empty\" | \"busy\" | \"pending\"; generation?: number }\n  | { state: \"absent\"; generation: number; path: string }\n  | { state: \"invalid\"; generation?: number; error: string; path?: string }\n  | { state: \"ready\"; generation: number; path: string }\n)",
       "UserScriptsNative": "{\n  watch(on: boolean): void;\n  read(): Promise<UserScriptsFolder>;\n  readStatus(): Promise<string | null>;\n  writeStatus(json: string): Promise<void>;\n  addListener(name: \"onChange\", listener: () => void): EventSubscription;\n}"
+    },
+    "desktop/src/sharedFolders.ts": {
+      "SharedFolderPick": "{ path: string; name: string }",
+      "SharedFolderEntry": "{ name: string; text: string; modified: number }",
+      "SharedFolderRead": "{ status: \"available\"; entries: SharedFolderEntry[] } | { status: \"missing\" | \"inaccessible\" }",
+      "SharedFoldersNative": "{\n  pick(): Promise<SharedFolderPick | null>;\n  read(path: string): Promise<SharedFolderRead>;\n  write(path: string, name: string, text: string): Promise<boolean>;\n  remove(path: string, name: string): Promise<boolean>;\n  watch(path: string, on: boolean): Promise<void>;\n  forget(path: string): Promise<void>;\n  reveal(path: string): Promise<boolean>;\n  // macOS: the share sheet, with iCloud Drive's Collaborate.\n  share?(path: string): Promise<boolean>;\n  addListener(name: \"onChange\", listener: (e: { path: string }) => void): EventSubscription;\n}"
     },
     "desktop/src/localFiles.tsx": {
       "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"

@@ -60,6 +60,9 @@ class ShellUI {
                           const std::string& root,
                           bool folder,
                           Response callback);
+  // BaySharedFolders.pick: the folder the user picks is granted
+  // (shared_folders.h). Answers {path, name}, or null when cancelled.
+  void PickSharedFolder(const HostContext& context, Response callback);
 
  private:
   void StartFilePicker(const HostContext& context,

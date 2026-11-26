@@ -1238,6 +1238,17 @@
                     and removes them; a removed agent's connection closes at its next message.
                   </td>
                 </tr>
+                <tr>
+                  <td>G11</td>
+                  <td>
+                    Done in source, all three platforms: a pinned folder's menu › Keep in a Shared Folder… binds it to a folder the person picks (iCloud Drive ›
+                    Bay Shared by default on the Mac) of <code>.webloc</code>, <code>.url</code> or <code>.desktop</code> files, which Bay reads in all three
+                    kinds and writes in its own. Sync is three-way against the last sync (<code>lib/sharedFolders.ts</code>, tested): a link added, removed,
+                    renamed or moved on one side goes to the other, and a link changed on both takes the folder's. New links come in as pinned rows that don't
+                    load. The menu shows the folder, syncs now, stops, and on the Mac invites people through the share sheet's Collaborate. Natives:
+                    <code>SharedFoldersModule.swift</code> and <code>webui/shared_folders.cc</code>, each reaching only folders picked in its picker.
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1303,6 +1314,17 @@
             <li>
               G13 warms a renderer, not a whole page: the tab's web view and its WebContents are still made when the page opens. A pre-made page the next tab
               adopts would need the engine's adoption to take one; it isn't measured yet either, and the engine needs a rebuild for the call.
+            </li>
+            <li>
+              G11 keeps one level: a shared folder's subfolders, and the pinned folder's own subfolders, aren't synced. A Finder-made binary
+              <code>.webloc</code> reads on the Mac only. Windows and Linux delete a removed link (the Mac moves it to the Trash). The
+              <code>BayShell</code>/<code>BaySharedFolders</code> WebUI dispatch in <code>native_host.cc</code> isn't syntax checked here (it needs a generated
+              mojom header); <code>shared_folders.cc</code>, <code>shell_ui.cc</code> and <code>runtime_state.cc</code> are, and the Swift is parse-checked.
+              <code>pod install</code> registers the new Mac module.
+            </li>
+            <li>
+              Fixed with G11: Windows and Linux windows now see the kill switches, coding agents and shared folders (mirrored through the service state), and
+              the native service checks accept GitLab, which G7 had missed.
             </li>
           </ul>
         </section>
