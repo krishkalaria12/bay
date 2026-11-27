@@ -26,8 +26,9 @@ export const openAskPage = (tabId: string) => patch(tabId, { open: true });
 
 export const closeAskPage = (tabId: string) => useAskPage.setState({ [tabId]: CLOSED });
 
-// The page's own words, as it shows them; scripts and hidden text left out by innerText.
-const READ_TEXT = "(() => { try { return (document.body && document.body.innerText || '').slice(0, 20000); } catch { return ''; } })()";
+// The page's own words, as it shows them; scripts and hidden text left out by innerText. The model reads a long page
+// a part at a time (AskPageModule.swift), five parts at most.
+const READ_TEXT = "(() => { try { return (document.body && document.body.innerText || '').slice(0, 45000); } catch { return ''; } })()";
 
 /** Asks the model about the tab's page; the answer lands in the tab's state, unless the question changed meanwhile. */
 export async function askAboutPage(tabId: string, question: string) {
