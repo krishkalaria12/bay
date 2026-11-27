@@ -27,17 +27,22 @@ jobs:
         working-directory: apps/cli
         run: |
           bun install --frozen-lockfile
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun run typecheck
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       # Bay's desktop Rust library, on this OS: the readers, sync format and blocker lists both desktop hosts link.
-      # Clippy here is the only lint of the code compiled for this OS alone.
+      # Clippy here is the only lint of the code compiled for this OS alone. PowerShell fails a step only on its last
+      # command, so each command's exit code is checked.
       - name: Desktop Rust library
         run: |
           cargo fmt --check --all --manifest-path packages/rust/Cargo.toml
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           cargo clippy --locked --workspace --all-targets --manifest-path packages/rust/Cargo.toml -- -D warnings
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           cargo test --locked --workspace --manifest-path packages/rust/Cargo.toml
       - run: pnpm typecheck
       - run: pnpm typecheck:web

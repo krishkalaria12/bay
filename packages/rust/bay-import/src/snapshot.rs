@@ -36,12 +36,13 @@ impl Scratch {
             .map_err(|_| Failure::new("unreadable", "Could not create database snapshot"))?;
         let name: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
         let path = std::env::temp_dir().join(format!("bay-import-{name}"));
-        let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-        builder
-            .create(&path)
-            .map_err(|_| Failure::new("unreadable", "Could not create database snapshot"))?;
+        let created =
+            std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700)
+                .create(&path);
+        #[cfg(not(unix))]
+        let created = std::fs::create_dir(&path);
+        created.map_err(|_| Failure::new("unreadable", "Could not create database snapshot"))?;
         Ok(Self(path))
     }
 }
