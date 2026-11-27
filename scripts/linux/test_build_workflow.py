@@ -74,6 +74,16 @@ class LinuxBuildWorkflowTests(unittest.TestCase):
             self.assertLess(source.index(f"name: {earlier}"), source.index("name: Install Chromium's build dependencies"))
         self.assertLess(source.index("name: Install Chromium's build dependencies"), source.index("name: Patch sources"))
 
+    def test_unit_tests_run_after_a_finished_engine_and_before_the_tree_is_saved(self):
+        source = WORKFLOW.read_text()
+        tests = step("Run Bay's unit tests")
+        self.assertLess(source.index("name: Upload engine"), source.index("name: Run Bay's unit tests"))
+        self.assertLess(source.index("name: Run Bay's unit tests"), source.index("name: Compress state"))
+        self.assertIn("if: env.DONE != 'true' && steps.compile.outputs.code == '0'", tests)
+        self.assertIn("continue-on-error: true", tests)
+        self.assertIn('python scripts/windows/unit-tests.py --platform linux --root "$ENGINE_ROOT" --minutes "$minutes"',
+                      tests)
+
     def test_packages_use_the_engine_this_checkout_builds(self):
         build = step("Build app")
         self.assertIn('archive="dist/engine/$id.tar.zst"', build)

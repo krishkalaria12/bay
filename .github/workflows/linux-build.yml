@@ -195,6 +195,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+      - name: Run Bay's unit tests
+        # On the stage that finished the engine, before the tree is saved so what this builds carries over, in the
+        # time left: saving the tree takes about an hour of the job. Not required to pass yet: these ran on Linux for
+        # the first time here.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
+        continue-on-error: true
+        run: |
+          minutes=$(( 290 - ($(date +%s) - JOB_STARTED) / 60 ))
+          if (( minutes < 10 )); then echo "No time left in this stage for Bay's unit tests"; exit 0; fi
+          python scripts/windows/unit-tests.py --platform linux --root "$ENGINE_ROOT" --minutes "$minutes"
       - name: Compress state
         if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
         run: |
