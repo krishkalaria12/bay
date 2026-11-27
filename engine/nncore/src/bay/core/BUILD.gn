@@ -320,8 +320,7 @@ if (is_mac) {
 }
 
 # The shared models' unit tests, each with only the sources it needs (no link of
-# //chrome). Every engine build lists the target (scripts/windows/unit-tests.py,
-# docs/engine-cli.md).
+# //chrome). The Windows engine build runs it (scripts/windows/unit-tests.py).
 test("bay_core_unittests") {
   sources = [
     "nn_page_menu.cc",
