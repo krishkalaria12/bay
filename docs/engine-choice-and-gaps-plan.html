@@ -1135,16 +1135,16 @@
                   <td>G15</td>
                   <td>
                     Done in source, all three platforms: Settings › General › Spelling turns spell checking on or off in every space; Windows and Linux pick
-                    languages (<code>spellcheck.dictionaries</code>) and edit Your Words (each profile's custom dictionary, <code>nn_spelling.cc</code>);
-                    macOS uses its own.
+                    languages (<code>spellcheck.dictionaries</code>) and edit Your Words (each profile's custom dictionary, <code>nn_spelling.cc</code>); macOS
+                    uses its own.
                   </td>
                 </tr>
                 <tr>
                   <td>G2</td>
                   <td>
                     Done in source, Mac only: <code>BayAskPage</code> (<code>AskPageModule.swift</code>, FoundationModels, weakly linked) and the Ask card over
-                    the page, opened from the command bar's Ask About This Page or the Tabs menu (⌥⌘A). The page's text goes only to the on-device model;
-                    a long one is read a part at a time (9,000 characters a part, five at most) and answered from the model's notes.
+                    the page, opened from the command bar's Ask About This Page or the Tabs menu (⌥⌘A). The page's text goes only to the on-device model; a long
+                    one is read a part at a time (9,000 characters a part, five at most) and answered from the model's notes.
                   </td>
                 </tr>
                 <tr>
@@ -1191,8 +1191,8 @@
                   <td>
                     GitLab done, all three platforms: a GitLab source for pull request live folders, on GitLab.com or a self-managed site, with a personal
                     access token (<code>activity/gitlab.ts</code>, tested). It lists your open merge requests and the ones waiting for your review, each with
-                    its head pipeline, line counts and who approved it (one GraphQL query a refresh), and says which were merged, closed or reviewed once
-                    they leave.
+                    its head pipeline, line counts and who approved it (one GraphQL query a refresh), and says which were merged, closed or reviewed once they
+                    leave.
                   </td>
                 </tr>
                 <tr>
@@ -1257,16 +1257,15 @@
                   <td>
                     Done in source, all three platforms. A plugin is a folder with a <code>manifest.json</code> and a script, which the
                     <code>bay-plugins</code> crate checks, copies into Bay's plugins folder and serves (Rust, tested; <code>docs/plugins.md</code>, with
-                    <code>docs/plugins/hello-bay</code> as the example the tests install). Each runs out of process in a sandboxed page of its own: a
-                    WebKit page on the Mac (<code>PluginsModule.swift</code>), a <code>chrome-untrusted://bay-plugin/</code> frame of the coordinator's
-                    document on Windows and Linux (<code>webui/plugins.cc</code>), under one content security policy: its own files, no network, a
-                    unique origin. It reaches Bay only through <code>bay</code> calls, which <code>lib/plugins/protocol.ts</code> checks against the
-                    manifest (tested): fetches to the hosts it lists (never with cookies; the engine makes them on Windows and Linux, where a
-                    <code>chrome://</code> document meets CORS), the page a command runs on with <code>permissions.tabs</code>, tabs opened only while
-                    something the person chose runs. It can add command bar entries, toolbar buttons, tab menu items, sidebar views, live folder
-                    sources and space themes; settings rows keep secrets in the system's keychain; and with <code>permissions.links</code> it decides
-                    which space a link from another app opens in, before Bay's link rules (G6's decide hooks, for plugins). Settings › Plugins adds,
-                    turns on and off, configures and removes them, and a kill switch can turn them all off.
+                    <code>docs/plugins/hello-bay</code> as the example the tests install). Each runs out of process in a sandboxed page of its own: a WebKit
+                    page on the Mac (<code>PluginsModule.swift</code>), a <code>chrome-untrusted://bay-plugin/</code> frame of the coordinator's document on
+                    Windows and Linux (<code>webui/plugins.cc</code>), under one content security policy: its own files, no network, a unique origin. It reaches
+                    Bay only through <code>bay</code> calls, which <code>lib/plugins/protocol.ts</code> checks against the manifest (tested): fetches to the
+                    hosts it lists (never with cookies; the engine makes them on Windows and Linux, where a <code>chrome://</code> document meets CORS), the
+                    page a command runs on with <code>permissions.tabs</code>, tabs opened only while something the person chose runs. It can add command bar
+                    entries, toolbar buttons, tab menu items, sidebar views, live folder sources and space themes; settings rows keep secrets in the system's
+                    keychain; and with <code>permissions.links</code> it decides which space a link from another app opens in, before Bay's link rules (G6's
+                    decide hooks, for plugins). Settings › Plugins adds, turns on and off, configures and removes them, and a kill switch can turn them all off.
                   </td>
                 </tr>
               </tbody>
@@ -1275,57 +1274,55 @@
           <h3 id="known-gaps">Known gaps</h3>
           <ul class="prose">
             <li>
-              Nothing native is built yet. The engine (nncore, the Mac's Chromium) needs a rebuild for every engine change on this branch, and the Mac app
-              a <code>pod install</code> for its new modules (<code>BayAskPage</code>, <code>BaySharedFolders</code>, <code>BayPlugins</code>). The C++
-              is syntax checked against the local Chromium tree: the shared code as Mac code, and the Windows and Linux WebUI code as Linux code (the
-              tree's Linux sysroot, with <code>native_host.mojom</code>'s bindings generated for the check), which now covers
-              <code>native_host.cc</code>, <code>engine_services.cc</code>, <code>runtime_state.cc</code>, <code>shell_ui.cc</code>,
-              <code>shared_folders.cc</code>, <code>content_blocker.cc</code> and <code>plugins.cc</code>. Windows-only files
-              (<code>shared_folders_trash_win.cc</code> and the rest) aren't compiled anywhere yet. The Swift is parsed, and type-checked against
-              stand-ins for Expo where it's new (<code>PluginsModule.swift</code>, <code>AskPageModule.swift</code>, with the real FoundationModels);
-              the first Mac build may still need small fixes.
+              Nothing native is built yet. The engine (nncore, the Mac's Chromium) needs a rebuild for every engine change on this branch, and the Mac app a
+              <code>pod install</code> for its new modules (<code>BayAskPage</code>, <code>BaySharedFolders</code>, <code>BayPlugins</code>). The C++ is syntax
+              checked against the local Chromium tree: the shared code as Mac code, and the Windows and Linux WebUI code as Linux code (the tree's Linux
+              sysroot, with <code>native_host.mojom</code>'s bindings generated for the check), which now covers <code>native_host.cc</code>,
+              <code>engine_services.cc</code>, <code>runtime_state.cc</code>, <code>shell_ui.cc</code>, <code>shared_folders.cc</code>,
+              <code>content_blocker.cc</code> and <code>plugins.cc</code>. Windows-only files (<code>shared_folders_trash_win.cc</code> and the rest) aren't
+              compiled anywhere yet. The Swift is parsed, and type-checked against stand-ins for Expo where it's new (<code>PluginsModule.swift</code>,
+              <code>AskPageModule.swift</code>, with the real FoundationModels); the first Mac build may still need small fixes.
             </li>
             <li>
-              Carried storage (<code>localStorage</code> and the tab's <code>sessionStorage</code>, of the page's own origin) is written after the new
-              page commits, so a page that reads it during load sees it on the next load. IndexedDB and other stores don't carry.
+              Carried storage (<code>localStorage</code> and the tab's <code>sessionStorage</code>, of the page's own origin) is written after the new page
+              commits, so a page that reads it during load sees it on the next load. IndexedDB and other stores don't carry.
             </li>
             <li>WebKit pages show no blocked count in Site Controls: content rules count nothing.</li>
             <li>
-              On Linux a spelling language's dictionary downloads from Google's servers the first time, which the ungoogled engine may block. The Mac's
-              spelling uses its own learned words, so Your Words is on Windows and Linux.
+              On Linux a spelling language's dictionary downloads from Google's servers the first time, which the ungoogled engine may block. The Mac's spelling
+              uses its own learned words, so Your Words is on Windows and Linux.
             </li>
             <li>
               G1's agent access limits what an agent's MCP tools reach; it isn't a sandbox. An agent that can run programs as you can still read the bay
-              command's own token and run <code>bay exec</code>. A space-limited agent's new tab opens in one of its spaces now, even when another
-              space's window is in front (<code>g_bay_devtools_target_context</code>, in the two DevTools patches); with none of them open, it's
-              refused.
+              command's own token and run <code>bay exec</code>. A space-limited agent's new tab opens in one of its spaces now, even when another space's
+              window is in front (<code>g_bay_devtools_target_context</code>, in the two DevTools patches); with none of them open, it's refused.
             </li>
             <li>
               G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the website
-              deploy. Six features can be switched off: WebKit, sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. A
-              switch for anything else shows in Settings but turns nothing off.
+              deploy. Six features can be switched off: WebKit, sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. A switch for
+              anything else shows in Settings but turns nothing off.
             </li>
             <li>
-              G5's merge makes a group from list rows; a group holds list tabs only, so pinned rows and Essentials aren't offered it. Dropping a tab
-              among an open group's rows adds it to that group, as before.
+              G5's merge makes a group from list rows; a group holds list tabs only, so pinned rows and Essentials aren't offered it. Dropping a tab among an
+              open group's rows adds it to that group, as before.
             </li>
             <li>
               G9's sandbox (the CSP <code>sandbox</code> directive and subresource loads from its opaque origin) hasn't been tried in a running WebKit or
-              Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in Site Controls, so with the
-              toolbar hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private
-              windows, history or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes in a
-              hidden document may have their timers slowed by the engine.
+              Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in Site Controls, so with the toolbar
+              hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private windows, history
+              or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes in a hidden document may have their
+              timers slowed by the engine.
             </li>
             <li>
               G7's GitLab items get line counts and who approved them from one GraphQL query each refresh; a site whose GraphQL is off shows them without.
               Outlook, Notion, Confluence, Figma and Linear previews stay deferred.
             </li>
             <li>
-              G6 has no decide hooks for the bay command: its token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code>
-              domain, so a hook can't hold, rewrite or stop a navigation. Plugins can decide where links from other apps open (G9). Window focus and
-              finished downloads aren't events the bay command can see either (no focus event over DevTools; <code>Browser.setDownloadBehavior</code>
-              isn't allowed). Scheduled hooks and command bar results from a hook aren't built; a hook runs while <code>bay on</code> does, so keeping
-              one running is the system's job (launchd, systemd, Task Scheduler).
+              G6 has no decide hooks for the bay command: its token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code> domain, so
+              a hook can't hold, rewrite or stop a navigation. Plugins can decide where links from other apps open (G9). Window focus and finished downloads
+              aren't events the bay command can see either (no focus event over DevTools; <code>Browser.setDownloadBehavior</code> isn't allowed). Scheduled
+              hooks and command bar results from a hook aren't built; a hook runs while <code>bay on</code> does, so keeping one running is the system's job
+              (launchd, systemd, Task Scheduler).
             </li>
             <li>
               G10's AppleScript calls weren't run against a live Bay (that would read the tabs and ask for Automation access); they follow
@@ -1349,7 +1346,9 @@
           <h3 id="gaps-closed">Closed in the gaps pass</h3>
           <ul class="prose">
             <li>A settings change that moves pages on screen asks once, naming the pages with unsaved work, instead of once a tab.</li>
-            <li>A background tab's deferred move is kept in <code>engine-moves.json</code>, so it survives a quit: the tab takes its engine when it's next shown.</li>
+            <li>
+              A background tab's deferred move is kept in <code>engine-moves.json</code>, so it survives a quit: the tab takes its engine when it's next shown.
+            </li>
             <li>The sign-in ledger is kept in <code>engine-sign-ins.json</code> (cookie names, never values), so a sign-out carries after a relaunch.</li>
             <li>The Mac's Tabs menu has Reopen in WebKit/Chromium and Ask About This Page… (⌥⌘A).</li>
             <li>Deceptive-site warnings reach open WebKit pages too.</li>
