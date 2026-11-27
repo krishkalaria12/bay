@@ -1808,6 +1808,12 @@ impl BrowserStore {
         <p class="muted">Add parity gaps here in the commit that finds them.</p>
         <ul>
           <li>
+            Android: pages always see <code>prefers-color-scheme: light</code>, because content leaves the preferred look light and Chrome sets it from its
+            own night mode. The engine now takes it per tab (<code>BayTab.setPrefersDark</code>, applied in <code>OverrideWebPreferences</code>); once an
+            <code>android-engine-N</code> build with it is pinned, <code>BayEngineView</code> sets it from the configuration's night mode, at
+            <code>createTab</code> and in <code>onConfigurationChanged</code>. iOS already follows the system.
+          </li>
+          <li>
             iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
             accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
           </li>
