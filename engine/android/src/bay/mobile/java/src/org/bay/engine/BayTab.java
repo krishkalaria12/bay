@@ -81,6 +81,7 @@ public final class BayTab extends WebContentsDelegateAndroid {
     private boolean mFullscreen;
     private float mLastScrollOffset;
     private int mBottomControlsHeight;
+    private int mBottomControlsMinHeight;
 
     public BayTab(Activity activity, BayProfile profile, BayTabClient client) {
         ThreadUtils.assertOnUiThread();
@@ -177,6 +178,18 @@ public final class BayTab extends WebContentsDelegateAndroid {
     public void setBottomControlsHeight(int height) {
         if (mBottomControlsHeight == height) return;
         mBottomControlsHeight = height;
+        mWebContents.notifyBrowserControlsHeightChanged();
+    }
+
+    /**
+     * How much of the bar stays when the page scrolls it away, in physical pixels (0, the default, for none): the app's
+     * bar shrinks to a pill instead of leaving. The page keeps that much room at its bottom throughout, so what it pins
+     * there rests above the pill, and the bar's offset ({@link BayTabClient#onBottomControlsChanged}) goes only as far
+     * as the height less this.
+     */
+    public void setBottomControlsMinHeight(int height) {
+        if (mBottomControlsMinHeight == height) return;
+        mBottomControlsMinHeight = height;
         mWebContents.notifyBrowserControlsHeightChanged();
     }
 
@@ -471,6 +484,11 @@ public final class BayTab extends WebContentsDelegateAndroid {
     @Override
     public int getBottomControlsHeight() {
         return mBottomControlsHeight;
+    }
+
+    @Override
+    public int getBottomControlsMinHeight() {
+        return Math.min(mBottomControlsMinHeight, mBottomControlsHeight);
     }
 
     @Override
