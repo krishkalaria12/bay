@@ -1,14 +1,15 @@
 import { isMac } from "@bay/platform";
-import { getSpellCheck, setSpellCheckEnabled, setSpellCheckLanguages } from "@bay/chromium";
+import { getSpellCheck, setSpellCheckEnabled, setSpellCheckLanguages, setSpellingWord, spellingWords } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { useBrowserRead } from "../../../store/read";
 import { engineProfile } from "../../../store/model";
-import { Checkbox, Group, Row, SectionHeader, Toggle } from "../controls";
+import { Button, Checkbox, Group, Row, SectionHeader, TextField, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 
 // Settings › General › Spelling: Chromium's spell checker in every space (each space's engine profile keeps its own
 // prefs, so a change goes to all of them). macOS checks with the Mac's own languages (System Settings › Keyboard ›
-// Text Input); Windows and Linux take the languages here.
+// Text Input) and words it learned; Windows and Linux take the languages here, and the words it should know (each
+// profile's custom dictionary, which "Add to Dictionary" fills too).
 
 export const SPELLING_LANGUAGES = [
   ["en-US", "English (US)"],
@@ -78,6 +79,61 @@ export function SpellingSection() {
           SPELLING_LANGUAGES.map(([code, name]) => (
             <Row key={code} title={<Checkbox value={languages.includes(code)} onChange={(on) => pick(code, on)} label={name} />} />
           ))}
+      </Group>
+      {!isMac && enabled ? <YourWords profiles={profiles} /> : null}
+    </>
+  );
+}
+
+/** The words the checker should know, in every space: the spaces' dictionaries together, a change to each. */
+function YourWords({ profiles }: { profiles: string[] }) {
+  const [words, setWords] = useState<string[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const key = profiles.join("|");
+
+  useEffect(() => {
+    let live = true;
+
+    void Promise.all(profiles.map((p) => spellingWords(p).catch(() => null))).then((answers) => {
+      if (!live) return;
+      const all = new Set(answers.flatMap((a) => a?.words ?? []));
+
+      setWords([...all].sort((a, b) => a.localeCompare(b)));
+    });
+
+    return () => {
+      live = false;
+    };
+  }, [key]);
+
+  if (!words) return null;
+
+  const change = (word: string, add: boolean) => {
+    setWords((now) => (add ? [...new Set([...(now ?? []), word])].sort((a, b) => a.localeCompare(b)) : (now ?? []).filter((w) => w !== word)));
+
+    for (const profile of profiles) void setSpellingWord(profile, word, add).catch(() => {});
+  };
+
+  const add = () => {
+    const word = draft.trim();
+
+    if (!word || /\s/.test(word)) return;
+    setDraft("");
+    change(word, true);
+  };
+
+  return (
+    <>
+      <SectionHeader title="Your Words" description="Words the spell checker takes as spelled right, in every space." />
+      <Group>
+        <Row title={<TextField value={draft} onChangeText={setDraft} onSubmit={add} placeholder="Add a word" />}>
+          <Button title="Add" disabled={!draft.trim() || /\s/.test(draft.trim())} onPress={add} />
+        </Row>
+        {words.map((word) => (
+          <Row key={word} title={word}>
+            <Button title="Remove" onPress={() => change(word, false)} />
+          </Row>
+        ))}
       </Group>
     </>
   );

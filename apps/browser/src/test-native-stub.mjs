@@ -181,6 +181,8 @@ export const getSecureDns = () => Promise.resolve({ mode: "automatic", templates
 export const setSecureDns = () => Promise.resolve();
 export const getSpellCheck = () => Promise.resolve({ enabled: true, languages: [] });
 export const setSpellCheckEnabled = () => Promise.resolve();
+export const spellingWords = () => Promise.resolve({ words: [], loaded: true });
+export const setSpellingWord = () => Promise.resolve(true);
 export const setSpellCheckLanguages = () => Promise.resolve();
 // The person's own filter lists (components/settings/panes/OwnFilters.tsx).
 

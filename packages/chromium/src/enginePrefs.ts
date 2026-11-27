@@ -48,3 +48,11 @@ export const setSpellCheckEnabled = (profile: string, enabled: boolean) =>
 
 export const setSpellCheckLanguages = (profile: string, languages: string[]) =>
   engineCall("nn_prefs_set", profile, { name: "spellcheck.dictionaries", value: languages });
+
+// Spelling's own words: a profile's custom dictionary (engine nn_spelling.h), which "Add to Dictionary" fills.
+const SpellWordsReply = v.object({ words: v.array(v.string()), loaded: v.boolean() });
+
+export const spellingWords = async (profile: string) => v.parse(SpellWordsReply, await engineCall("nn_spell_words", profile, {}));
+
+export const setSpellingWord = async (profile: string, word: string, add: boolean) =>
+  v.parse(v.object({ changed: v.boolean() }), await engineCall("nn_spell_word", profile, { word, add })).changed;
