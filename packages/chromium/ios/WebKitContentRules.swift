@@ -29,7 +29,7 @@ final class WebKitContentRules {
     guard !started else { return }
     started = true
     // Run as the change is posted (on the main thread), before a reload it led to asks for the page's rules.
-    NotificationCenter.default.addObserver(forName: NNCoreContentBlockerChangedNotification, object: nil, queue: nil) { [weak self] _ in
+    NotificationCenter.default.addObserver(forName: .NNCoreContentBlockerChanged, object: nil, queue: nil) { [weak self] _ in
       self?.refresh()
     }
     refresh()
