@@ -29,6 +29,12 @@ public final class SyncVault {
   @discardableResult
   public func write(scope: String, payload: Data) throws -> String {
     let id = SyncKeys.newFileId()
+    try write(scope: scope, id: id, payload: payload)
+    return id
+  }
+
+  /// A file under a name it already has: one the relay holds, mirrored into the folder (packages/sync/src/relay/mirror.ts).
+  public func write(scope: String, id: String, payload: Data) throws {
     let scopeTag = keys.scopeTag(scope)
     let sealed = try keys.seal(payload, scopeTag: scopeTag, fileId: id)
     let directory = scopeURL(scope)
@@ -42,7 +48,6 @@ public final class SyncVault {
     try coordinate(writing: destination, options: .forReplacing) { url in
       try self.fileManager.moveItem(at: temporary, to: url)
     }
-    return id
   }
 
   public func remove(scope: String, ids: [String]) {

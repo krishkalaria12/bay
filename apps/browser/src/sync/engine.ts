@@ -10,7 +10,12 @@ import {
   Clock,
   emptyScope,
   folderTransport,
+  fromBase64,
+  Joining,
+  mirrorTransport,
+  relayTransport,
   restoreJournal,
+  SyncKeys,
   syncScope,
   SyncNative,
   visible,
@@ -18,6 +23,7 @@ import {
   type Adapter,
   type FolderInfo,
   type LogFile,
+  type MirrorState,
   type PhraseResult,
   type ScopeState,
   type Transport,
@@ -79,6 +85,10 @@ type SyncDoc = {
   setupAt: number | null;
   joining: boolean;
   seqs?: Record<string, number>;
+  /** Sync also goes through Bay's relay, for phones: the folder's files are mirrored there (relay/mirror.ts). */
+  relay?: boolean;
+  /** The mirror's files seen on both sides, per scope. */
+  mirror?: MirrorState;
 };
 
 const defaultTypes = (): Record<DataType, boolean> => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, settings: true });
@@ -117,6 +127,8 @@ export type SyncUi = {
   devices: SyncedDevice[];
   remoteTabs: Record<string, RemoteTabs[]>;
   remoteProfiles: RemoteProfile[];
+  /** Syncing through the relay too, so phones can join. */
+  relay: boolean;
 };
 
 export const useSync = create<SyncUi>(() => ({
@@ -131,6 +143,7 @@ export const useSync = create<SyncUi>(() => ({
   devices: [],
   remoteTabs: {},
   remoteProfiles: [],
+  relay: false,
 }));
 
 let doc: SyncDoc = emptyDoc();
@@ -183,7 +196,9 @@ function load() {
         (restored.clock !== null && !v.is(v.string(), restored.clock)) ||
         !v.is(v.boolean(), restored.joining) ||
         (restored.enabled && (!restored.folder || !restored.deviceId)) ||
-        (restored.seqs !== undefined && (!isRecord(restored.seqs) || Object.values(restored.seqs).some((seq) => !Number.isSafeInteger(seq) || seq < 0)))
+        (restored.seqs !== undefined && (!isRecord(restored.seqs) || Object.values(restored.seqs).some((seq) => !Number.isSafeInteger(seq) || seq < 0))) ||
+        (restored.relay !== undefined && !v.is(v.boolean(), restored.relay)) ||
+        (restored.mirror !== undefined && !v.is(v.record(v.string(), v.array(v.string())), restored.mirror))
       ) {
         throw new Error("Invalid sync metadata");
       }
@@ -534,6 +549,7 @@ function publishUi(patch: Partial<SyncUi> = {}) {
     types: { ...doc.types },
     profiles: { ...doc.profiles },
     lastSyncedAt: doc.lastSyncedAt,
+    relay: !!doc.relay,
     ...(doc.enabled ? summarize() : { devices: [], remoteTabs: {}, remoteProfiles: [], pending: 0 }),
     ...patch,
   });
@@ -751,7 +767,8 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
       return {};
     }
 
-    const transport = guardTransport(folderTransport(native, doc.folder), generation);
+    const transport = guardTransport(await cycleTransport(native, doc.folder), generation);
+    assertSyncGeneration(generation);
     const clock = new Clock(doc.deviceId, doc.clock);
     cycleClock = clock;
     const device = doc.deviceId;
@@ -826,6 +843,64 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
       save();
     }
   }
+}
+
+/** The chain's keys for the relay, from the key this Mac holds; null while it's locked. */
+async function relayKeys(): Promise<SyncKeys | null> {
+  const native = SyncNative;
+  const key = await native?.relayKey();
+
+  return native && key ? new SyncKeys(fromBase64(key), (count) => fromBase64(native.randomBytes(count))) : null;
+}
+
+/** The folder, and with the relay on, the folder mirrored to the relay so phones read the same chain. */
+async function cycleTransport(native: NonNullable<typeof SyncNative>, folder: string): Promise<Transport> {
+  const onFolder = folderTransport(native, folder);
+  const keys = doc.relay ? await relayKeys() : null;
+
+  return keys ? mirrorTransport(onFolder, relayTransport({ keys }), (doc.mirror ??= {})) : onFolder;
+}
+
+/** Turns syncing through the relay on or off. Off, the relay keeps the chain's files until it's turned on again. */
+export function setRelaySynced(enabled: boolean) {
+  doc.relay = enabled;
+
+  if (!enabled) delete doc.mirror;
+
+  save();
+  publishUi();
+  scheduleSync(0);
+}
+
+/** A phone waiting under the code it shows, to let in; or why there's none. */
+export async function findPhone(code: string): Promise<Joining | "not-found" | "not-verified" | "taken" | "locked" | "offline"> {
+  const keys = await relayKeys();
+
+  if (!keys) return "locked";
+
+  try {
+    return await Joining.find(code, { random: (count) => fromBase64(SyncNative!.randomBytes(count)) });
+  } catch {
+    return "offline";
+  }
+}
+
+/** Lets a phone in once its digits matched: seals the chain's key to it, and syncs through the relay from now on. */
+export async function letPhoneIn(phone: Joining): Promise<boolean> {
+  const keys = await relayKeys();
+
+  if (!keys) return false;
+
+  try {
+    await phone.letIn(keys.entropy);
+  } catch {
+    return false;
+  }
+
+  if (!doc.relay) setRelaySynced(true);
+  else scheduleSync(0);
+
+  return true;
 }
 
 const errorText = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));

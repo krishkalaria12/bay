@@ -20,7 +20,7 @@
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 #include "chrome/browser/bay/webui/bay_adblock.h"
 #include "chrome/browser/bay/webui/bay_blocker_hooks.h"
 #include "chrome/browser/bay/webui/bay_lists.h"

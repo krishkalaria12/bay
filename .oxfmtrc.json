@@ -6,6 +6,7 @@
     "engine/**",
     "**/*.md",
     "tools/oxlint/anti-slop/**",
+    "packages/mobile-pagescripts/resources/**",
     "packages/platform/src/nativeContracts.ts",
     "packages/desktop/src/lucideSymbols.web.ts"
   ]

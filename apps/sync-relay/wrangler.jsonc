@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bay-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-20",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "CHAIN", "class_name": "Chain" },
+      { "name": "PAIRING", "class_name": "Pairing" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Chain", "Pairing"] }],
+}

@@ -1,0 +1,1904 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Bay mobile · native rewrite plan</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --foreground: light-dark(#28242b, #ede7ef);
+        --muted-foreground: light-dark(#665e6c, #bcb1c3);
+        --border: light-dark(#d8d0dc, #4b414f);
+        --card: light-dark(#f3eef4, #2b252f);
+        --secondary: light-dark(#ece5ee, #342c39);
+        --primary: light-dark(#69435f, #e1b4d5);
+        --success: light-dark(#245c48, #9fd4bb);
+        --warning: light-dark(#75521c, #e4c68f);
+        --code-background: light-dark(#eee8f0, #302837);
+        --swift: light-dark(#a3431f, #f2a88a);
+        --kotlin: light-dark(#5b3fb0, #c3b2f5);
+        --rust: light-dark(#7a4a12, #e8c08f);
+        --radius: 9px;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: light-dark(#fbf9fb, #1d1920);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.6;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+        width: 100%;
+      }
+      h1 {
+        font-size: clamp(27px, 5vw, 40px);
+        line-height: 1.16;
+        letter-spacing: -0.035em;
+        font-weight: 650;
+        margin: 12px 0 16px;
+      }
+      h2 {
+        font-size: 24px;
+        letter-spacing: -0.025em;
+        line-height: 1.28;
+        margin: 42px 0 17px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 18px;
+        letter-spacing: -0.01em;
+        margin: 26px 0 9px;
+      }
+      h4 {
+        font-size: 15px;
+        margin: 18px 0 5px;
+      }
+      p {
+        margin: 9px 0 15px;
+      }
+      p,
+      li {
+        max-width: 90ch;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 75ch;
+      }
+      .meta,
+      .muted {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+      a {
+        color: var(--primary);
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 3px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        margin: 22px 0;
+        font-size: 14px;
+      }
+      code {
+        font: 0.86em var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      pre {
+        font: 12px/1.65 var(--font-mono);
+        overflow: auto;
+        padding: 16px;
+        background: var(--code-background);
+        border-radius: var(--radius);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+        margin: 9px 0 18px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .callout {
+        background: var(--card);
+        padding: 16px 18px;
+        border-radius: var(--radius);
+        margin: 22px 0;
+      }
+      .callout p:last-child,
+      .callout ul:last-child {
+        margin-bottom: 0;
+      }
+      .note {
+        border-left: 3px solid var(--primary);
+        padding: 0 0 0 16px;
+        margin: 21px 0;
+      }
+      .warn {
+        border-left-color: var(--warning);
+      }
+      .table-wrap {
+        overflow-x: auto;
+        max-width: 100%;
+        margin: 16px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      thead th {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-weight: 600;
+        background: var(--card);
+      }
+      tbody th {
+        font-weight: 600;
+      }
+      td p {
+        margin: 4px 0 8px;
+      }
+      td ul {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .decisions th:first-child {
+        width: 22%;
+      }
+      .inventory td:first-child {
+        width: 34%;
+      }
+      .id {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        display: block;
+        margin-bottom: 3px;
+      }
+      .lang {
+        font-size: 11px;
+        font-weight: 650;
+        padding: 1px 7px;
+        border-radius: 99px;
+        white-space: nowrap;
+        border: 1px solid currentColor;
+        display: inline-block;
+        margin: 1px 0;
+      }
+      .lang.rust {
+        color: var(--rust);
+      }
+      .lang.swift {
+        color: var(--swift);
+      }
+      .lang.kotlin {
+        color: var(--kotlin);
+      }
+      .lang.js {
+        color: var(--warning);
+      }
+      .lang.drop {
+        color: var(--muted-foreground);
+      }
+      .lang.both {
+        color: var(--success);
+      }
+
+      /* Architecture diagram */
+      .arch {
+        display: grid;
+        grid-template-columns: 1fr 1.15fr 1fr;
+        gap: 12px;
+        margin: 22px 0;
+      }
+      .arch .col {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
+        background: var(--card);
+      }
+      .arch .col h4 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+      .arch .col.ios h4 {
+        color: var(--swift);
+      }
+      .arch .col.core h4 {
+        color: var(--rust);
+      }
+      .arch .col.android h4 {
+        color: var(--kotlin);
+      }
+      .arch .layer {
+        background: var(--secondary);
+        border-radius: 7px;
+        padding: 8px 10px;
+        margin: 7px 0;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .arch .layer strong {
+        display: block;
+        font-size: 13px;
+      }
+      .arch .core {
+        border-color: var(--rust);
+        border-width: 2px;
+      }
+      .arch .bridge {
+        grid-column: 1 / -1;
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--muted-foreground);
+      }
+      .arch .wide {
+        grid-column: 1 / -1;
+      }
+
+      /* Phases */
+      .phases {
+        list-style: none;
+        padding: 0;
+        margin: 20px 0;
+        counter-reset: none;
+      }
+      .phase {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin: 14px 0;
+        padding: 0;
+      }
+      .phase > summary {
+        cursor: pointer;
+        padding: 14px 16px;
+        list-style: none;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 4px 14px;
+        align-items: baseline;
+      }
+      .phase > summary::-webkit-details-marker {
+        display: none;
+      }
+      .phase > summary::after {
+        content: "+";
+        font-weight: 600;
+        color: var(--muted-foreground);
+      }
+      .phase[open] > summary::after {
+        content: "−";
+      }
+      .phase .pid {
+        font: 600 13px var(--font-mono);
+        color: var(--primary);
+      }
+      .phase .ptitle {
+        font-weight: 650;
+      }
+      .phase .pdep {
+        grid-column: 2 / 4;
+        font-size: 12.5px;
+        color: var(--muted-foreground);
+      }
+      .phase .body {
+        padding: 0 16px 14px;
+        border-top: 1px solid var(--border);
+      }
+      .phase .body h4 {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        text-transform: none;
+      }
+      .lanes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .lanes > div {
+        background: var(--card);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 13.5px;
+      }
+      .lanes > div p {
+        margin: 0 0 4px;
+      }
+      .lanes ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .seq {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin: 14px 0 6px;
+        font: 12px var(--font-mono);
+      }
+      .seq span {
+        background: var(--secondary);
+        padding: 3px 8px;
+        border-radius: 6px;
+      }
+      .seq i {
+        color: var(--muted-foreground);
+        font-style: normal;
+      }
+
+      footer {
+        border-top: 1px solid var(--border);
+        padding-top: 18px;
+        margin-top: 36px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      @media (max-width: 760px) {
+        .arch {
+          grid-template-columns: 1fr;
+        }
+        .lanes {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 540px) {
+        h2 {
+          font-size: 22px;
+        }
+        .lead {
+          font-size: 16px;
+        }
+        th,
+        td {
+          padding: 9px 7px;
+          font-size: 12.5px;
+        }
+        .decisions thead {
+          display: none;
+        }
+        .decisions tr {
+          display: block;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .decisions th:first-child,
+        .decisions td {
+          display: block;
+          width: auto;
+          border: 0;
+          padding: 3px 0;
+        }
+        .phase > summary {
+          grid-template-columns: auto 1fr;
+        }
+        .phase > summary::after {
+          display: none;
+        }
+        .phase .pdep {
+          grid-column: 1 / -1;
+        }
+      }
+      @media print {
+        html,
+        body {
+          color: #222;
+          color-scheme: light;
+          background: #fff;
+        }
+        nav {
+          display: none;
+        }
+        .phase > .body {
+          display: block !important;
+        }
+        tr,
+        .callout,
+        .phase {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">
+          Mobile engineering plan · 17 November 2026 · base: PR #27 <code>feat/phone-sync</code> at <code>bd495e62</code> · this plan's branch:
+          <code>refactor/mobile-native</code>
+        </p>
+        <h1>Bay mobile, native: Swift on iPhone, Kotlin on Android, one Rust core</h1>
+        <p class="lead">
+          Rewrite <code>apps/mobile</code> (Expo SDK 58, React Native 0.88) as two native apps: <strong>SwiftUI</strong> for iOS and
+          <strong>Jetpack Compose</strong> (Foundation only, no Material) for Android. Both apps sit on one shared <strong>Rust core</strong>, exposed through
+          <a href="https://mozilla.github.io/uniffi-rs/">UniFFI</a>, that owns the store, persistence, sync, address input and the other platform-free logic.
+          The engines (WebKit, Bay's Chromium) and everything you see are native code.
+        </p>
+        <p>
+          PR #27's feature set is what the rewrite has to match: spaces with their own data, phone↔computer sync through the relay, the Settings screen,
+          onboarding, reading and power tools, downloads, media, import, privacy and the app icon picker. The Expo app keeps shipping until the native apps pass
+          the same checks on both platforms. Then it is removed.
+        </p>
+        <p class="meta">
+          This is a plan only, with no code changes. I've settled every open decision with my recommendation; the reasons are in <a href="#decisions">§2</a>.
+        </p>
+      </header>
+
+      <nav aria-label="Plan sections">
+        <a href="#baseline">1 Baseline</a><a href="#decisions">2 Decisions</a><a href="#architecture">3 Architecture</a><a href="#starters">4 Starter kits</a
+        ><a href="#inventory">5 File map</a><a href="#core-api">6 Core API</a><a href="#phases">7 Phases</a><a href="#verification">8 Verification</a
+        ><a href="#migration">9 Data migration</a><a href="#risks">10 Risks</a><a href="#done">11 Done when</a><a href="#sources">Sources</a>
+      </nav>
+
+      <!-- 1 -->
+      <section id="baseline">
+        <h2>1. Baseline: what PR #27 is</h2>
+        <p>
+          PR #27 (<em>feat(sync): sync phones with the computer through a relay</em>) is stacked on #26 (<code>feat/mobile-redesign</code>), which is stacked on
+          the Android engine chain (#21 → #22 → #24). Its head <code>bd495e62</code> includes the per-space engine profiles, per-space history, bookmarks,
+          archive and website data, the space editor, the hold-to-slide spaces bar and the page-bottom fix. That commit is the parity target. Anything that
+          lands on #27 later is merged up into <code>refactor/mobile-native</code> and added to the target.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>What exists today</th>
+                <th>Size (lines)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Store</th>
+                <td>
+                  <code>src/store/model.ts</code>: a pure reducer over <code>BrowserData</code> with 55 actions, plus types, bookmarks tree, persistence to
+                  <code>browser.json</code>, page signals
+                </td>
+                <td>model 1,447 · types 234 · persistence 225 · bookmarks 216</td>
+              </tr>
+              <tr>
+                <th>Sync</th>
+                <td>
+                  <code>src/sync</code> (engine, adapters, Effect service, state) on <code>@bay/sync</code>'s TS relay port: sealing, keys, X25519 pairing,
+                  24-word phrase, transport, mirror, HLC, canon, order, scope
+                </td>
+                <td>adapters 580 · engine 307 · service 302</td>
+              </tr>
+              <tr>
+                <th>Shared TS</th>
+                <td>
+                  <code>@bay/core</code>: <code>input</code>, <code>suggest</code>, <code>suggestFetcher</code>, <code>engines</code>, <code>cleanUrl</code>,
+                  <code>selectorFor</code>, <code>elementInfo</code>
+                </td>
+                <td>from the desktop repo</td>
+              </tr>
+              <tr>
+                <th>Services</th>
+                <td>
+                  <code>src/effect</code>: an Effect runtime with ports for engine, files, http, secure store, lifecycle, links, import files, diagnostics,
+                  browser state
+                </td>
+                <td>runtime 257 · testing 629</td>
+              </tr>
+              <tr>
+                <th>UI</th>
+                <td>
+                  Browser screen, tab page, swipe and zoom, tab switcher, search card, start page, bar (<code>.ios</code>/<code>.android</code> pairs), 20
+                  panels/sheets, Settings screen, onboarding
+                </td>
+                <td>BrowserScreen 1,659 · settings content 908 · SettingsScreen 850</td>
+              </tr>
+              <tr>
+                <th>Native</th>
+                <td>
+                  <code>modules/bay-engine</code> (iOS WebKit view, downloads, content blocker, media, voice, shortcuts, space profiles; Android Chromium view,
+                  backend, downloader, media service, gestures, search widget), <code>bay-import</code>, <code>bay-welcome</code>, share extension, widget
+                  extension
+                </td>
+                <td>BayEngineView.swift 922 · BayEngineView.kt 663</td>
+              </tr>
+              <tr>
+                <th>Strings</th>
+                <td>7 locales (en, de, es, fr, hi, ja, pt-BR) × 5 tables in <code>src/i18n/strings</code></td>
+                <td>35 files</td>
+              </tr>
+              <tr>
+                <th>Page scripts</th>
+                <td>12 scripts injected into pages: reader, article, find, inspect, markdown, picker, media, images, favicon, tweaks, youtube, vendor</td>
+                <td>stays JavaScript</td>
+              </tr>
+              <tr>
+                <th>Tests</th>
+                <td>~40 <code>node --test</code> suites in <code>tests/</code>, 18 Argent e2e flows in <code>.argent/e2e</code></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <th>Rust today</th>
+                <td>
+                  <code>packages/adblock</code> (Brave's adblock-rust): <code>BayAdblock.xcframework</code> on iOS, <code>libbay_adblock.a</code> linked into
+                  <code>libbay_engine.so</code> on Android
+                </td>
+                <td>already on both platforms</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="decisions">
+        <h2>2. Decisions (resolved with the recommended option)</h2>
+        <div class="table-wrap">
+          <table class="decisions">
+            <thead>
+              <tr>
+                <th>Decision</th>
+                <th>Choice</th>
+                <th>Why, and what it rules out</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th><span class="id">D1</span>How logic is shared</th>
+                <td>
+                  <strong>One Rust crate, <code>bay-mobile-core</code>, with UniFFI bindings</strong> generated for Swift and Kotlin.
+                </td>
+                <td>
+                  <p>
+                    Rust already ships in both apps (the adblock engine), so the build already handles the toolchain, xcframework, NDK and the duplicate-symbol
+                    fix for the Chromium link. Mozilla's application-services uses this same pattern for Firefox iOS and Android's history, tabs and sync. That
+                    is the closest precedent to Bay's store and sync.
+                  </p>
+                  <p>
+                    Rejected: <em>Kotlin Multiplatform</em> would add a third language runtime and GC on iOS, and its Swift export is still maturing.
+                    <em>A headless JS runtime running today's TS</em> would keep Hermes in a native app. <em>Two hand-written copies</em> would drift.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D2</span>Core vs native boundary</th>
+                <td>
+                  <p>
+                    <span class="lang rust">core</span> domain types, reducer, persistence, spaces, history, bookmarks, pins, site settings, preferences, sync
+                    (crypto, pairing, adapters, cycle), address input and suggestions, import parsing, settings tree and search, onboarding flow, the adblock
+                    engine.
+                  </p>
+                  <p>
+                    <span class="lang both">native</span> views, navigation, gestures, animation, both engines, keychain/keystore, files and pickers, downloads,
+                    media session, voice, widgets, share, notifications, the sync schedule.
+                  </p>
+                </td>
+                <td>
+                  Anything a test can run without a device goes in the core. Anything that touches an OS API or a pixel stays native. Fast UI state (load
+                  progress, scroll, gesture positions) never crosses the bridge.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D3</span>Store shape</th>
+                <td>
+                  The core owns a <code>BrowserStore</code> object. Native calls <code>dispatch(action)</code>, which takes a UniFFI enum mirroring today's 55
+                  actions. The core returns a <code>Change</code> (revision plus touched slices) and tells a registered observer. Each app keeps a thin
+                  observable mirror: Swift <code>AppModel: ObservableObject</code> and Kotlin <code>StateFlow</code>s.
+                </td>
+                <td>
+                  The reducer stays the single source of truth, as it is now. Slices (tabs of a space, pins, preferences) are read on change instead of copying
+                  the whole state across FFI. Large lists (history) are paged queries, not part of the snapshot.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D4</span>Persistence</th>
+                <td>
+                  <strong>Revised in N1:</strong> the core reads and writes the Expo app's own document, <code>browser.json</code> (version 2), with the same
+                  repair rules, written atomically after the store is still for a moment. SQLite (<code>rusqlite</code>, bundled) comes later, if history and
+                  bookmark search or the save cost ask for it, with a one-time import from the document.
+                </td>
+                <td>
+                  The first native launch reads the file the Expo app left, with nothing to migrate, and the 446 recorded fixtures prove the port reads and
+                  changes it exactly as the TS store does. In Rust, serializing a few thousand entries off the main thread takes milliseconds, which takes away
+                  the main reason for SQLite.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D5</span>Networking</th>
+                <td>
+                  <strong>Revised in N2:</strong> the core declares an async <code>HttpClient</code> foreign trait (method, URL, headers, body in; status and
+                  body out). iOS answers it with <code>URLSession</code>, Android with <code>HttpURLConnection</code>. Everything above that line is Rust: the
+                  relay client, its JSON, retries, pairing, sealing.
+                </td>
+                <td>
+                  reqwest 0.13's TLS is rustls on aws-lc, a C library to cross-build for iOS and Android. Its certificate verifier also needs JNI start-up and
+                  an extra Kotlin component on Android. The native clients bring the OS's trust store, proxies and VPN for free and keep a TLS stack out of the
+                  binary. Rust tests answer the trait with an in-memory relay that behaves like <code>apps/sync-relay</code>.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D6</span>Sync crypto</th>
+                <td>
+                  Port <code>packages/sync/src/relay</code> to Rust using the crates that match today's <code>@noble</code>/<code>@scure</code> calls one for
+                  one: <code>aes-gcm</code>, <code>hkdf</code>, <code>hmac</code>, <code>pbkdf2</code>, <code>sha2</code>, <code>x25519-dalek</code>,
+                  <code>bip39</code> (English word list; the 4-letter prefix rule stays our code), <code>data-encoding</code> (lowercase unpadded base32,
+                  base64url), <code>getrandom</code>, <code>zeroize</code>. Then check it it byte for byte against
+                  <code>packages/sync/fixtures/golden.json</code>, the vector the TS port and the Mac's Swift crypto already pass. Secrets go through a
+                  <code>SecretStore</code> foreign trait (Keychain / Android Keystore).
+                </td>
+                <td>One golden vector, three implementations, so the computer and phone can't diverge. The core never holds secrets at rest.</td>
+              </tr>
+              <tr>
+                <th><span class="id">D7</span>iOS UI and minimum</th>
+                <td>
+                  SwiftUI, <strong>minimum iOS 15.0</strong>. UIKit where SwiftUI is weak on 15: the WKWebView host and page gestures, sheets
+                  (<code>UISheetPresentationController</code>, iOS 15) and the settings push stack. Liquid Glass through <code>.glassEffect</code> on iOS 26,
+                  and a material-blur fallback on 15–25.
+                </td>
+                <td>
+                  <p>
+                    You asked for about iOS 14. 15 is the lowest that works. Xcode 26 supports iOS 15 and up only, and Xcode 27 turns older targets into build
+                    errors. Tab restore needs <code>WKWebView.interactionState</code>, which is iOS 15+. iOS 15 runs on every iPhone that iOS 14 does (6s and
+                    later), so no device is lost.
+                  </p>
+                  <p>
+                    What 15 costs: <code>ObservableObject</code> instead of <code>@Observable</code> (17), <code>NavigationView</code>/UIKit instead of
+                    <code>NavigationStack</code> (16). Per-space website data (<code>WKWebsiteDataStore(forIdentifier:)</code>) stays iOS 17+. Below 17 spaces
+                    share one store, which is already how the current guard works.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D8</span>Android UI</th>
+                <td>
+                  Jetpack Compose on <code>compose.foundation</code>, with <strong>no Material3 in UI modules</strong>. Headless sheets, menus and dialogs come
+                  from Compose Unstyled, styled by Bay's own design system. The Chromium view stays an Android <code>View</code> (the SurfaceView handover)
+                  inside <code>AndroidView</code>. Navigation 3 for the settings stack and predictive back. minSdk 29, as today, which Bay's Chromium build
+                  requires.
+                </td>
+                <td>
+                  This keeps the Arc-Search-for-Android look (flat translucent fills, hairlines, no ripples or elevation) that AGENTS.md requires. The Compose
+                  Material libraries would bring that styling back by default.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D9</span>Starter bases</th>
+                <td>
+                  Rust: <code>ianthetechie/uniffi-starter</code> layout. Android: <code>android/architecture-templates</code> (<code>multimodule</code>), using
+                  Now in Android's <code>build-logic</code> convention plugins. iOS: <code>tuist init</code> SwiftUI app, using
+                  <code>tddworks/SwiftUITemplate</code> as the reference for extension targets. Details in <a href="#starters">§4</a>.
+                </td>
+                <td>Each starter supplies the skeleton only. We drop what Bay doesn't need (Room, Hilt, TCA, sample features).</td>
+              </tr>
+              <tr>
+                <th><span class="id">D10</span>Dependency injection and concurrency</th>
+                <td>
+                  No DI framework. Each app has one hand-written <code>AppGraph</code> that builds the core, engine and services. Swift structured concurrency
+                  (actors for engine and downloads), Kotlin coroutines (<code>lifecycleScope</code>, <code>Dispatchers.IO</code>). Store calls are synchronous.
+                  Network and long-running work (sync, suggestions, import) are exported <code>async</code> on the core's <code>tokio</code> runtime (<code
+                    >#[uniffi::export(async_runtime = "tokio")]</code
+                  >), so Swift and Kotlin just <code>await</code> or <code>suspend</code>.
+                </td>
+                <td>
+                  The app has a dozen services, not hundreds, and Hilt/KSP would cost build minutes. Today's Effect runtime goes away: its failure and retry
+                  policies move into the core (for sync and import) and native services.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D10b</span>Rust crates</th>
+                <td>
+                  <strong>Use crates.io crates freely</strong> wherever one saves work. Pick well-maintained crates (RustCrypto, the rusqlite/serde/tokio
+                  family, crates the adblock crate already pulls in). Write our own code only where the behaviour is Bay's: the reducer, sync record format, the
+                  address rules. The full list is in <a href="#crates">§4.1</a>.
+                </td>
+                <td>
+                  Your call: crates make the port shorter and better tested than hand-written equivalents. Bay controls the size cost by building with LTO,
+                  <code>opt-level = "s"</code> for the core, and one Rust artifact per app (D16). <code>cargo deny</code> checks licences and advisories.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D11</span>Strings</th>
+                <td>
+                  One source catalog, <code>packages/mobile-core/strings/&lt;locale&gt;.json</code>, written from the TS tables by a script once (removed with
+                  the Expo app at N8; the JSON is the catalog now) and compiled into the core. The core's <code>i18n</code> module gives each app a locale's
+                  whole catalog (English behind missing keys), matches device tags, and fills <code>{name}</code> placeholders. Each app keeps the table in an
+                  observable <code>Strings</code> object. Revised in N0: this replaced generated <code>xcstrings</code> and <code>strings.xml</code>.
+                </td>
+                <td>
+                  Settings › Language switches the whole app at once, without a restart, as the Expo app does. Native resource files follow the system's per-app
+                  language and need a restart. One file per locale for translators, and the key and placeholder checks run once in Rust.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D12</span>Design tokens and icons</th>
+                <td>
+                  <code>tokens.json</code> (radius, space, icon sizes, row heights, type scale, colours from <code>tokens.ts</code> and <code>global.css</code>)
+                  generates <code>BayTokens.swift</code> and <code>BayTokens.kt</code>. Icons: SF Symbols on iOS, Material Symbols outline vector drawables on
+                  Android, each in a fixed square.
+                </td>
+                <td>This keeps the rule in today's AGENTS.md (“tokens, not numbers”) on both platforms, with one place to change a radius.</td>
+              </tr>
+              <tr>
+                <th><span class="id">D13</span>Page scripts</th>
+                <td>
+                  They stay JavaScript in <code>packages/mobile-pagescripts</code>. A build step writes every script into one resource file
+                  (<code>resources/pagescripts.json</code>) that both apps bundle; a script with arguments reads them from <code>args</code>, declared ahead of
+                  it as JSON. The scripts are TypeScript in <code>packages/mobile-pagescripts/src</code> (moved from the Expo app at N8), one copy; a test fails
+                  when the resource is out of date. They aren't minified: no minifier is in the repo, and only Readability is large, which is compact already.
+                  Their jsdom tests keep running under Node.
+                </td>
+                <td>They run inside the page, so they can't be native. Sharing them as files keeps one copy.</td>
+              </tr>
+              <tr>
+                <th><span class="id">D14</span>Strategy</th>
+                <td>
+                  <strong>Build the native apps beside the Expo app, then cut over.</strong> No brownfield React Native embed. The Expo app gets fixes only.
+                  Public test builds before 22 Dec 2026 (when Arc Search for Android goes away) still come from the Expo app.
+                </td>
+                <td>
+                  The browser screen is one large component, so screen-by-screen embedding would mean running two UI stacks in one app for months. The native
+                  rewrite isn't allowed to block the December test builds.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D15</span>Where it lives</th>
+                <td>
+                  <code>apps/ios</code>, <code>apps/android</code>, <code>packages/mobile-core</code> (Rust, with <code>packages/adblock</code> as a
+                  dependency), <code>packages/mobile-pagescripts</code>, on <code>refactor/mobile-native</code>, stacked on #27. Same bundle ID and application
+                  ID (<code>in.krishkalaria.bay.mobile</code>).
+                </td>
+                <td>
+                  The native apps install over Expo builds and keep users' data (<a href="#migration">§9</a>). Stack rule as before: merge lower branches up,
+                  never rebase.
+                </td>
+              </tr>
+              <tr>
+                <th><span class="id">D16</span>One Rust library per app</th>
+                <td>
+                  The core links the adblock crate, and each platform ships <strong>one</strong> Rust artifact. On iOS one xcframework replaces
+                  <code>BayAdblock.xcframework</code>. On Android, <code>libbay_engine.so</code> links the core staticlib in place of
+                  <code>libbay_adblock.a</code>, keeping the <code>llvm-objcopy --weaken</code> step.
+                </td>
+                <td>Two Rust staticlibs in one binary duplicate the Rust standard library's symbols. Android already hit this with Chromium.</td>
+              </tr>
+              <tr>
+                <th><span class="id">D17</span>Desktop</th>
+                <td>
+                  Out of scope. The core is written so the Mac (Swift bindings) or the Windows/Linux ports could adopt it later. Desktop keeps
+                  <code>@bay/core</code> and <code>@bay/sync</code> in TS.
+                </td>
+                <td>Sync compatibility comes from the shared golden vector and record format, not from shared code.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="architecture">
+        <h2>3. Architecture</h2>
+        <div
+          class="arch"
+          role="img"
+          aria-label="Three columns: iOS app in Swift, the shared Rust core in the middle, Android app in Kotlin. Both apps call the core through UniFFI and implement its foreign traits."
+        >
+          <div class="col ios">
+            <h4>apps/ios · Swift</h4>
+            <div class="layer"><strong>Features</strong>Browser, Tabs, Spaces, Search, Panels, Settings, Onboarding</div>
+            <div class="layer"><strong>BayDesign</strong>tokens, Text, Icon, Surface, Glass (26) / blur (15–25), sheets</div>
+            <div class="layer"><strong>AppModel</strong>ObservableObject mirror of core slices, PageSignals</div>
+            <div class="layer"><strong>BayEngine</strong>WKWebView host, content rules, downloads, media, voice, space data stores</div>
+            <div class="layer"><strong>Extensions</strong>Share, Widget, App Intents / Shortcuts</div>
+          </div>
+          <div class="col core">
+            <h4>packages/mobile-core · Rust</h4>
+            <div class="layer"><strong>store</strong>types, reducer (55 actions), spaces, pins, folders, site settings, preferences</div>
+            <div class="layer"><strong>db</strong>SQLite schema, migrations, JSON importer</div>
+            <div class="layer"><strong>sync</strong>relay crypto, keys, phrase, pairing, mirror, HLC, adapters, cycle</div>
+            <div class="layer"><strong>input</strong>address parsing, engines, clean URL, suggestions</div>
+            <div class="layer"><strong>import · settings · onboarding</strong>export parsers, settings tree and search, first-run flow</div>
+            <div class="layer"><strong>adblock</strong>packages/adblock (Brave adblock-rust)</div>
+            <div class="layer"><strong>runtime</strong>tokio + reqwest/rustls for relay and suggestions</div>
+            <div class="layer"><strong>foreign traits</strong>SecretStore, Logger, StoreObserver</div>
+          </div>
+          <div class="col android">
+            <h4>apps/android · Kotlin</h4>
+            <div class="layer"><strong>:feature:*</strong>browser, tabs, spaces, search, panels, settings, onboarding</div>
+            <div class="layer"><strong>:core:designsystem</strong>tokens, Text, Icon, Surface, sheets (Compose Unstyled)</div>
+            <div class="layer"><strong>:core:model</strong>StateFlow mirror of core slices, PageSignals</div>
+            <div class="layer"><strong>:engine</strong>Bay Chromium AAR, BayEngineView, downloader, media service, gestures</div>
+            <div class="layer"><strong>Widgets</strong>search widget, share target, app shortcuts</div>
+          </div>
+          <p class="bridge wide">
+            Both apps → UniFFI generated bindings (<code>BayCore.swift</code> + static library / <code>uniffi.bay_core</code> Kotlin + <code>.so</code>) → core.
+            Page scripts (JS) are bundled into both apps.
+          </p>
+        </div>
+        <h3>A user action, end to end</h3>
+        <div class="seq" aria-label="Sequence">
+          <span>tap “close tab”</span><i>→</i><span>AppModel.dispatch(.closeTab)</span><i>→</i><span>core reducer</span><i>→</i><span>SQLite write</span><i>→</i
+          ><span>Change{rev, tabs(space)}</span><i>→</i><span>observer</span><i>→</i><span>mirror refresh</span><i>→</i
+          ><span>view update + engine.close(tab)</span>
+        </div>
+        <p class="muted">
+          Engine events go the other way: a navigation event becomes a <code>dispatch(.visit)</code>, and load progress stays in the native PageSignals object.
+        </p>
+      </section>
+
+      <!-- 4 -->
+      <section id="starters">
+        <h2>4. Starter kits and reference apps</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>Base</th>
+                <th>Take</th>
+                <th>Leave out</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th><span class="lang rust">Rust core</span></th>
+                <td>
+                  <a href="https://github.com/ianthetechie/uniffi-starter">ianthetechie/uniffi-starter</a> (BSD-3). Its layout follows Stadia Maps' Ferrostar
+                  SDK.
+                </td>
+                <td>
+                  <code>rust/</code> workspace, <code>build-ios.sh</code> (xcframework + Swift bindings), root <code>Package.swift</code> binary target, Gradle
+                  module building via <code>cargo-ndk</code>, CI.
+                </td>
+                <td>Sample calculator, the separate Android library publication. Bay consumes the core in-repo.</td>
+              </tr>
+              <tr>
+                <th><span class="lang kotlin">Android</span></th>
+                <td>
+                  <a href="https://github.com/android/architecture-templates/tree/multimodule">android/architecture-templates · multimodule</a>, with
+                  <a href="https://github.com/android/nowinandroid">Now in Android</a>'s <code>build-logic</code> convention plugins and version catalog
+                </td>
+                <td>
+                  Gradle layout, convention plugins (<code>bay.android.application</code>, <code>bay.android.feature</code>, <code>bay.compose</code>), version
+                  catalog, baseline profile module, CI shape.
+                </td>
+                <td>Room (the core owns SQLite), Hilt (D10), Material3 theme (D8), sample feature.</td>
+              </tr>
+              <tr>
+                <th><span class="lang swift">iOS</span></th>
+                <td>
+                  <a href="https://docs.tuist.dev/">Tuist</a> (<code>tuist init</code>, SwiftUI app), using
+                  <a href="https://github.com/tddworks/SwiftUITemplate">tddworks/SwiftUITemplate</a> as the reference for app + framework + extension targets
+                </td>
+                <td>
+                  <code>Project.swift</code> with app, <code>BayEngine</code>/<code>BayDesign</code> frameworks, Share and Widget extensions, the BayCore binary
+                  target. The generated project stays out of git, so there are no <code>.pbxproj</code> conflicts.
+                </td>
+                <td>TCA or any other architecture framework; feature modules beyond what the source tree needs.</td>
+              </tr>
+              <tr>
+                <th><span class="lang both">Headless UI</span></th>
+                <td><a href="https://composables.com/compose-unstyled">Compose Unstyled</a></td>
+                <td>Bottom sheet, dropdown menu, dialog, tab group primitives with accessibility.</td>
+                <td>Its styled “Composables UI” layer.</td>
+              </tr>
+              <tr>
+                <th>References (read, don't fork)</th>
+                <td colspan="3">
+                  <ul>
+                    <li>
+                      <a href="https://github.com/mozilla/application-services">mozilla/application-services</a>: Rust places/tabs/sync components with UniFFI,
+                      consumed by Firefox iOS and Android. Use it for crate layout, error mapping and the foreign-trait HTTP pattern (viaduct).
+                    </li>
+                    <li>
+                      <a href="https://github.com/mozilla-mobile/firefox-ios">firefox-ios</a> and
+                      <a href="https://github.com/mozilla-mobile/firefox-android">firefox-android</a>: native browser shells around a shared core (tab managers,
+                      WKWebView host, toolbar).
+                    </li>
+                    <li>
+                      Bay's own <code>modules/bay-engine</code>, <code>bay-import</code>, <code>bay-welcome</code>, share and widget extensions. These are
+                      already Swift/Kotlin and move over with their Expo wrappers removed.
+                    </li>
+                  </ul>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Repository layout after N0</h3>
+        <pre>
+packages/mobile-core/        Rust: Cargo workspace (from uniffi-starter)
+  crates/bay-core/           store, db, sync, input, import, settings, onboarding
+  strings/                   en.json … pt-BR.json (D11)
+  tokens.json                design tokens (D12)
+  scripts/build-ios.sh       → libbay_core.a per platform + BayCoreFFI header + BayCore.swift
+packages/mobile-pagescripts/ JS page scripts + jsdom tests (D13)
+apps/ios/                    Tuist: Project.swift, Bay/, BayEngine/, BayDesign/, BayShare/, BayWidget/
+apps/android/                Gradle: build-logic/, app/, engine/, core/{model,designsystem,core-bindings}/, feature/*
+apps/mobile-e2e/             Argent e2e flows and the pages they open, for both apps</pre>
+
+        <h3 id="crates">4.1 Rust crates for the core</h3>
+        <p>
+          Crates are used freely (D10b). This is the starting set, by core module. Each one replaces code we would otherwise write or a TS package we use today.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Module</th>
+                <th>Crates</th>
+                <th>Replaces / does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Bindings</th>
+                <td><code>uniffi</code> (proc-macros, library mode), <code>thiserror</code></td>
+                <td>Swift/Kotlin bindings; typed errors that become Swift <code>Error</code>s and Kotlin exceptions</td>
+              </tr>
+              <tr>
+                <th>store, db</th>
+                <td>
+                  <code>rusqlite</code> (<code>bundled</code>, FTS5), <code>rusqlite_migration</code>, <code>serde</code> + <code>serde_json</code>,
+                  <code>uuid</code>, <code>jiff</code>
+                </td>
+                <td>
+                  <code>browser.json</code> and its parser (the importer reads the old file with serde); history and bookmark search through FTS5; ids and dates
+                </td>
+              </tr>
+              <tr>
+                <th>sync · crypto</th>
+                <td>
+                  <code>aes-gcm</code>, <code>hkdf</code>, <code>hmac</code>, <code>pbkdf2</code>, <code>sha2</code>, <code>x25519-dalek</code>,
+                  <code>bip39</code>, <code>data-encoding</code>, <code>getrandom</code>, <code>zeroize</code>, <code>subtle</code>
+                </td>
+                <td>
+                  <code>@noble/ciphers</code>, <code>@noble/curves</code>, <code>@noble/hashes</code>, <code>@scure/bip39</code>, <code>bytes.ts</code>;
+                  constant-time check-digit compare; keys wiped from memory
+                </td>
+              </tr>
+              <tr>
+                <th>sync · network</th>
+                <td><code>async-trait</code> over the apps' <code>HttpClient</code> (D5), <code>pollster</code> in tests</td>
+                <td><code>transport.ts</code> and the Effect retry/backoff policies; the 30 s / 3 s cycle timing stays native</td>
+              </tr>
+              <tr>
+                <th>input</th>
+                <td><code>url</code> (with IDNA), <code>psl</code> (already in adblock), <code>percent-encoding</code>, <code>nucleo-matcher</code></td>
+                <td><code>input.ts</code>, <code>cleanUrl.ts</code>, <code>idn.ts</code>; fuzzy ranking for suggestions and the settings search</td>
+              </tr>
+              <tr>
+                <th>import</th>
+                <td><code>zip</code>, <code>csv</code>, <code>scraper</code> (already in adblock), <code>lz4_flex</code>, <code>encoding_rs</code></td>
+                <td>Browser export archives, CSV exports, Netscape bookmark HTML, Firefox <code>jsonlz4</code> files, legacy text encodings</td>
+              </tr>
+              <tr>
+                <th>adblock</th>
+                <td><code>adblock</code> 0.13 and its existing deps</td>
+                <td>Unchanged; linked into the one core artifact (D16)</td>
+              </tr>
+              <tr>
+                <th>diagnostics</th>
+                <td><code>tracing</code>, <code>tracing-subscriber</code></td>
+                <td>Core logs routed to the native <code>Logger</code> trait (os_log / Logcat)</td>
+              </tr>
+              <tr>
+                <th>tests and CI</th>
+                <td><code>insta</code> (JSON snapshots), <code>proptest</code>, <code>wiremock</code>, <code>cargo-deny</code>, <code>cargo-bloat</code></td>
+                <td>Differential reducer fixtures, property tests for sync ordering and merge, a fake relay, licence and size checks</td>
+              </tr>
+              <tr>
+                <th>build</th>
+                <td><code>cargo-ndk</code> (Android), <code>cargo-swift</code> or the starter's <code>build-ios.sh</code> (xcframework)</td>
+                <td>Builds and packages the core for each platform</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">
+          Secrets stay out of crates: <code>keyring</code>-style crates don't cover the Android Keystore well, so the <code>SecretStore</code> trait stays
+          native.
+        </p>
+      </section>
+
+      <!-- 5 -->
+      <section id="inventory">
+        <h2>5. File map: where each part of today's app goes</h2>
+        <div class="table-wrap">
+          <table class="inventory">
+            <thead>
+              <tr>
+                <th>Today (PR #27)</th>
+                <th>Goes to</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/store/types.ts</code>, <code>model.ts</code>, <code>bookmarks.ts</code>, <code>spaceName.ts</code></td>
+                <td><span class="lang rust">core::store</span></td>
+                <td>
+                  Same action names and semantics; <code>tests/model.test.ts</code> and <code>bookmarks.test.ts</code> cases become Rust tests plus differential
+                  fixtures (§8).
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/store/persistence.ts</code> (<code>browser.json</code>)</td>
+                <td><span class="lang rust">core::db</span></td>
+                <td>SQLite schema and the one-time JSON importer. <code>parseBrowserData</code>'s tolerance rules carry over.</td>
+              </tr>
+              <tr>
+                <td><code>src/store/browser.ts</code>, <code>pageSignals.ts</code></td>
+                <td><span class="lang swift">AppModel</span> <span class="lang kotlin">:core:model</span></td>
+                <td>Observable mirrors; signals never enter the core.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>src/sync/engine.ts</code>, <code>adapters.ts</code>, <code>state.ts</code>, <code>@bay/sync</code> relay +
+                  <code>canon</code>/<code>hlc</code>/<code>order</code>/<code>scope</code>
+                </td>
+                <td><span class="lang rust">core::sync</span></td>
+                <td>Golden vector gate. The computer's bar still becomes a folder, history stays at 90 days, and the Personal space binding stays.</td>
+              </tr>
+              <tr>
+                <td><code>src/sync/service.ts</code>, <code>platform.ts</code></td>
+                <td><span class="lang both">native schedule</span></td>
+                <td>
+                  A cycle every 30 s while open and 3 s after a change. iOS: a <code>Task</code> while foreground + <code>BGAppRefreshTask</code>. Android: a
+                  lifecycle coroutine + WorkManager.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>@bay/core</code> <code>input</code>, <code>suggest</code>, <code>suggestFetcher</code>, <code>engines</code>, <code>cleanUrl</code>
+                </td>
+                <td><span class="lang rust">core::input</span></td>
+                <td>Port only these five. Desktop keeps its TS. A shared JSON case file checks both.</td>
+              </tr>
+              <tr>
+                <td><code>@bay/core</code> <code>selectorFor</code>, <code>elementInfo</code></td>
+                <td><span class="lang js">pagescripts</span></td>
+                <td>They run in the page.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>src/browser/address.ts</code>, <code>linkResolver.ts</code>, <code>incomingLink.ts</code>, <code>siteName.ts</code>,
+                  <code>pageErrors.ts</code>, <code>src/panels/historyGroups.ts</code>
+                </td>
+                <td><span class="lang rust">core</span> for the pure parts</td>
+                <td>Each file is checked for engine/OS calls when it's ported, and those parts stay native.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>src/browser/*.tsx</code> (BrowserScreen, TabPage, TabSwipe, TabZoom, TabSwitcher, SearchCard, StartPage, FindBar, MiniPlayer, Toast,
+                  Tip, Wallpaper, PrivateLock)
+                </td>
+                <td><span class="lang swift">Features</span> <span class="lang kotlin">:feature:*</span></td>
+                <td>Rebuilt natively. The browser screen splits into smaller views instead of one 1,659-line component.</td>
+              </tr>
+              <tr>
+                <td><code>src/chrome/*</code> (tokens, Text, Icon, Surface, PillButton, Toggle, SpaceScrub, BrowserBar, motion, haptics, layout)</td>
+                <td><span class="lang swift">BayDesign</span> <span class="lang kotlin">:core:designsystem</span></td>
+                <td>Same type scale, radii, spacing and 4pt grid, from <code>tokens.json</code>.</td>
+              </tr>
+              <tr>
+                <td><code>src/panels/*</code> (20 sheets)</td>
+                <td><span class="lang both">native</span></td>
+                <td>
+                  Sheets size to fit their content, as <code>PanelSheet</code> does now. iOS: UISheetPresentationController with custom detents (16+, fixed
+                  heights on 15). Android: Unstyled sheet.
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/settings/content.ts</code>, <code>model.ts</code></td>
+                <td><span class="lang rust">core::settings</span></td>
+                <td>The page/row tree and its search come from the core. <code>tests/settings.test.ts</code> moves with it.</td>
+              </tr>
+              <tr>
+                <td><code>src/settings/*.tsx</code>, <code>syncBodies.tsx</code></td>
+                <td><span class="lang both">native</span></td>
+                <td>Same whole-screen Settings with pages that push in.</td>
+              </tr>
+              <tr>
+                <td><code>src/onboarding/flow.ts</code></td>
+                <td><span class="lang rust">core::onboarding</span></td>
+                <td><code>tests/firstRun.test.ts</code> moves with it.</td>
+              </tr>
+              <tr>
+                <td><code>src/onboarding/*.tsx</code>, <code>modules/bay-welcome</code></td>
+                <td><span class="lang both">native</span></td>
+                <td>The iOS glass letters view is already Swift and is reused as is.</td>
+              </tr>
+              <tr>
+                <td><code>src/import/*</code></td>
+                <td><span class="lang rust">core::import</span> + native pickers</td>
+                <td>
+                  Parsers go to the core. <code>BayImport</code>/<code>BayExport</code>/<code>BayZip</code> (Swift) and the Kotlin module keep file access.
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/privacy/*</code>, <code>packages/adblock</code></td>
+                <td><span class="lang rust">core::adblock</span> + engine</td>
+                <td>
+                  List selection and per-site rules go to the core. iOS rule-list compiling (<code>BayContentBlocker.swift</code>) and Android request
+                  interception stay in the engine.
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/i18n/*</code> (35 files)</td>
+                <td><span class="lang rust">core::i18n</span></td>
+                <td><code>strings/*.json</code>, compiled into the core; <code>tests/i18n.test.ts</code> moves with it (D11).</td>
+              </tr>
+              <tr>
+                <td><code>src/pagescripts/*</code></td>
+                <td><span class="lang js">packages/mobile-pagescripts</span></td>
+                <td>Bundled resources (D13).</td>
+              </tr>
+              <tr>
+                <td><code>modules/bay-engine/ios/*</code></td>
+                <td><span class="lang swift">BayEngine</span> framework</td>
+                <td>
+                  The Expo <code>Module</code>/<code>View</code> wrappers become a Swift API: <code>EngineView</code> and a delegate or
+                  <code>AsyncStream</code> of events.
+                </td>
+              </tr>
+              <tr>
+                <td><code>modules/bay-engine/android/*</code>, <code>app.plugin.js</code>, <code>scripts/fetch-android-engine.mjs</code></td>
+                <td><span class="lang kotlin">:engine</span> module</td>
+                <td>
+                  The config plugin's Gradle edits (Chromium R views, Play services, guava/protobuf pins, AAR as <code>api</code>) move into a convention
+                  plugin. Events become <code>Flow</code>s.
+                </td>
+              </tr>
+              <tr>
+                <td><code>share-extension</code>, <code>widget-extension</code></td>
+                <td><span class="lang swift">Tuist targets</span></td>
+                <td>Already Swift; they move over unchanged.</td>
+              </tr>
+              <tr>
+                <td><code>src/effect/*</code></td>
+                <td><span class="lang drop">removed</span></td>
+                <td>
+                  Http moves into the core (reqwest). Secrets become a foreign trait. The other ports become plain native services (files, links, lifecycle,
+                  diagnostics).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Expo, Expo Router, Metro, Hermes, HeroUI Native, Uniwind/Tailwind, Reanimated, Gesture Handler, gorhom sheet, Legend List, zustand, Effect,
+                  valibot, React Compiler rules
+                </td>
+                <td><span class="lang drop">removed</span></td>
+                <td>AGENTS.md's Performance section is replaced by native rules (§8).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="core-api">
+        <h2>6. Core API sketch</h2>
+        <p>This is the shape of the boundary, not final signatures. UniFFI proc-macros, library mode.</p>
+        <pre>
+// packages/mobile-core/crates/bay-core/src/lib.rs
+// Networking is internal: reqwest + rustls on the core's tokio runtime (D5).
+#[uniffi::export(with_foreign)]
+pub trait SecretStore: Send + Sync { fn read(&amp;self, key: String) -&gt; Option&lt;Vec&lt;u8&gt;&gt;; fn write(&amp;self, key: String, value: Vec&lt;u8&gt;); }
+#[uniffi::export(with_foreign)]
+pub trait StoreObserver: Send + Sync { fn changed(&amp;self, change: Change); }
+
+#[derive(uniffi::Object)] pub struct BrowserStore { /* db, state, observers */ }
+
+#[uniffi::export]
+impl BrowserStore {
+    #[uniffi::constructor] fn open(dir: String, legacy_json: Option&lt;String&gt;) -&gt; Result&lt;Arc&lt;Self&gt;, StoreError&gt;;
+    fn dispatch(&amp;self, action: Action) -&gt; Change;          // Action: 55 variants, mirrors BrowserAction
+    fn tabs(&amp;self, space: String) -&gt; Vec&lt;Tab&gt;;
+    fn spaces(&amp;self) -&gt; Vec&lt;Space&gt;;  fn pins(&amp;self, space: String) -&gt; Vec&lt;PinnedSite&gt;;
+    fn history(&amp;self, space: String, query: String, page: u32) -&gt; HistoryPage;
+    fn preferences(&amp;self) -&gt; Preferences;
+    fn observe(&amp;self, observer: Arc&lt;dyn StoreObserver&gt;);
+}
+
+#[derive(uniffi::Object)] pub struct PhoneSync { /* store, http, secrets */ }
+#[uniffi::export(async_runtime = "tokio")] impl PhoneSync {
+    async fn join_with_code(&amp;self, code: String) -&gt; Result&lt;Pairing, SyncError&gt;;   // returns 4 check digits
+    async fn join_with_phrase(&amp;self, words: Vec&lt;String&gt;) -&gt; Result&lt;(), SyncError&gt;;
+    async fn cycle(&amp;self) -&gt; Result&lt;SyncReport, SyncError&gt;;
+    fn status(&amp;self) -&gt; SyncStatus;  fn set_types(&amp;self, types: SyncTypes);  async fn leave(&amp;self) -&gt; Result&lt;(), SyncError&gt;;
+}
+
+#[uniffi::export] fn parse_input(text: String, engines: EngineSet) -&gt; Input;   // from @bay/core input.ts
+#[uniffi::export] fn settings_search(query: &amp;str, ctx: SettingsContext) -&gt; Vec&lt;SettingsMatch&gt;;</pre>
+        <p>
+          Swift sees <code>BrowserStore.open(dir:legacyJson:)</code>, <code>store.dispatch(action: .closeTab(id:))</code>. Kotlin sees
+          <code>BrowserStore.open(dir, legacyJson)</code>, <code>store.dispatch(Action.CloseTab(id))</code>. Errors become Swift <code>Error</code> types and
+          Kotlin exceptions.
+        </p>
+      </section>
+
+      <!-- 7 -->
+      <section id="phases">
+        <h2>7. Phases</h2>
+        <p>Core (N1–N2) and engine hosts (N3) don't depend on each other and can go in parallel after N0. UI phases need both.</p>
+        <div class="callout">
+          <p>
+            <strong>Commit in chunks.</strong> Don't wait for a phase to finish, and don't commit every small edit. Commit once a good amount of work is done
+            and checked: a ported core module with its tests passing, an engine host browsing on both devices, a screen that matches the Expo build on iOS and
+            Android with its e2e flows passing.
+          </p>
+          <ul>
+            <li>
+              Before each commit, run lint, typecheck and the slop check (repo AGENTS.md), plus <code>cargo test</code>/<code>clippy</code> for core changes and
+              the Swift and Kotlin builds for app changes.
+            </li>
+            <li>
+              Each commit stands on its own and builds. Messages are one line, for example <code>feat(mobile-core): port the store reducer</code> or
+              <code>feat(ios): add the tab switcher</code>.
+            </li>
+            <li>
+              Push after each chunk so <code>refactor/mobile-native</code> and its PR show progress. Record any gap a chunk leaves open in
+              <a href="#done">Known gaps</a> in the same commit.
+            </li>
+          </ul>
+        </div>
+
+        <details class="phase" open>
+          <summary>
+            <span class="pid">N0</span><span class="ptitle">Freeze the base and scaffold three projects</span
+            ><span class="pdep">Depends on: PR #27 at <code>bd495e62</code></span>
+          </summary>
+          <div class="body">
+            <ul>
+              <li>Work on <code>refactor/mobile-native</code> (this plan's PR, stacked on #27). Merge #27 up when it changes; never rebase.</li>
+              <li>
+                <code>packages/mobile-core</code> from uniffi-starter. iOS: <code>build-ios.sh</code> writes a static library per platform, UniFFI's header and
+                the Swift API, run by the <code>BayCore</code> target before it compiles (an xcframework's header is copied before the script runs, so it went
+                stale). Android: <code>:core:bindings</code> runs cargo-ndk and UniFFI's Kotlin generator. Linking <code>packages/adblock</code> into the same
+                artifact (D16) comes with the engine hosts in N3.
+              </li>
+              <li>
+                <code>apps/ios</code> with Tuist: app, BayEngine, BayDesign, BayShare, BayWidget targets, iOS 15.0, bundle ID
+                <code>in.krishkalaria.bay.mobile</code>, the Lately LLC signing team.
+              </li>
+              <li>
+                <code>apps/android</code> from architecture-templates multimodule plus NiA <code>build-logic</code>. Remove Room, Hilt and Material.
+                applicationId <code>in.krishkalaria.bay.mobile</code>, minSdk 29.
+              </li>
+              <li>
+                Strings: the 35 TS tables become <code>strings/*.json</code>, served by the core's <code>i18n</code> module (D11). Tokens:
+                <code>tokens.json</code> → Swift/Kotlin, built with the design system in N4.
+              </li>
+              <li>CI: <code>cargo test</code>, iOS simulator build, <code>:app:assembleDebug</code> against the pinned engine.</li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              Both apps launch on the simulator and the emulator and show <code>bay_core::version()</code> in a Text view. Argent <code>describe</code> reads
+              it. Lint, typecheck and slop checks pass for the repo.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary>
+            <span class="pid">N1</span><span class="ptitle">Core store and database</span><span class="pdep">Depends on: N0 · parallel with N3</span>
+          </summary>
+          <div class="body">
+            <ul>
+              <li>
+                Port <code>types.ts</code> → Rust types with UniFFI records and enums, and <code>reduceBrowserData</code>'s 55 actions → <code>Action</code> +
+                reducer.
+              </li>
+              <li>
+                Port spaces (Personal undeletable, emoji rules, per-space history/bookmarks/archive), pins (essential/row, folders), site settings, preferences
+                and their parsers.
+              </li>
+              <li>
+                Persistence: the core reads and writes <code>browser.json</code> (version 2) with <code>parseBrowserData</code>'s rules, so a bad file falls
+                back as today (D4).
+              </li>
+              <li>
+                Differential fixtures (done): <code>scripts/record-fixtures.mjs store</code> wraps the TS model with a Node load hook while the Expo app's whole
+                test suite and <code>scripts/store-scenarios.test.ts</code> run, and writes each distinct call to <code>fixtures/store.jsonl</code>.
+                <code>tests/store_fixtures.rs</code> replays all 446 against the Rust port: same next state, same no-op, same repairs. The recorders went with
+                the Expo app at N8, so the fixtures are frozen: a deliberate change to an answer changes its fixture by hand.
+              </li>
+            </ul>
+            <h4>Done when</h4>
+            <p>Every fixture matches. An imported real <code>browser.json</code> from each device round-trips, and the core's state equals the TS state.</p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary>
+            <span class="pid">N2</span><span class="ptitle">Core services: sync, input, import, settings, onboarding</span
+            ><span class="pdep">Depends on: N1</span>
+          </summary>
+          <div class="body">
+            <p class="muted">
+              Done so far: strings (<code>i18n</code>); sync, end to end on both apps against the relay; address input, IDN display, the calculator and the
+              search field's suggestions (<code>input</code>), with 2,597 calls recorded from <code>@bay/core</code>'s and the Expo app's tests matching
+              (<code>fixtures/input.jsonl</code>); the settings tree and search (<code>settings</code>), every page in seven states and every language matching
+              the Expo pages (<code>fixtures/settings.jsonl</code>, 777 calls, rows' callbacks recorded as the calls they make and returned as
+              <code>SettingsAction</code>s the apps perform; the search's tie-break sorts with ICU's root collation, as Node's <code>localeCompare</code>); the
+              first-run flow (<code>onboarding</code>, with <code>tests/firstRun.test.ts</code> ported); the import parsers (<code>imports</code>: bookmarks
+              files, Safari's and Takeout's history, merging, drafts, the phone's browsers and shared tab lists), 525 calls from the Expo app's tests and odd
+              files matching (<code>fixtures/import.jsonl</code>). the browser helpers (<code>browser</code>: incoming links and <code>bay://</code> commands,
+              page error words, the saved-logins document, downloads that open themselves, favicon checks, history's day groups from the phone's own day bounds,
+              and the navigation-event timing), 282 calls matching (<code>fixtures/browser.jsonl</code>) and the navigation and history-group suites ported. And
+              the link resolver: <code>HttpClient</code> now reports the final address and headers, can stop at the first redirect and takes a time limit (iOS
+              stops redirects with a per-task delegate; Android follows them itself, since <code>HttpURLConnection</code> won't cross between http and https,
+              and allows cleartext as the Expo app does), with its suite ported and checked on both devices along with a sync round trip on the real relay. N2's
+              core work is done.
+            </p>
+            <ul>
+              <li>
+                Sync: bytes, keys, sealing, phrase (24 words), pairing (8-letter code, X25519, 4 check digits), transport over <code>reqwest</code>, mirror,
+                HLC/canon/order/scope, adapters, cycle.
+              </li>
+              <li>
+                Input: <code>input</code>, <code>engines</code>, <code>cleanUrl</code>, <code>suggest</code> + fetcher over <code>reqwest</code>. JSON case
+                files are shared with the TS tests.
+              </li>
+              <li>
+                Import parsers (<code>exports.ts</code>, <code>importer.ts</code>, <code>apply.ts</code>), settings tree and search (<code>content.ts</code>),
+                onboarding flow.
+              </li>
+              <li>Pure parts of address, link resolver, incoming link, site name, page errors, history groups.</li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              The golden vector passes. A Rust test client pairs with the stand-in computer script on the real relay, syncs both ways and clears its chain. The
+              ported unit suites (settings, firstRun, importExports, address, linkResolver, historyGroups, phoneSync) pass in Rust.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary>
+            <span class="pid">N3</span><span class="ptitle">Engine hosts without Expo</span><span class="pdep">Depends on: N0 · parallel with N1–N2</span>
+          </summary>
+          <div class="body">
+            <p class="muted">
+              Done so far: iOS hosts the engine without Expo in the <code>BayEngine</code> framework (<code>EngineView</code> with one
+              <code>EngineEvent</code> stream, and <code>Engine</code> for what views share), and the content blocker's C functions come from the core's own
+              library (D16: <code>bay-core</code>'s <code>adblock</code> feature, on for iOS only, so Android's library doesn't grow). Android hosts Bay's
+              Chromium without Expo too, in the <code>:engine</code> module (<code>BayEngineView</code> with one <code>EngineEvent</code> stream,
+              <code>MainActivity</code> as its <code>EngineHost</code>), built against <code>android-engine-16</code> (the first engine with
+              <code>BayProfile.forSpace</code>). Page scripts are one resource both apps bundle (D13), run by <code>PageScript</code> on each platform; the core
+              reads pages' media reports (<code>parse_media_message</code>) and decides when the watcher runs (<code>scripts_for</code>). On both devices the
+              debug screen ("Engine check") browses, runs a page script, blocks with a test list, downloads a file into the store and opens it, and keeps
+              playing audio in the background with the system's controls (lock screen, media notification) pausing it. The release APK builds locally with R8 at
+              93 MB (compressed native libraries, arm64 only), and the engine loads from it in every process. The share extension and search widgets build with
+              Tuist. Ported but not yet checked on devices: voice search, quick actions, and the extensions themselves; they get checked as N4–N5 screens use
+              them.
+            </p>
+            <div class="lanes">
+              <div>
+                <p><span class="lang swift">iOS</span></p>
+                <ul>
+                  <li>BayEngineView → <code>EngineView</code> (UIViewRepresentable) + <code>EngineEvents</code> AsyncStream</li>
+                  <li>Downloads, content blocker, media, voice, shortcuts, space profiles (17+ guarded)</li>
+                  <li>Tab state files (<code>interactionState</code>), snapshots</li>
+                  <li>Share + widget extensions build in Tuist</li>
+                </ul>
+              </div>
+              <div>
+                <p><span class="lang kotlin">Android</span></p>
+                <ul>
+                  <li>BayEngineView/Backend → <code>:engine</code> with <code>Flow</code> events</li>
+                  <li>app.plugin.js Gradle edits → convention plugin; <code>fetch-android-engine.mjs</code> kept</li>
+                  <li>Downloader, media service, gestures, file chooser, voice, search widget</li>
+                  <li><code>BayProfile.forSpace</code> wired (needs the next engine run)</li>
+                </ul>
+              </div>
+              <div>
+                <p><span class="lang both">Both</span></p>
+                <ul>
+                  <li>Page-script runner reads bundled resources</li>
+                  <li>One Rust artifact (D16), and Android's <code>libbay_engine.so</code> link checked locally first</li>
+                  <li>A debug screen that loads a URL and runs a page script</li>
+                </ul>
+              </div>
+            </div>
+            <h4>Done when</h4>
+            <p>
+              The debug screen browses, blocks ads, downloads a file and plays media in the background on both platforms. The Android release APK builds locally
+              against the real AAR before any <code>android-engine-N</code> tag is pushed.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary>
+            <span class="pid">N4</span><span class="ptitle">Design system and the browser shell</span><span class="pdep">Depends on: N1, N3</span>
+          </summary>
+          <div class="body">
+            <p class="muted">
+              Done so far: the design system on both apps (<code>BayDesign</code>, <code>:core:designsystem</code>) from one source,
+              <code>packages/mobile-core/design/{tokens,icons}.json</code>, generated into <code>BayTokens.swift</code> and <code>BayTokens.kt</code> by
+              <code>scripts/build-design.mjs</code> (CI checks it is current); Inter on Android. The browser screen on both: the bar (start, page and tabs
+              modes, load progress, tab count, swipe between tabs, hides while scrolling), pages kept loaded (four, plus tabs playing media) and restored from
+              saved state, the status strip in the page's colour, the start page (greeting, pins, recent pages, wallpaper), the search card (the core's ranked
+              rows, the engine's suggestions, inline completion, private toggle), page errors in plain words, the tab switcher as a space's page (Essentials,
+              pinned rows, cards with snapshots, flick up to close, Clear), the spaces capsule and new spaces, toasts with Undo, the mini player and system
+              media controls, and the private lock. Settings is still the stand-in screen behind <code>bar-settings</code>. Left: the find bar (opened from the
+              page menu, N5), tips, the card-to-page zoom, pinned folders and hold-to-slide on the spaces, the space editor, and the e2e flows (see Known gaps).
+            </p>
+            <ul>
+              <li>
+                BayDesign / <code>:core:designsystem</code>: Text with the type scale (SF on iOS, Inter on Android), Icon squares, Surface (Glass 26 / blur,
+                flat translucent on Android), PillButton, Toggle, sheet container sized to its content, motion and haptics.
+              </li>
+              <li>
+                Browser screen, tab page, bar, load progress, swipe between tabs, zoom into the switcher, start page, search card with suggestions, find bar,
+                mini player, toasts and tips, private lock, wallpaper.
+              </li>
+              <li>
+                Tab switcher as a space's page (Essentials tiles, Pinned rows and folders, grid of cards, Clear), the spaces capsule with scrolling and
+                hold-to-slide, and the space editor.
+              </li>
+              <li>Accessibility identifiers equal today's <code>testID</code>s (Android <code>testTag</code> + <code>testTagsAsResourceId</code>).</li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              <code>smoke</code>, <code>search-and-open</code>, <code>tabs-roundtrip</code>, <code>tab-swipe-close</code>, <code>start-page</code>,
+              <code>page-zoom</code> and <code>wallpaper</code> pass on both platforms. Screenshots match the Expo build side by side.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary><span class="pid">N5</span><span class="ptitle">Panels and Settings</span><span class="pdep">Depends on: N2, N4</span></summary>
+          <div class="body">
+            <p class="muted">
+              Done so far, on both apps: Settings drawn from the core (the index with search, every page and row, the wallpaper, page zoom, custom engine and
+              sync join pages, clearing browsing data through the store's reset), and the page menu (<code>bar-more</code>): navigation, find on page, bookmark,
+              share, copy link, pin, private tab, Markdown, archive, translate, the site's zoom and desktop mode, and the blocking card. Page zoom, AMP
+              skipping, desktop mode, swipe, pull to refresh and app links now reach the page views. The archive (<code>bar-archive</code>), history, bookmarks
+              (folders, search across the tree, removing a folder after asking) and downloads sheets, opened from the bar, the page menu, the bookmark toast and
+              Settings' index, with day groups and swipe-to-remove rows; the core lists a bookmark folder or search (<code>bookmarkListing</code>). Site
+              settings (<code>page-site-settings</code>: zoom, desktop page, blocking and what it blocks here, Reader opening by itself, swipe, downloads from
+              the site, the connection, reset) and the link menu (a long press on a link, or on a bare image on iOS through the core's
+              <code>parseImagePress</code>: open, open in background, copy, share, save an image, and where a link goes). The tabs menu (holding
+              <code>bar-tabs</code>: new and private tabs, archiving, spaces, moving the tab, and making, renaming and deleting folders), the pin sheet (holding
+              a tab card: an Essential, a pinned row or a row in a folder) and the page's questions (<code>page-request</code>: alert, confirm, prompt, HTTP
+              sign-in, another app's link, camera, microphone and location), queued and answered one at a time; Android's sheets now keep above the keyboard.
+              Reader (<code>page-reader</code>: the article in Reader's look, its settings sheet with text size, font and theme changing it live, and sites that
+              open Reader by themselves), its themes and CSS variables from the core (<code>readerThemes</code>, <code>readerVariables</code>). Hide elements
+              and Inspect (<code>page-hide-elements</code>, <code>page-inspect</code>): the element picker in the bar's place, hiding what's picked for the site
+              (in memory only for private tabs) with undo, reset and the menu's "show hidden" row, and the inspect sheet (the font and where it comes from,
+              size, colours, matching CSS, copy for an agent); the core reads the picker's and inspector's reports (<code>parsePickedMessage</code>,
+              <code>parseInspectedElement</code>, <code>fontOrigin</code>). Content blocking: the core keeps the eight filter lists on disk
+              (<code>FilterListStore</code>: downloaded once a day at most, a server's same ETag or Last-Modified keeps the saved copy, a version that names
+              their text), the apps hand them to the engines while "Block ads and trackers" is on, with each site's own groups and the tracking parameters
+              (<code>trackingParametersJson</code>), and Privacy says how many lists block. Import (<code>bookmarks-import</code>, Settings' Import row): the
+              phone's browsers, a browser's steps with the system file picker, the review and what was added, and pasted tabs opened or archived; the core reads
+              the chosen file, unpacking Safari's and Takeout's archives itself (<code>readExportFile</code>, only bookmark pages and history files are read),
+              and applies it (<code>importTabs</code>, <code>importExport</code>). The app icon picker (Appearance: alternate icons on iOS, launcher aliases on
+              Android, both named as the Expo app named them so a chosen icon carries over), the download toast, YouTube's clean-up from the core
+              (<code>youtubeSelectors</code>, reaching open pages when the switches change), the reading tools' notices, the private session kept while its tabs
+              are unloaded, and what a page pins to its bottom kept above the bar. Sync pairs from the UI on both apps with the stand-in computer, shows the
+              devices and the computer's tabs, and a cycle a caller gives up on no longer wedges sync (the core releases it; Android lets a started cycle
+              finish). The browser behind an open sheet steps out of TalkBack's way, as iOS's sheets already do for VoiceOver. Every done-when flow passes on
+              Android; iOS is checked by hand (see Known gaps).
+            </p>
+            <ul>
+              <li>
+                All 20 sheets: page menu, link menu, tabs menu, bookmarks, history (paged core queries), archive, downloads, import, reader, inspect, site
+                settings, pin, page request, space icon, space edit, behind-sheets stacking.
+              </li>
+              <li>
+                Settings screen: index with search (core), pages with tiles and rows, Appearance (app icon picker via <code>setAlternateIconName</code> /
+                activity-alias), Browsing, Privacy, Sync (join by code or phrase, status, devices, computer's tabs, per-type switches).
+              </li>
+              <li>Native sync scheduling (30 s / 3 s cadence).</li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              The <code>bookmarks-import</code>, <code>downloads</code>, <code>link-menu</code>, <code>power-tools</code>, <code>privacy</code>,
+              <code>private-session</code>, <code>reading-tools</code>, <code>settings-appearance</code>, <code>settings-browsing</code>,
+              <code>mini-player</code> and <code>youtube</code> flows pass on both. A phone pairs with the stand-in computer from the UI on each platform.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary>
+            <span class="pid">N6</span><span class="ptitle">Onboarding, extensions, languages, polish</span><span class="pdep">Depends on: N4, N5</span>
+          </summary>
+          <div class="body">
+            <p class="muted">
+              Done so far, on both apps: the first run, ported from Yab's (SwiftUI on iOS with Liquid Glass from 26 and a material before it; Compose on Android
+              with flat plates and the name in ink), its pages, words and motion from the core (<code>welcomeContent</code>,
+              <code>hero</code>, <code>welcomeForward</code>), Skip handing over to the real search field, the keyboard and lock settings (the lock proves Face
+              ID or the fingerprint first), and "Make Bay default" (Android's role dialog, iOS's Default Apps). Settings shows whether Bay is the default.
+              Search opens when Bay starts if asked, and a long time away starts on a fresh start page (the core's <code>startFresh</code>). Links from other
+              apps, <code>bay://</code> commands, quick actions (iOS) and app shortcuts (Android), the share extension and Android's share target, the search
+              widget (Android, moved into the app), and voice search from the search card's microphone or the widget. <code>fresh-start</code> passes on
+              Android. Report a problem shares the crashes Bay kept (the core's <code>CrashLog</code> on disk, filled by MetricKit and uncaught exceptions on
+              iOS and the uncaught-exception handler on Android). Every locale was screenshot-checked on the main screens of both apps (fixes: Hindi text
+              measurement on Android, the page menu's security line, Japanese wording, French apostrophes); the largest Dynamic Type and font scale 2.0, dark
+              mode and reduced motion were checked and fixed where they broke. Accessibility audits run as tests: XCUITest's
+              <code>performAccessibilityAudit</code> (<code>BayUITests</code>) and the Accessibility Test Framework's checks
+              (<code>AccessibilityAuditTest</code>), both passing after the fixes they found (touch targets, labels, text over wallpapers). Android 10 runs the
+              app and <code>smoke</code> passes there; its pages stay black (see Known gaps).
+            </p>
+            <ul>
+              <li>
+                First run: the pages from <code>flow.ts</code> with the travelling glass object, default-browser prompt (Android role dialog, iOS Default Apps
+                link), Skip.
+              </li>
+              <li>
+                Share extension and Android share target, widgets, App Intents/shortcuts, incoming links and <code>http</code>/<code>https</code>/<code
+                  >bay</code
+                >
+                schemes.
+              </li>
+              <li>All 7 locales, Dynamic Type / font scale, VoiceOver and TalkBack labels, reduced motion, dark mode, iOS 15 and Android 10 devices.</li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              <code>fresh-start</code> passes. Each locale is screenshot-checked on the main screens. Accessibility audits (Xcode Accessibility Inspector,
+              Android Accessibility Scanner) show no blocking issues.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary><span class="pid">N7</span><span class="ptitle">Parity and migration proof</span><span class="pdep">Depends on: N6</span></summary>
+          <div class="body">
+            <ul>
+              <li>
+                Install each native build over an Expo build that holds real data (tabs in several spaces, pins, history, bookmarks, a paired sync chain) on the
+                iPhone simulator, the emulator and the OnePlus. Everything is still there, and sync keeps working without pairing again.
+              </li>
+              <li>All 18 Argent e2e flows plus <code>fresh-start</code>, two clean passes in a row on both platforms.</li>
+              <li>
+                Performance against the Expo build on the same pages: cold start to first paint, tab switch, opening the switcher with 50 tabs, memory after 20
+                tabs, APK and IPA size.
+              </li>
+            </ul>
+            <h4>Done when</h4>
+            <p>
+              No lost data. Every flow passes twice. The native builds are no slower than Expo on any of those measures. Any gap goes into this plan's Known
+              gaps section in the same commit.
+            </p>
+          </div>
+        </details>
+
+        <details class="phase">
+          <summary><span class="pid">N8</span><span class="ptitle">Cutover</span><span class="pdep">Depends on: N7</span></summary>
+          <div class="body">
+            <ul>
+              <li>
+                Release builds: iOS archive and TestFlight with the Lately LLC team. The Android APK comes from the release workflow (Gradle on the runner,
+                release key from secrets), with versionCode above the last Expo build.
+              </li>
+              <li>
+                Remove <code>apps/mobile</code>. Move <code>.argent/e2e</code> to the repo's native apps folder. Rewrite <code>apps/mobile/AGENTS.md</code> as
+                <code>apps/ios/AGENTS.md</code> + <code>apps/android/AGENTS.md</code> with native build, test and performance rules.
+              </li>
+              <li>
+                Update <code>docs/mobile-releasing.md</code> and the android-engine workflow (it builds <code>apps/android</code> instead of the Expo prebuild).
+              </li>
+            </ul>
+            <h4>Done when</h4>
+            <p>A public test build of each native app is out, and the Expo app is gone from <code>main</code>.</p>
+            <p>
+              Status: <code>apps/mobile</code> is removed. The flows and their pages are in <code>apps/mobile-e2e</code> (<code>run</code> serves the pages on
+              port 8099 and runs the flows), the page scripts are their own workspace package, the engine pin and its fetch script are in
+              <code>apps/android</code>, the android-engine workflow builds <code>apps/android</code>, and <code>docs/mobile-releasing.md</code> describes the
+              native builds. N7's migration proof is moot (the mobile app never shipped, so there is no Expo data to carry over). Not done yet: the first public
+              test builds.
+            </p>
+          </div>
+        </details>
+      </section>
+
+      <!-- 8 -->
+      <section id="verification">
+        <h2>8. Verification</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Check</th>
+                <th>Runs</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Core logic</th>
+                <td>
+                  <code>cargo test</code>: ported unit suites, differential reducer fixtures generated from the TS tests, golden sync vector, JSON import of
+                  real state files
+                </td>
+                <td>Every commit (pre-push)</td>
+              </tr>
+              <tr>
+                <th>Bindings</th>
+                <td>Swift Testing and JUnit smoke tests that call each exported function once (catches UniFFI type mismatches)</td>
+                <td>Every commit</td>
+              </tr>
+              <tr>
+                <th>Page scripts</th>
+                <td>Existing jsdom tests, moved to <code>packages/mobile-pagescripts</code></td>
+                <td>Every commit</td>
+              </tr>
+              <tr>
+                <th>UI flows</th>
+                <td>
+                  The 18 Argent e2e YAML flows plus <code>fresh-start</code>, unchanged, since identifiers are kept. Verify each flow through MCP
+                  <code>e2e-execute</code>, as now.
+                </td>
+                <td>End of each UI batch, both platforms</td>
+              </tr>
+              <tr>
+                <th>Performance</th>
+                <td>
+                  Argent native profiler (xctrace / Perfetto) on replayed flows. Android baseline profile. Rules for the new AGENTS.md: no core call on the main
+                  thread for paged history; page signals stay native; long lists are <code>LazyVStack</code>/<code>LazyColumn</code> with stable IDs.
+                </td>
+                <td>N4, N7</td>
+              </tr>
+              <tr>
+                <th>Repo gates</th>
+                <td>
+                  Lint, typecheck and slop commands before every commit (root AGENTS.md), plus <code>swiftformat</code>/<code>swiftlint</code>,
+                  <code>ktlint</code>/detekt, <code>cargo clippy</code>, <code>cargo fmt</code>
+                </td>
+                <td>Every commit</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="migration">
+        <h2>9. Users' data across the cutover</h2>
+        <p>
+          <strong>Update, 19 November 2026:</strong> the mobile app never shipped, so there are no users' data to carry over and the native apps keep no
+          fallbacks for the Expo app's layouts. Secrets (the sync key, saved sign-ins) live in Bay's own keychain service and keystore preferences. The plan
+          below is kept for the record.
+        </p>
+        <p>The native apps keep the same bundle ID and application ID, so they install as an update. On first launch:</p>
+        <ol>
+          <li>
+            <strong>Browser state:</strong> the core opens <code>browser.json</code> in the app's document directory (expo-file-system
+            <code>Paths.document</code>) as the Expo app left it, and keeps writing the same version-2 document (D4).
+          </li>
+          <li>
+            <strong>Sync state:</strong> import <code>sync/state.json</code> the same way. The sync key is read from where <code>expo-secure-store</code> put
+            it. On iOS that's the Keychain under its service name. On Android it's the expo-secure-store SharedPreferences file, encrypted with its Keystore
+            alias. Write the key back through the native <code>SecretStore</code>, then remove the old entry. The exact service names and aliases are checked
+            against the expo-secure-store source in N1.
+          </li>
+          <li>
+            <strong>Engine data:</strong> WebKit data stores (default + <code>forIdentifier</code> per space) and the Chromium profiles under
+            <code>Spaces/&lt;id&gt;</code> stay where they are. The new engine hosts open the same identifiers and paths, so cookies and logins survive.
+          </li>
+          <li>
+            <strong>Tab state and snapshots:</strong> same cache paths as <code>BayEngineModule</code> uses today. If they're missing, tabs reload instead of
+            failing.
+          </li>
+          <li>
+            <strong>Preferences that live in the OS:</strong> alternate app icon (iOS keeps it; on Android, map the Expo activity-alias names to the new ones),
+            default-browser role.
+          </li>
+        </ol>
+        <p class="note warn">
+          Migration runs once and is tested in N7 on all three test devices. If the import fails, the old files stay and the app opens with a fresh state plus a
+          notice. A partial import never runs.
+        </p>
+      </section>
+
+      <!-- 10 -->
+      <section id="risks">
+        <h2>10. Risks</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Risk</th>
+                <th>What we do about it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Rust std symbols clash with Chromium's on Android</th>
+                <td>One staticlib (D16), the existing <code>--weaken</code> step, and a local NDK test link before any runner build.</td>
+              </tr>
+              <tr>
+                <th>The reducer port differs in small ways</th>
+                <td>Differential fixtures generated from the TS reducer. The TS reducer stays in git history as the reference until N7.</td>
+              </tr>
+              <tr>
+                <th>Sync crypto mismatch locks phones out</th>
+                <td>Golden vector gate in N2, and a real-relay round trip with the stand-in computer before any UI work on sync.</td>
+              </tr>
+              <tr>
+                <th>SwiftUI on iOS 15 lacks newer APIs</th>
+                <td>
+                  UIKit for sheets, navigation and the web view host. The <code>#available</code> branches are listed in BayDesign. Test on an iOS 15 simulator
+                  runtime every batch.
+                </td>
+              </tr>
+              <tr>
+                <th>Compose without Material means writing more components</th>
+                <td>Compose Unstyled for behaviour, our own styling. The component list is bounded by today's <code>src/chrome</code>.</td>
+              </tr>
+              <tr>
+                <th>Rewrite time competes with the December test builds</th>
+                <td>D14: test builds ship from Expo. The native work doesn't touch <code>apps/mobile</code> except to fix it.</td>
+              </tr>
+              <tr>
+                <th>Two UIs drift</th>
+                <td>Same as today (AGENTS.md “Both platforms, always”), plus shared tokens and strings and identical e2e flows on both.</td>
+              </tr>
+              <tr>
+                <th>Binary size</th>
+                <td>
+                  The core replaces the adblock artifact. It adds the store, SQLite, tokio, reqwest/rustls and the crypto crates, but React Native, Hermes and
+                  the JS bundle go away. LTO, <code>opt-level = "s"</code>, <code>panic = "abort"</code>, trimmed crate features. Measured in N7 with
+                  <code>cargo bloat</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>Crate churn or licences</th>
+                <td>
+                  <code>cargo deny</code> (licences, advisories, duplicate versions) in CI. Pin versions in <code>Cargo.lock</code> and upgrade on purpose.
+                </td>
+              </tr>
+              <tr>
+                <th>UniFFI async and callback edge cases</th>
+                <td>
+                  Keep async to network and import work on the core's tokio runtime. Observers are fire-and-forget with a revision number, so a missed call is
+                  recovered by the next read.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section id="done">
+        <h2>11. Done when</h2>
+        <div class="callout">
+          <ul>
+            <li>Every feature in PR #27 (and anything that lands on the Expo app before cutover) works in both native apps.</li>
+            <li>
+              The store, persistence, sync, input, import, settings tree and onboarding flow exist once, in <code>packages/mobile-core</code>, and both apps use
+              it.
+            </li>
+            <li>All core, binding, page-script and e2e checks pass twice on both platforms. Real users' data survives the update.</li>
+            <li><code>apps/mobile</code>, Expo and React Native are gone from the repo, and the AGENTS.md files and release docs describe the native apps.</li>
+          </ul>
+        </div>
+        <h3>Known gaps</h3>
+        <p class="muted">Add parity gaps here in the commit that finds them.</p>
+        <ul>
+          <li>
+            Android: pages always see <code>prefers-color-scheme: light</code>, because content leaves the preferred look light and Chrome sets it from its own
+            night mode. The engine now takes it per tab (<code>BayTab.setPrefersDark</code>, applied in <code>OverrideWebPreferences</code>); once an
+            <code>android-engine-N</code> build with it is pinned, <code>BayEngineView</code> sets it from the configuration's night mode, at
+            <code>createTab</code> and in <code>onConfigurationChanged</code>. iOS already follows the system.
+          </li>
+          <li>
+            Android: scrolled down, the bar's pill sits on what a page pins to its bottom (YouTube's tabs), because the page takes the whole screen as the bar
+            slides away. The engine now keeps part of the bar (<code>BayTab.setBottomControlsMinHeight</code>); once it's pinned,
+            <code>BayEngineView</code> takes a <code>barMinHeight</code> (the navigation bar + <code>Space.xs</code> + the pill's 36dp + <code>Space.sm</code>,
+            from <code>BrowserScreen</code> beside <code>barCover</code>) and reports <code>BarMoved</code> as the offset over
+            <code>barHeight - barMinHeight</code>. iOS already reserves only the pill while the bar is shrunk.
+          </li>
+          <li>
+            iOS: Argent's tree still lists the active page's web content under the tab switcher, although every page view is hidden there (WebKit's remote
+            accessibility tree). VoiceOver and taps aren't affected; tests should target identifiers, not page text, while the switcher is up.
+          </li>
+          <li>
+            The e2e flows are in <code>apps/mobile-e2e</code>; all 18 pass on Android. Two steps changed for the native labels: an archived row's label is "Open
+            &lt;title&gt;" with the site as its state, and a bare title also matches the row's Remove button.
+          </li>
+          <li>
+            iOS 15 and 16 weren't run: Xcode 27.2 offers no simulator runtime older than iOS 27. The app compiles for the 15.0 deployment target, and the iOS 15
+            paths (materials in place of glass, older toggles and sheets) were only read, not run.
+          </li>
+          <li>Google's Accessibility Scanner app wasn't run on Android (it needs a Google sign-in); the same checks run in the audit test.</li>
+          <li>
+            iOS: the widgets weren't placed on the simulator (automation can't add one); the <code>bay://</code> links they send were checked instead. Links to
+            <code>http</code>/<code>https</code> pages go to Safari on a debug build, which can't be the default browser; they take the same path as the share
+            extension's links, which were checked.
+          </li>
+          <li>
+            iOS builds claim the default-browser entitlement only with <code>TUIST_BAY_DEFAULT_BROWSER=1</code> (as the Expo app's
+            <code>BAY_DEFAULT_BROWSER</code>); without it the welcome skips the links page and Settings says Bay can't be the default.
+          </li>
+          <li>
+            iOS: the e2e flows can't run through Argent's runner, which reads a projected UIView tree where SwiftUI's accessibility identifiers don't appear
+            (<code>describe</code> and <code>await-ui-element</code> do see them). N5's flows were checked by hand on the iPhone simulator instead: import
+            (paste, steps, the file picker opening and cancelling; choosing a file in the out-of-process picker doesn't take Argent's taps), the app icon, sync
+            pairing, Inspect, Reader and the bottom inset.
+          </li>
+          <li>
+            iOS before 26: WebKit has no obscured inset, so the page's scroll view is inset under the bar but what a page fixes to its bottom (YouTube's tab
+            bar, say) still sits under Bay's bar, as it did in the Expo app.
+          </li>
+          <li>
+            iOS: Argent's tree still lists the page's web content under Settings and sheets, although the page views are hidden and marked
+            <code>accessibilityElementsHidden</code> (WebKit answers accessibility from its own process).
+          </li>
+          <li>
+            Android e2e: on a loaded emulator, the runner's Enter can reach the address field before the keyboard's last characters, so the page opens a
+            shortened address. Go waits a moment for pending edits; a slower run can still lose the tail. A person's Go comes from the keyboard, in order.
+          </li>
+          <li>
+            Android: the link menu has no live preview of the linked page. A second page view drawing over the tab leaves the tab blank once it goes, even after
+            the view is disposed (which hands the compositor back), the tab is shown again or re-attached; the engine's hand-back needs fixing before the
+            preview can come back. iOS has the preview.
+          </li>
+        </ul>
+      </section>
+
+      <section id="sources">
+        <h2>Sources</h2>
+        <ul>
+          <li>
+            <a href="https://github.com/ianthetechie/uniffi-starter">ianthetechie/uniffi-starter</a> ·
+            <a href="https://stadiamaps.com/blog/ferrostar-building-a-cross-platform-navigation-sdk-in-rust-part-1/"
+              >Ferrostar: building a cross-platform SDK in Rust</a
+            >
+            · <a href="https://mozilla.github.io/uniffi-rs/">UniFFI user guide</a>
+          </li>
+          <li><a href="https://github.com/mozilla/application-services">mozilla/application-services</a> (Rust components behind Firefox iOS and Android)</li>
+          <li>
+            <a href="https://github.com/android/architecture-templates">android/architecture-templates</a> ·
+            <a href="https://medium.com/androiddevelopers/introducing-the-architecture-templates-3151323e4e34">Introducing the Architecture Templates</a> ·
+            <a href="https://github.com/android/nowinandroid">Now in Android</a>
+          </li>
+          <li><a href="https://docs.tuist.dev/">Tuist</a> · <a href="https://github.com/tddworks/SwiftUITemplate">tddworks/SwiftUITemplate</a></li>
+          <li><a href="https://composables.com/compose-unstyled">Compose Unstyled</a></li>
+          <li><a href="https://touchlab.co/the-future-of-kmps-ios-interop">Touchlab: the future of KMP's iOS interop</a> (on why KMP was not chosen)</li>
+          <li>
+            <a href="https://developer.apple.com/forums/thread/799576">Apple forums: Xcode 26 minimum deployment target</a> ·
+            <a href="https://developer.apple.com/support/xcode/">Xcode support matrix</a>
+          </li>
+          <li>
+            In-repo: PR #27, <code>docs/mobile-plan.html</code>, <code>docs/android-chromium-plan.html</code>,
+            <code>docs/mobile-effect-plan.html</code>
+          </li>
+        </ul>
+      </section>
+
+      <footer>Bay · mobile native rewrite plan · written against PR #27 on 17 November 2026</footer>
+    </main>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Install NNCore: copy the web host layer, or run apply.sh for the macOS Chrome host."""
+"""Install NNCore: copy the web host layer (//bay/core; //bay/filter is engine/shared's), or run apply.sh for the
+macOS Chrome host."""
 import argparse
 import importlib.util
 import json
@@ -22,12 +23,12 @@ def main() -> int:
     web_host = platform in ("win", "linux")
     if args.list_paths:
         if web_host:
-            print(json.dumps([["bay", True]]))
+            print(json.dumps([["bay/core", True]]))
         else:
             import re
             script = (here / "apply.sh").read_text()
             hooks = sorted(set(re.findall(r'\$src/([^"\s]+)', script)))
-            print(json.dumps([["bay", True]] + [[p, False] for p in hooks if p != "bay" and not p.endswith("/")]))
+            print(json.dumps([["bay/core", True]] + [[p, False] for p in hooks if not p.startswith("bay") and not p.endswith("/")]))
         return 0
     if not web_host:
         return subprocess.call(["bash", str(here / "apply.sh"), *(["--check"] if args.check else [])])
@@ -35,10 +36,10 @@ def main() -> int:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     root = Path(os.environ.get("CHROMIUM_SRC", str(Path.home() / "chromium-build/chromium_git/chromium/src")))
-    source, destination = here / "src/bay", root / "bay"
+    source, destination = here / "src/bay/core", root / "bay/core"
     if args.check:
         if module.differs(source, destination):
-            print("drift: bay")
+            print("drift: bay/core")
             return 1
     else:
         module.sync(source, destination)

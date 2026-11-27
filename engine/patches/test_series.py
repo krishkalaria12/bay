@@ -161,9 +161,38 @@ class PlatformRoutingTests(unittest.TestCase):
             self.assertNotIn('"chromium"', text)
             self.assertTrue(series.is_applied(step, directory))
 
+    def test_android_takes_no_desktop_step(self):
+        steps = series.read_series("android")
+        self.assertFalse([step for step in steps if step.kind == "cef"])
+        names = {step.name for step in steps}
+        self.assertNotIn("chromium-bay-layer.patch", names)
+        self.assertNotIn("engine/nncore", names)
+        self.assertNotIn("engine/chromium", names)
+        self.assertIn("engine/shared", names)
+
+    def test_all_means_every_desktop_platform(self):
+        for platform in ("mac", "win", "linux"):
+            self.assertTrue(series.selects("all", platform))
+        self.assertFalse(series.selects("all", "android"))
+        self.assertTrue(series.selects("mac,android", "android"))
+        self.assertFalse(series.selects("win,linux", "mac"))
+
+    def test_shared_filter_survives_the_nncore_copy(self):
+        # engine/shared puts //bay/filter in first; NNCore's web host copy owns only //bay/core.
+        steps = [s for s in series.read_series("linux") if s.kind == "layer"]
+        self.assertEqual([s.name for s in steps], ["engine/shared", "engine/chromium", "engine/nncore"])
+        shared, nncore = steps[0], steps[2]
+        self.assertEqual(shared.paths(), [("bay/filter", True)])
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(series.apply_step(shared, directory))
+            self.assertIsNone(series.apply_step(nncore, directory))
+            self.assertTrue((Path(directory) / "bay/filter/BUILD.gn").is_file())
+            self.assertTrue(series.is_applied(shared, directory))
+            self.assertTrue(series.is_applied(nncore, directory))
+
     def test_linux_nncore_copies_layer_without_mac_hooks_and_detects_drift(self):
         step = next(s for s in series.read_series("linux") if s.name == "engine/nncore")
-        self.assertEqual(step.paths(), [("bay", True)])
+        self.assertEqual(step.paths(), [("bay/core", True)])
         mac = next(s for s in series.read_series("mac") if s.name == "engine/nncore")
         self.assertGreater(len(mac.paths()), 1)
         with tempfile.TemporaryDirectory() as directory:

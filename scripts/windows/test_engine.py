@@ -68,7 +68,7 @@ class PatchPlatformTests(unittest.TestCase):
 
     def test_windows_nncore_has_no_mac_hooks(self):
         step = next(step for step in series.read_series("win") if step.name == "engine/nncore")
-        self.assertEqual(step.paths(), [("bay", True)])
+        self.assertEqual(step.paths(), [("bay/core", True)])
 
     def test_windows_exports_patch_applies_to_pinned_target(self):
         step = next(step for step in series.read_series("win") if step.name == "chromium-bay-layer-win.patch")

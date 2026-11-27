@@ -100,7 +100,7 @@
 #include "bay/core/nn_lifetime.h"
 #include "bay/core/nn_main_delegate.h"
 #include "bay/core/nn_page_channel.h"
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 #include "bay/core/nn_password_prompt.h"
 #include "bay/core/nn_tab_info.h"
 #include "bay/core/nn_permissions.h"

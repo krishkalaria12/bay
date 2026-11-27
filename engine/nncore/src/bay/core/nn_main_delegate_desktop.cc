@@ -17,7 +17,7 @@
 #include "bay/core/nn_installed_bubble.h"
 #include "bay/core/nn_navigation_hold.h"
 #include "bay/core/nn_page_channel.h"
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 #include "bay/core/nn_strings.h"
 #include "bay/core/renderer/nn_content_renderer_client.h"
 #include "build/build_config.h"

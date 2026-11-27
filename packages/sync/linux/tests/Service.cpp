@@ -1,5 +1,6 @@
 // Portable service check: real crypto/vault/service, fake desktop/keyring
 // edges.
+#include "../../portable/Base64.h"
 #include "../../portable/RecoveryKit.h"
 #include "../../portable/SyncService.h"
 #include <cassert>
@@ -231,8 +232,26 @@ int main(int argc, char **argv) {
   call("createChain", {chain});
   auto ciphertext = call("sealLocal", {"private"});
   assert(call("openLocal", {ciphertext}) == "private");
+  // The relay's transport seals with the chain's key in TypeScript, and the
+  // folder takes the relay's files under the names they already have.
+  auto relayKey = call("relayKey");
+  assert(decodeBase64(relayKey.get<std::string>()).size() == 32);
+  assert(decodeBase64(call("randomBytes", {32}).get<std::string>()).size() ==
+         32);
+  assert(call("randomBytes", {32}) != call("randomBytes", {32}));
+  const std::string mirrored = "abcdefghijklmnopqrstuvwxyz";
+  call("writeAs", {chain, "p:default", mirrored, "from a phone"});
+  call("writeAs", {chain, "p:default", mirrored, "from a phone, again"});
+  auto listing = call("read", {chain, "p:default", Json::array()});
+  assert(listing["files"].size() == 1);
+  assert(listing["files"][0]["id"] == mirrored);
+  assert(listing["files"][0]["payload"] == "from a phone, again");
+  assert(Json::parse(InvokeEnvelope(
+             "writeAs", Json{chain, "p:default", "../escape", "x"}.dump()))
+             ["error"]["code"] == "name");
   assert(call("unlock", {"b"}) == false);
   assert(call("folderInfo")["keyStorage"] == "locked");
+  assert(call("relayKey").is_null());
   assert(Json::parse(InvokeEnvelope("recoveryWords", "[]"))["error"]["code"] ==
          "locked");
   assert(call("openLocal", {ciphertext}).is_null());

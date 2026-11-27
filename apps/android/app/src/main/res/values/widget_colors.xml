@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's colours: the "Bay" wallpaper's day sky, as on the iOS widget. values-night holds the night sky. -->
+<resources>
+    <color name="widget_sky_top">#B8D4EB</color>
+    <color name="widget_sky_middle">#D9E3F0</color>
+    <color name="widget_sky_bottom">#EDDED9</color>
+    <color name="widget_field">#D9FFFFFF</color>
+    <color name="widget_text">#E6101820</color>
+    <color name="widget_text_muted">#99101820</color>
+    <color name="widget_icon">#CC101820</color>
+</resources>
