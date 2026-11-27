@@ -11,6 +11,9 @@ bay-adblock.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
+
+# Windows refuses to replace a mapped file, so the engine is read whole there (files.rs).
+[target.'cfg(not(windows))'.dependencies]
 memmap2.workspace = true
 
 [dev-dependencies]
