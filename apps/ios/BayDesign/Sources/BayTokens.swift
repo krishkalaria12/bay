@@ -159,22 +159,22 @@ public enum Motion {
   public static let settleDuration: Double = 0.24
 }
 
-/// A start-page wallpaper: a wash from top to bottom under a fine dot grid.
+/// A start-page wallpaper: a wash from top to bottom under fine grain, as desktop Bay's window (grain: its opacity).
 public struct WallpaperPalette: Sendable {
-  public let top: Color, middle: Color, bottom: Color, dot: Color
-  public let dotOpacity: Double
+  public let top: Color, middle: Color, bottom: Color
+  public let grain: Double
 }
 
 /// Bay's wallpapers, light and dark, by id. Plain (the theme's background) and the user's photo have none.
 public enum Wallpapers {
   public static func palette(_ id: String, dark: Bool) -> WallpaperPalette? {
     switch (id, dark) {
-    case ("bay", false): return WallpaperPalette(top: Color(RGBA(184, 211, 234, 1)), middle: Color(RGBA(217, 228, 239, 1)), bottom: Color(RGBA(238, 223, 217, 1)), dot: Color(RGBA(27, 42, 58, 1)), dotOpacity: 0.07)
-    case ("bay", true): return WallpaperPalette(top: Color(RGBA(15, 28, 42, 1)), middle: Color(RGBA(20, 32, 44, 1)), bottom: Color(RGBA(35, 29, 36, 1)), dot: Color(RGBA(255, 255, 255, 1)), dotOpacity: 0.06)
-    case ("dusk", false): return WallpaperPalette(top: Color(RGBA(242, 212, 196, 1)), middle: Color(RGBA(234, 216, 226, 1)), bottom: Color(RGBA(211, 208, 236, 1)), dot: Color(RGBA(27, 42, 58, 1)), dotOpacity: 0.07)
-    case ("dusk", true): return WallpaperPalette(top: Color(RGBA(38, 24, 42, 1)), middle: Color(RGBA(28, 23, 39, 1)), bottom: Color(RGBA(18, 22, 36, 1)), dot: Color(RGBA(255, 255, 255, 1)), dotOpacity: 0.06)
-    case ("forest", false): return WallpaperPalette(top: Color(RGBA(201, 223, 204, 1)), middle: Color(RGBA(223, 234, 219, 1)), bottom: Color(RGBA(239, 234, 218, 1)), dot: Color(RGBA(27, 42, 58, 1)), dotOpacity: 0.07)
-    case ("forest", true): return WallpaperPalette(top: Color(RGBA(14, 29, 24, 1)), middle: Color(RGBA(18, 30, 25, 1)), bottom: Color(RGBA(27, 29, 22, 1)), dot: Color(RGBA(255, 255, 255, 1)), dotOpacity: 0.06)
+    case ("bay", false): return WallpaperPalette(top: Color(RGBA(184, 211, 234, 1)), middle: Color(RGBA(217, 228, 239, 1)), bottom: Color(RGBA(238, 223, 217, 1)), grain: 0.07)
+    case ("bay", true): return WallpaperPalette(top: Color(RGBA(15, 28, 42, 1)), middle: Color(RGBA(20, 32, 44, 1)), bottom: Color(RGBA(35, 29, 36, 1)), grain: 0.05)
+    case ("dusk", false): return WallpaperPalette(top: Color(RGBA(242, 212, 196, 1)), middle: Color(RGBA(234, 216, 226, 1)), bottom: Color(RGBA(211, 208, 236, 1)), grain: 0.07)
+    case ("dusk", true): return WallpaperPalette(top: Color(RGBA(38, 24, 42, 1)), middle: Color(RGBA(28, 23, 39, 1)), bottom: Color(RGBA(18, 22, 36, 1)), grain: 0.05)
+    case ("forest", false): return WallpaperPalette(top: Color(RGBA(201, 223, 204, 1)), middle: Color(RGBA(223, 234, 219, 1)), bottom: Color(RGBA(239, 234, 218, 1)), grain: 0.07)
+    case ("forest", true): return WallpaperPalette(top: Color(RGBA(14, 29, 24, 1)), middle: Color(RGBA(18, 30, 25, 1)), bottom: Color(RGBA(27, 29, 22, 1)), grain: 0.05)
     default: return nil
     }
   }

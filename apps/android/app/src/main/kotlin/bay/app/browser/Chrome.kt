@@ -64,6 +64,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import android.graphics.Bitmap
+import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -207,7 +215,7 @@ private fun Monogram(letter: String, fontSize: TextUnit, color: Color) {
     BasicText(letter, style = TextVariant.FOOTNOTE.style(FontWeight.SemiBold, color).copy(fontSize = fontSize, lineHeight = fontSize), maxLines = 1, softWrap = false)
 }
 
-/** Bay's start-page wallpaper: a wash under a fine dot grid, the theme's background for Plain. */
+/** Bay's start-page wallpaper: a wash under fine grain, the theme's background for Plain. */
 @Composable
 fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
     val palette = wallpaperPalette(id.name.lowercase(), isSystemInDarkTheme())
@@ -215,19 +223,49 @@ fun Wallpaper(id: WallpaperId, modifier: Modifier = Modifier) {
         Box(modifier.fillMaxSize().background(Theme.colors.background).semantics { invisibleToUser() })
         return
     }
+    val density = LocalDensity.current.density
+    val grain = remember(density) { ShaderBrush(ImageShader(Grain.tile(density), TileMode.Repeated, TileMode.Repeated)) }
     Canvas(modifier.fillMaxSize().semantics { invisibleToUser() }) {
         drawRect(Brush.verticalGradient(0f to palette.top, 0.55f to palette.middle, 1f to palette.bottom))
-        val step = 14.dp.toPx()
-        val dot = palette.dot.copy(alpha = palette.dotOpacity)
-        var y = step / 2
-        while (y < size.height) {
-            var x = step / 2
-            while (x < size.width) {
-                drawCircle(dot, 0.9.dp.toPx(), Offset(x, y))
-                x += step
-            }
-            y += step
+        drawRect(grain, alpha = palette.grain)
+    }
+}
+
+/**
+ * Film grain over a wallpaper, as desktop Bay draws it (packages/shaders/src/webgl/grain.ts): a fixed seed, one dp a
+ * cell, never moving. Each cell is white above the middle and black below, more opaque the further from it, so it shows
+ * on light and dark.
+ */
+private object Grain {
+    private const val SIZE = 128
+
+    /** Dave Hoskins' hash12, desktop's grainHash. */
+    private fun hash(x: Double, y: Double): Double {
+        fun fract(v: Double) = v - floor(v)
+        var p0 = fract(x * 0.1031)
+        var p1 = fract(y * 0.1031)
+        var p2 = fract(x * 0.1031)
+        val d = p0 * (p1 + 33.33) + p1 * (p2 + 33.33) + p2 * (p0 + 33.33)
+        p0 += d
+        p1 += d
+        p2 += d
+        return fract((p0 + p1) * p2)
+    }
+
+    private val cells: Bitmap by lazy {
+        val pixels = IntArray(SIZE * SIZE) { i ->
+            val g = hash((i % SIZE).toDouble(), (i / SIZE).toDouble())
+            val alpha = (abs(g - 0.5) * 2 * 255).roundToInt()
+            val value = if (g < 0.5) 0 else 255
+            android.graphics.Color.argb(alpha, value, value, value)
         }
+        Bitmap.createBitmap(pixels, SIZE, SIZE, Bitmap.Config.ARGB_8888)
+    }
+
+    /** The tile at a dp a cell, its cells kept sharp. */
+    fun tile(density: Float): ImageBitmap {
+        val side = (SIZE * density).roundToInt().coerceAtLeast(SIZE)
+        return Bitmap.createScaledBitmap(cells, side, side, false).asImageBitmap()
     }
 }
 

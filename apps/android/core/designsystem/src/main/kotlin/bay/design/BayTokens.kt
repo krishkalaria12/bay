@@ -154,17 +154,17 @@ object Motion {
     const val SETTLE_MS = 240
 }
 
-/** A start-page wallpaper: a wash from top to bottom under a fine dot grid. */
-class WallpaperPalette(val top: Color, val middle: Color, val bottom: Color, val dot: Color, val dotOpacity: Float)
+/** A start-page wallpaper: a wash from top to bottom under fine grain, as desktop Bay's window (grain: its opacity). */
+class WallpaperPalette(val top: Color, val middle: Color, val bottom: Color, val grain: Float)
 
 /** Bay's wallpapers, light and dark, by id. Plain (the theme's background) and the user's photo have none. */
 fun wallpaperPalette(id: String, dark: Boolean): WallpaperPalette? = when {
-    id == "bay" && !dark -> WallpaperPalette(Color(0xFFB8D3EA), Color(0xFFD9E4EF), Color(0xFFEEDFD9), Color(0xFF1B2A3A), 0.07f)
-    id == "bay" && dark -> WallpaperPalette(Color(0xFF0F1C2A), Color(0xFF14202C), Color(0xFF231D24), Color(0xFFFFFFFF), 0.06f)
-    id == "dusk" && !dark -> WallpaperPalette(Color(0xFFF2D4C4), Color(0xFFEAD8E2), Color(0xFFD3D0EC), Color(0xFF1B2A3A), 0.07f)
-    id == "dusk" && dark -> WallpaperPalette(Color(0xFF26182A), Color(0xFF1C1727), Color(0xFF121624), Color(0xFFFFFFFF), 0.06f)
-    id == "forest" && !dark -> WallpaperPalette(Color(0xFFC9DFCC), Color(0xFFDFEADB), Color(0xFFEFEADA), Color(0xFF1B2A3A), 0.07f)
-    id == "forest" && dark -> WallpaperPalette(Color(0xFF0E1D18), Color(0xFF121E19), Color(0xFF1B1D16), Color(0xFFFFFFFF), 0.06f)
+    id == "bay" && !dark -> WallpaperPalette(Color(0xFFB8D3EA), Color(0xFFD9E4EF), Color(0xFFEEDFD9), 0.07f)
+    id == "bay" && dark -> WallpaperPalette(Color(0xFF0F1C2A), Color(0xFF14202C), Color(0xFF231D24), 0.05f)
+    id == "dusk" && !dark -> WallpaperPalette(Color(0xFFF2D4C4), Color(0xFFEAD8E2), Color(0xFFD3D0EC), 0.07f)
+    id == "dusk" && dark -> WallpaperPalette(Color(0xFF26182A), Color(0xFF1C1727), Color(0xFF121624), 0.05f)
+    id == "forest" && !dark -> WallpaperPalette(Color(0xFFC9DFCC), Color(0xFFDFEADB), Color(0xFFEFEADA), 0.07f)
+    id == "forest" && dark -> WallpaperPalette(Color(0xFF0E1D18), Color(0xFF121E19), Color(0xFF1B1D16), 0.05f)
     else -> null
 }
 

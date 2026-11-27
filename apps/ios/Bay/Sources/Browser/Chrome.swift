@@ -140,18 +140,7 @@ struct WallpaperView: View {
           LinearGradient(
             stops: [.init(color: palette.top, location: 0), .init(color: palette.middle, location: 0.55), .init(color: palette.bottom, location: 1)],
             startPoint: .top, endPoint: .bottom)
-          Canvas { context, size in
-            let step: CGFloat = 14
-            var y = step / 2
-            while y < size.height {
-              var x = step / 2
-              while x < size.width {
-                context.fill(Path(ellipseIn: CGRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8)), with: .color(palette.dot.opacity(palette.dotOpacity)))
-                x += step
-              }
-              y += step
-            }
-          }
+          Image(uiImage: Grain.tile).resizable(resizingMode: .tile).interpolation(.none).opacity(palette.grain)
         }
       } else {
         BayColor.background
@@ -160,6 +149,47 @@ struct WallpaperView: View {
     .ignoresSafeArea()
     .accessibilityHidden(true)
   }
+}
+
+/// Film grain over a wallpaper, as desktop Bay draws it (packages/shaders/src/webgl/grain.ts): a fixed seed, one point a
+/// cell, never moving. Each cell is white above the middle and black below, more opaque the further from it, so it
+/// shows on light and dark.
+enum Grain {
+  static let size = 128
+
+  /// Dave Hoskins' hash12, desktop's grainHash.
+  static func hash(_ x: Double, _ y: Double) -> Double {
+    func fract(_ v: Double) -> Double { v - v.rounded(.down) }
+    var p0 = fract(x * 0.1031), p1 = fract(y * 0.1031), p2 = fract(x * 0.1031)
+    let d = p0 * (p1 + 33.33) + p1 * (p2 + 33.33) + p2 * (p0 + 33.33)
+    p0 += d
+    p1 += d
+    p2 += d
+    return fract((p0 + p1) * p2)
+  }
+
+  /// One tile of `size` cells a side, a pixel a cell, tiled at one point a pixel.
+  static let tile: UIImage = {
+    var pixels = [UInt8](repeating: 0, count: size * size * 4)
+    for y in 0..<size {
+      for x in 0..<size {
+        let g = hash(Double(x), Double(y))
+        let alpha = UInt8((abs(g - 0.5) * 2 * 255).rounded())
+        // Premultiplied: white's channels are its alpha, black's are 0.
+        let value = g < 0.5 ? 0 : alpha
+        let i = (y * size + x) * 4
+        pixels[i] = value
+        pixels[i + 1] = value
+        pixels[i + 2] = value
+        pixels[i + 3] = alpha
+      }
+    }
+    let image = CGContext(
+      data: &pixels, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )?.makeImage()
+    return image.map { UIImage(cgImage: $0, scale: 1, orientation: .up) } ?? UIImage()
+  }()
 }
 
 /// The floating bar: tabs, search and settings over the start page; tabs, the site and more over a page.

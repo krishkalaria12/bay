@@ -145,10 +145,10 @@ public enum Motion {
   public static let settleDuration: Double = ${tokens.motion.settleMs / 1000}
 }
 
-/// A start-page wallpaper: a wash from top to bottom under a fine dot grid.
+/// A start-page wallpaper: a wash from top to bottom under fine grain, as desktop Bay's window (grain: its opacity).
 public struct WallpaperPalette: Sendable {
-  public let top: Color, middle: Color, bottom: Color, dot: Color
-  public let dotOpacity: Double
+  public let top: Color, middle: Color, bottom: Color
+  public let grain: Double
 }
 
 /// Bay's wallpapers, light and dark, by id. Plain (the theme's background) and the user's photo have none.
@@ -159,7 +159,7 @@ ${Object.entries(tokens.wallpapers)
   .flatMap(([id, modes]) =>
     Object.entries(modes).map(
       ([mode, p]) =>
-        `    case ("${id}", ${mode === "dark"}): return WallpaperPalette(top: Color(${swiftRgba(hex(p.top))}), middle: Color(${swiftRgba(hex(p.middle))}), bottom: Color(${swiftRgba(hex(p.bottom))}), dot: Color(${swiftRgba(hex(p.dot))}), dotOpacity: ${p.dotOpacity})`,
+        `    case ("${id}", ${mode === "dark"}): return WallpaperPalette(top: Color(${swiftRgba(hex(p.top))}), middle: Color(${swiftRgba(hex(p.middle))}), bottom: Color(${swiftRgba(hex(p.bottom))}), grain: ${p.grain})`,
     ),
   )
   .join("\n")}
@@ -263,8 +263,8 @@ object Motion {
     const val SETTLE_MS = ${tokens.motion.settleMs}
 }
 
-/** A start-page wallpaper: a wash from top to bottom under a fine dot grid. */
-class WallpaperPalette(val top: Color, val middle: Color, val bottom: Color, val dot: Color, val dotOpacity: Float)
+/** A start-page wallpaper: a wash from top to bottom under fine grain, as desktop Bay's window (grain: its opacity). */
+class WallpaperPalette(val top: Color, val middle: Color, val bottom: Color, val grain: Float)
 
 /** Bay's wallpapers, light and dark, by id. Plain (the theme's background) and the user's photo have none. */
 fun wallpaperPalette(id: String, dark: Boolean): WallpaperPalette? = when {
@@ -272,7 +272,7 @@ ${Object.entries(tokens.wallpapers)
   .flatMap(([id, modes]) =>
     Object.entries(modes).map(
       ([mode, p]) =>
-        `    id == "${id}" && ${mode === "dark" ? "dark" : "!dark"} -> WallpaperPalette(Color(${argb(hex(p.top))}), Color(${argb(hex(p.middle))}), Color(${argb(hex(p.bottom))}), Color(${argb(hex(p.dot))}), ${p.dotOpacity}f)`,
+        `    id == "${id}" && ${mode === "dark" ? "dark" : "!dark"} -> WallpaperPalette(Color(${argb(hex(p.top))}), Color(${argb(hex(p.middle))}), Color(${argb(hex(p.bottom))}), ${p.grain}f)`,
     ),
   )
   .join("\n")}
