@@ -15,6 +15,7 @@ file that only name sites: `packages/core/src/bangList.ts` (search shortcuts, op
 | baybrowser.in | Sharing a folder, split or Easel; sending diagnostics when you've turned sharing on | Bay's website: shared links and the opt-in usage and error collector |
 | bay.krishkalaria.in | Opening an old shared link | Bay's former website address, for links shared before the move |
 | github.com | Checking for updates | Bay's releases and its update feed (appcast) |
+| bay-sync.codewithkrish12.workers.dev | Syncing with your phone or another computer through the relay | Bay's sync relay: keeps your synced files, sealed on your device so the relay can't read them |
 
 ## Services you turn on or choose
 
