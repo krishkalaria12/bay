@@ -1274,14 +1274,12 @@
           <h3 id="known-gaps">Known gaps</h3>
           <ul class="prose">
             <li>
-              Nothing native is built yet. The engine (nncore, the Mac's Chromium) needs a rebuild for every engine change on this branch, and the Mac app a
-              <code>pod install</code> for its new modules (<code>BayAskPage</code>, <code>BaySharedFolders</code>, <code>BayPlugins</code>). The C++ is syntax
-              checked against the local Chromium tree: the shared code as Mac code, and the Windows and Linux WebUI code as Linux code (the tree's Linux
-              sysroot, with <code>native_host.mojom</code>'s bindings generated for the check), which now covers <code>native_host.cc</code>,
-              <code>engine_services.cc</code>, <code>runtime_state.cc</code>, <code>shell_ui.cc</code>, <code>shared_folders.cc</code>,
-              <code>content_blocker.cc</code> and <code>plugins.cc</code>. Windows-only files (<code>shared_folders_trash_win.cc</code> and the rest) aren't
-              compiled anywhere yet. The Swift is parsed, and type-checked against stand-ins for Expo where it's new (<code>PluginsModule.swift</code>,
-              <code>AskPageModule.swift</code>, with the real FoundationModels); the first Mac build may still need small fixes.
+              The Mac's engine and app are built (2026-11-27) and the plugins tried in them: a plugin's WebKit sandbox has an opaque origin, no network,
+              storage, <code>eval</code> or remote subresources of its own, and its <code>bay</code> calls, commands, live source, sidebar view, toolbar badge,
+              settings, keychain secrets and links decide hook work; Your Words' engine calls too. Windows and Linux aren't built: their WebUI code is syntax
+              checked as Linux code against the local Chromium tree (the tree's Linux sysroot, with <code>native_host.mojom</code>'s bindings generated for the
+              check), and Windows-only files (<code>shared_folders_trash_win.cc</code> and the rest) aren't compiled anywhere yet, nor is the
+              <code>chrome-untrusted://bay-plugin/</code> sandbox tried in Chromium.
             </li>
             <li>
               Carried storage (<code>localStorage</code> and the tab's <code>sessionStorage</code>, of the page's own origin) is written after the new page
@@ -1307,11 +1305,11 @@
               open group's rows adds it to that group, as before.
             </li>
             <li>
-              G9's sandbox (the CSP <code>sandbox</code> directive and subresource loads from its opaque origin) hasn't been tried in a running WebKit or
-              Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in Site Controls, so with the toolbar
-              hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private windows, history
-              or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes in a hidden document may have their
-              timers slowed by the engine.
+              G9 on Windows and Linux (the CSP <code>sandbox</code> directive in a <code>chrome-untrusted://</code> frame, subresource loads from its opaque
+              origin) hasn't been tried in a running Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in
+              Site Controls, so with the toolbar hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins
+              can't see private windows, history or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes
+              in a hidden document may have their timers slowed by the engine.
             </li>
             <li>
               G7's GitLab items get line counts and who approved them from one GraphQL query each refresh; a site whose GraphQL is off shows them without.
@@ -1355,6 +1353,10 @@
             <li>Settings › General › Spelling › Your Words edits each space's custom dictionary (<code>nn_spell_words</code>, <code>nn_spell_word</code>).</li>
             <li>Ask About This Page reads a long page a part at a time (five at most) and answers from its notes, instead of cutting the page.</li>
             <li>Windows sends a removed shared link to the Recycle Bin, Linux to the Trash.</li>
+            <li>
+              Found building the Mac app: the toolbar's eased colour style called valibot inside a worklet, which crashed the app whenever a toolbar showed
+              (main has it too); <code>nn_external_apps.cc</code> and <code>.mm</code> shared one object file; a Swift notification name.
+            </li>
             <li>Earlier: Windows and Linux windows see the kill switches, coding agents and shared folders, and the native service checks accept GitLab.</li>
           </ul>
         </section>
