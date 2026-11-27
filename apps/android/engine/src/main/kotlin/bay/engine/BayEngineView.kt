@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.net.Uri
@@ -203,6 +204,16 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
   // MARK: The tab
 
+  /** Pages are told the look the app has (`prefers-color-scheme`): dark in night mode. */
+  private fun prefersDark(configuration: Configuration) =
+    configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
+  /** Night mode turned on or off while Bay runs (the activity keeps itself through it): pages hear it at once. */
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    tab?.setPrefersDark(prefersDark(newConfig))
+  }
+
   private fun createTab() {
     val activity = activityFor(context) ?: Engine.host?.currentActivity
     if (activity == null) {
@@ -220,6 +231,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.view.importantForAccessibility = accessibility()
     created.setDesktopMode(desktopMode)
     created.setForceDark(forceDark)
+    created.setPrefersDark(prefersDark(activity.resources.configuration))
     created.setVisible(!isSuspended)
     created.setBottomControlsHeight(barHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
