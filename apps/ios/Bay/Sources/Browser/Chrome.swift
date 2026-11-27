@@ -184,7 +184,7 @@ struct BrowserBar: View {
         GlassIconButton(.archive, label: strings.t("bar.archive")) { browser.openDrawer(archive: true) }
           .accessibilityIdentifier("bar-archive")
         SpacesCapsule(browser: browser)
-        GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true) }
+        GlassIconButton(.add, label: strings.t("bar.newTab")) { browser.search(inNewTab: true, privately: browser.activeTab?.private ?? false) }
           .accessibilityIdentifier("bar-search")
       } else {
         barCapsule

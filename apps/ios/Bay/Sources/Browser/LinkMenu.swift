@@ -20,10 +20,12 @@ struct LinkMenu: View {
   var body: some View {
     let title = strings.t("linkMenu.title")
     let tab = browser.activeTab
+    // A link on a private page opens privately, in front or behind.
+    let privately = tab?.private ?? false
     PanelSheet(title: title, testID: "link-menu", words: strings.sheetWords(title), onClose: close) {
       // A link to a site that keeps its desktop page previews it that way too.
       Peek(
-        url: link.url, privately: tab?.private ?? false, profile: tab?.spaceId ?? app.activeSpaceId,
+        url: link.url, privately: privately, profile: tab?.spaceId ?? app.activeSpaceId,
         desktopMode: app.store.siteSetting(url: link.url).desktopMode
       )
       .id(link.url)
@@ -36,7 +38,7 @@ struct LinkMenu: View {
         .accessibilityIdentifier("link-menu-url")
       RowGroup {
         if link.image {
-          ActionRow(strings.t("linkMenu.openImage"), testID: "link-open-tab", icon: .add, action: act { browser.openTab(link.url) })
+          ActionRow(strings.t("linkMenu.openImage"), testID: "link-open-tab", icon: .add, action: act { browser.openTab(link.url, privately: privately) })
           RowDivider()
           ActionRow(strings.t("linkMenu.copyImage"), testID: "link-image-copy", icon: .copy, action: act { browser.copy(link.url) })
           RowDivider()
@@ -44,11 +46,11 @@ struct LinkMenu: View {
           RowDivider()
           ActionRow(strings.t("linkMenu.saveImage"), testID: "link-image-save", icon: .download, action: act { browser.saveImage(link.url) })
         } else {
-          ActionRow(strings.t("linkMenu.openTab"), testID: "link-open-tab", icon: .add, action: act { browser.openTab(link.url) })
+          ActionRow(strings.t("linkMenu.openTab"), testID: "link-open-tab", icon: .add, action: act { browser.openTab(link.url, privately: privately) })
           RowDivider()
           ActionRow(
             strings.t("linkMenu.openBackground"), testID: "link-open-background", icon: .tabs,
-            action: act { browser.openTab(link.url, background: true) })
+            action: act { browser.openTab(link.url, privately: privately, background: true) })
           RowDivider()
           ActionRow(strings.t("linkMenu.copyLink"), testID: "link-copy", icon: .link, action: act { browser.copy(link.url) })
           RowDivider()

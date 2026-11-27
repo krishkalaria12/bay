@@ -390,7 +390,7 @@ private fun BarRow(browser: BrowserModel, strings: Strings, onSettings: () -> Un
         if (browser.overlay == Overlay.TABS) {
             BarButton("bar-archive", strings.t("bar.archive"), { browser.openDrawer(archive = true) }) { BayIconView(BayIcon.ARCHIVE, size = IconSize.control) }
             SpacesCapsule(browser, strings)
-            BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
+            BarButton("bar-search", strings.t("bar.newTab"), { browser.search(inNewTab = true, privately = browser.activeTab?.private == true) }) { BayIconView(BayIcon.ADD, size = IconSize.control) }
         } else {
             BarCapsule(browser, strings, onSettings, onChecks, slide)
         }

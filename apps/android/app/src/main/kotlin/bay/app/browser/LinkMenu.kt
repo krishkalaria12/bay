@@ -59,6 +59,8 @@ fun LinkMenu(browser: BrowserModel, strings: Strings, visible: Boolean) {
 @Composable
 private fun LinkActions(browser: BrowserModel, strings: Strings, link: EngineEvent.LinkPress, close: () -> Unit) {
     val app = browser.app
+    // A link on a private page opens privately, in front or behind.
+    val privately = browser.activeTab?.private == true
     val scope = rememberCoroutineScope()
     var destination by remember { mutableStateOf<Destination?>(null) }
     val act = { action: () -> Unit ->
@@ -80,7 +82,7 @@ private fun LinkActions(browser: BrowserModel, strings: Strings, link: EngineEve
     )
     RowGroup {
         if (link.image) {
-            ActionRow(strings.t("linkMenu.openImage"), "link-open-tab", icon = BayIcon.ADD, onClick = act { browser.openTab(link.url) })
+            ActionRow(strings.t("linkMenu.openImage"), "link-open-tab", icon = BayIcon.ADD, onClick = act { browser.openTab(link.url, privately) })
             RowDivider()
             ActionRow(strings.t("linkMenu.copyImage"), "link-image-copy", icon = BayIcon.COPY, onClick = act { browser.copyAddress(link.url) })
             RowDivider()
@@ -88,11 +90,11 @@ private fun LinkActions(browser: BrowserModel, strings: Strings, link: EngineEve
             RowDivider()
             ActionRow(strings.t("linkMenu.saveImage"), "link-image-save", icon = BayIcon.DOWNLOAD, onClick = act { browser.saveImage(link.url) })
         } else {
-            ActionRow(strings.t("linkMenu.openTab"), "link-open-tab", icon = BayIcon.ADD, onClick = act { browser.openTab(link.url) })
+            ActionRow(strings.t("linkMenu.openTab"), "link-open-tab", icon = BayIcon.ADD, onClick = act { browser.openTab(link.url, privately) })
             RowDivider()
             ActionRow(
                 strings.t("linkMenu.openBackground"), "link-open-background", icon = BayIcon.TABS,
-                onClick = act { browser.openTab(link.url, background = true) },
+                onClick = act { browser.openTab(link.url, privately, background = true) },
             )
             RowDivider()
             ActionRow(strings.t("linkMenu.copyLink"), "link-copy", icon = BayIcon.LINK, onClick = act { browser.copyAddress(link.url) })
