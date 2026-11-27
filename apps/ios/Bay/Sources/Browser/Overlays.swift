@@ -114,6 +114,42 @@ struct MiniPlayer: View {
   }
 }
 
+/// Covers Bay while it isn't in front with something private on screen: iOS takes the app switcher's picture as Bay
+/// leaves, and it mustn't show a private page. A window of its own, over the sheets too.
+@MainActor enum PrivacyShield {
+  private static var window: UIWindow?
+
+  static func show() {
+    guard window == nil,
+      let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState != .unattached })
+    else { return }
+    // The keyboard is the system's, drawn over every window of Bay's: a private search's goes down so it isn't pictured.
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    let cover = UIWindow(windowScene: scene)
+    cover.windowLevel = .alert + 1
+    let host = UIHostingController(rootView: PrivateCover())
+    host.view.backgroundColor = .clear
+    cover.rootViewController = host
+    cover.isHidden = false
+    window = cover
+  }
+
+  static func hide() {
+    window?.isHidden = true
+    window = nil
+  }
+}
+
+/// What the app switcher shows of Bay over a private page: the private mark on night.
+private struct PrivateCover: View {
+  var body: some View {
+    BayIconView(.private, size: 40, color: Color(RGBA(0xF4, 0xF4, 0xF5)).opacity(0.85))
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color(RGBA(0x0A, 0x0A, 0x0A)).ignoresSafeArea())
+      .accessibilityHidden(true)
+  }
+}
+
 /// Covers a private page after Bay has been in the background, until Face ID, Touch ID or the passcode unlocks it.
 struct PrivateLockView: View {
   @EnvironmentObject private var strings: Strings

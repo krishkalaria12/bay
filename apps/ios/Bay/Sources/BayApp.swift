@@ -56,15 +56,20 @@ struct BayApp: App {
     .onChange(of: scenePhase) { phase in
       switch phase {
       case .active:
+        PrivacyShield.hide()
         model.startSyncing()
         model.refreshBangs()
         if launched { cameBack() }
+      case .inactive:
+        // On the way to the app switcher (or under Control Center): its picture of Bay leaves out a private page.
+        if browser.privateShowing { PrivacyShield.show() }
       case .background:
+        if browser.privateShowing { PrivacyShield.show() }
         browser.appLeft()
         model.stopSyncing()
         model.dispatch(.left(now: AppModel.now()))
         model.flush()
-      default:
+      @unknown default:
         break
       }
     }

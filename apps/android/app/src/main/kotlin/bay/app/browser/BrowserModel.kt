@@ -798,6 +798,14 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         })
     }
 
+    /**
+     * Something private is on screen: a private tab, the tab view with private cards, or a private search. Recents
+     * gets no picture of Bay then (MainActivity).
+     */
+    val privateShowing: Boolean
+        get() = activeTab?.private == true || (overlay == Overlay.TABS && switcherTabs.any { it.private }) ||
+            (overlay == Overlay.SEARCH && searchPrivately)
+
     // The tab switcher
 
     /** The space's tabs the switcher's grid shows: a tab showing a pinned page is reached by its pin instead. */

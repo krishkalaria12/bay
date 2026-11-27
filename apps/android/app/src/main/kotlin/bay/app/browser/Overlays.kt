@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -153,6 +154,14 @@ private fun PlayerButton(id: String, label: String, icon: BayIcon, strong: Boole
         Modifier.size(44.dp).testTag(id).clearAndSetSemantics { contentDescription = label; role = Role.Button }.pressFeedback(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { BayIconView(icon, size = size, color = if (strong) Theme.colors.foreground else Theme.colors.muted) }
+}
+
+/** What recents shows of Bay over something private: the private mark on night (MainActivity). */
+@Composable
+fun PrivateCover() {
+    Box(Modifier.fillMaxSize().background(Color(0xFF0A0A0A)).clearAndSetSemantics { invisibleToUser() }, contentAlignment = Alignment.Center) {
+        BayIconView(BayIcon.PRIVATE, size = 40.dp, color = Color(0xFFF4F4F5).copy(alpha = 0.85f))
+    }
 }
 
 /** Covers a private page after Bay has been in the background, until the fingerprint, face or screen lock unlocks it. */

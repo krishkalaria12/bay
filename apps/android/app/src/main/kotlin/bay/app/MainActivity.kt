@@ -4,6 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalWindowInfo
+import bay.app.browser.PrivateCover
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.isSystemInDarkTheme
 import bay.app.browser.Overlay
@@ -105,6 +109,11 @@ class MainActivity : ComponentActivity(), EngineHost {
         setContent {
             // The stand-in screens (the engine check, the store check) behind a long press on Settings, for testing.
             var checks by remember { mutableStateOf<String?>(null) }
+            // No picture in recents while something private is on screen. Recents shows Bay live at first, with Bay still
+            // resumed but no longer focused: the private cover stands in for the screen then.
+            val hidden = browser.privateShowing
+            LaunchedEffect(hidden) { hideFromRecents(hidden) }
+            val focused = LocalWindowInfo.current.isWindowFocused
             BayTheme {
                 Box(Modifier.semantics { testTagsAsResourceId = true }) {
                     when (checks) {
@@ -131,10 +140,20 @@ class MainActivity : ComponentActivity(), EngineHost {
                             }
                         }
                     }
+                    if (hidden && !focused) PrivateCover()
                 }
             }
         }
         window.decorView.announceContentChangesToUiAutomator()
+    }
+
+    /**
+     * Recents shows Bay blank while something private is on screen, as Chrome's Incognito does. Only the secure flag
+     * covers the live screen recents shows on the way in (setRecentsScreenshotEnabled covers just the saved picture), so
+     * screenshots are off meanwhile too.
+     */
+    private fun hideFromRecents(hide: Boolean) {
+        if (hide) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
 
     override fun onStart() {

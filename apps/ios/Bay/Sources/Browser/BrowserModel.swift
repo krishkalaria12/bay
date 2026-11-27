@@ -813,6 +813,12 @@ final class BrowserModel: ObservableObject {
     if app.preferences.lockPrivateTabs, app.allTabs.contains(where: \.private) { locked = true }
   }
 
+  /// Something private is on screen: a private tab, the tab view with private cards, or a private search. Bay is
+  /// covered as it leaves then, so the app switcher's picture doesn't show it (PrivacyShield).
+  var privateShowing: Bool {
+    activeTab?.private == true || (overlay == .tabs && switcherTabs.contains(where: \.private)) || (overlay == .search && searchPrivately)
+  }
+
   /// Face ID, Touch ID or the passcode unlocks the private tabs.
   func unlock() {
     let context = LAContext()
