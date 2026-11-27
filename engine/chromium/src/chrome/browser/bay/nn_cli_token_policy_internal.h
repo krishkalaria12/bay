@@ -72,6 +72,9 @@ class TokenClient : public BayDevToolsTokenClient {
   bool InScope(content::BrowserContext* context) const;
   bool ScopedHost(content::DevToolsAgentHost* host) const;
   bool ScopedTarget(const std::string* target_id) const;
+  // Where a coding agent's Target.createTarget opens: the last used profile
+  // when it's the agent's, else one of its spaces that's open; null for none.
+  content::BrowserContext* AgentTargetContext() const;
 
  private:
   struct Contexts {

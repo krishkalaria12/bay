@@ -13,8 +13,12 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/values.h"
+#include "bay/core/nn_content_hooks.h"  // nogncheck
 #include "chrome/browser/bay/nn_cli_agents.h"
 #include "chrome/browser/bay/nn_cli_token_policy_internal.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/render_frame_host.h"
@@ -58,6 +62,8 @@ TokenClient::~TokenClient() {
 }
 
 bool TokenClient::FilterCommand(std::string& message, std::string* reply) {
+  // Only the command about to run may steer a new tab (Target.createTarget).
+  g_bay_devtools_target_context = nullptr;
   std::optional<base::Value> parsed =
       base::JSONReader::Read(message, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict()) {
@@ -147,6 +153,24 @@ bool TokenClient::ScopedHost(content::DevToolsAgentHost* host) const {
           InScope(host->GetBrowserContext()));
 }
 
+content::BrowserContext* TokenClient::AgentTargetContext() const {
+  ProfileManager* profiles = g_browser_process->profile_manager();
+  Profile* last = profiles ? ProfileManager::GetLastUsedProfileIfLoaded()
+                           : nullptr;
+  if (last && InScope(last)) {
+    return last;
+  }
+  if (!profiles) {
+    return nullptr;
+  }
+  for (Profile* profile : profiles->GetLoadedProfiles()) {
+    if (!profile->IsOffTheRecord() && InScope(profile)) {
+      return profile;
+    }
+  }
+  return nullptr;
+}
+
 bool TokenClient::ScopedTarget(const std::string* target_id) const {
   return target_id &&
          ScopedHost(content::DevToolsAgentHost::GetForId(*target_id).get());
@@ -219,6 +243,15 @@ std::string TokenClient::Refusal(const std::string& method,
     }
     if (params.Find("browserContextId")) {
       return "in another browser context";
+    }
+    // A coding agent kept to some spaces gets its tab in one of them, whichever
+    // window is in front.
+    if (!agent_.empty()) {
+      content::BrowserContext* context = AgentTargetContext();
+      if (!context) {
+        return "while none of the spaces it may use is open";
+      }
+      g_bay_devtools_target_context = context;
     }
   } else if (method == "Target.activateTarget" ||
              method == "Target.closeTarget") {
