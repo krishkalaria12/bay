@@ -101,9 +101,13 @@ export function useEasedColor(color: string | null, duration = 180): EasedColor 
 
 /** A style with `color` (eased or plain) as its `prop`. */
 export function useEasedColorStyle(color: EasedColor | string, prop: "backgroundColor" | "borderColor") {
+  // Told apart here, on the JS thread: the style runs as a worklet on the UI thread, where valibot doesn't exist.
+  const plain = v.is(v.string(), color) ? color : null;
+  const eased = v.is(v.string(), color) ? null : color;
+
   return useAnimatedStyle(() => {
-    const value = v.is(v.string(), color) ? color : interpolateColor(color.progress.get(), [0, 1], color.colors.get());
+    const value = plain ?? (eased ? interpolateColor(eased.progress.get(), [0, 1], eased.colors.get()) : "transparent");
 
     return prop === "backgroundColor" ? { backgroundColor: value } : { borderColor: value };
-  }, [color, prop]);
+  }, [plain, eased, prop]);
 }
