@@ -35,7 +35,10 @@ TEST(DocumentNameTest, RejectsPathsAndWindowsReservedNames) {
 
 class DocumentStoreTest : public testing::Test {
  protected:
-  void SetUp() override { ASSERT_TRUE(folder_.CreateUniqueTempDir()); }
+  void SetUp() override {
+    DocumentStore::ResetDiskSequenceForTesting();
+    ASSERT_TRUE(folder_.CreateUniqueTempDir());
+  }
 
   base::FilePath Folder() const { return folder_.GetPath(); }
   std::unique_ptr<DocumentStore> Ready(
