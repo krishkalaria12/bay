@@ -52,7 +52,8 @@ public class WebKitModule: Module {
     AsyncFunction("applySiteCookies") { (profile: String, set: [[String: Any]], remove: [[String: Any]], promise: Promise) in
       WebKitHub.shared.applySiteCookies(profile: profile, set: set, remove: remove) { promise.resolve($0) }
     }.runOnQueue(.main)
-    Function("setFraudWarnings") { (on: Bool) in WebKitHub.fraudWarnings = on }
+    // Open pages' web views are the main thread's.
+    Function("setFraudWarnings") { (on: Bool) in DispatchQueue.main.async { WebKitHub.shared.setFraudWarnings(on) } }
     // A page moving here from Chromium keeps its zoom (lib/pageEngines.ts openPageIn).
     Function("setZoom") { (profile: String, host: String, zoom: Double) in WebKitHub.shared.setZoom(zoom, profile: profile, host: host) }
     AsyncFunction("info") { () -> [String: Any] in

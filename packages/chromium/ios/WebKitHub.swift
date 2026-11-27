@@ -188,6 +188,13 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
 
   static var fraudWarnings = true
 
+  /// Settings › Engines › Warn about deceptive sites, for new pages and the open ones: a page's configuration shares
+  /// its preferences with the page, which follows a change at its next navigation.
+  func setFraudWarnings(_ on: Bool) {
+    Self.fraudWarnings = on
+    for tab in liveTabs() { tab.webView?.configuration.preferences.isFraudulentWebsiteWarningEnabled = on }
+  }
+
   func configuration(profile: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = dataStore(for: profile)
@@ -205,7 +212,7 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     config.preferences.isElementFullscreenEnabled = !Self.background
     Self.allowPictureInPicture(config.preferences)
     config.preferences.javaScriptCanOpenWindowsAutomatically = false
-    // Settings › Engines › Warn about deceptive sites (WebKitModule setFraudWarnings); pages opened after a change take it.
+    // Settings › Engines › Warn about deceptive sites (WebKitModule setFraudWarnings, which also reaches open pages).
     config.preferences.isFraudulentWebsiteWarningEnabled = Self.fraudWarnings
     config.defaultWebpagePreferences.preferredContentMode = .desktop
     return config
