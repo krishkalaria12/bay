@@ -205,8 +205,9 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
     var barGone by mutableFloatStateOf(0f)
         private set
 
-    /** How much of a page's bottom the bar covers, in pixels, as the screen lays it out. */
+    /** How much of a page's bottom the bar covers, in pixels, as the screen lays it out; and its pill, scrolled away. */
     private var barCover = 0
+    private var pillCover = 0
 
     /** The bar brought back for a moment on a site set to Always fullscreen, by a tap on the bottom edge. */
     var peeking by mutableStateOf(false)
@@ -219,9 +220,10 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
             app.preferences.siteSettings[siteHost(activeUrl)]?.fullscreen == true
 
     /** The screen's layout of the bar: each page leaves that much room for it at its bottom while it shows. */
-    fun barCoverChanged(pixels: Int) {
-        if (barCover == pixels) return
+    fun barCoverChanged(pixels: Int, pill: Int) {
+        if (barCover == pixels && pillCover == pill) return
         barCover = pixels
+        pillCover = pill
         for ((id, view) in views) configure(view, pageUrl(id))
     }
 
@@ -1575,6 +1577,7 @@ class BrowserModel(private val context: Context, val app: AppModel, private val 
         view.appLinks = preferences.appLinks.name.lowercase()
         // A fullscreen site has no bar over it.
         view.barHeight = if (setting?.fullscreen == true) 0 else barCover
+        view.barMinHeight = if (setting?.fullscreen == true) 0 else pillCover
     }
 
     /** Bay's page zoom (the site's own first) and the AMP swap, on the page a tab shows. */

@@ -170,6 +170,17 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       tab?.setBottomControlsHeight(value)
     }
 
+  /**
+   * How much of the bar stays as the page scrolls it away, in pixels: the room of the pill it shrinks to. The page keeps
+   * that much at its bottom throughout, so what it pins there rests above the pill instead of under it.
+   */
+  var barMinHeight = 0
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.setBottomControlsMinHeight(value)
+    }
+
   /** Brings the bar back with the page's room for it, as a new page does. */
   fun showBar() {
     tab?.showBrowserControls(true)
@@ -234,6 +245,7 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.setPrefersDark(prefersDark(activity.resources.configuration))
     created.setVisible(!isSuspended)
     created.setBottomControlsHeight(barHeight)
+    created.setBottomControlsMinHeight(barMinHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     if (isActive) {
       lastActive = this
@@ -377,7 +389,8 @@ class BayEngineView(context: Context) : FrameLayout(context) {
       val readable = bitmap?.let { if (it.config == android.graphics.Bitmap.Config.HARDWARE) it.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else it }
       // The picture runs to the view's foot, under the room the page leaves the bar while it shows (blank there): the
       // page's own bottom edge is that far above it.
-      val room = readable?.let { (barHeight * (1 - barHidden) * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
+      val showing = barHeight - barHidden * (barHeight - barMinHeight)
+      val room = readable?.let { (showing * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
       val edges = readable?.takeIf { it.height - room >= 4 }?.let { edgeColor(it, 0) to edgeColor(it, it.height - room - 2) }
       if (readable !== bitmap) readable?.recycle()
       bitmap?.recycle()
@@ -652,7 +665,8 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
     override fun onBottomControlsChanged(offset: Int) {
       if (disposed || barHeight <= 0) return
-      val hidden = (offset.toFloat() / barHeight).coerceIn(0f, 1f)
+      // The bar goes only as far as the pill it keeps (barMinHeight): that far is all the way.
+      val hidden = (offset.toFloat() / (barHeight - barMinHeight).coerceAtLeast(1)).coerceIn(0f, 1f)
       // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
       // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
       if (hidden == barHidden || (hidden > barHidden && !touchedLately())) return
