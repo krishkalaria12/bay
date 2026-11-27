@@ -22,7 +22,7 @@ class BayContentBrowserClient : public content::ContentBrowserClient {
   BayContentBrowserClient& operator=(const BayContentBrowserClient&) = delete;
   ~BayContentBrowserClient() override;
 
-  // Force dark, per tab (BayTab::SetForceDark).
+  // Force dark and the preferred look, per tab (BayTab::SetForceDark, BayTab::SetPrefersDark).
   void OverrideWebPreferences(content::WebContents* web_contents,
                               content::SiteInstance& main_frame_site,
                               blink::web_pref::WebPreferences* prefs) override;

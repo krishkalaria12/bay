@@ -910,6 +910,19 @@ static void JNI_BayTab_SetForceDark(JNIEnv* env, int64_t tab_ptr, bool dark) {
   reinterpret_cast<BayTab*>(tab_ptr)->SetForceDark(dark);
 }
 
+void BayTab::SetPrefersDark(bool dark) {
+  if (prefers_dark_ == dark) {
+    return;
+  }
+  prefers_dark_ = dark;
+  // As with force dark: the page hears the change (a `prefers-color-scheme` media query) without a reload.
+  web_contents_->NotifyPreferencesChanged();
+}
+
+static void JNI_BayTab_SetPrefersDark(JNIEnv* env, int64_t tab_ptr, bool dark) {
+  reinterpret_cast<BayTab*>(tab_ptr)->SetPrefersDark(dark);
+}
+
 void BayTab::ShowBrowserControls(bool animate) {
   // Scrolling still moves them (kBoth); they're shown now.
   web_contents_->UpdateBrowserControlsState(cc::BrowserControlsState::kBoth, cc::BrowserControlsState::kShown, animate,

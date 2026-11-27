@@ -161,6 +161,14 @@ public final class BayTab extends WebContentsDelegateAndroid {
     }
 
     /**
+     * The look the person prefers, as pages read it (`prefers-color-scheme`): dark when the app is dark. A page with a
+     * dark look of its own shows it at once; light until set.
+     */
+    public void setPrefersDark(boolean dark) {
+        if (mNativeTab != 0) BayTabJni.get().setPrefersDark(mNativeTab, dark);
+    }
+
+    /**
      * How much of the page's bottom the app's bar covers, in physical pixels (0 for none), as Chrome's bottom toolbar
      * does. The page keeps its size: as the bar shows, the compositor lifts what the page pins to its bottom above it and
      * lets the last of the page scroll clear of it; scrolling down slides the bar away with the page, and scrolling up
@@ -587,6 +595,8 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void setDesktopMode(long tabPtr, boolean desktop);
 
         void setForceDark(long tabPtr, boolean dark);
+
+        void setPrefersDark(long tabPtr, boolean dark);
 
         void showBrowserControls(long tabPtr, boolean animate);
     }

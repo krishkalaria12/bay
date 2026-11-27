@@ -291,6 +291,9 @@ void BayContentBrowserClient::OverrideWebPreferences(content::WebContents* web_c
                                                      blink::web_pref::WebPreferences* prefs) {
   if (BayTab* tab = BayTab::FromWebContents(web_contents)) {
     prefs->force_dark_mode_enabled = tab->force_dark();
+    // Content leaves pages light on Android; Chrome answers from its night mode, Bay from the app's look.
+    prefs->preferred_color_scheme =
+        tab->prefers_dark() ? blink::mojom::PreferredColorScheme::kDark : blink::mojom::PreferredColorScheme::kLight;
   }
 }
 

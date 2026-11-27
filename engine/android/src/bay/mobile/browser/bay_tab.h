@@ -77,6 +77,11 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void SetForceDark(bool dark);
   bool force_dark() const { return force_dark_; }
 
+  // The look the person prefers (BayTab.setPrefersDark), as pages read it in `prefers-color-scheme`; the content
+  // client applies it with force dark (OverrideWebPreferences).
+  void SetPrefersDark(bool dark);
+  bool prefers_dark() const { return prefers_dark_; }
+
   // The app's bar is the page's bottom browser controls (BayTab.setBottomControlsHeight): scrolling moves it with the
   // page in the compositor. This brings it back, as Chrome does for a new page.
   void ShowBrowserControls(bool animate);
@@ -164,6 +169,7 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   bool page_committed_ = false;
   bool desktop_mode_ = false;
   bool force_dark_ = false;
+  bool prefers_dark_ = false;
   // Requests blocked on the current page (C18), and whether a report to Java is already on its way.
   int blocked_count_ = 0;
   bool blocked_report_pending_ = false;
