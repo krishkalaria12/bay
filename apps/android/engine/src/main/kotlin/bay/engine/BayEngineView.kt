@@ -167,19 +167,34 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     set(value) {
       if (field == value) return
       field = value
-      tab?.setBottomControlsHeight(value)
+      tab?.let(::fitBar)
     }
 
   /**
-   * How much of the bar stays as the page scrolls it away, in pixels: the room of the pill it shrinks to. The page keeps
-   * that much at its bottom throughout, so what it pins there rests above the pill instead of under it.
+   * How much of the bar stays as the page scrolls it away, in pixels: the room of the pill it shrinks to. The page ends
+   * that far above the view's foot, always, so what it pins to its bottom rests above the pill instead of under it;
+   * Chromium's toolbar is the rest of the bar, the part that slides away. The page's size never changes while it
+   * scrolls (Chromium's own minimum height would need the page resized as the bar moves, which shook it).
    */
   var barMinHeight = 0
     set(value) {
       if (field == value) return
       field = value
-      tab?.setBottomControlsMinHeight(value)
+      tab?.let(::fitBar)
     }
+
+  /** The part of the bar that slides away with the page: all of it above the pill's room. */
+  private val slidingBar get() = (barHeight - barMinHeight).coerceAtLeast(0)
+
+  private fun fitBar(tab: BayTab) {
+    tab.setBottomControlsHeight(slidingBar)
+    (tab.view.layoutParams as? LayoutParams)?.let { params ->
+      if (params.bottomMargin != barMinHeight) {
+        params.bottomMargin = barMinHeight
+        tab.view.layoutParams = params
+      }
+    }
+  }
 
   /** Brings the bar back with the page's room for it, as a new page does. */
   fun showBar() {
@@ -244,9 +259,8 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.setForceDark(forceDark)
     created.setPrefersDark(prefersDark(activity.resources.configuration))
     created.setVisible(!isSuspended)
-    created.setBottomControlsHeight(barHeight)
-    created.setBottomControlsMinHeight(barMinHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    fitBar(created)
     if (isActive) {
       lastActive = this
       created.showPage()
@@ -387,10 +401,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     }
     current.captureSnapshot(EDGE_SAMPLE_WIDTH) { bitmap ->
       val readable = bitmap?.let { if (it.config == android.graphics.Bitmap.Config.HARDWARE) it.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else it }
-      // The picture runs to the view's foot, under the room the page leaves the bar while it shows (blank there): the
-      // page's own bottom edge is that far above it.
-      val showing = barHeight - barHidden * (barHeight - barMinHeight)
-      val room = readable?.let { (showing * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
+      // The picture runs to the page's foot, under the room it leaves the sliding bar while that shows (blank there):
+      // the page's own bottom edge is that far above it.
+      val room = readable?.let { (slidingBar * (1 - barHidden) * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
       val edges = readable?.takeIf { it.height - room >= 4 }?.let { edgeColor(it, 0) to edgeColor(it, it.height - room - 2) }
       if (readable !== bitmap) readable?.recycle()
       bitmap?.recycle()
@@ -664,9 +677,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     }
 
     override fun onBottomControlsChanged(offset: Int) {
-      if (disposed || barHeight <= 0) return
-      // The bar goes only as far as the pill it keeps (barMinHeight): that far is all the way.
-      val hidden = (offset.toFloat() / (barHeight - barMinHeight).coerceAtLeast(1)).coerceIn(0f, 1f)
+      if (disposed || slidingBar <= 0) return
+      // Gone as far as the sliding part goes: the bar is down to its pill.
+      val hidden = (offset.toFloat() / slidingBar).coerceIn(0f, 1f)
       // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
       // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
       if (hidden == barHidden || (hidden > barHidden && !touchedLately())) return
