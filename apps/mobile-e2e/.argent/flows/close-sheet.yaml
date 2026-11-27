@@ -1,0 +1,11 @@
+# Closes the sheet that's up (the page menu and a site's settings have no close button): Android's back, or a swipe
+# down on iOS. The caller waits for what the sheet showed to go.
+steps:
+  - when: { platform: android }
+    steps:
+      - tool: button
+        args: { button: back }
+  - when: { platform: ios }
+    steps:
+      - tool: gesture-swipe
+        args: { fromX: 0.5, fromY: 0.5, toX: 0.5, toY: 0.95 }

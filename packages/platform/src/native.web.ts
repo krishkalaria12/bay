@@ -11,6 +11,13 @@ export function nativeRandomUUID(_fallback: () => string): string {
   return globalThis.crypto.randomUUID();
 }
 
+/** `count` random bytes as base64, from the renderer's own CSPRNG (at most 1024, as on the Mac). */
+export function nativeRandomBytes(count: number, _fallback: () => string): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(Math.max(0, Math.min(count, 1024))));
+
+  return btoa(String.fromCharCode(...bytes));
+}
+
 export function requireOptionalNativeModule<T = unknown>(name: string): T | null {
   return bindNativeModule<T>(getNativeTransport(), name);
 }

@@ -23,6 +23,10 @@ public:
   bool chainExists() const;
   void createChain() const;
   std::string write(const std::string &scope, const Bytes &payload) const;
+  // A file under a name it already has: one the relay holds, mirrored into the
+  // folder (packages/sync/src/relay/mirror.ts). Replaces a file of that name.
+  void write(const std::string &scope, const std::string &id,
+             const Bytes &payload) const;
   Listing read(const std::string &scope,
                const std::set<std::string> &known) const;
   void remove(const std::string &scope,

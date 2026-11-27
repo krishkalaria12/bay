@@ -3,6 +3,7 @@
 #include "Base64.h"
 #include "RecoveryKit.h"
 #include "SyncVault.h"
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -259,6 +260,12 @@ std::string Invoke(const std::string &, const std::string &method,
     return Json(newFileId()).dump();
   if (method == "deviceName")
     return Json(deviceName()).dump();
+  // The WebUI draws its own (platform nativeRandomBytes); this answers any
+  // other caller the same way the Mac does, at most 1024 bytes.
+  if (method == "randomBytes")
+    return Json(encodeBase64(randomBytes(static_cast<std::size_t>(
+                    std::clamp(args.at(0).get<double>(), 0.0, 1024.0)))))
+        .dump();
   if (method == "chooseFolder")
     return choose(true, args.empty() || args[0].is_null()
                             ? fs::path{}
@@ -388,6 +395,15 @@ std::string Invoke(const std::string &, const std::string &method,
     auto value = args.at(2).get<std::string>();
     result = Vault(fs::u8path(args.at(0).get<std::string>()), unlocked())
                  .write(args.at(1), Bytes(value.begin(), value.end()));
+  } else if (method == "writeAs") {
+    auto value = args.at(3).get<std::string>();
+    Vault(fs::u8path(args.at(0).get<std::string>()), unlocked())
+        .write(args.at(1), args.at(2), Bytes(value.begin(), value.end()));
+  } else if (method == "relayKey") {
+    // The chain's key for the relay's transport (packages/sync/src/relay),
+    // which seals the same files in TypeScript; null while sync is locked.
+    if (keys)
+      result = encodeBase64(entropy);
   } else if (method == "read") {
     auto known = args.at(2).get<std::vector<std::string>>();
     auto listing = Vault(fs::u8path(args.at(0).get<std::string>()), unlocked())
@@ -531,6 +547,9 @@ const std::vector<std::string> &MethodNames() {
                                                    "chainStatus",
                                                    "createChain",
                                                    "write",
+                                                   "writeAs",
+                                                   "relayKey",
+                                                   "randomBytes",
                                                    "read",
                                                    "remove",
                                                    "deleteChain",

@@ -1,0 +1,8 @@
+[bindings.swift]
+module_name = "BayCore"
+ffi_module_name = "BayCoreFFI"
+ffi_module_filename = "BayCoreFFI"
+
+[bindings.kotlin]
+package_name = "bay.core"
+cdylib_name = "bay_core"

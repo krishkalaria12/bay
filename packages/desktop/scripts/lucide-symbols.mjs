@@ -170,6 +170,7 @@ const SYMBOLS = {
   display: "monitor",
   desktopcomputer: "monitor",
   laptopcomputer: "laptop",
+  iphone: "smartphone",
   "tv.and.mediabox": "monitor-speaker",
   tv: "tv",
   clock: "clock",

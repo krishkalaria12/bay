@@ -125,6 +125,7 @@ source_set("impl") {
     ":window_placement",
     "resources:build_ts",
     "//bay/core:portable",
+    "//bay/filter",
     "//chrome/app:command_ids",
     "//chrome/browser:browser_process",
     "//chrome/browser/bay",
@@ -327,12 +328,10 @@ if (is_win || is_linux) {
   }
 
   test("default_browser_unittests") {
-    sources = [
-      "default_browser_unittest.cc",
-      "host_context.cc",
-    ]
+    sources = [ "default_browser_unittest.cc" ]
     deps = [
       ":default_browser",
+      ":impl",
       "//base/test:test_support",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/browser_window",
@@ -473,11 +472,9 @@ if (is_win || is_linux) {
 
 if (is_win || is_linux) {
   test("shell_appearance_unittests") {
-    sources = [
-      "host_context.cc",
-      "shell_appearance_unittest.cc",
-    ]
+    sources = [ "shell_appearance_unittest.cc" ]
     deps = [
+      ":impl",
       ":shell_appearance",
       ":shell_files",
       "//base/test:test_support",
@@ -721,6 +718,10 @@ if (is_win || is_linux) {
       "//third_party/crashpad/crashpad/snapshot:test_support",
       "//third_party/crashpad/crashpad/util",
     ]
+    if (is_win) {
+      # Chrome's crash calls go through chrome_elf's exports, which tests stub.
+      deps += [ "//components/crash/core/app:test_support" ]
+    }
   }
 }
 
@@ -746,6 +747,7 @@ if (is_win || is_linux) {
   test("native_file_drag_unittests") {
     sources = [ "native_file_drag_unittest.cc" ]
     deps = [
+      ":impl",
       ":webui",
       "//base/test:test_support",
       "//chrome/test:test_support_unit",
@@ -834,7 +836,10 @@ if (is_win || is_linux) {
     if (is_win) {
       # Windows' linker resolves everything :notifications pulls in, so it needs
       # the browser, which this brings along with its own main().
-      deps += [ "//chrome/test:test_support_unit" ]
+      deps += [
+        ":impl",
+        "//chrome/test:test_support_unit",
+      ]
     }
   }
 }
@@ -1006,11 +1011,9 @@ if (is_win || is_linux) {
   }
 
   test("keychain_unittests") {
-    sources = [
-      "host_context.cc",
-      "keychain_unittest.cc",
-    ]
+    sources = [ "keychain_unittest.cc" ]
     deps = [
+      ":impl",
       ":keychain",
       "//base/test:test_support",
       "//chrome/browser/profiles:profile",

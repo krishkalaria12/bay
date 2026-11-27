@@ -1,5 +1,6 @@
-import { requireOptionalNativeModule, nativeRandomUUID, nativeSnapshot } from "@bay/platform/native";
-import type { Listing, Transport } from "./scope.ts";
+import { requireOptionalNativeModule, nativeRandomBytes, nativeRandomUUID, nativeSnapshot } from "@bay/platform/native";
+import type { NamedTransport } from "./relay/mirror.ts";
+import type { Listing } from "./scope.ts";
 
 export type FolderInfo = {
   keyStorage?: "persistent" | "session" | "locked";
@@ -35,6 +36,12 @@ type SyncNative = {
   chainStatus(folder: string): Promise<"ok" | "missing" | "unavailable">;
   createChain(folder: string): Promise<void>;
   write(folder: string, scope: string, payload: string): Promise<string>;
+  /** A file under a name it already has (relay/mirror.ts). */
+  writeAs(folder: string, scope: string, id: string, payload: string): Promise<void>;
+  /** The chain's key, base64, while it's unlocked: the relay's transport seals with it. */
+  relayKey(): Promise<string | null>;
+  /** Random bytes from the system, base64. */
+  randomBytes(count: number): string;
   read(folder: string, scope: string, known: string[]): Promise<Listing>;
   remove(folder: string, scope: string, ids: string[]): Promise<void>;
   deleteChain(folder: string): Promise<void>;
@@ -58,6 +65,9 @@ const Native = requireOptionalNativeModule<SyncNative>("BaySync");
 const newDeviceId = () => nativeRandomUUID(() => Native!.newDeviceId());
 const deviceName = () => nativeSnapshot("BaySync", "deviceName", [], () => Native!.deviceName());
 
+// The WebUI renderer has its own CSPRNG; Hermes on the Mac has none, so there the system's comes from native.
+const randomBytes = (count: number) => nativeRandomBytes(count, () => Native!.randomBytes(count));
+
 export const SyncNative: SyncNative | null =
   Native &&
   new Proxy(Native, {
@@ -66,13 +76,16 @@ export const SyncNative: SyncNative | null =
 
       if (property === "deviceName") return deviceName;
 
+      if (property === "randomBytes") return randomBytes;
+
       // SAFETY: the property is the key the target was asked for.
       return target[property as keyof typeof target];
     },
   });
 
-export const folderTransport = (native: SyncNative, folder: string): Transport => ({
+export const folderTransport = (native: SyncNative, folder: string): NamedTransport => ({
   write: (scope, payload) => native.write(folder, scope, payload),
+  writeAs: (scope, id, payload) => native.writeAs(folder, scope, id, payload),
   read: (scope, known) => native.read(folder, scope, known),
   remove: (scope, ids) => native.remove(folder, scope, ids),
 });

@@ -1,7 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "bay/core/nn_tab_events.h"
 
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 
 #include "base/logging.h"
 #include "chrome/browser/bay/nn_engine.h"

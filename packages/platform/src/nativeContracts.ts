@@ -2300,6 +2300,27 @@ export const nativeContracts = {
           "maxArgs": 3,
           "signature": "write(folder: string, scope: string, payload: string): Promise<string>;"
         },
+        "writeAs": {
+          "async": true,
+          "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "writeAs(folder: string, scope: string, id: string, payload: string): Promise<void>;"
+        },
+        "relayKey": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "relayKey(): Promise<string | null>;"
+        },
+        "randomBytes": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "randomBytes(count: number): Promise<string>;"
+        },
         "read": {
           "async": true,
           "optional": false,
@@ -2886,7 +2907,7 @@ export const nativeContracts = {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",
       "PhraseResult": "| { ok: true }\n  | { error: \"wordCount\"; count: number }\n  | { error: \"unknownWord\"; word: string }\n  | { error: \"checksum\" }\n  | { error: \"noData\" }\n  | { error: \"mismatch\" }\n  | { error: \"keychain\" }",
       "SavedLogin": "{ origin: string; url: string; username: string; password: string; created: number }",
-      "SyncNative": "{\n  folderInfo(path: string | null): Promise<FolderInfo>;\n  chooseFolder(current: string | null): Promise<string | null>;\n  newDeviceId(): string;\n  deviceName(): string;\n  createPhrase(account: string): Promise<boolean>;\n  enterPhrase(account: string, text: string, folder: string): Promise<PhraseResult>;\n  unlock(account: string): Promise<boolean>;\n  forget(account: string): Promise<void>;\n  chainStatus(folder: string): Promise<\"ok\" | \"missing\" | \"unavailable\">;\n  createChain(folder: string): Promise<void>;\n  write(folder: string, scope: string, payload: string): Promise<string>;\n  read(folder: string, scope: string, known: string[]): Promise<Listing>;\n  remove(folder: string, scope: string, ids: string[]): Promise<void>;\n  deleteChain(folder: string): Promise<void>;\n  sealLocal(text: string): Promise<string>;\n  openLocal(sealed: string): Promise<string | null>;\n  recoveryWords(): Promise<string[]>;\n  qrCode(): Promise<string | null>;\n  recoveryKitPreview(width: number): Promise<string | null>;\n  saveRecoveryKit(format: \"pdf\" | \"text\"): Promise<string | null>;\n  copyRecoveryKit(): Promise<void>;\n  shareRecoveryKit(): Promise<void>;\n  copyRecoveryPhrase(): Promise<void>;\n  revealFolder(path: string): Promise<void>;\n  readPasswords(engineProfile: string): Promise<SavedLogin[] | null>;\n}"
+      "SyncNative": "{\n  folderInfo(path: string | null): Promise<FolderInfo>;\n  chooseFolder(current: string | null): Promise<string | null>;\n  newDeviceId(): string;\n  deviceName(): string;\n  createPhrase(account: string): Promise<boolean>;\n  enterPhrase(account: string, text: string, folder: string): Promise<PhraseResult>;\n  unlock(account: string): Promise<boolean>;\n  forget(account: string): Promise<void>;\n  chainStatus(folder: string): Promise<\"ok\" | \"missing\" | \"unavailable\">;\n  createChain(folder: string): Promise<void>;\n  write(folder: string, scope: string, payload: string): Promise<string>;\n  /** A file under a name it already has (relay/mirror.ts). */\n  writeAs(folder: string, scope: string, id: string, payload: string): Promise<void>;\n  /** The chain's key, base64, while it's unlocked: the relay's transport seals with it. */\n  relayKey(): Promise<string | null>;\n  /** Random bytes from the system, base64. */\n  randomBytes(count: number): string;\n  read(folder: string, scope: string, known: string[]): Promise<Listing>;\n  remove(folder: string, scope: string, ids: string[]): Promise<void>;\n  deleteChain(folder: string): Promise<void>;\n  sealLocal(text: string): Promise<string>;\n  openLocal(sealed: string): Promise<string | null>;\n  recoveryWords(): Promise<string[]>;\n  qrCode(): Promise<string | null>;\n  recoveryKitPreview(width: number): Promise<string | null>;\n  saveRecoveryKit(format: \"pdf\" | \"text\"): Promise<string | null>;\n  copyRecoveryKit(): Promise<void>;\n  shareRecoveryKit(): Promise<void>;\n  copyRecoveryPhrase(): Promise<void>;\n  revealFolder(path: string): Promise<void>;\n  readPasswords(engineProfile: string): Promise<SavedLogin[] | null>;\n}"
     },
     "import/src/index.ts": {
       "ImportKind": "\"bookmarks\" | \"history\" | \"tabs\" | \"passwords\" | \"cookies\" | \"autofill\" | \"extensions\" | \"spaces\" | \"pinnedTabs\" | \"favorites\"",
