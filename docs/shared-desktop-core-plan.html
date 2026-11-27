@@ -550,8 +550,9 @@
             <li>
               <strong>Nothing tried by hand on Windows or Linux.</strong> The engine builds <code>windows-build-41</code> and <code>linux-build-13</code> pass
               and the Windows build opens a window. Still to check on both: the blocker (first launch offline, a list turning on, a paused site, Settings ›
-              Privacy), an import with saved passwords, cards and cookies, and each moved prompt. The Windows build's other unit tests fail as they did before
-              this work (the same list as <code>windows-build-35</code>).
+              Privacy), an import with saved passwords, cards and cookies, and each moved prompt. Bay's unit tests are fixed in source but not yet seen passing:
+              on Windows (<code>windows-build-42</code>), and on Linux, whose engine build now runs them too (<code>linux-build-14</code>, the first Linux run).
+              Neither step fails the build yet. If the notification tests still fail on Windows, the cause is elsewhere.
             </li>
             <li>
               <strong>WebUI contract coverage.</strong> The WebUI host reports only its optional methods at run time and binds every required one, and its
