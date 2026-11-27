@@ -39,12 +39,19 @@ std::string Failure(const char* code, const std::string& message) {
       .value_or("{}");
 }
 
-scoped_refptr<base::SequencedTaskRunner> DiskRunner() {
-  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> runner(
-      base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
+scoped_refptr<base::SequencedTaskRunner>& DiskRunnerSlot() {
+  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> runner;
   return *runner;
+}
+
+scoped_refptr<base::SequencedTaskRunner> DiskRunner() {
+  auto& runner = DiskRunnerSlot();
+  if (!runner) {
+    runner = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  }
+  return runner;
 }
 
 // Every live store, so a write can reach the others on its folder.
@@ -120,6 +127,11 @@ base::ListValue DocumentStore::SupportedMethods() {
       .Append("BayShell.writeDocument")
       .Append("BayShell.saveDocument")
       .Append("BayShell.removeDocument");
+}
+
+// static
+void DocumentStore::ResetDiskSequenceForTesting() {
+  DiskRunnerSlot() = nullptr;
 }
 
 DocumentStore::DocumentStore(base::FilePath directory,

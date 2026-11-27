@@ -10,12 +10,14 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
+import type { PageEngine } from "@bay/chromium";
 import * as v from "valibot";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
 import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/keptAwakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
+import { siteFromInput } from "../lib/siteDomain";
 import { normalizeExternalLinkRules, normalizeLinkDestination, type ExternalLinkRule, type LinkDestination } from "../lib/externalLinkRules";
 
 export type SearchEngineId = string;
@@ -109,7 +111,24 @@ export type Settings = {
   littleBayMenuBarItem: boolean;
   // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
   littleBayPutAwayAfterHours: number | null;
+
+  // Which engine pages open in (store/engines.ts). Only a build with WebKit (macOS) reads these; elsewhere every
+  // page is Chromium's. Automatic is Bay's own choice: the default engine, site rules and streaming sites in WebKit.
+  engineMode: EngineMode;
+  defaultEngine: PageEngine;
+  // Site rules, by registrable domain ("figma.com" covers its subdomains): lib/siteDomain.ts.
+  siteEngines: Record<string, PageEngine>;
+  streamingInWebKit: boolean;
+  // What a Chromium page whose protected video won't play does (lib/pageEngines.ts › playInWebKit).
+  protectedVideoFallback: "ask" | "move" | "stay";
+  // A switch keeps the old page on screen until the new one paints, with its scroll and zoom.
+  engineSwitchKeepsPage: boolean;
+  // A switch carries the site's cookies and storage to the other engine (lib/engineSiteData.ts).
+  engineSwitchCarriesSignIns: boolean;
+  webKitFraudWarnings: boolean;
 };
+
+export type EngineMode = "automatic" | "chromium" | "webkit";
 
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
 
@@ -178,7 +197,70 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBayMenuBarItem: false,
   // Arc's: six hours.
   littleBayPutAwayAfterHours: 6,
+  engineMode: "automatic",
+  defaultEngine: "chromium",
+  siteEngines: {},
+  streamingInWebKit: true,
+  // Today's behaviour: the page moves, and the video plays.
+  protectedVideoFallback: "move",
+  engineSwitchKeepsPage: true,
+  engineSwitchCarriesSignIns: true,
+  webKitFraudWarnings: true,
 };
+
+const EngineSchema = v.picklist(["chromium", "webkit"]);
+
+const ENGINE_SETTING_SCHEMAS = {
+  engineMode: v.picklist(["automatic", "chromium", "webkit"]),
+  defaultEngine: EngineSchema,
+  siteEngines: v.record(v.string(), v.string()),
+  streamingInWebKit: v.boolean(),
+  protectedVideoFallback: v.picklist(["ask", "move", "stay"]),
+  engineSwitchKeepsPage: v.boolean(),
+  engineSwitchCarriesSignIns: v.boolean(),
+  webKitFraudWarnings: v.boolean(),
+} as const;
+
+const ENGINE_SETTINGS = [
+  "engineMode",
+  "defaultEngine",
+  "siteEngines",
+  "streamingInWebKit",
+  "protectedVideoFallback",
+  "engineSwitchKeepsPage",
+  "engineSwitchCarriesSignIns",
+  "webKitFraudWarnings",
+] as const satisfies readonly (keyof typeof ENGINE_SETTING_SCHEMAS)[];
+
+/** Site rules keyed by registrable domain, each Chromium or WebKit; anything else is dropped. */
+export function normalizeSiteEngines(value: Readonly<Record<string, string>>): Settings["siteEngines"] {
+  const rules: Settings["siteEngines"] = {};
+
+  for (const [input, engine] of Object.entries(value)) {
+    const site = siteFromInput(input);
+
+    if (site && v.is(EngineSchema, engine)) rules[site] = engine;
+  }
+
+  return rules;
+}
+
+/** A patch's engine settings, each valid value kept and any other replaced by `current`'s (saved or synced data
+ *  can hold anything). */
+export function checkedEngineSettings(patch: Partial<Settings>, current: Settings): Partial<Settings> {
+  const checked: Partial<Settings> = {};
+
+  for (const name of ENGINE_SETTINGS) {
+    if (!(name in patch)) continue;
+    const value = patch[name];
+
+    if (!v.is(ENGINE_SETTING_SCHEMAS[name], value)) Object.assign(checked, { [name]: current[name] });
+    else if (name === "siteEngines") checked.siteEngines = normalizeSiteEngines(patch.siteEngines ?? {});
+    else Object.assign(checked, { [name]: value });
+  }
+
+  return checked;
+}
 
 type LegacySettings = Partial<Settings> & {
   defaultProfileId?: string;
@@ -187,12 +269,28 @@ type LegacySettings = Partial<Settings> & {
   harborSize?: [number, number];
   openLinksInSmallYahu?: boolean;
   smallYahuSize?: [number, number];
+  // The engine choices taken out on 5 Nov 2026; engineMode and siteEngines replace them, starting afresh.
+  pageEngine?: unknown;
+  websiteEngines?: unknown;
 };
 
 /** Preserve preferences and command bindings saved before profiles became spaces. */
 export function restoreSettings(saved: LegacySettings | null = {}): Settings {
-  const { defaultProfileId, warnBeforeMovingTabsToProfile, openLinksInHarbor, harborSize, openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
+  const {
+    defaultProfileId,
+    warnBeforeMovingTabsToProfile,
+    openLinksInHarbor,
+    harborSize,
+    openLinksInSmallYahu,
+    smallYahuSize,
+    pageEngine: _pageEngine,
+    websiteEngines: _websiteEngines,
+    ...current
+  } = saved ?? {};
+
   const settings = { ...DEFAULT_SETTINGS, ...current };
+
+  Object.assign(settings, checkedEngineSettings(current, DEFAULT_SETTINGS));
 
   if (current.defaultSpaceId === undefined && defaultProfileId) settings.defaultSpaceId = defaultProfileId;
 
@@ -304,6 +402,7 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
             ? { externalLinkDefault: null }
             : {}),
         ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : undefined),
+        ...checkedEngineSettings(patch, s.settings),
         ...("awakeSites" in patch
           ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites }
           : undefined),

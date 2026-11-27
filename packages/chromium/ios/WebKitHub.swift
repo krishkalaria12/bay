@@ -186,6 +186,15 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     })();
     """
 
+  static var fraudWarnings = true
+
+  /// Settings › Engines › Warn about deceptive sites, for new pages and the open ones: a page's configuration shares
+  /// its preferences with the page, which follows a change at its next navigation.
+  func setFraudWarnings(_ on: Bool) {
+    Self.fraudWarnings = on
+    for tab in liveTabs() { tab.webView?.configuration.preferences.isFraudulentWebsiteWarningEnabled = on }
+  }
+
   func configuration(profile: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = dataStore(for: profile)
@@ -203,7 +212,8 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     config.preferences.isElementFullscreenEnabled = !Self.background
     Self.allowPictureInPicture(config.preferences)
     config.preferences.javaScriptCanOpenWindowsAutomatically = false
-    config.preferences.isFraudulentWebsiteWarningEnabled = false
+    // Settings › Engines › Warn about deceptive sites (WebKitModule setFraudWarnings, which also reaches open pages).
+    config.preferences.isFraudulentWebsiteWarningEnabled = Self.fraudWarnings
     config.defaultWebpagePreferences.preferredContentMode = .desktop
     return config
   }
@@ -222,6 +232,9 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
   func unregister(_ webView: WKWebView) { owners.removeValue(forKey: ObjectIdentifier(webView)) }
 
   func owner(of webView: WKWebView) -> WebKitTab? { owners[ObjectIdentifier(webView)]?.tab }
+
+  /// The tabs with a page now (WebKitContentRules reapplies its rules to them).
+  func liveTabs() -> [WebKitTab] { owners.values.compactMap(\.tab) }
 
   func noteLive(_ tab: WebKitTab, key: String) { liveByKey[key] = WeakTab(tab) }
 
@@ -485,6 +498,82 @@ final class WebKitHub: NSObject, WKScriptMessageHandler {
     }
   }
 
+  // MARK: Sign-ins carried between engines (apps/browser lib/engineSiteData.ts)
+
+  /// Whether a cookie's domain is `site` (a registrable domain) or one of its subdomains.
+  static func ofSite(_ domain: String, site: String) -> Bool {
+    let name = domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+    return !site.isEmpty && (name == site || name.hasSuffix("." + site))
+  }
+
+  /// A site's cookies in the profile's WebKit store, in the engine's nn_cookies_site shape. None for a private window.
+  func siteCookies(profile: String, site rawSite: String, completion: @escaping ([[String: Any]]) -> Void) {
+    let site = rawSite.lowercased()
+    guard !Self.isPrivate(profile) else { return completion([]) }
+    dataStore(for: profile).httpCookieStore.getAllCookies { cookies in
+      completion(cookies.filter { Self.ofSite($0.domain, site: site) }.map(Self.cookieDictionary))
+    }
+  }
+
+  static func cookieDictionary(_ cookie: HTTPCookie) -> [String: Any] {
+    var sameSite = "unspecified"
+    if cookie.sameSitePolicy == .sameSiteLax { sameSite = "lax" }
+    if cookie.sameSitePolicy == .sameSiteStrict { sameSite = "strict" }
+    return [
+      "name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
+      "expires": (cookie.expiresDate?.timeIntervalSince1970 ?? 0) * 1000, "secure": cookie.isSecure, "httpOnly": cookie.isHTTPOnly,
+      "sameSite": sameSite, "sourceScheme": cookie.isSecure ? "secure" : "unset", "sourcePort": -1,
+    ]
+  }
+
+  /// Writes `set` and deletes the cookies `remove` names (name, domain, path) in the profile's WebKit store, touching
+  /// nothing else of the site's. Replies with the counts, as nn_cookies_apply.
+  func applySiteCookies(profile: String, set: [[String: Any]], remove: [[String: Any]], completion: @escaping ([String: Any]) -> Void) {
+    guard !Self.isPrivate(profile) else { return completion(["error": "private profile"]) }
+    let store = dataStore(for: profile).httpCookieStore
+    let group = DispatchGroup()
+    var written = 0, rejected = 0, removed = 0
+    let names = Set(remove.compactMap { r -> String? in
+      guard let name = r["name"] as? String, let domain = r["domain"] as? String, let path = r["path"] as? String else { return nil }
+      return "\(name)|\(domain.lowercased())|\(path)"
+    })
+    group.enter()
+    store.getAllCookies { cookies in
+      for cookie in cookies where names.contains("\(cookie.name)|\(cookie.domain.lowercased())|\(cookie.path)") {
+        group.enter()
+        removed += 1
+        store.delete(cookie) { group.leave() }
+      }
+      for entry in set {
+        guard let cookie = Self.cookie(entry) else {
+          rejected += 1
+          continue
+        }
+        group.enter()
+        written += 1
+        store.setCookie(cookie) { group.leave() }
+      }
+      group.leave()
+    }
+    group.notify(queue: .main) { completion(["set": written, "rejected": rejected, "removed": removed]) }
+  }
+
+  static func cookie(_ entry: [String: Any]) -> HTTPCookie? {
+    guard let name = entry["name"] as? String, let value = entry["value"] as? String, let domain = entry["domain"] as? String,
+      let path = entry["path"] as? String, !domain.isEmpty
+    else { return nil }
+    var properties: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .domain: domain, .path: path]
+    if entry["secure"] as? Bool == true { properties[.secure] = "TRUE" }
+    if entry["httpOnly"] as? Bool == true { properties[HTTPCookiePropertyKey("HttpOnly")] = "TRUE" }
+    if let expires = entry["expires"] as? Double, expires > 0 { properties[.expires] = Date(timeIntervalSince1970: expires / 1000) }
+    switch entry["sameSite"] as? String {
+    case "lax": properties[.sameSitePolicy] = HTTPCookieStringPolicy.sameSiteLax
+    case "strict": properties[.sameSitePolicy] = HTTPCookieStringPolicy.sameSiteStrict
+    default: break
+    }
+    return HTTPCookie(properties: properties)
+  }
+
   func deleteProfileData(_ profile: String, completion: @escaping (Bool) -> Void) {
     guard !Self.isPrivate(profile) else { return completion(true) }
     let store = dataStore(for: profile)
@@ -631,6 +720,28 @@ final class WebKitDownloads: NSObject, WKDownloadDelegate {
   static func makeStaging(in folder: URL, uuid: String) -> URL? {
     let staging = folder.appendingPathComponent(stagingPrefix + uuid, isDirectory: true)
     return mkdir(staging.path, 0o700) == 0 ? staging : nil
+  }
+
+  /// Staging folders a crash or a forced quit left in the Downloads folder: a day old or more and not a running
+  /// download's. Their partial files go with them.
+  static func removeLeftoverStaging(in folder: URL, active: Set<String>, now: Date = Date()) {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
+    for name in names where name.hasPrefix(stagingPrefix) {
+      let uuid = String(name.dropFirst(stagingPrefix.count))
+      let path = folder.appendingPathComponent(name).path
+      guard UUID(uuidString: uuid) != nil, !active.contains(path),
+        let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date,
+        now.timeIntervalSince(modified) > 24 * 60 * 60
+      else { continue }
+      _ = removeStaging(path, uuid: uuid, folder: folder.path)
+    }
+  }
+
+  /// Once a launch: the Downloads folder's leftover staging folders.
+  func removeLeftoverStaging() {
+    let active = Set(items.values.compactMap { $0.staging?.path })
+    let folder = fallbackFolder
+    DispatchQueue.global(qos: .utility).async { Self.removeLeftoverStaging(in: folder, active: active) }
   }
 
   static func plainAbsolute(_ path: String) -> Bool {

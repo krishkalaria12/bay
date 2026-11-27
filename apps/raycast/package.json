@@ -1,0 +1,88 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "bay",
+  "description": "Search Bay's tabs and history, switch spaces, and open tabs and windows.",
+  "categories": [
+    "Applications",
+    "Productivity",
+    "Web"
+  ],
+  "license": "Apache-2.0",
+  "author": "bay",
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@raycast/api": "^2.14.0",
+    "@raycast/utils": "^2.3.3",
+    "valibot": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.0"
+  },
+  "icon": "icon.png",
+  "commands": [
+    {
+      "name": "search-tabs",
+      "title": "Search Tabs",
+      "subtitle": "Bay",
+      "description": "Find an open tab in any space and switch to it.",
+      "mode": "view"
+    },
+    {
+      "name": "switch-space",
+      "title": "Switch Space",
+      "subtitle": "Bay",
+      "description": "Show another space in the front window.",
+      "mode": "view"
+    },
+    {
+      "name": "new-tab",
+      "title": "New Tab",
+      "subtitle": "Bay",
+      "description": "Open a new tab, at an address if you give one.",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "url",
+          "placeholder": "Address",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "new-window",
+      "title": "New Window",
+      "subtitle": "Bay",
+      "description": "Open a new Bay window.",
+      "mode": "no-view"
+    },
+    {
+      "name": "search-history",
+      "title": "Search History",
+      "subtitle": "Bay",
+      "description": "Find a page you visited in the last month, through the bay command.",
+      "mode": "view"
+    }
+  ],
+  "platforms": [
+    "macOS"
+  ],
+  "preferences": [
+    {
+      "name": "bayCommand",
+      "title": "bay command",
+      "description": "Where the bay command is, for history. Settings › Advanced in Bay installs it; leave empty to look in the usual places.",
+      "type": "textfield",
+      "required": false
+    }
+  ],
+  "title": "Bay"
+}

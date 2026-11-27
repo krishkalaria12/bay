@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mac portable fixture proof only. Creates fresh fake profiles, never keyring data.
 
-Requires Homebrew nss/nspr/openssl@3 and the vendored JSON header. Does not
+Requires Homebrew nss (to write the fake key4.db profiles), openssl@3 and the vendored JSON header. Does not
 configure GN, build/link Linux, or run a Linux binary.
 """
 import argparse
@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import shlex
 import subprocess
 import tempfile
 import sys
@@ -79,7 +80,6 @@ def fixtures(root):
         db.executemany("INSERT INTO credit_cards VALUES (?)", [(cbc(b"test-safe-storage-secret", b"4111111111111111", b"v11"),), (vectors["badPadding"],)])
     nss_profile(root / "firefox", "fixture-primary", "fixture-user", "fixture-password")
     nss_profile(root / "firefox-empty", "", "other-user", "other-password")
-    nss_profile(root / "sentinel", "", "sentinel-user", "sentinel-password")
 
 
 def main():
@@ -91,10 +91,9 @@ def main():
     repo = Path(__file__).resolve().parents[4]
     test = Path(__file__).resolve().parent
     sources = [test / "SecretsTest.cpp", test.parent / "ChromiumSecrets.cpp", test.parent / "SecretService.cpp",
-               test.parent / "FirefoxNSS.cpp", repo / "packages/import/windows/Secrets.cpp", repo / "packages/import/windows/Readers.cpp"]
+               repo / "packages/import/portable/Secrets.cpp", repo / "packages/import/portable/Readers.cpp"]
     includes = [repo / "engine/chromium/src/chrome/browser/bay/data/vendor",
-                Path("/opt/homebrew/opt/openssl@3/include"), Path("/opt/homebrew/opt/nss/include/nss"),
-                Path("/opt/homebrew/opt/nspr/include/nspr")]
+                Path("/opt/homebrew/opt/openssl@3/include")]
     with tempfile.TemporaryDirectory(prefix="bay-linux-secret-test-") as temporary:
         root = args.keep.resolve() if args.keep else Path(temporary)
         root.mkdir(parents=True, exist_ok=True)
@@ -103,6 +102,8 @@ def main():
         for include in includes:
             command += ["-I", str(include)]
         command += [str(s) for s in sources]
+        # Readers.cpp hands its work to bay-import, in Bay's desktop Rust library.
+        command += shlex.split(subprocess.check_output([sys.executable, str(repo / "scripts/lib/rust_desktop.py")], text=True))
         command += ["/opt/homebrew/opt/openssl@3/lib/libcrypto.dylib", "-lsqlite3", "-o", str(root / "secrets-test")]
         subprocess.run(command, check=True)
         subprocess.run([str(root / "secrets-test"), str(root)], check=True)

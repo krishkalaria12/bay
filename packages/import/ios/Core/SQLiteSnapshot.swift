@@ -48,16 +48,12 @@ final class SQLiteSnapshot {
   }
 
   func tableExists(_ name: String) -> Bool {
-    (try? scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", [.text(name)])) ?? 0 > 0
-  }
-
-  func scalar(_ sql: String, _ bindings: [Value] = []) throws -> Int64? {
-    var result: Int64?
-    try query(sql, bindings) { row in
-      result = row.int(0)
+    var found = false
+    try? query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", [.text(name)]) { _ in
+      found = true
       return false
     }
-    return result
+    return found
   }
 
   enum Value {
@@ -113,27 +109,5 @@ final class SQLiteSnapshot {
       return String(cString: p)
     }
     func text(_ name: String) -> String? { index(name).flatMap { text($0) } }
-
-    func blob(_ i: Int32) -> Data? {
-      let count = Int(sqlite3_column_bytes(stmt, i))
-      guard let p = sqlite3_column_blob(stmt, i) else { return count == 0 && !isNull(i) ? Data() : nil }
-      return Data(bytes: p, count: count)
-    }
-    func blob(_ name: String) -> Data? { index(name).flatMap { blob($0) } }
-
-    /// The column's raw bytes, valid only until the next step. Use to move plaintext secrets into SecretBytes
-    /// without a Data/String copy.
-    func blobPointer(_ i: Int32) -> UnsafeRawBufferPointer? {
-      guard !isNull(i) else { return nil }
-      let p = sqlite3_column_blob(stmt, i)
-      let count = Int(sqlite3_column_bytes(stmt, i))
-      return UnsafeRawBufferPointer(start: count > 0 ? p : nil, count: count)
-    }
-
-    func secret(_ name: String) -> SecretBytes? {
-      index(name).flatMap { blobPointer($0) }.map { SecretBytes(copying: $0) }
-    }
-
-    func has(_ name: String) -> Bool { index(name) != nil }
   }
 }

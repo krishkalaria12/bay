@@ -25,6 +25,7 @@ const PANES = {
   links: "links",
   engines: "engines",
   livefolders: "liveFolders",
+  plugins: "plugins",
   calendar: "calendar",
   advanced: "advanced",
 } satisfies Record<string, SettingsPane>;

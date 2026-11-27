@@ -33,3 +33,17 @@ export * from "./swipe";
 export * from "./tabStripBridge";
 
 export * from "./webkit";
+
+export * from "./siteCookies";
+
+export * from "./switches";
+
+export * from "./sparePage";
+
+export * from "./cliAgents";
+
+export * from "./enginePrefs";
+
+export * from "./plugins";
+
+export * from "./pluginSandbox";

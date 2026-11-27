@@ -15,6 +15,15 @@
 //       opening by itself (CEF's engine sets false)
 //   download.prompt_for_download         bool  ask where to save each file
 //       (the downloads service turns the ungoogled default, on, off)
+//   browser.enable_spellchecking         bool  check spelling as you type
+//   spellcheck.dictionaries              [string]  its languages ("en-US")
+//
+// The browser's own (local state, every profile; the call's profile only
+// picks the engine):
+//
+//   dns_over_https.mode       string  "off" | "automatic" | "secure"
+//   dns_over_https.templates  string  the DoH server's URI templates,
+//       space-separated (used in "secure")
 
 #ifndef CHROME_BROWSER_BAY_NN_PREFS_H_
 #define CHROME_BROWSER_BAY_NN_PREFS_H_

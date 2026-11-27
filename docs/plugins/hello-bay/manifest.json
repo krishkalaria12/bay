@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "id": "hello-bay",
+  "name": "Hello Bay",
+  "version": "1.0.0",
+  "description": "A small plugin that shows every part of the format: a command, a button, a tab menu item, a sidebar view, a live folder source and a theme.",
+  "author": "Bay",
+  "permissions": {
+    "hosts": ["https://api.github.com"],
+    "tabs": true,
+    "links": true
+  },
+  "settings": [
+    { "key": "user", "title": "GitHub user", "type": "text", "default": "octocat" },
+    { "key": "token", "title": "GitHub token", "type": "secret", "description": "Optional: a token raises GitHub's rate limit." },
+    { "key": "workLinks", "title": "Open GitHub links in a space named Work", "type": "toggle" }
+  ],
+  "contributes": {
+    "commands": [
+      { "id": "copy-title", "title": "Remember This Page", "icon": "bookmark", "keywords": ["hello"], "needs": "page" },
+      { "id": "open-profile", "title": "Open My GitHub Profile", "icon": "person.crop.circle" }
+    ],
+    "toolbar": [{ "id": "repos", "title": "My Repositories", "icon": "tray.full", "view": "repos" }],
+    "tabMenu": [{ "id": "remember", "title": "Remember This Page", "command": "copy-title" }],
+    "sidebarViews": [{ "id": "repos", "title": "Repositories", "icon": "tray.full" }],
+    "liveSources": [{ "id": "starred", "name": "Starred repositories", "kind": "documents", "site": "https://github.com" }],
+    "themes": [{ "id": "harbour", "name": "Harbour", "colors": ["#1D3557", "#457B9D", "#A8DADC"] }]
+  }
+}

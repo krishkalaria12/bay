@@ -8,6 +8,7 @@ extension CefModule {
     "nn_bookmarks_tree", "nn_bookmarks_apply", "nn_bookmarks_watch",
     "nn_prefs_get", "nn_prefs_set",
     "nn_search_suggestions",
-    "nn_cli_control",
+    "nn_spare_warmup", "nn_spell_words", "nn_spell_word",
+    "nn_cli_control", "nn_cli_agents", "nn_cli_agent_answer", "nn_cli_agent_revoke",
   ]
 }

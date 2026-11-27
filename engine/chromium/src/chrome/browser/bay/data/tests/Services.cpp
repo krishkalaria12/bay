@@ -1,7 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "data_services.h"
-#include "packages/sync/windows/SyncCrypto.h"
-#include "packages/sync/windows/SyncService.h"
+#include "packages/sync/portable/SyncCrypto.h"
+#include "packages/sync/portable/SyncService.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -54,7 +54,7 @@ void deleteSecret(const std::string &) {
 
 #if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
 #include "packages/import/linux/ChromiumSecrets.h"
-#include "packages/import/windows/SQLite.h"
+#include <sqlite3.h>
 #include <openssl/evp.h>
 #endif
 

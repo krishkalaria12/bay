@@ -197,12 +197,15 @@ def sha256(path):
 def source_digest(platform="win"):
     digest = hashlib.sha256(platform.encode() + b"\0")
     for directory in ("engine/patches", "engine/shared", "engine/chromium", "engine/nncore",
-                      "packages/adblock/include", "packages/adblock/src",
-                      "packages/import/windows", "packages/import/linux",
-                      "packages/sync/windows", "packages/sync/linux"):
+                      "packages/adblock/include", "packages/adblock/src", "packages/rust",
+                      "packages/import/portable", "packages/import/linux",
+                      "packages/sync/portable", "packages/sync/linux"):
         for path in sorted((REPO / directory).rglob("*")):
-            package_test = directory.startswith("packages/") and "tests" in path.relative_to(REPO / directory).parts
-            if path.is_file() and not package_test and "__pycache__" not in path.parts and path.suffix != ".pyc":
+            parts = path.relative_to(REPO / directory).parts
+            package_test = directory.startswith("packages/") and "tests" in parts
+            # Cargo's build output, not source.
+            built = directory == "packages/rust" and parts[:1] == ("target",)
+            if path.is_file() and not package_test and not built and "__pycache__" not in path.parts and path.suffix != ".pyc":
                 digest.update(path.relative_to(REPO).as_posix().encode() + b"\0")
                 digest.update(bytes.fromhex(sha256(path)))
     for manifest in ("packages/adblock/Cargo.toml", "packages/adblock/Cargo.lock"):
@@ -453,20 +456,39 @@ def generate_gn(root, env, platform="win"):
     run(["gn", "gen", lock["outputDirectory"]], cwd=src, env=env)
 
 
-def build_adblock(src, output_directory, env, platform):
-    """Build the content blocker's Rust library where webui/BUILD.gn links it."""
-    target, library = {"win": ("x86_64-pc-windows-msvc", "bay_adblock.lib"),
-                       "linux": ("x86_64-unknown-linux-gnu", "libbay_adblock.a")}[platform]
+SQLITE_WIN32_HELPERS = ("compact_heap", "mbcs_to_utf8", "mbcs_to_utf8_v2", "reset_heap", "set_directory",
+                        "set_directory16", "set_directory8", "sleep", "unicode_to_utf8", "utf8_to_mbcs",
+                        "utf8_to_mbcs_v2", "utf8_to_unicode", "write_debug")
+
+
+def build_rust(src, output_directory, env, platform):
+    """Build Bay's desktop Rust library (packages/rust, bay-desktop) where webui/BUILD.gn links it."""
+    target, library = {"win": ("x86_64-pc-windows-msvc", "bay_desktop.lib"),
+                       "linux": ("x86_64-unknown-linux-gnu", "libbay_desktop.a")}[platform]
     cargo_env = dict(env)
     if platform == "win":
         # Chrome links the static C runtime, and one binary can't mix the two.
         cargo_env["RUSTFLAGS"] = "-C target-feature=+crt-static"
-    crate = REPO / "packages/adblock"
-    run(["cargo", "rustc", "--locked", "--release", "--lib", "--crate-type", "staticlib", "--target", target],
-        cwd=crate, env=cargo_env)
-    destination = src / output_directory / "bay_adblock"
+        # Chromium's SQLite renames its API but keeps the sqlite3_win32_* helpers, which bay-import's bundled SQLite
+        # also defines, so rename those in Bay's copy.
+        cargo_env["LIBSQLITE3_FLAGS"] = " ".join(f"-Dsqlite3_win32_{name}=bay_sqlite3_win32_{name}"
+                                                 for name in SQLITE_WIN32_HELPERS)
+    if platform == "linux":
+        # The library's C (bay-import's SQLite) is linked into Chrome against Chromium's Debian sysroot, so compile it
+        # with Chromium's clang against that sysroot too: the runner's newer glibc headers turn fcntl into fcntl64,
+        # which the sysroot's libc doesn't have.
+        sysroot = src / "build/linux" / platform_lock("linux")["sysroot"]["directory"]
+        clang = src / "third_party/llvm-build/Release+Asserts/bin"
+        key = target.replace("-", "_")
+        cargo_env[f"CC_{key}"] = str(clang / "clang")
+        cargo_env[f"AR_{key}"] = str(clang / "llvm-ar")
+        cargo_env[f"CFLAGS_{key}"] = f"--target={target} --sysroot={sysroot}"
+    workspace = REPO / "packages/rust"
+    run(["cargo", "rustc", "--locked", "--release", "--package", "bay-desktop", "--lib", "--crate-type", "staticlib",
+         "--target", target], cwd=workspace, env=cargo_env)
+    destination = src / output_directory / "bay_desktop"
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(crate / "target" / target / "release" / library, destination / library)
+    shutil.copy2(workspace / "target" / target / "release" / library, destination / library)
     rename_personality(src, destination, library, env)
 
 
@@ -559,6 +581,11 @@ def compile_changes_first(src, output_directory, targets, jobs, env, minutes):
     return run_until([*command, "bay_changes"], src, env, minutes)
 
 
+def check_web_features(src, env):
+    """Every way a page reaches the browser is covered (engine/web-features.json) before this Chromium builds."""
+    run([sys.executable, str(REPO / "scripts/web-features.py"), "check", "--src", str(src)], env=env)
+
+
 def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     lock = platform_lock(platform)
     require_linux_integration(env, platform)
@@ -572,8 +599,9 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     series(root, env, "check")
     generate_gn(root, env, platform)
     src = pathlib.Path(env["CHROMIUM_SRC"])
+    check_web_features(src, env)
     require_tools(("cargo",), env)
-    build_adblock(src, lock["outputDirectory"], env, platform)
+    build_rust(src, lock["outputDirectory"], env, platform)
     targets = targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])
     args = ["autoninja", "-C", lock["outputDirectory"]]
     if jobs:

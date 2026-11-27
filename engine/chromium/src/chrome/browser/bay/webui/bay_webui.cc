@@ -159,6 +159,10 @@ bool ConfigureBayWebUI(content::WebUI* web_ui) {
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ConnectSrc,
       "connect-src 'self' https:;");
+  // Plugins' sandboxes (plugins.h), which the coordinator's document frames.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameSrc,
+      "frame-src chrome-untrusted://bay-plugin/;");
   source->SetRequestFilter(
       base::BindRepeating([](const std::string&) { return true; }),
       base::BindRepeating([](const std::string& path,

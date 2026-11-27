@@ -37,6 +37,8 @@ import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } fro
 import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
+import { OwnFilters } from "./OwnFilters";
+import { SecureDnsSection } from "./SecureDns";
 import { platformWords } from "../../../lib/platformWords";
 
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
@@ -122,6 +124,8 @@ export function PrivacyPane() {
         </Row>
       </Group>
 
+      <OwnFilters blocker={blocker} refresh={refresh} />
+
       {!!blocker?.allowedHosts.length && (
         <>
           <SectionHeader title="Sites without blocking" description="Turned off from a site's controls. Blocking applies to subdomains too." />
@@ -148,6 +152,7 @@ export function PrivacyPane() {
         </>
       )}
 
+      <SecureDnsSection />
       <SitePermissions />
       <AppLinks />
       <ZoomLevels />

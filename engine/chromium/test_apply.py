@@ -37,7 +37,7 @@ class ChromiumLayerTests(unittest.TestCase):
             here = checkout / "engine/chromium"
             shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             for package in ("import", "sync"):
-                for platform in ("windows", "linux"):
+                for platform in ("portable", "linux"):
                     source = REPO / "packages" / package / platform
                     if source.exists():
                         shutil.copytree(source, checkout / "packages" / package / platform)
@@ -47,6 +47,22 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
+            plugins = checkout / "packages/rust/bay-plugins/include"
+            plugins.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-plugins/include/bay_plugins.h", plugins)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
+            imports = checkout / "packages/rust/bay-import/include"
+            imports.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-import/include/bay_import.h", imports)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -55,9 +71,9 @@ class ChromiumLayerTests(unittest.TestCase):
             embedded = root / "chrome/browser/bay/webui/page_script.g.h"
             self.assertIn(page_script.read_text(encoding="utf-8"), embedded.read_text(encoding="utf-8"))
             for package, source in (("import", "ImportService.cpp"), ("sync", "SyncService.cpp")):
-                copied = target / package / "windows" / source
-                self.assertEqual(copied.read_bytes(), (checkout / "packages" / package / "windows" / source).read_bytes())
-                self.assertFalse((target / package / "windows/tests").exists())
+                copied = target / package / "portable" / source
+                self.assertEqual(copied.read_bytes(), (checkout / "packages" / package / "portable" / source).read_bytes())
+                self.assertFalse((target / package / "portable/tests").exists())
             for source in (checkout / "packages/import").rglob("*"):
                 relative = source.relative_to(checkout / "packages/import")
                 if (source.is_file() and "tests" not in relative.parts
@@ -77,7 +93,7 @@ class ChromiumLayerTests(unittest.TestCase):
                 "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
             )
             subprocess.run([*command, "--check"], env=environment, check=True, capture_output=True)
-            changed = target / "import/windows/Readers.cpp"
+            changed = target / "import/portable/Readers.cpp"
             changed.write_text("drift\n")
             result = subprocess.run([*command, "--check"], env=environment, capture_output=True)
             self.assertEqual(result.returncode, 1)
@@ -90,7 +106,7 @@ class ChromiumLayerTests(unittest.TestCase):
             here = checkout / "engine/chromium"
             shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             for package in ("import", "sync"):
-                for platform in ("windows", "linux"):
+                for platform in ("portable", "linux"):
                     source = REPO / "packages" / package / platform
                     if source.exists():
                         shutil.copytree(source, checkout / "packages" / package / platform)
@@ -108,6 +124,22 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
+            plugins = checkout / "packages/rust/bay-plugins/include"
+            plugins.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-plugins/include/bay_plugins.h", plugins)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
+            imports = checkout / "packages/rust/bay-import/include"
+            imports.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-import/include/bay_import.h", imports)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
             command = [sys.executable, str(here / "apply.py")]
@@ -134,7 +166,7 @@ class ChromiumLayerTests(unittest.TestCase):
             here = checkout / "engine/chromium"
             shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             for package in ("import", "sync"):
-                for platform in ("windows", "linux"):
+                for platform in ("portable", "linux"):
                     source = REPO / "packages" / package / platform
                     if source.exists():
                         shutil.copytree(source, checkout / "packages" / package / platform)
@@ -144,6 +176,22 @@ class ChromiumLayerTests(unittest.TestCase):
             adblock = checkout / "packages/adblock/include"
             adblock.mkdir(parents=True)
             shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
+            shutil.copy2(REPO / "packages/adblock/include/bay_blocker_hooks.h", adblock)
+            lists = checkout / "packages/rust/bay-lists/include"
+            lists.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-lists/include/bay_lists.h", lists)
+            switches = checkout / "packages/rust/bay-switches/include"
+            switches.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-switches/include/bay_switches.h", switches)
+            plugins = checkout / "packages/rust/bay-plugins/include"
+            plugins.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-plugins/include/bay_plugins.h", plugins)
+            sync = checkout / "packages/rust/bay-sync/include"
+            sync.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-sync/include/bay_sync.h", sync)
+            imports = checkout / "packages/rust/bay-import/include"
+            imports.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/rust/bay-import/include/bay_import.h", imports)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]
@@ -187,7 +235,7 @@ class ChromiumLayerTests(unittest.TestCase):
             original = engine.REPO
             engine.REPO = Path(directory)
             try:
-                production = engine.REPO / "packages/import/windows/Readers.cpp"
+                production = engine.REPO / "packages/import/portable/Readers.cpp"
                 production.parent.mkdir(parents=True)
                 production.write_text("before\n")
                 before = engine.source_digest()
@@ -198,7 +246,7 @@ class ChromiumLayerTests(unittest.TestCase):
                 test_file.parent.mkdir()
                 test_file.write_text("test-only\n")
                 self.assertEqual(after, engine.source_digest())
-                for relative in ("packages/import/windows/BrowserDiscovery.cpp",
+                for relative in ("packages/import/portable/BrowserDiscovery.cpp",
                                  "packages/import/linux/ChromiumSecrets.cpp",
                                  "packages/sync/linux/Backend.cpp"):
                     source = engine.REPO / relative

@@ -6,7 +6,6 @@
 
 #include "base/functional/callback.h"
 #include "base/values.h"
-#include "components/permissions/request_type.h"
 
 namespace bay {
 
@@ -28,8 +27,6 @@ class PermissionPrompts {
   static void Resolve(const std::string& request_id,
                       const std::string& result,
                       bool remember);
-  // The JS PermissionKind, or nullptr for one the app doesn't name.
-  static const char* KindName(permissions::RequestType type);
 };
 
 }  // namespace bay

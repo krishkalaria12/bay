@@ -8,6 +8,8 @@
 
 assert(is_mac || is_win || is_linux)
 
+import("//testing/test.gni")
+
 source_set("engine_api") {
   sources = [
     "nncore_engine_api.cc",
@@ -22,12 +24,42 @@ source_set("engine_api") {
 
 source_set("portable") {
   sources = [
+    "nn_cast_dialogs.cc",
+    "nn_cast_dialogs.h",
+    "nn_device_choosers.cc",
+    "nn_device_choosers.h",
     "nn_devtools_call.cc",
     "nn_devtools_call.h",
+    "nn_external_app_requests.cc",
+    "nn_external_app_requests.h",
+    "nn_form_prompts.cc",
+    "nn_form_prompts.h",
+    "nn_icon_download.cc",
+    "nn_icon_download.h",
+    "nn_page_menu.cc",
+    "nn_page_menu.h",
+    "nn_page_security.cc",
+    "nn_page_security.h",
+    "nn_permission_flow.cc",
+    "nn_permission_flow.h",
+    "nn_permission_prompts.cc",
+    "nn_permission_prompts.h",
   ]
   deps = [
     "//base",
+    "//chrome/app:command_ids",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/media_router",
+    "//components/media_router/browser",
+    "//components/media_router/common",
+    "//components/permissions",
     "//content/public/browser",
+    "//net",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//third_party/blink/public/common",
+    "//ui/menus",
+    "//url",
   ]
   if (!is_mac) {
     sources += [
@@ -96,18 +128,38 @@ if (is_mac) {
       "nn_browser_window.mm",
       "nn_cast_dialog.h",
       "nn_cast_dialog.mm",
+      "nn_cast_dialogs.cc",
+      "nn_cast_dialogs.h",
       "nn_context_menu.h",
       "nn_context_menu.mm",
       "nn_desktop_capture.cc",
       "nn_desktop_capture.h",
       "nn_device_chooser.h",
       "nn_device_chooser.mm",
+      "nn_device_choosers.cc",
+      "nn_device_choosers.h",
       "nn_devtools_call.cc",
       "nn_devtools_call.h",
+      "nn_icon_download.cc",
+      "nn_icon_download.h",
+      "nn_page_menu.cc",
+      "nn_page_menu.h",
+      "nn_page_security.cc",
+      "nn_page_security.h",
+      "nn_permission_flow.cc",
+      "nn_permission_flow.h",
+      "nn_permission_prompts.cc",
+      "nn_permission_prompts.h",
       "nn_extension_view.cc",
       "nn_extension_view.h",
+      "nn_external_app_requests.cc",
+      "nn_external_app_requests.h",
       "nn_external_apps.h",
       "nn_external_apps.mm",
+      "nn_form_prompts.cc",
+      "nn_form_prompts.h",
+      "nn_mac_values.h",
+      "nn_mac_values.mm",
       "nn_fake_media.h",
       "nn_fake_media.mm",
       "nn_host_visibility.cc",
@@ -265,4 +317,31 @@ if (is_mac) {
       ]
     }
   }
+}
+
+# The shared models' unit tests, each with only the sources it needs (no link of
+# //chrome). The Windows engine build runs it (scripts/windows/unit-tests.py).
+test("bay_core_unittests") {
+  sources = [
+    "nn_page_menu.cc",
+    "nn_page_menu.h",
+    "nn_page_menu_unittest.cc",
+    "nn_page_security.cc",
+    "nn_page_security.h",
+    "nn_page_security_unittest.cc",
+    "nn_permission_flow.cc",
+    "nn_permission_flow.h",
+    "nn_permission_flow_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//chrome/app:command_ids",
+    "//components/permissions",
+    "//content/public/browser",
+    "//net",
+    "//testing/gtest",
+    "//ui/menus",
+    "//url",
+  ]
 }

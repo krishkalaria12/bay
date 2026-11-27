@@ -1,0 +1,6 @@
+// bay-sync's C ABI (packages/rust/bay-sync), for Swift: the Swift package (../Package.swift) and the BaySync pod
+// (ios/BaySync.podspec) both import it as BaySyncFFI. The app links the library itself (bay-desktop).
+module BaySyncFFI {
+  header "../../rust/bay-sync/include/bay_sync.h"
+  export *
+}

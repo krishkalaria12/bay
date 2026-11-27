@@ -1,5 +1,6 @@
 #!/bin/bash
-# Lint (warnings fail it) and the format check, as CI runs them, then the anti-slop rules: any failing stops the push.
+# Lint (warnings fail it) and the format check, as CI runs them, then the anti-slop rules, then the desktop Rust
+# library's checks when this push changes it: any failing stops the push.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 [[ -x ./node_modules/.bin/oxlint ]] || { echo "pre-push: oxlint missing; run pnpm install" >&2; exit 1; }
@@ -15,4 +16,23 @@ fi
 if ! ./node_modules/.bin/oxlint -c .oxlintrc.anti-slop.json; then
   echo "pre-push: anti-slop failed; fix it (pnpm slop) before pushing." >&2
   exit 1
+fi
+# The desktop Rust library (packages/rust): format always; clippy and tests when the commits being pushed touch it.
+if command -v cargo >/dev/null 2>&1 || [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+  if ! cargo fmt --check --all --manifest-path packages/rust/Cargo.toml >/dev/null 2>&1; then
+    echo "pre-push: Rust isn't formatted; run cargo fmt --all in packages/rust and commit." >&2
+    exit 1
+  fi
+  base=$(git rev-parse --verify --quiet '@{upstream}' || git rev-parse --verify --quiet origin/main || true)
+  if [[ -z "$base" ]] || [[ -n "$(git diff --name-only "$base" HEAD -- packages/rust)" ]]; then
+    if ! cargo clippy --locked --quiet --workspace --all-targets --manifest-path packages/rust/Cargo.toml -- -D warnings; then
+      echo "pre-push: clippy failed in packages/rust; fix it before pushing." >&2
+      exit 1
+    fi
+    if ! cargo test --locked --quiet --workspace --manifest-path packages/rust/Cargo.toml >/dev/null; then
+      echo "pre-push: Rust tests failed; run cargo test --workspace in packages/rust." >&2
+      exit 1
+    fi
+  fi
 fi

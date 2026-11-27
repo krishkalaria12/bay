@@ -1,0 +1,66 @@
+{
+  "favorites": {},
+  "spaces": [
+    {
+      "id": "personal",
+      "name": "Personal",
+      "pinned": [
+        {
+          "title": "Loose page",
+          "type": "url",
+          "url": "https://loose.example/"
+        },
+        {
+          "children": [
+            {
+              "pageTitle": "Work page",
+              "title": "My work",
+              "type": "url",
+              "url": "https://work-tab.example/"
+            },
+            {
+              "children": [
+                {
+                  "title": "Research page",
+                  "type": "url",
+                  "url": "https://inner-tab.example/"
+                },
+                {
+                  "children": [],
+                  "title": "Empty child",
+                  "type": "folder"
+                },
+                {
+                  "title": "Left page",
+                  "type": "url",
+                  "url": "https://left.example/"
+                },
+                {
+                  "title": "Right page",
+                  "type": "url",
+                  "url": "https://right.example/"
+                }
+              ],
+              "title": "Research",
+              "type": "folder"
+            },
+            {
+              "title": "Last work page",
+              "type": "url",
+              "url": "https://tail.example/"
+            }
+          ],
+          "title": "Work",
+          "type": "folder"
+        },
+        {
+          "children": [],
+          "title": "Empty root",
+          "type": "folder"
+        }
+      ],
+      "profileId": "Default",
+      "tabs": []
+    }
+  ]
+}

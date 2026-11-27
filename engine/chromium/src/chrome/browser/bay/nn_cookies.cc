@@ -356,6 +356,176 @@ void ReadPresent(base::WeakPtr<Profile> profile,
                                      counts, std::move(reply)));
 }
 
+std::string_view SameSiteName(net::CookieSameSite same_site) {
+  switch (same_site) {
+    case net::CookieSameSite::NO_RESTRICTION:
+      return "none";
+    case net::CookieSameSite::LAX_MODE:
+      return "lax";
+    case net::CookieSameSite::STRICT_MODE:
+      return "strict";
+    default:
+      return "unspecified";
+  }
+}
+
+std::string_view PriorityName(net::CookiePriority priority) {
+  switch (priority) {
+    case net::COOKIE_PRIORITY_LOW:
+      return "low";
+    case net::COOKIE_PRIORITY_HIGH:
+      return "high";
+    default:
+      return "medium";
+  }
+}
+
+double Ms(base::Time time) {
+  return time.is_null() ? 0 : time.InMillisecondsFSinceUnixEpoch();
+}
+
+// Whether |cookie| belongs to |site| (a registrable domain): its domain is the
+// site or one of its subdomains. Partitioned (CHIPS) cookies belong to the
+// pages that embed them, so they never travel.
+bool OfSite(const net::CanonicalCookie& cookie, std::string_view site) {
+  if (cookie.PartitionKey().has_value() || site.empty()) {
+    return false;
+  }
+  const std::string host = cookie.DomainWithoutDot();
+  return host == site ||
+         (host.size() > site.size() && host.ends_with(site) &&
+          host[host.size() - site.size() - 1] == '.');
+}
+
+base::DictValue CookieDict(const net::CanonicalCookie& cookie) {
+  base::DictValue dict;
+  dict.Set("name", cookie.Name());
+  dict.Set("value", cookie.Value());
+  dict.Set("domain", cookie.Domain());
+  dict.Set("path", cookie.Path());
+  dict.Set("created", Ms(cookie.CreationDate()));
+  dict.Set("expires", cookie.IsPersistent() ? Ms(cookie.ExpiryDate()) : 0);
+  dict.Set("lastAccess", Ms(cookie.LastAccessDate()));
+  dict.Set("secure", cookie.SecureAttribute());
+  dict.Set("httpOnly", cookie.IsHttpOnly());
+  dict.Set("sameSite", SameSiteName(cookie.SameSite()));
+  dict.Set("priority", PriorityName(cookie.Priority()));
+  dict.Set("sourceScheme",
+           cookie.SourceScheme() == net::CookieSourceScheme::kSecure
+               ? "secure"
+               : cookie.SourceScheme() == net::CookieSourceScheme::kNonSecure
+                     ? "nonSecure"
+                     : "unset");
+  dict.Set("sourcePort", cookie.SourcePort());
+  return dict;
+}
+
+void ReplySite(std::string site,
+               Reply reply,
+               const std::vector<net::CanonicalCookie>& cookies) {
+  base::ListValue list;
+  for (const net::CanonicalCookie& cookie : cookies) {
+    if (OfSite(cookie, site)) {
+      list.Append(CookieDict(cookie));
+    }
+  }
+  reply.Send(base::DictValue().Set("cookies", std::move(list)));
+}
+
+struct Removal {
+  std::string name;
+  std::string domain;
+  std::string path;
+};
+
+struct Applied {
+  int set = 0;
+  int rejected = 0;
+  int removed = 0;
+};
+
+void AppliedAll(base::WeakPtr<Profile> profile,
+                Applied counts,
+                Reply reply,
+                const std::vector<bool>& results) {
+  for (bool ok : results) {
+    ++(ok ? counts.set : counts.rejected);
+  }
+  if (!profile) {
+    return reply.Error("profile closed");
+  }
+  CookieManagerOf(profile.get())
+      ->FlushCookieStore(base::BindOnce(
+          [](Reply reply, Applied counts) {
+            reply.Send(base::DictValue()
+                           .Set("set", counts.set)
+                           .Set("rejected", counts.rejected)
+                           .Set("removed", counts.removed));
+          },
+          std::move(reply), counts));
+}
+
+// The removals have run: writes |cookies|.
+void SetCarried(base::WeakPtr<Profile> profile,
+                std::vector<Imported> cookies,
+                Applied counts,
+                Reply reply,
+                const std::vector<bool>& removed) {
+  if (!profile) {
+    return reply.Error("profile closed");
+  }
+  for (bool ok : removed) {
+    counts.removed += ok ? 1 : 0;
+  }
+  base::RepeatingCallback<void(bool)> barrier = base::BarrierCallback<bool>(
+      cookies.size(),
+      base::BindOnce(&AppliedAll, profile, counts, std::move(reply)));
+  network::mojom::CookieManager* manager = CookieManagerOf(profile.get());
+  for (const Imported& imported : cookies) {
+    manager->SetCanonicalCookie(*imported.cookie, imported.source_url,
+                                net::CookieOptions::MakeAllInclusive(),
+                                base::BindOnce(
+                                    [](base::RepeatingCallback<void(bool)> done,
+                                       net::CookieAccessResult result) {
+                                      done.Run(result.status.IsInclude());
+                                    },
+                                    barrier));
+  }
+}
+
+// Deletes the profile's unpartitioned cookies |removals| names (a deletion
+// needs the stored cookie itself), then sets the carried ones.
+void RemoveCarried(base::WeakPtr<Profile> profile,
+                   std::vector<Removal> removals,
+                   std::vector<Imported> cookies,
+                   Applied counts,
+                   Reply reply,
+                   const std::vector<net::CanonicalCookie>& present) {
+  if (!profile) {
+    return reply.Error("profile closed");
+  }
+  std::vector<const net::CanonicalCookie*> gone;
+  for (const net::CanonicalCookie& cookie : present) {
+    if (cookie.PartitionKey().has_value()) {
+      continue;
+    }
+    for (const Removal& removal : removals) {
+      if (cookie.Name() == removal.name && cookie.Domain() == removal.domain &&
+          cookie.Path() == removal.path) {
+        gone.push_back(&cookie);
+        break;
+      }
+    }
+  }
+  base::RepeatingCallback<void(bool)> barrier = base::BarrierCallback<bool>(
+      gone.size(), base::BindOnce(&SetCarried, profile, std::move(cookies),
+                                  counts, std::move(reply)));
+  network::mojom::CookieManager* manager = CookieManagerOf(profile.get());
+  for (const net::CanonicalCookie* cookie : gone) {
+    manager->DeleteCanonicalCookie(*cookie, barrier);
+  }
+}
+
 }  // namespace
 }  // namespace bay
 
@@ -412,4 +582,79 @@ NN_ENGINE_CALL(nn_cookies_import) {
       profile, std::move(sites),
       base::BindOnce(&bay::ReadPresent, profile->GetWeakPtr(),
                      std::move(cookies), counts, call.TakeReply()));
+}
+
+NN_ENGINE_CALL(nn_cookies_site) {
+  bay::Call call(profile_dir, args_json, reply, context);
+  if (!call) {
+    return;
+  }
+  if (call.profile()->IsOffTheRecord()) {
+    return call.TakeReply().Error("private profile");
+  }
+  std::string site = base::ToLowerASCII(call.String("site"));
+  if (site.empty()) {
+    return call.TakeReply().Error("site must be a domain");
+  }
+  bay::CookieManagerOf(call.profile())
+      ->GetAllCookies(
+          base::BindOnce(&bay::ReplySite, std::move(site), call.TakeReply()));
+}
+
+NN_ENGINE_CALL(nn_cookies_apply) {
+  // Parsed here, not by Call, so this copy of the values is ours to zero.
+  bay::Call call(profile_dir, nullptr, reply, context);
+  if (!call) {
+    return;
+  }
+  if (call.profile()->IsOffTheRecord()) {
+    return call.TakeReply().Error("private profile");
+  }
+
+  std::vector<bay::Imported> cookies;
+  std::vector<bay::Removal> removals;
+  bay::Applied counts;
+  {
+    bay::SensitiveArgs args(args_json, bay::kMaxArgsBytes);
+    if (args.too_large()) {
+      return call.TakeReply().Error("arguments too large");
+    }
+    if (!args.dict()) {
+      return call.TakeReply().Error("arguments are not a JSON object");
+    }
+    const base::ListValue* set = args.dict()->FindList("set");
+    const base::ListValue* remove = args.dict()->FindList("remove");
+    if ((set ? set->size() : 0) + (remove ? remove->size() : 0) >
+        bay::kMaxCookies) {
+      return call.TakeReply().Error("too many cookies in one call");
+    }
+    const base::Time now = base::Time::Now();
+    if (set) {
+      for (const base::Value& entry : *set) {
+        std::optional<bay::Imported> cookie = bay::ToCookie(entry, now);
+        // A carried cookie is never partitioned (nn_cookies_site sends none).
+        if (cookie && !cookie->cookie->PartitionKey().has_value()) {
+          cookies.push_back(std::move(*cookie));
+        } else {
+          ++counts.rejected;
+        }
+      }
+    }
+    if (remove) {
+      for (const base::Value& entry : *remove) {
+        const base::DictValue* dict = entry.GetIfDict();
+        const std::string* name = dict ? dict->FindString("name") : nullptr;
+        const std::string* domain = dict ? dict->FindString("domain") : nullptr;
+        const std::string* path = dict ? dict->FindString("path") : nullptr;
+        if (name && domain && path) {
+          removals.push_back({*name, base::ToLowerASCII(*domain), *path});
+        }
+      }
+    }
+  }  // The parsed arguments are zeroed here.
+
+  Profile* profile = call.profile();
+  bay::CookieManagerOf(profile)->GetAllCookies(base::BindOnce(
+      &bay::RemoveCarried, profile->GetWeakPtr(), std::move(removals),
+      std::move(cookies), counts, call.TakeReply()));
 }

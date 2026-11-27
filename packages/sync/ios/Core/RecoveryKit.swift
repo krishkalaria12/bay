@@ -1,5 +1,5 @@
 import AppKit
-import CoreImage
+import BaySyncFFI
 import Foundation
 
 public enum RecoveryKit {
@@ -24,12 +24,29 @@ public enum RecoveryKit {
     return lines.joined(separator: "\n")
   }
 
+  /// The phrase's QR code: bay-sync's modules (the ones Windows and Linux draw), `scale` points each, with a
+  /// one-module margin.
   public static func qrCode(words: [String], scale: CGFloat = 8) -> CGImage? {
-    guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
-    filter.setValue(Data(words.joined(separator: " ").utf8), forKey: "inputMessage")
-    filter.setValue("M", forKey: "inputCorrectionLevel")
-    guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) else { return nil }
-    return CIContext(options: [.useSoftwareRenderer: true]).createCGImage(output, from: output.extent)
+    guard let entropy = try? RecoveryPhrase.entropy(from: words.joined(separator: " ")) else { return nil }
+    var side = 0
+    guard let modules = entropy.withUnsafeBytes({ bay_sync_phrase_qr($0.bindMemory(to: UInt8.self).baseAddress, &side) })
+    else { return nil }
+    // The phrase is in the modules: wiped as they're freed.
+    defer { bay_sync_secret_free(modules, side * side) }
+    let unit = max(1, Int(scale)), width = (side + 2) * unit
+    guard let context = CGContext(data: nil, width: width, height: width, bitsPerComponent: 8, bytesPerRow: width,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+    else { return nil }
+    context.setFillColor(gray: 1, alpha: 1)
+    context.fill(CGRect(x: 0, y: 0, width: width, height: width))
+    context.setFillColor(gray: 0, alpha: 1)
+    for y in 0..<side {
+      for x in 0..<side where modules[y * side + x] != 0 {
+        // Core Graphics counts rows from the bottom.
+        context.fill(CGRect(x: (x + 1) * unit, y: (side - y) * unit, width: unit, height: unit))
+      }
+    }
+    return context.makeImage()
   }
 
   public static func png(_ image: CGImage) -> Data? {

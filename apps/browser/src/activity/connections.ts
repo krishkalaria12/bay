@@ -34,6 +34,10 @@ export const connectNotion = (token: string): Promise<void> =>
   hasServiceClient() ? requestService("liveConnect", ["notion", [token]]) : withConnections((service) => service.connectNotion(token));
 
 /** Connects Confluence with a site, an email and an API token. */
+/** Connects GitLab (gitlab.com or a self-managed site) with a personal access token. */
+export const connectGitlab = (site: string, token: string): Promise<void> =>
+  hasServiceClient() ? requestService("liveConnect", ["gitlab", [site, token]]) : withConnections((service) => service.connectGitlab(site, token));
+
 export const connectConfluence = (site: string, email: string, token: string): Promise<void> =>
   hasServiceClient()
     ? requestService("liveConnect", ["confluence", [site, email, token]])

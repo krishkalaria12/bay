@@ -1,0 +1,36 @@
+{
+  "groups": [
+    {
+      "collapsed": false,
+      "color": "orange",
+      "id": "g-1",
+      "title": "Shopping"
+    }
+  ],
+  "tabs": [
+    {
+      "active": false,
+      "lastActive": 1788220800000,
+      "pinned": true,
+      "title": "Mozilla",
+      "url": "https://www.mozilla.example/",
+      "windowIndex": 0
+    },
+    {
+      "active": true,
+      "groupId": "g-1",
+      "lastActive": 1788220799995,
+      "pinned": false,
+      "title": "A",
+      "url": "https://a.example/",
+      "windowIndex": 0
+    },
+    {
+      "active": true,
+      "pinned": false,
+      "title": "Second",
+      "url": "https://second.example/",
+      "windowIndex": 1
+    }
+  ]
+}

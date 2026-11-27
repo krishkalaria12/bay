@@ -15,6 +15,12 @@ import { LITTLE_BAY_DISABLED_COMMANDS } from "../littleBay/menu";
 import { boostHost } from "../../lib/boosts";
 import { libraryAvailable } from "../library/availability";
 import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
+import { ENGINE_NAMES, engineSwitchFor } from "../../store/engines";
+import { canAskPage } from "../ask/askPage";
+import { activePlugins, usePlugins } from "../../lib/plugins/pluginStore";
+import { runPluginCommandIn } from "../../lib/plugins/pluginActions";
+
+const engineSwitch = ({ s, tab }: Context) => (tab ? engineSwitchFor(s, tab.id) : null);
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
@@ -235,6 +241,31 @@ const WINDOW_MENU_DEFS: ActionDef[] = [
   },
   { command: "caretBrowsing", title: "Caret Browsing", icon: "doc", available: nativePage },
   {
+    command: "askPage",
+    title: "Ask About This Page",
+    icon: "sparkles",
+    keywords: ["ask", "question", "summarize", "summary", "apple intelligence", "ai", "explain"],
+    available: (c) => nativePage(c) && canAskPage(),
+  },
+  ...(["webkit", "chromium"] as const).flatMap((engine): ActionDef[] => [
+    {
+      command: "reopenInEngine",
+      arg: engine,
+      title: `Reopen in ${ENGINE_NAMES[engine]}`,
+      icon: engine === "webkit" ? "safari" : "globe",
+      keywords: ["engine", "webkit", "safari", "chromium", "switch engine"],
+      available: (c) => engineSwitch(c)?.other === engine,
+    },
+    {
+      command: "alwaysOpenSiteIn",
+      arg: engine,
+      title: (c) => `Always Open ${engineSwitch(c)?.site ?? "This Site"} in ${ENGINE_NAMES[engine]}`,
+      icon: engine === "webkit" ? "safari" : "globe",
+      keywords: ["engine", "webkit", "safari", "chromium", "site rule"],
+      available: (c) => !!engineSwitch(c) && engineSwitch(c)?.rule !== engine,
+    },
+  ]),
+  {
     command: "toggleTabLayout",
     title: ({ s, windowId }) => ((s.windows[windowId]?.tabLayout ?? s.settings.tabLayout) === "top" ? "Show Tabs in Sidebar" : "Show Tabs on Top"),
     icon: "rectangle.split.2x1",
@@ -301,6 +332,19 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     out.push(action);
   }
 
+  // Plugins' commands (lib/plugins), while their plugin runs.
+  for (const plugin of activePlugins(usePlugins.getState())) {
+    for (const command of plugin.manifest.contributes.commands) {
+      if (command.page && !tab?.url) continue;
+      out.push({
+        id: `plugin:${plugin.manifest.id}:${command.id}`,
+        title: command.title,
+        icon: command.icon,
+        keywords: [...command.keywords, plugin.manifest.name],
+      });
+    }
+  }
+
   if (w && !w.incognito) {
     s.spaceOrder.forEach((id, i) => {
       if (id === w.spaceId) return;
@@ -319,6 +363,9 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
 }
 
 export function runBarAction(id: string, windowId: string) {
+  const plugin = /^plugin:([^:]+):(.+)$/.exec(id);
+
+  if (plugin) return void runPluginCommandIn(windowId, plugin[1]!, plugin[2]!, "commandBar").catch(() => {});
   const i = id.indexOf(":");
   // SAFETY: actionId builds ids from a BrowserCommand (optionally suffixed `:arg`), so the prefix before ':' is one.
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;

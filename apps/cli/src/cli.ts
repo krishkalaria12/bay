@@ -18,6 +18,11 @@ import { dataDirFlag, portFlag, secondsFlag, toggle, wsFlag } from "./cliFlags.t
 import { scripts } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
+import { installMcp, MCP_AGENTS, serveMcp } from "./mcp.ts";
+import { AGENT_ID, requestAgentAccess, withToken } from "./agentAccess.ts";
+import { HOOK_EVENTS, hookFilter, watchHooks } from "./hooks.ts";
+import { Session } from "./browser.ts";
+import { homedir } from "node:os";
 import { redact } from "./redact.ts";
 
 export const DESCRIPTION = "Control a running Bay from the terminal.";
@@ -177,9 +182,162 @@ export const skills = Command.make("skills").pipe(
   Command.withSubcommands([skillsInstall]),
 );
 
+// MARK: mcp
+
+export const MCP_DESCRIPTION = `Bay as an MCP server for coding agents: list, open and read tabs, click, type and take screenshots.
+
+  bay mcp serve [--agent AGENT]     speak MCP on stdin and stdout (what an agent runs)
+  bay mcp install --agent AGENT     add Bay to an agent's MCP servers, changing nothing else there
+
+Agents: ${MCP_AGENTS.join(", ")}. Needs Settings › Advanced › Let the bay command control Bay, as bay exec does,
+and reaches only web page tabs, never private windows. With --agent (what install writes), Bay asks you the
+first time whether the agent may use it and in which spaces; Settings › Advanced changes or takes that back.`;
+
+const mcpServe = Command.make(
+  "serve",
+  {
+    agent: Flag.String("agent").pipe(
+      Flag.filter(
+        (agent) => AGENT_ID.test(agent),
+        () => "--agent must be a short lowercase name, like claude-code",
+      ),
+      Flag.withDescription("ask Bay for this agent's own access, kept to the spaces you allow"),
+      Flag.optional,
+    ),
+    dataDir: dataDirFlag,
+    port: portFlag,
+    ws: wsFlag,
+  },
+  (input) =>
+    Effect.promise(() =>
+      serveMcp(async () => {
+        const endpoint = await Effect.runPromise(
+          resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir: Option.getOrUndefined(input.dataDir) }),
+        );
+
+        const session = new Session(endpoint);
+        await session.connect();
+        const agent = Option.getOrUndefined(input.agent);
+
+        if (!agent) return session;
+
+        // The bay command's own connection asks; the agent's tools run on a connection with the agent's token.
+        try {
+          const token = await requestAgentAccess(session.cdp, agent, { notice: (message) => void process.stderr.write(`bay: ${message}\n`) });
+          const own = new Session(withToken(endpoint, token));
+          await own.connect();
+
+          return own;
+        } finally {
+          await session.close();
+        }
+      }, VERSION),
+    ),
+).pipe(Command.withDescription("Serve MCP on stdin and stdout."), Command.withShortDescription("serve MCP to an agent"));
+
+const mcpInstall = Command.make(
+  "install",
+  { agent: Flag.Literals("agent", [...MCP_AGENTS]).pipe(Flag.withDescription("the agent to add Bay to (repeatable)"), Flag.atLeast(1)) },
+  (input) =>
+    Effect.gen(function* () {
+      for (const agent of input.agent) {
+        const path = yield* Effect.try({ try: () => installMcp(agent, homedir()), catch: (error) => error }).pipe(
+          Effect.catch((error) => failWith(1, `bay mcp install: ${agent}: ${messageOf(error)}`)),
+        );
+
+        yield* say(`${agent}: added bay to ${path}`);
+      }
+    }),
+).pipe(Command.withDescription("Add Bay to agents' MCP servers."), Command.withShortDescription("add Bay to an agent"));
+
+export const mcp = Command.make("mcp").pipe(
+  Command.withDescription(MCP_DESCRIPTION),
+  Command.withShortDescription("serve Bay to coding agents over MCP"),
+  Command.withSubcommands([mcpServe, mcpInstall]),
+);
+
+// MARK: on
+
+export const ON_DESCRIPTION = `Run a program whenever something happens in the running Bay, until Bay quits or you stop it.
+
+Events:
+  tab-opened      a web page tab opens (or a tab comes to a web page from one of Bay's own)
+  tab-navigated   a tab goes to another address
+  page-loaded     a tab's page finishes loading
+  tab-closed      a tab closes
+
+The program gets BAY_EVENT, BAY_TAB_ID, BAY_URL and BAY_TITLE in its environment, and the same as one line of JSON on
+stdin. It runs as you, outside Bay, and only watches: it can't stop or change the page. Up to --parallel run at once.
+
+Exit status: 0 stopped (or, with --once, the program's own), 1 bad arguments, 2 Bay can't be reached or quit, 130
+interrupted. Needs Settings › Advanced › Let the bay command control Bay, as bay exec does.`;
+
+export const on = Command.make(
+  "on",
+  {
+    event: Argument.Literals("event", HOOK_EVENTS).pipe(Argument.withDescription("what to run on")),
+    command: Argument.String("command").pipe(Argument.withDescription("the program and its arguments, after --"), Argument.variadic({ min: 1 })),
+    match: Flag.String("match").pipe(Flag.withDescription("only pages matching a Chrome match pattern, like https://*.example.com/*"), Flag.optional),
+    once: toggle("once", "stop after the first run, with the program's exit status"),
+    parallel: Flag.Int("parallel").pipe(
+      Flag.filter(
+        (n) => n >= 1 && n <= 32,
+        () => "--parallel must be between 1 and 32",
+      ),
+      Flag.withDefault(4),
+      Flag.withDescription("how many runs at once"),
+    ),
+    dataDir: dataDirFlag,
+    port: portFlag,
+    ws: wsFlag,
+  },
+  (input) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* redactedOutput;
+
+        const match = yield* Effect.try({ try: () => hookFilter(Option.getOrNull(input.match)), catch: (error) => error }).pipe(
+          Effect.catch((error) => failWith(1, `bay on: --match: ${messageOf(error)}`)),
+        );
+
+        const endpoint = yield* resolveEndpoint({
+          ws: Option.getOrUndefined(input.ws),
+          port: Option.getOrUndefined(input.port),
+          dataDir: Option.getOrUndefined(input.dataDir),
+        }).pipe(Effect.catch((error) => failWith(2, `bay: ${error.message}`)));
+
+        const session = new Session(endpoint);
+
+        yield* Effect.tryPromise({ try: () => session.connect(), catch: (error) => error }).pipe(
+          Effect.catch((error) => failWith(2, `bay: ${messageOf(error)}`)),
+        );
+
+        const status = yield* Effect.tryPromise({
+          try: () => watchHooks(session, { event: input.event, match, command: [...input.command], once: input.once, parallel: input.parallel }),
+          catch: (error) => error,
+        }).pipe(
+          Effect.ensuring(Effect.promise(() => session.close())),
+          Effect.catch((error) => failWith(2, `bay on: ${messageOf(error)}`)),
+        );
+
+        if (status === null) return yield* failWith(2, `bay on: lost the connection to ${session.lost()}`);
+
+        if (status !== 0) return yield* exitWith(status);
+      }),
+    ),
+).pipe(
+  Command.withDescription(ON_DESCRIPTION),
+  Command.withShortDescription("run a program when something happens in Bay"),
+  Command.withExamples([
+    { command: "bay on page-loaded --match 'https://github.com/*' -- ./log-visit.sh", description: "run a script for every GitHub page that loads" },
+    { command: `bay on tab-opened -- sh -c 'echo "$BAY_URL" >> ~/opened.txt'`, description: "keep a list of opened tabs" },
+    { command: "bay on tab-closed --once -- say closed", description: "wait for the next tab to close" },
+  ]),
+);
+
 // MARK: The command
 
-export const bay = Command.make("bay").pipe(Command.withDescription(DESCRIPTION), Command.withSubcommands([exec, scripts, skills]));
+export const bay = Command.make("bay").pipe(Command.withDescription(DESCRIPTION), Command.withSubcommands([exec, scripts, skills, mcp, on]));
 
 // The parser's output: help and the version as it builds them, and a rejected invocation as one line on stderr.
 const presenter: CliOutput.Presenter = {

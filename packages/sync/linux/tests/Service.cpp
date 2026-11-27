@@ -1,8 +1,8 @@
 // Portable service check: real crypto/vault/service, fake desktop/keyring
 // edges.
-#include "../../windows/Base64.h"
-#include "../../windows/RecoveryKit.h"
-#include "../../windows/SyncService.h"
+#include "../../portable/Base64.h"
+#include "../../portable/RecoveryKit.h"
+#include "../../portable/SyncService.h"
 #include <cassert>
 #include <cstdarg>
 #include <cstring>

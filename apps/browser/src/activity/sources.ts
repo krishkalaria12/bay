@@ -29,11 +29,15 @@ import {
   type GithubResponse,
 } from "./github";
 import { DETAILS_PAGE } from "./constants";
+import { gitlabBase, gitlabGone, gitlabIds, gitlabStats, gitlabStatsQuery, mapGitlab, mergeGitlabLists, type GitlabMergeRequest } from "./gitlab";
 import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
-import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
+import { LiveError, type BuiltInSourceId, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId, type PluginSourceId } from "./types";
 import { retireConnections } from "./connections";
+import { pluginSourceItems } from "../lib/plugins/pluginService";
+import type { JsonValue } from "../lib/json";
+import { parsePluginSourceId, usePlugins } from "../lib/plugins/pluginStore";
 
 export type LiveSource = {
   id: LiveSourceId;
@@ -147,6 +151,80 @@ const bitbucket: LiveSource = {
   },
 };
 
+// MARK: GitLab
+
+async function gitlabAccess() {
+  const base = gitlabBase(live().config.gitlabSite);
+
+  if (!base) throw new LiveError("notConfigured", "No GitLab site");
+  const token = await secret("gitlab");
+
+  return { api: endpoints.gitlab(base), graphql: endpoints.gitlabGraphql(base), headers: { "PRIVATE-TOKEN": token }, token };
+}
+
+const gitlab: LiveSource = {
+  id: "gitlab",
+  name: "GitLab",
+  kind: "pullRequests",
+  site: "https://gitlab.com",
+  async fetch(folder) {
+    const { api, graphql, headers, token } = await gitlabAccess();
+    const me = live().accounts.gitlab;
+
+    if (!me) throw new LiveError("signedOut", "Not signed in");
+    const list = (query: string) => request<GitlabMergeRequest[]>(`${api}/merge_requests?state=opened&per_page=50&${query}`, { headers });
+
+    const [authored, review] = await Promise.all([
+      folder.filters.authored ? list("scope=created_by_me") : [],
+      folder.filters.reviewRequests ? list(`scope=all&reviewer_username=${encodeURIComponent(me.login)}`) : [],
+    ]);
+
+    // The list leaves out the head pipeline and the size: each merge request's own answer has them. Line counts and
+    // approvals come from one GraphQL query for them all; without it the items still show.
+    const lists = mergeGitlabLists(authored, review);
+
+    const [full, stats] = await Promise.all([
+      Promise.all(
+        lists.map(({ mr }) => request<GitlabMergeRequest>(`${api}/projects/${mr.project_id}/merge_requests/${mr.iid}`, { headers }).catch(() => null)),
+      ),
+      lists.length
+        ? request<JsonValue>(graphql, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ query: gitlabStatsQuery(lists.map(({ mr }) => mr)) }),
+          }).then(
+            (answer) => gitlabStats(answer, lists.length),
+            () => [],
+          )
+        : [],
+    ]);
+
+    return lists.map(({ mr, section }, i) => mapGitlab(full[i] ?? mr, section, stats[i] ?? null));
+  },
+  async resolveGone(items) {
+    const gone = items.flatMap((item) => {
+      const ids = item.source === "gitlab" ? gitlabIds(item.id) : null;
+
+      return ids ? [{ item, ids }] : [];
+    });
+
+    if (!gone.length) return {};
+    const { api, headers } = await gitlabAccess();
+    const out: Record<string, CompletionState> = {};
+
+    await Promise.all(
+      gone.map(async ({ item, ids }) => {
+        const mr = await request<GitlabMergeRequest>(`${api}/projects/${ids.project}/merge_requests/${ids.iid}`, { headers }).catch(() => null);
+        const state = mr && gitlabGone(mr, item.section);
+
+        if (state) out[item.id] = state;
+      }),
+    );
+
+    return out;
+  },
+};
+
 // MARK: Notion
 
 const notion: LiveSource = {
@@ -203,10 +281,65 @@ const gdrive: LiveSource = {
   },
 };
 
-export const SOURCES: Record<LiveSourceId, LiveSource> = { github, bitbucket, notion, confluence, gdrive };
+export const SOURCES: Record<BuiltInSourceId, LiveSource> = { github, gitlab, bitbucket, notion, confluence, gdrive };
+
+// MARK: Plugins
+
+const pluginSources = new Map<string, LiveSource>();
+
+/** A plugin's live source (lib/plugins): its plugin answers, through its sandbox, in the coordinator. */
+function pluginSource(id: PluginSourceId): LiveSource {
+  const parsed = parsePluginSourceId(id);
+  const plugin = parsed && usePlugins.getState().plugins.find((p) => p.manifest.id === parsed.pluginId);
+  const spec = plugin?.manifest.contributes.liveSources.find((s) => s.id === parsed?.sourceId);
+  const name = spec ? `${spec.name} (${plugin!.manifest.name})` : "A plugin";
+  const known = pluginSources.get(id);
+
+  if (known?.name === name) return known;
+
+  const source: LiveSource = {
+    id,
+    name,
+    kind: spec?.kind ?? "documents",
+    site: spec?.site ?? "",
+    async fetch() {
+      if (!parsed || !plugin?.enabled) throw new LiveError("notConfigured", "The plugin is off");
+
+      const items = await pluginSourceItems(parsed.pluginId, parsed.sourceId).catch((error: Error) => {
+        throw new LiveError("other", error.message);
+      });
+
+      return items.map((item) => ({
+        id: `${id}:${item.id}`,
+        source: id,
+        url: item.url,
+        title: item.title,
+        subtitle: item.subtitle ?? "",
+        icon: item.icon ?? null,
+        updatedAt: item.updatedAt ?? Date.now(),
+      }));
+    },
+  };
+
+  pluginSources.set(id, source);
+
+  return source;
+}
+
+const isBuiltIn = (id: LiveSourceId): id is BuiltInSourceId => Object.hasOwn(SOURCES, id);
+
+/** A live folder's source: one of Bay's own, or a plugin's. */
+export const liveSource = (id: LiveSourceId): LiveSource => (isBuiltIn(id) ? SOURCES[id] : pluginSource(id));
+
+/** The live sources the turned-on plugins add for a kind of folder. */
+export const pluginSourcesFor = (kind: LiveFolder["kind"]): PluginSourceId[] =>
+  usePlugins
+    .getState()
+    .plugins.filter((p) => p.enabled)
+    .flatMap((p) => p.manifest.contributes.liveSources.filter((s) => s.kind === kind).map((s): PluginSourceId => `plugin:${p.manifest.id}:${s.id}`));
 
 // Compatibility entry points share the Effect connection implementation.
-export { connectGithub, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
+export { connectGithub, connectGitlab, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
 
 export type { DeviceSignIn as DeviceFlow } from "./connections";
 

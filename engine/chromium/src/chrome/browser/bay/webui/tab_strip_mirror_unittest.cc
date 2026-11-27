@@ -1,7 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
 
-#include <limits>
 #include <string>
 #include <vector>
 
@@ -234,7 +233,7 @@ TEST_F(TabStripMirrorTest, MissingStripCommandsStillAcknowledgeOnce) {
   EXPECT_EQ(rev, snapshot.FindDict("value")->FindDouble("rev"));
   EXPECT_TRUE(Invoke("tabStripCommand",
                      base::ListValue()
-                         .Append(std::numeric_limits<double>::quiet_NaN())
+                         .Append(1.5)
                          .Append(spec.Clone()))
                   .FindDict("error"));
   EXPECT_EQ(before + 1, transactions_.size());

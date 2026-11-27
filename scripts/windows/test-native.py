@@ -35,6 +35,14 @@ def run(command):
     subprocess.run([str(part) for part in command], check=True, cwd=REPO)
 
 
+def rust_desktop():
+    """Bay's desktop Rust library (scripts/lib/rust_desktop.py): the sync format SyncCrypto.cpp calls."""
+    spec = importlib.util.spec_from_file_location("rust_desktop", REPO / "scripts/lib/rust_desktop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.link_flags()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=("sync", "import", "all"), default="all")
@@ -49,9 +57,12 @@ def main():
         root = Path(temporary)
         def compile(sources, binary, libraries=(), extra_includes=()):
             sources = [REPO / source for source in sources]
-            if windows:
-                if any(source.name == "SyncCrypto.cpp" for source in sources):
-                    sources.append(REPO / "packages/sync/windows/SyncCryptoWindows.cpp")
+            if any(source.name == "SyncCrypto.cpp" for source in sources):
+                archive, rust_libraries, rust_includes = rust_desktop()
+                libraries = [*libraries, archive, *rust_libraries]
+                extra_includes = [*extra_includes, *rust_includes]
+                if windows:
+                    sources.append(REPO / "packages/sync/portable/SyncCryptoWindows.cpp")
             if windows:
                 # One object per source: Readers.cpp and tests/Readers.cpp would otherwise both write Readers.obj.
                 objects = [root / f"{binary.stem}-{index}-{source.stem}.obj" for index, source in enumerate(sources)]
@@ -61,21 +72,21 @@ def main():
             else:
                 run([compiler, "-std=c++17", "-DBAY_SYNC_PORTABLE_TEST", f"-I{include}", *[f"-I{path}" for path in extra_includes], *sources, *libraries, "-o", binary])
         if args.suite in ("sync", "all"):
-            sources = ["packages/sync/windows/SyncCrypto.cpp", "packages/sync/windows/SyncVault.cpp", "packages/sync/windows/RecoveryKit.cpp", "packages/sync/windows/vendor/qrcodegen.cpp", "packages/sync/windows/tests/Compatibility.cpp"]
+            sources = ["packages/sync/portable/SyncCrypto.cpp", "packages/sync/portable/SyncVault.cpp", "packages/sync/portable/RecoveryKit.cpp", "packages/sync/portable/tests/Compatibility.cpp"]
             libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
-                sources.append("packages/sync/windows/tests/OpenSSLBackend.cpp")
+                sources.append("packages/sync/portable/tests/OpenSSLBackend.cpp")
                 libraries = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))
             binary = root / ("sync-test.exe" if windows else "sync-test")
             compile(sources, binary, libraries)
-            run([binary, REPO / "packages/sync/windows/tests/golden.json", root / "vault"])
+            run([binary, REPO / "packages/sync/fixtures/golden.json", root / "vault"])
         if args.suite in ("import", "all"):
             binary = root / ("import-test.exe" if windows else "import-test")
-            sources = ["packages/import/windows/Readers.cpp", "packages/import/windows/Sessions.cpp", "packages/import/windows/Arc.cpp", "packages/import/windows/Secrets.cpp", "packages/sync/windows/SyncCrypto.cpp", "packages/import/windows/tests/Readers.cpp"]
-            libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib"]
+            sources = ["packages/import/portable/Readers.cpp", "packages/import/portable/Secrets.cpp", "packages/sync/portable/SyncCrypto.cpp", "packages/import/portable/tests/Readers.cpp"]
+            libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
-                sources.append("packages/sync/windows/tests/OpenSSLBackend.cpp")
-                libraries = ["-lsqlite3", *shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
+                sources.append("packages/sync/portable/tests/OpenSSLBackend.cpp")
+                libraries = [*shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
             compile(sources, binary, libraries)
             run([binary, REPO / "packages/import/fixtures", root / "import-db"])
         if args.suite == "all":
@@ -86,14 +97,14 @@ def main():
                 data = layer / "data"
                 production = data / "packages"
                 sources = [data / "data_services.cc", data / "tests/Services.cpp"]
-                sources.extend(production / "import/windows" / name for name in ("ImportService.cpp", "Readers.cpp", "Sessions.cpp", "Arc.cpp", "Secrets.cpp"))
-                sources.append(production / "import/windows/BrowserDiscovery.cpp")
-                sources.extend(production / "sync/windows" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp"))
-                libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
+                sources.extend(production / "import/portable" / name for name in ("ImportService.cpp", "Readers.cpp", "Secrets.cpp"))
+                sources.append(production / "import/portable/BrowserDiscovery.cpp")
+                sources.extend(production / "sync/portable" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp"))
+                libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
                 if windows:
-                    sources.append(production / "sync/windows/RecoveryKitWindows.cpp")
+                    sources.append(production / "sync/portable/RecoveryKitWindows.cpp")
                 else:
-                    sources.append(REPO / "packages/sync/windows/tests/OpenSSLBackend.cpp")
+                    sources.append(REPO / "packages/sync/portable/tests/OpenSSLBackend.cpp")
                     libraries = ["-lsqlite3", *shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
                 binary = root / ("data-services-test.exe" if windows else "data-services-test")
                 compile(sources, binary, libraries, [data])

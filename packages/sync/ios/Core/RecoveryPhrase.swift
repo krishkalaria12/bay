@@ -1,10 +1,10 @@
-import CryptoKit
+import BaySyncFFI
 import Foundation
-import Security
 
+/// The recovery phrase: a chain's 32 bytes as 24 BIP-39 English words, from bay-sync (packages/rust/bay-sync), which
+/// Windows and Linux share. A word may be typed by its first four letters or more.
 public enum RecoveryPhrase {
   public static let wordCount = 24
-  static let entropyBytes = 32
 
   public enum Problem: Error, Equatable {
     case wordCount(Int)
@@ -13,48 +13,27 @@ public enum RecoveryPhrase {
   }
 
   public static func generateEntropy() -> Data {
-    var bytes = Data(count: entropyBytes)
-    let status = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, entropyBytes, $0.baseAddress!) }
-    precondition(status == errSecSuccess, "SecRandomCopyBytes failed: \(status)")
+    var bytes = Data(count: 32)
+    bytes.withUnsafeMutableBytes { bay_sync_random_entropy($0.bindMemory(to: UInt8.self).baseAddress) }
     return bytes
   }
 
   public static func words(for entropy: Data) -> [String] {
-    precondition(entropy.count == entropyBytes)
-    var bits = entropy.flatMap { byte in (0..<8).reversed().map { (byte >> $0) & 1 } }
-    let checksum = Data(SHA256.hash(data: entropy)).first!
-    bits += (0..<8).reversed().map { (checksum >> $0) & 1 }
-    return stride(from: 0, to: bits.count, by: 11).map { start in
-      Wordlist.english[bits[start..<start + 11].reduce(0) { $0 << 1 | Int($1) }]
-    }
-  }
-
-  public static func tokens(in text: String) -> [String] {
-    text.lowercased().components(separatedBy: CharacterSet.lowercaseLetters.inverted).filter { !$0.isEmpty }
-  }
-
-  static func index(of token: String) -> Int? {
-    if let i = lookup[token] { return i }
-    guard token.count >= 4 else { return nil }
-    return prefixes[String(token.prefix(4))].flatMap { i in Wordlist.english[i].hasPrefix(token) ? i : nil }
+    precondition(entropy.count == 32)
+    let phrase = entropy.withUnsafeBytes { SyncKeys.string(bay_sync_phrase_words($0.bindMemory(to: UInt8.self).baseAddress)) }
+    return phrase.split(separator: " ").map(String.init)
   }
 
   public static func entropy(from text: String) throws -> Data {
-    let tokens = tokens(in: text)
-    guard tokens.count == wordCount else { throw Problem.wordCount(tokens.count) }
-    var bits: [UInt8] = []
-    for token in tokens {
-      guard let i = index(of: token) else { throw Problem.unknownWord(token) }
-      bits += (0..<11).reversed().map { UInt8((i >> $0) & 1) }
+    var entropy = Data(count: 32)
+    var detail: UnsafeMutablePointer<CChar>?
+    let status = entropy.withUnsafeMutableBytes { bay_sync_phrase_entropy(text, $0.bindMemory(to: UInt8.self).baseAddress, &detail) }
+    let what = SyncKeys.string(detail)
+    switch status {
+    case 0: return entropy
+    case 1: throw Problem.wordCount(Int(what) ?? 0)
+    case 2: throw Problem.unknownWord(what)
+    default: throw Problem.checksum
     }
-    let entropy = Data(stride(from: 0, to: entropyBytes * 8, by: 8).map { start in
-      bits[start..<start + 8].reduce(UInt8(0)) { $0 << 1 | $1 }
-    })
-    let checksum = bits[(entropyBytes * 8)...].reduce(UInt8(0)) { $0 << 1 | $1 }
-    guard Data(SHA256.hash(data: entropy)).first! == checksum else { throw Problem.checksum }
-    return entropy
   }
-
-  private static let lookup = Dictionary(uniqueKeysWithValues: Wordlist.english.enumerated().map { ($1, $0) })
-  private static let prefixes = Dictionary(uniqueKeysWithValues: Wordlist.english.enumerated().map { (String($1.prefix(4)), $0) })
 }

@@ -92,6 +92,9 @@ export const Cef = requireNativeModule<{
   fetchFavicon(url: string, profile: string): Promise<FaviconImage | FaviconSvg | null>;
   removeLegacyFavicons(profile: string): Promise<void>;
   engineCall(name: string, profile: string, args: string | null): Promise<string>;
+  // Optional: native code from before engine choice can't carry sign-ins (siteCookies.ts).
+  siteCookies?(profile: string, site: string): Promise<string>;
+  applySiteCookies?(profile: string, args: string): Promise<string>;
   releaseProfile(profile: string): Promise<void>;
   deleteProfileData(profile: string): Promise<{ remaining: string[] }>;
 
@@ -99,9 +102,17 @@ export const Cef = requireNativeModule<{
   getContentBlocker(): Promise<ContentBlockerState>;
   setContentBlockerEnabled(enabled: boolean): Promise<void>;
   setFilterListEnabled(id: string, enabled: boolean): Promise<void>;
+  // Optional: native code from before the person's own lists.
+  addFilterList?(url: string, title: string): Promise<string>;
+  removeFilterList?(id: string): Promise<void>;
+  getUserFilters?(): Promise<string>;
+  setUserFilters?(text: string): Promise<void>;
   isContentBlockerAllowed(host: string): Promise<boolean>;
   setContentBlockerAllowed(host: string, allowed: boolean): Promise<void>;
   setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;
+  // Remote kill switches (bay-switches): which switches in the signed feed apply to this release, as JSON. Optional:
+  // native code from before them.
+  checkSwitches?(feed: string, signature: string, lastIssued: number): Promise<string>;
 
   setSiteSetting(profile: string, origin: string, type: SiteSettingType, value: SiteSettingValue): Promise<void>;
   getSiteSettings(profile: string, origin: string): Promise<SiteSettings>;

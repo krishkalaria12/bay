@@ -13,9 +13,14 @@ NN_ENGINE_CALL(nn_bookmarks_apply);
 NN_ENGINE_CALL(nn_bookmarks_tree);
 NN_ENGINE_CALL(nn_bookmarks_watch);
 NN_ENGINE_CALL(nn_browsing_data_clear);
+NN_ENGINE_CALL(nn_cli_agent_answer);
+NN_ENGINE_CALL(nn_cli_agent_revoke);
+NN_ENGINE_CALL(nn_cli_agents);
 NN_ENGINE_CALL(nn_cli_control);
 NN_ENGINE_CALL(nn_components_list);
+NN_ENGINE_CALL(nn_cookies_apply);
 NN_ENGINE_CALL(nn_cookies_import);
+NN_ENGINE_CALL(nn_cookies_site);
 NN_ENGINE_CALL(nn_downloads_cancel);
 NN_ENGINE_CALL(nn_downloads_keep);
 NN_ENGINE_CALL(nn_downloads_list);
@@ -57,6 +62,9 @@ NN_ENGINE_CALL(nn_site_settings_get);
 NN_ENGINE_CALL(nn_site_settings_origins);
 NN_ENGINE_CALL(nn_site_settings_reset);
 NN_ENGINE_CALL(nn_site_settings_set);
+NN_ENGINE_CALL(nn_spare_warmup);
+NN_ENGINE_CALL(nn_spell_word);
+NN_ENGINE_CALL(nn_spell_words);
 NN_ENGINE_CALL(nn_tab_restore_load);
 NN_ENGINE_CALL(nn_tab_restore_tag);
 NN_ENGINE_CALL(nn_tab_restore_take);
@@ -89,9 +97,14 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_bookmarks_tree", &nn_bookmarks_tree},
       {"nn_bookmarks_watch", &nn_bookmarks_watch},
       {"nn_browsing_data_clear", &nn_browsing_data_clear},
+      {"nn_cli_agent_answer", &nn_cli_agent_answer},
+      {"nn_cli_agent_revoke", &nn_cli_agent_revoke},
+      {"nn_cli_agents", &nn_cli_agents},
       {"nn_cli_control", &nn_cli_control},
       {"nn_components_list", &nn_components_list},
+      {"nn_cookies_apply", &nn_cookies_apply},
       {"nn_cookies_import", &nn_cookies_import},
+      {"nn_cookies_site", &nn_cookies_site},
       {"nn_downloads_cancel", &nn_downloads_cancel},
       {"nn_downloads_keep", &nn_downloads_keep},
       {"nn_downloads_list", &nn_downloads_list},
@@ -133,6 +146,9 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_site_settings_origins", &nn_site_settings_origins},
       {"nn_site_settings_reset", &nn_site_settings_reset},
       {"nn_site_settings_set", &nn_site_settings_set},
+      {"nn_spare_warmup", &nn_spare_warmup},
+      {"nn_spell_word", &nn_spell_word},
+      {"nn_spell_words", &nn_spell_words},
       {"nn_tab_restore_load", &nn_tab_restore_load},
       {"nn_tab_restore_tag", &nn_tab_restore_tag},
       {"nn_tab_restore_take", &nn_tab_restore_take},
@@ -156,6 +172,9 @@ bool IsWebEngineCall(std::string_view name) {
       "nn_bookmarks_apply",
       "nn_bookmarks_tree",
       "nn_bookmarks_watch",
+      "nn_cli_agent_answer",
+      "nn_cli_agent_revoke",
+      "nn_cli_agents",
       "nn_cli_control",
       "nn_favicons_get",
       "nn_favicons_set",
@@ -167,6 +186,9 @@ bool IsWebEngineCall(std::string_view name) {
       "nn_prefs_get",
       "nn_prefs_set",
       "nn_search_suggestions",
+      "nn_spare_warmup",
+      "nn_spell_word",
+      "nn_spell_words",
       "nn_tab_restore_load",
   };
   for (auto allowed : names) {

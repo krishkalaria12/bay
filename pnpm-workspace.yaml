@@ -9,6 +9,8 @@ packages:
   - "!apps/videos"
   # The sync relay is a standalone Cloudflare Worker with its own lockfile (apps/sync-relay).
   - "!apps/sync-relay"
+  # The Raycast extension is a standalone npm project, as Raycast builds it (apps/raycast).
+  - "!apps/raycast"
 
 # React Native + CocoaPods expect a flat node_modules (the Podfile and Metro
 # resolve react-native-macos by path), so hoist instead of pnpm's symlink store.

@@ -16,7 +16,7 @@ import * as Scope from "effect/Scope";
 import { Scheduler } from "../effect/ports/scheduler";
 import { AuthorityStore } from "../effect/ports/store";
 import { activeTabId, pinnedPage } from "../store/model";
-import { SOURCES, type LiveSource } from "./sources";
+import { liveSource, SOURCES, type LiveSource } from "./sources";
 import { applyFetch, finishCompleting, live, removeFolder, setStatus, useLive } from "./activityStore";
 import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
 import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
@@ -45,7 +45,7 @@ function describe(source: LiveSourceId, error: Error) {
 }
 
 /** The sources the folders ask, as the service reaches them. */
-export class LiveSources extends Context.Service<LiveSources, Record<LiveSourceId, LiveSource>>()("bay/LiveSources") {
+export class LiveSources extends Context.Service<LiveSources, Partial<Record<LiveSourceId, LiveSource>>>()("bay/LiveSources") {
   static readonly layer = Layer.succeed(LiveSources)(SOURCES);
 }
 
@@ -87,7 +87,7 @@ export class ActivityService extends Context.Service<
       const fetchSource = (source: LiveSourceId, folder: LiveFolder): Effect.Effect<LiveItem[], unknown> =>
         Effect.suspend(() =>
           Effect.tryPromise({
-            try: () => sources[source].fetch(folder),
+            try: () => (sources[source] ?? liveSource(source)).fetch(folder),
             catch: (cause) => cause,
           }),
         );
@@ -129,7 +129,7 @@ export class ActivityService extends Context.Service<
           const gone: Record<string, CompletionState> = {};
 
           for (const source of new Set(missing.map((it) => it.source))) {
-            const resolve = sources[source].resolveGone;
+            const resolve = (sources[source] ?? liveSource(source)).resolveGone;
 
             if (!resolve) continue;
 

@@ -28,31 +28,31 @@ def main():
         raise RuntimeError("Use --services-only on Linux; the NSS fixture generator is macOS-only")
     compiler = shutil.which("c++")
     if not compiler or not shutil.which("pkg-config"):
-        raise RuntimeError("Install a C++17 compiler and pkg-config with OpenSSL, GIO and NSS headers")
+        raise RuntimeError("Install a C++17 compiler and pkg-config with OpenSSL and GIO headers")
     flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))
-    flags += shlex.split(subprocess.check_output(["pkg-config", "--cflags", "nss"], text=True))
     if sys.platform == "linux":
         flags += shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
         flags += ["-ldl"]
+    # The sync format the shared C++ calls is bay-sync's, in Bay's desktop Rust library.
+    flags += shlex.split(subprocess.check_output([sys.executable, str(REPO / "scripts/lib/rust_desktop.py")], text=True))
     sources = [
-        "packages/import/windows/ImportService.cpp",
-        "packages/import/windows/BrowserDiscovery.cpp",
-        "packages/import/windows/Readers.cpp",
-        "packages/import/windows/Sessions.cpp",
-        "packages/import/windows/Arc.cpp",
-        "packages/import/windows/Secrets.cpp",
+        "packages/import/portable/ImportService.cpp",
+        "packages/import/portable/BrowserDiscovery.cpp",
+        "packages/import/portable/Readers.cpp",
+        "packages/import/portable/Secrets.cpp",
         "packages/import/linux/ChromiumSecrets.cpp",
         "packages/import/linux/SecretService.cpp",
-        "packages/import/linux/FirefoxNSS.cpp",
-        "packages/sync/windows/SyncCrypto.cpp",
-        "packages/sync/windows/tests/OpenSSLBackend.cpp",
+        "packages/sync/portable/SyncCrypto.cpp",
+        "packages/sync/portable/tests/OpenSSLBackend.cpp",
     ]
     with tempfile.TemporaryDirectory(prefix="bay-import-service-fixtures-") as directory:
         discovery = Path(directory) / "discovery-tests"
+        # Profile listing is bay-import's, in Bay's desktop Rust library.
         subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra",
                         "-I" + str(REPO / "engine/chromium/src/chrome/browser/bay/data/vendor"),
-                        str(REPO / "packages/import/windows/BrowserDiscovery.cpp"),
-                        str(REPO / "packages/import/windows/tests/Discovery.cpp"),
+                        str(REPO / "packages/import/portable/BrowserDiscovery.cpp"),
+                        str(REPO / "packages/import/portable/tests/Discovery.cpp"),
+                        *shlex.split(subprocess.check_output([sys.executable, str(REPO / "scripts/lib/rust_desktop.py")], text=True)),
                         "-o", str(discovery)], check=True)
         discovery_home = Path(directory) / "discovery-home"
         discovery_home.mkdir()
@@ -64,8 +64,8 @@ def main():
         ):
             binary = Path(directory) / (name + "-tests")
             sync_sources = [] if name == "service" else [
-                REPO / "packages/sync/windows" / source for source in
-                ("SyncService.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp")
+                REPO / "packages/sync/portable" / source for source in
+                ("SyncService.cpp", "SyncVault.cpp", "RecoveryKit.cpp")
             ]
             subprocess.run([compiler, "-std=c++17", "-DBAY_IMPORT_LINUX_TEST", "-DBAY_SYNC_PORTABLE_TEST", "-pthread",
                             "-I" + str(data / "vendor"), "-I" + str(data), "-I" + str(REPO),

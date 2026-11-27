@@ -4,9 +4,9 @@ import { closeTab } from "../../lib/actions";
 import { calendarConnected, connectCalendar, setCalendarHidden, useCalendar } from "../../activity/calendar";
 import { deleteLiveFolder, newLiveFolder, openLiveItem, refreshFolder, statusText } from "../../activity/activityEngine";
 import { ALERT_LEADS } from "../../activity/meetings";
-import { SOURCES } from "../../activity/sources";
+import { liveSource, pluginSourcesFor, SOURCES } from "../../activity/sources";
 import { live, markRead, markUnread, moveFolder, updateCalendarSettings, updateFolder } from "../../activity/activityStore";
-import type { LiveItem, LiveSourceId } from "../../activity/types";
+import type { BuiltInSourceId, LiveItem, LiveSourceId } from "../../activity/types";
 import { openSettings } from "../settings/windows";
 import { openIconPicker } from "./actions";
 
@@ -32,8 +32,8 @@ export function runNewLiveFolder(windowId: string, choice: string): boolean {
   return true;
 }
 
-const SOURCE_GROUPS: Record<"pullRequests" | "documents", LiveSourceId[]> = {
-  pullRequests: ["github", "bitbucket"],
+const SOURCE_GROUPS: Record<"pullRequests" | "documents", BuiltInSourceId[]> = {
+  pullRequests: ["github", "gitlab", "bitbucket"],
   documents: ["notion", "confluence", "gdrive"],
 };
 
@@ -61,11 +61,19 @@ export async function openLiveFolderMenu(windowId: string, folderId: string) {
       id: "sources",
       title: pr ? "Pull Requests" : "Documents",
       symbol: pr ? "arrow.triangle.pull" : "doc.text",
-      children: SOURCE_GROUPS[folder.kind].map((id) => ({
-        id: `source:${id}`,
-        title: s.accounts[id] ? SOURCES[id].name : `${SOURCES[id].name} (Not Connected)`,
-        checked: folder.sources.includes(id),
-      })),
+      children: [
+        ...SOURCE_GROUPS[folder.kind].map((id) => ({
+          id: `source:${id}`,
+          title: s.accounts[id] ? SOURCES[id].name : `${SOURCES[id].name} (Not Connected)`,
+          checked: folder.sources.includes(id),
+        })),
+        // Plugins' sources (lib/plugins), and one a folder still has from a plugin that's off now.
+        ...[...new Set([...pluginSourcesFor(folder.kind), ...folder.sources.filter((id) => id.startsWith("plugin:"))])].map((id) => ({
+          id: `source:${id}`,
+          title: liveSource(id).name,
+          checked: folder.sources.includes(id),
+        })),
+      ],
     },
     sep,
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
@@ -91,7 +99,8 @@ export async function openLiveFolderMenu(windowId: string, folderId: string) {
     // SAFETY: LiveSourceId assertion matches the runtime value validated at this call site.
     const id = choice.slice(7) as LiveSourceId;
 
-    if (!s.accounts[id]) return openSettings("liveFolders");
+    // A plugin's source needs no account (Settings › Plugins turns its plugin on).
+    if (!id.startsWith("plugin:") && !s.accounts[id]) return openSettings("liveFolders");
     const sources = folder.sources.includes(id) ? folder.sources.filter((x) => x !== id) : [...folder.sources, id];
     updateFolder(folderId, { sources: sources.length ? sources : folder.sources });
     void refreshFolder(folderId);

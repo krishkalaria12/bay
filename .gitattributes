@@ -3,3 +3,5 @@ engine/chromium/src/chrome/browser/bay/data/vendor/nlohmann/json.hpp text eol=lf
 engine/patches/build/linux/xdg-utils/* text eol=lf
 # git apply compares patch bytes, so autocrlf must never rewrite them.
 engine/patches/**/*.patch text eol=lf
+# The kill switch feed is signed over its exact bytes (packages/rust/bay-switches): autocrlf must never rewrite it.
+apps/web/public/switches.json text eol=lf

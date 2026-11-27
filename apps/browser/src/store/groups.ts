@@ -105,9 +105,10 @@ export function placeFolders(ids: string[], tabs: Record<string, Tab>, folders: 
   return out;
 }
 
-export function placeBlock(tabIds: string[], block: string[]): string[] {
+/** The block together, where its first tab in the list is, or where `anchor` is. */
+export function placeBlock(tabIds: string[], block: string[], anchor?: string): string[] {
   const members = new Set(block);
-  const at = tabIds.findIndex((id) => members.has(id));
+  const at = anchor !== undefined && tabIds.includes(anchor) ? tabIds.indexOf(anchor) : tabIds.findIndex((id) => members.has(id));
   const rest = tabIds.filter((id) => !members.has(id));
   const before = tabIds.slice(0, at).filter((id) => !members.has(id)).length;
   rest.splice(before, 0, ...block);

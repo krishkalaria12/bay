@@ -11,6 +11,7 @@
 
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/base64.h"
 #include "base/environment.h"
@@ -79,6 +80,8 @@
 #include "chrome/browser/bay/webui/content_blocker.h"
 #include "chrome/browser/bay/webui/window_key_watch.h"
 #include "ui/views/widget/widget.h"
+#include "chrome/browser/bay/webui/plugins.h"
+#include "chrome/browser/bay/webui/shared_folders.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/platform_util.h"
 #include "content/public/common/drop_data.h"
@@ -1036,6 +1039,13 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
         if (host)
           host->Emit("BayUserScripts", "onChange", base::Value(base::DictValue()));
       }, GetWeakPtr()));
+  shared_folders_ = std::make_unique<SharedFolders>(base::BindRepeating(
+      [](base::WeakPtr<NativeHost> host, const std::string& path) {
+        if (host)
+          host->Emit("BaySharedFolders", "onChange",
+                     base::Value(base::DictValue().Set("path", path)));
+      },
+      GetWeakPtr()));
   easel_sharing_ = std::make_unique<EaselSharing>(context_.profile());
   easel_sharing_->Prepare(
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
@@ -1144,6 +1154,8 @@ base::DictValue NativeHost::Info() const {
   modules.Append("BayKeychain");
   modules.Append("BayLocalFiles");
   modules.Append("BayUserScripts");
+  modules.Append("BaySharedFolders");
+  modules.Append("BayPlugins");
   modules.Append("BayCli");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
@@ -1372,6 +1384,10 @@ base::DictValue NativeHost::Info() const {
     host_methods->Append(std::move(method));
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   for (auto& method : UserScripts::SupportedMethods())
+    host_methods->Append(std::move(method));
+  for (auto& method : SharedFolders::SupportedMethods())
+    host_methods->Append(std::move(method));
+  for (auto& method : Plugins::SupportedMethods())
     host_methods->Append(std::move(method));
   for (auto& method : EaselSharing::SupportedMethods())
     host_methods->Append(std::move(method));
@@ -1900,6 +1916,59 @@ void NativeHost::Invoke(const std::string& module,
   }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (user_scripts_->Dispatch(module, method, args, callback))
+    return;
+  if (module == "BaySharedFolders" && method == "pick") {
+    if (!local_files_ui_)
+      local_files_ui_ = std::make_unique<ShellUI>();
+    local_files_ui_->PickSharedFolder(context_, std::move(callback));
+    return;
+  }
+  if (module == "BaySharedFolders" && method == "reveal") {
+    const base::FilePath folder = base::FilePath::FromUTF8Unsafe(Text(args, 0));
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(&SharedFolders::Granted, folder),
+        base::BindOnce(
+            [](base::WeakPtr<NativeHost> host, base::FilePath folder,
+               InvokeCallback callback, bool granted) {
+              Profile* profile = host ? host->context_.profile() : nullptr;
+              if (granted && profile)
+                platform_util::ShowItemInFolder(profile, folder);
+              std::move(callback).Run(Success(base::Value(granted && profile)));
+            },
+            GetWeakPtr(), folder, std::move(callback)));
+    return;
+  }
+  if (shared_folders_->Dispatch(module, method, args, callback))
+    return;
+  if (module == "BayPlugins" && method == "install") {
+    if (!local_files_ui_)
+      local_files_ui_ = std::make_unique<ShellUI>();
+    local_files_ui_->PickPluginFolder(context_, std::move(callback));
+    return;
+  }
+  if (module == "BayPlugins" && method == "reveal") {
+    // The plugins folder, made first so there's something to show.
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce([] {
+          const base::FilePath root = Plugins::Root();
+          return !root.empty() && base::CreateDirectory(root) ? root
+                                                              : base::FilePath();
+        }),
+        base::BindOnce(
+            [](base::WeakPtr<NativeHost> host, InvokeCallback callback,
+               base::FilePath root) {
+              Profile* profile = host ? host->context_.profile() : nullptr;
+              if (profile && !root.empty())
+                platform_util::OpenItem(profile, root,
+                                        platform_util::OPEN_FOLDER, {});
+              std::move(callback).Run(Success());
+            },
+            GetWeakPtr(), std::move(callback)));
+    return;
+  }
+  if (Plugins::Dispatch(module, method, args, callback))
     return;
   if (easel_sharing_->Dispatch(module, method, args, callback))
     return;

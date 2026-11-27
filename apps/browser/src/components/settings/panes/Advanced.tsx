@@ -11,6 +11,8 @@ import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
+import { switchTitle, useKillSwitches } from "../../../lib/killSwitches";
+import { CodingAgents } from "./CodingAgents";
 import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/driverControl";
 
 export function AdvancedPane() {
@@ -31,6 +33,7 @@ export function AdvancedPane() {
 
   return (
     <View>
+      <SwitchedOff />
       <SectionHeader title="Browsing" />
       <Group>
         <Row settingId={SETTINGS.showFullUrl.id} title={SETTINGS.showFullUrl.title} description="Instead of the site alone.">
@@ -77,7 +80,13 @@ export function AdvancedPane() {
             <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
               <Toggle value={settings.cliControl === true} onChange={(cliControl) => reportBrowserCommand(updateSettings({ cliControl }))} />
             </Row>
+            <Row
+              settingId={SETTINGS.mcpAgents.id}
+              title={SETTINGS.mcpAgents.title}
+              description="Coding agents can list, read and use your web page tabs over MCP while the control above is on, never private windows. In a terminal: bay mcp install --agent claude-code (or codex, cursor, vscode). Bay asks the first time an agent connects, and lets it use only the spaces you allow."
+            />
           </Group>
+          <CodingAgents />
         </>
       ) : null}
 
@@ -120,5 +129,23 @@ function BoostsRow() {
         <Toggle value={on} onChange={setBoostsOn} />
       </View>
     </Row>
+  );
+}
+
+/** What Bay turned off remotely for this release (lib/killSwitches.ts), and why. Nothing when nothing is. */
+function SwitchedOff() {
+  const active = useKillSwitches((k) => k.active);
+
+  if (!active.length) return null;
+
+  return (
+    <>
+      <SectionHeader title="Turned Off by Bay" description="Until a fix ships, these are off in this version. They come back by themselves." />
+      <Group>
+        {active.map((s) => (
+          <Row key={s.id} title={switchTitle(s)} description={s.reason} />
+        ))}
+      </Group>
+    </>
   );
 }

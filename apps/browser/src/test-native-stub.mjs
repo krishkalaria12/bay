@@ -45,6 +45,7 @@ export const saveDocument = (name, contents) =>
   });
 
 export const setZoom = () => Promise.resolve();
+export const getSiteSettings = () => Promise.resolve({});
 export const launchEnvironment = () => null;
 export const jsReload = { on: false };
 export const isJsReload = () => jsReload.on;
@@ -173,6 +174,40 @@ export const cancelDownload = () => Promise.resolve();
 let webKitAvailable = true;
 export const hasWebKit = () => webKitAvailable;
 export const setWebKitAvailable = (on) => void (webKitAvailable = on);
+export const setWebKitZoom = () => {};
+// Chrome preferences through nn_prefs (components/settings/panes/SecureDns.tsx, Spelling).
+
+export const getSecureDns = () => Promise.resolve({ mode: "automatic", templates: "", managed: false });
+export const setSecureDns = () => Promise.resolve();
+export const getSpellCheck = () => Promise.resolve({ enabled: true, languages: [] });
+export const setSpellCheckEnabled = () => Promise.resolve();
+export const spellingWords = () => Promise.resolve({ words: [], loaded: true });
+export const setSpellingWord = () => Promise.resolve(true);
+export const setSpellCheckLanguages = () => Promise.resolve();
+// The person's own filter lists (components/settings/panes/OwnFilters.tsx).
+
+export const MY_FILTERS_ID = "my-filters";
+export const canAddFilterLists = () => false;
+export const addFilterList = () => Promise.reject(new Error("unavailable"));
+export const removeFilterList = () => Promise.resolve();
+export const getUserFilters = () => Promise.resolve("");
+export const setUserFilters = () => Promise.resolve();
+export const setWebKitFraudWarnings = () => {};
+export const webKitPasskeyAccess = () => Promise.resolve(null);
+export const requestWebKitPasskeyAccess = () => Promise.resolve(null);
+// Sign-ins carried between engines (lib/engineSiteData.ts): no native stores here.
+
+// Each engine's cookies for the sign-in carry (lib/engineSiteData.ts): off unless a test turns it on.
+export const cookieCarry = { can: false, cookies: {}, applied: [] };
+export const canCarrySiteCookies = () => cookieCarry.can;
+export const siteCookies = (engine) => Promise.resolve(cookieCarry.cookies[engine] ?? null);
+
+export const applySiteCookies = (engine, _profile, set, remove) => {
+  cookieCarry.applied.push({ engine, set, remove });
+
+  return Promise.resolve(true);
+};
+
 export const endedWebKitSessions = [];
 export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(session), Promise.resolve());
 export const WEBKIT_SITE_SETTINGS = ["camera", "microphone"];
@@ -530,6 +565,9 @@ export const tidyNames = {
 // Tidy Tabs' model: a test sets `answer` (a function of the prompt) and `status`.
 export const tidyTabsAnswers = { status: "off", answer: async () => null, prompts: [] };
 
+// Ask on Page (components/ask): no model in tests.
+export const askPageModel = null;
+
 export const tidyTabsModel = {
   modelStatus: () => tidyTabsAnswers.status,
   group: (prompt) => (tidyTabsAnswers.prompts.push(prompt), tidyTabsAnswers.answer(prompt)),
@@ -710,3 +748,39 @@ export const onPermissionDismissed = permissionListener("onPermissionDismissed")
 export const permissionEvents = { fire: (name, value) => permissionListeners.get(name)?.(value) };
 
 export const resolvePermission = () => Promise.resolve();
+export const checkSwitches = () => Promise.resolve(null);
+export const warmSpareRenderer = () => Promise.resolve({ warmed: false, reason: "failed" });
+export const cliAgents = () => Promise.resolve({ agents: [], requests: [], loaded: true });
+export const answerCliAgent = () => Promise.resolve({ ok: true });
+export const revokeCliAgent = () => Promise.resolve({ ok: true });
+export const onCliAgentsChanged = () => ({ remove() {} });
+// Shared folders (lib/sharedFolderService.ts): a fake folder of link files tests fill in.
+
+export const sharedFolderFiles = new Map();
+export const sharedFoldersAvailable = () => true;
+export const canShareFolderSheet = () => false;
+export const pickSharedFolder = () => Promise.resolve(null);
+
+export const readSharedFolder = (path) =>
+  Promise.resolve(
+    sharedFolderFiles.has(path)
+      ? { status: "available", entries: [...sharedFolderFiles.get(path)].map(([name, text]) => ({ name, text, modified: 0 })) }
+      : { status: "missing" },
+  );
+
+export const writeSharedLink = (path, name, text) => (sharedFolderFiles.get(path)?.set(name, text), Promise.resolve(true));
+export const removeSharedLink = (path, name) => (sharedFolderFiles.get(path)?.delete(name), Promise.resolve(true));
+export const watchSharedFolder = () => Promise.resolve();
+export const forgetSharedFolder = () => Promise.resolve();
+export const revealSharedFolder = () => Promise.resolve(true);
+export const shareSharedFolder = () => Promise.resolve(false);
+export const onSharedFolderChange = () => ({ remove() {} });
+// Plugins (lib/plugins): no plugins folder and no sandboxes unless a test brings its own host.
+
+export const PluginsNative = null;
+export const pluginsAvailable = () => false;
+export const listPlugins = () => Promise.resolve({ plugins: [], problems: [] });
+export const installPlugin = () => Promise.resolve(null);
+export const removePlugin = () => Promise.resolve(true);
+export const revealPlugins = () => Promise.resolve();
+export const startPluginSandbox = () => null;

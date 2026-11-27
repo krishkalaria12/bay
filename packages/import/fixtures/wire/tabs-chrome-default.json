@@ -1,0 +1,49 @@
+{
+  "groups": [
+    {
+      "collapsed": true,
+      "color": "green",
+      "id": "112233445566778899AABBCCDDEEFF00",
+      "title": "Research"
+    }
+  ],
+  "tabs": [
+    {
+      "active": false,
+      "pinned": true,
+      "title": "Inbox",
+      "url": "https://mail.example.com/",
+      "windowIndex": 0
+    },
+    {
+      "active": false,
+      "pinned": false,
+      "title": "C",
+      "url": "https://c.example.com/",
+      "windowIndex": 0
+    },
+    {
+      "active": true,
+      "pinned": false,
+      "title": "News",
+      "url": "https://news.example.com/",
+      "windowIndex": 0
+    },
+    {
+      "active": false,
+      "groupId": "112233445566778899AABBCCDDEEFF00",
+      "pinned": false,
+      "title": "Docs 文档",
+      "url": "https://docs.example.com/",
+      "windowIndex": 0
+    },
+    {
+      "active": true,
+      "lastActive": 1788220680000.0,
+      "pinned": false,
+      "title": "Second window",
+      "url": "https://second.example.com/",
+      "windowIndex": 1
+    }
+  ]
+}

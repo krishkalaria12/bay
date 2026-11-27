@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <mutex>
 #include <utility>
-#include "packages/import/windows/ImportCore.h"
-#include "packages/sync/windows/SyncService.h"
+#include "packages/import/portable/ImportCore.h"
+#include "packages/sync/portable/SyncService.h"
 
 namespace bay::data {
 namespace {

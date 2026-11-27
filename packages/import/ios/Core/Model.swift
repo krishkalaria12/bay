@@ -1,3 +1,4 @@
+import BayImportFFI
 import Foundation
 
 public enum ImportKind: String, Codable, CaseIterable, Sendable {
@@ -295,13 +296,15 @@ public enum ImportError: Error, Equatable, CustomStringConvertible {
 }
 
 public final class Cancellation: @unchecked Sendable {
-  private let lock = NSLock()
-  private var flag = false
+  /// The stop flag, owned through the shared readers so they see it as it's set.
+  let token = bay_import_cancel_new()!
 
   public init() {}
 
-  public var isCancelled: Bool { lock.withLock { flag } }
-  public func cancel() { lock.withLock { flag = true } }
+  deinit { bay_import_cancel_free(token) }
+
+  public var isCancelled: Bool { bay_import_cancelled(token) }
+  public func cancel() { bay_import_cancel(token) }
   public func check() throws { if isCancelled { throw ImportError.cancelled } }
 }
 
@@ -343,29 +346,8 @@ public struct ImportOptions: Sendable {
 }
 
 enum Time {
-  static func fromWebKit(_ micros: Int64) -> Double? {
-    guard micros > 0 else { return nil }
-    return Double(micros - 11_644_473_600_000_000) / 1000
-  }
-
-  static func fromWebKit(_ string: String?) -> Double? {
-    string.flatMap { Int64($0) }.flatMap { fromWebKit($0) }
-  }
-
   static func fromUnixMicros(_ micros: Int64) -> Double? {
     micros > 0 ? Double(micros) / 1000 : nil
-  }
-}
-
-enum Hex {
-  static func color(red: Double, green: Double, blue: Double) -> String {
-    func byte(_ v: Double) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
-    return String(format: "#%02X%02X%02X", byte(red), byte(green), byte(blue))
-  }
-
-  static func color(skColor: Int) -> String {
-    let v = UInt32(truncatingIfNeeded: skColor)
-    return String(format: "#%02X%02X%02X", (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
   }
 }
 

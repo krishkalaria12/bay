@@ -1,3 +1,6 @@
+# bay-import's C ABI (packages/rust/bay-import), imported as BayImportFFI; the app links the library (BayNNCore.podspec).
+ffi = File.expand_path('../ffi', __dir__)
+
 Pod::Spec.new do |s|
   s.name           = 'BayImport'
   s.version        = '0.0.0'
@@ -16,5 +19,7 @@ Pod::Spec.new do |s|
   # Core/ is plain Swift with no Expo dependency; it's also built and tested on its own by
   # ../Package.swift (`pnpm --filter @bay/import test`).
   s.source_files   = 'ImportModule.swift', 'ImportWriter.swift', 'ExtensionImportWriter.swift', 'Core/**/*.swift'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
+  # The app imports BayImport, whose module depends on BayImportFFI, so it needs the path too.
+  s.user_target_xcconfig = { 'SWIFT_INCLUDE_PATHS' => "\"#{ffi}\"" }
 end

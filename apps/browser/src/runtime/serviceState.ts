@@ -11,7 +11,11 @@ import { bindLiveBrowser } from "../activity/activityEngine";
 import { bindGoogleBrowser } from "../activity/googleAuth";
 import { useOnboardingRequest, type OnboardingRequest } from "./onboardingRequest";
 import { useCli } from "../components/cli/driverControl";
-import type { CliControlStatus } from "@bay/chromium";
+import type { ActiveSwitch, CliAgents, CliControlStatus } from "@bay/chromium";
+import { useKillSwitches } from "../lib/killSwitches";
+import { useCliAgents } from "../components/cli/agentApprovals";
+import { useSharedFolders, type SharedFolderStatus } from "../lib/sharedFolderService";
+import { usePlugins, type PluginsState } from "../lib/plugins/pluginStore";
 
 /** UI state only. OAuth tokens and the sync document never enter this value. */
 export type ServiceState = {
@@ -22,6 +26,13 @@ export type ServiceState = {
   telemetry: ReturnType<typeof useTelemetry.getState>;
   onboarding: OnboardingRequest;
   cli: CliControlStatus | null;
+  // Remote kill switches, coding agents' access, and folders kept in shared folders: the coordinator's, which a
+  // window's settings and menus read.
+  switches: { active: ActiveSwitch[]; checkedAt: number | null };
+  agents: CliAgents;
+  sharedFolders: { folders: Record<string, SharedFolderStatus> };
+  // Plugins: what they are, whether they run, and what their buttons and views show (never a secret's value).
+  plugins: PluginsState;
 };
 
 // What a window's settings pane shows of terminal control. The engine's status also names its control file, which
@@ -56,6 +67,10 @@ export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) 
   install("telemetry", (value) => useTelemetry.setState(value, true));
   install("onboarding", (value) => useOnboardingRequest.setState(value, true));
   install("cli", (server) => useCli.setState({ server }));
+  install("switches", (value) => useKillSwitches.setState(value, true));
+  install("agents", (value) => useCliAgents.setState(value, true));
+  install("sharedFolders", (value) => useSharedFolders.setState(value, true));
+  install("plugins", (value) => usePlugins.setState(value, true));
 }
 
 export function startServiceStateOwner(store: BrowserStore, { restore = true } = {}): () => void {
@@ -71,6 +86,10 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       telemetry: useTelemetry.getState(),
       onboarding: useOnboardingRequest.getState(),
       cli: windowCliStatus(useCli.getState().server),
+      switches: { active: [...useKillSwitches.getState().active], checkedAt: useKillSwitches.getState().checkedAt },
+      agents: useCliAgents.getState(),
+      sharedFolders: { folders: { ...useSharedFolders.getState().folders } },
+      plugins: usePlugins.getState(),
     };
 
     store.setState({ services });
@@ -84,6 +103,10 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
     useTelemetry.subscribe(publish),
     useOnboardingRequest.subscribe(publish),
     useCli.subscribe(publish),
+    useKillSwitches.subscribe(publish),
+    useCliAgents.subscribe(publish),
+    useSharedFolders.subscribe(publish),
+    usePlugins.subscribe(publish),
   );
   publish();
 

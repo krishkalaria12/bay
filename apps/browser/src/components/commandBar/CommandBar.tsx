@@ -34,6 +34,7 @@ import { currentPageActions, type PaletteSuggestion } from "./panelStart";
 import { isEscapeKey } from "../../lib/escapeKey";
 import { removeHistory } from "../../runtime/bookmarkActions";
 import { isIncognitoSpace } from "../../store/model";
+import { warmSparePage } from "../../lib/sparePage";
 
 type Variant = "palette" | "sidebar";
 
@@ -134,6 +135,8 @@ export function Omnibox({
   );
 
   useEffect(() => () => bangEnter.cancel(), [bangEnter, bangsEnabled, engines]);
+  // Opening the bar means a page is coming: its renderer starts now (lib/sparePage.ts).
+  useEffect(() => void warmSparePage(spaceId), [spaceId]);
 
   // The palette scrolls a longer list than the sidebar's dropdown: as yab's, every engine suggestion (Google gives
   // ten at most) right after the search row, then matching pages.

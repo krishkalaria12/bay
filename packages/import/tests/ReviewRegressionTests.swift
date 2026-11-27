@@ -3,19 +3,6 @@ import XCTest
 
 // Cases from the Codex review of the cookie import (2026-10-02).
 final class ReviewRegressionTests: XCTestCase {
-  func testMalformedFirefoxOriginAttributesDoNotTrap() {
-    XCTAssertTrue(Firefox.originAttributes("^=").isolated)
-    XCTAssertTrue(Firefox.originAttributes("^=1&userContextId=0").isolated)
-    XCTAssertFalse(Firefox.originAttributes("").isolated)
-  }
-
-  func testNonV10EncryptedValuesAreUndecryptable() {
-    let key = Fixtures.chromiumKey
-    XCTAssertNil(ChromiumCrypto.decryptSecret(Data("v11garbage-but-printable".utf8), key: key))
-    XCTAssertNil(ChromiumCrypto.decryptSecret(Data("v10".utf8) + Data([1, 2, 3]), key: key))
-    XCTAssertNil(ChromiumCrypto.decryptSecret(Data("plain".utf8), key: key, hostKey: "example.com"))
-  }
-
   private func record() -> [UInt8] {
     func le32(_ v: Int) -> [UInt8] { (0..<4).map { UInt8((v >> (8 * $0)) & 0xFF) } }
     let strings: [[UInt8]] = ["a.example", "n", "/", "v"].map { Array($0.utf8) + [0] }

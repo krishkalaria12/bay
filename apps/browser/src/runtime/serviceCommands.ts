@@ -4,7 +4,7 @@ import * as v from "valibot";
 import type * as sync from "../sync/engine";
 import { commandBoolean as boolean, commandFields, commandIds, commandNullableText, commandObject, commandText, invalidCommand } from "./commandValidation";
 import type { CalendarSettings, LiveConfig } from "../activity/activityStore";
-import type { LiveFolder, LiveFolderKind, LiveSourceId } from "../activity/types";
+import type { BuiltInSourceId, LiveFolder, LiveFolderKind, LiveSourceId } from "../activity/types";
 import type { CaptureSource, LibraryMedia } from "../components/library/model";
 import type { ClearRequest } from "../components/settings/workflows";
 
@@ -19,8 +19,8 @@ export type ServiceArgs = {
   liveConfig: [Partial<LiveConfig>];
   liveRefresh: [string];
   liveOpen: [string, string, string, boolean];
-  liveConnect: [LiveSourceId, string[]];
-  liveDisconnect: [LiveSourceId];
+  liveConnect: [BuiltInSourceId, string[]];
+  liveDisconnect: [BuiltInSourceId];
   githubStart: [string];
   githubWait: [string];
   githubCancel: [string];
@@ -56,6 +56,18 @@ export type ServiceArgs = {
   settingsExportCsv: [string];
   settingsClearData: [string, ClearRequest];
   librarySaveMedia: [string, { path: string; width: number; height: number }, string, CaptureSource | null];
+  sharedFolderBind: [string, string, string];
+  sharedFolderUnbind: [string];
+  sharedFolderSync: [string];
+  // Plugins (lib/plugins/pluginService.ts): the folder read again, a plugin on or off or removed, its settings, and
+  // a command or a sidebar view's item run in it.
+  pluginsReload: [];
+  pluginEnable: [string, boolean];
+  pluginRemove: [string];
+  pluginSetting: [string, string, string | boolean];
+  pluginSecret: [string, string, string | null];
+  pluginRun: [string, string, string, "commandBar" | "toolbar" | "tabMenu", string | null];
+  pluginSelect: [string, string, string];
 };
 
 export type ServiceAction = keyof ServiceArgs;
@@ -74,14 +86,29 @@ const nullable = (value: JsonInput) => (value === null ? null : text(value));
 const choice = <T extends string>(value: JsonInput, choices: readonly T[]): T =>
   v.is(v.string(), value) && choices.includes(value as T) ? (value as T) : invalidCommand("invalid service option");
 
-const source = (value: JsonInput) => choice(value, ["github", "bitbucket", "notion", "confluence", "gdrive"] as const);
+const source = (value: JsonInput) => choice(value, ["github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"] as const);
+
+// A live folder's source: one of Bay's own, or a plugin's (`plugin:<plugin>:<source>`).
+// SAFETY: the pattern is LiveSourceId's plugin form.
+const liveSource = (value: JsonInput): LiveSourceId =>
+  v.is(v.pipe(v.string(), v.regex(/^plugin:[a-z][a-z0-9-]{1,39}:[A-Za-z][\w-]{0,39}$/)), value) ? (value as LiveSourceId) : source(value);
+
+const pluginId = (value: JsonInput) => {
+  const id = commandText(value, 40);
+
+  return /^[a-z][a-z0-9-]{1,39}$/.test(id) ? id : invalidCommand("invalid plugin id");
+};
+
+const pluginItem = (value: JsonInput) => commandText(value, 100);
+
+const settingInput = (value: JsonInput) => (v.is(v.boolean(), value) ? value : commandText(value, 4096, true));
 
 const folderPatch = (value: JsonInput) =>
   commandFields(commandObject(value, ["name", "icon", "collapsed", "sources", "filters"]), {
     name: (name) => commandText(name, 1024, true),
     icon: commandNullableText,
     collapsed: boolean,
-    sources: (sources) => commandIds(sources).map(source),
+    sources: (sources) => commandIds(sources).map(liveSource),
     filters: (filters) => {
       const o = commandObject(filters, ["authored", "reviewRequests"]);
 
@@ -92,9 +119,10 @@ const folderPatch = (value: JsonInput) =>
 const configText = (value: JsonInput) => commandText(value, 4096, true);
 
 const configPatch = (value: JsonInput) =>
-  commandFields(commandObject(value, ["githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"]), {
+  commandFields(commandObject(value, ["githubClientId", "bitbucketUser", "gitlabSite", "confluenceSite", "confluenceEmail", "googleClientId"]), {
     githubClientId: configText,
     bitbucketUser: configText,
+    gitlabSite: configText,
     confluenceSite: configText,
     confluenceEmail: configText,
     googleClientId: configText,
@@ -240,6 +268,16 @@ const readers: Record<ServiceAction, ((value: JsonInput) => ServiceValue)[]> = {
   settingsExportCsv: [text],
   settingsClearData: [text, clearRequest],
   librarySaveMedia: [text, mediaImage, (value) => commandText(value, 16384, true), captureSource],
+  sharedFolderBind: [text, text, (name) => commandText(name, 1024)],
+  sharedFolderUnbind: [text],
+  sharedFolderSync: [text],
+  pluginsReload: [],
+  pluginEnable: [pluginId, boolean],
+  pluginRemove: [pluginId],
+  pluginSetting: [pluginId, pluginItem, settingInput],
+  pluginSecret: [pluginId, pluginItem, (secret) => (secret === null ? null : commandText(secret, 65536))],
+  pluginRun: [text, pluginId, pluginItem, (from) => choice(from, ["commandBar", "toolbar", "tabMenu"] as const), nullable],
+  pluginSelect: [pluginId, pluginItem, pluginItem],
 };
 
 // SAFETY: the checks above established this shape.
@@ -259,7 +297,7 @@ export function parseServiceCommand(value: JsonInput): ServiceCommand {
   const read = readers[action].map((reader, index) => reader(args[index]));
 
   if (action === "liveConnect") {
-    const sizes = { github: 1, bitbucket: 2, notion: 1, confluence: 3 } satisfies Record<string, number>;
+    const sizes = { github: 1, gitlab: 2, bitbucket: 2, notion: 1, confluence: 3 } satisfies Record<string, number>;
 
     // SAFETY: the checks above established this shape.
     if ((read[1] as string[]).length !== (lookup(sizes, read[0] as string) ?? 0)) return invalidCommand("invalid account arguments");

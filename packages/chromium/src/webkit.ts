@@ -2,6 +2,7 @@ import { requireOptionalNativeModule, type EventSubscription } from "@bay/platfo
 import type { ExternalAppAllowance } from "./externalApps";
 import type { BrowsingDataType, Download, PermissionRequest, PermissionResult } from "./nativeModule";
 import type { SiteSettings, SiteSettingType, SiteSettingValue } from "./siteSettings";
+import type { CookieName, CookiesApplied, SiteCookie } from "./siteCookies";
 
 // The engine a tab's page runs in. Chromium (NNCore) has no Widevine, so DRM video (Netflix, Disney+…) plays only in
 // WebKit (WKWebView, ../ios/WebKit*.swift, Expo module BayWebKit), which has FairPlay. Each engine keeps its own
@@ -25,6 +26,13 @@ type WebKitNative = {
   clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;
   deleteProfileData(profile: string): Promise<boolean>;
   info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;
+  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.
+  setZoom?(profile: string, host: string, zoom: number): void;
+  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;
+  setFraudWarnings?(on: boolean): void;
+  passkeyAccess(): Promise<PasskeyAccess>;
+  requestPasskeyAccess(): Promise<PasskeyAccess>;
+  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;
 };
 
 // Optional: a build without the module (older native code) keeps every page in Chromium.
@@ -55,3 +63,15 @@ export const setWebKitSiteSetting = (profile: string, origin: string, type: Site
   WebKit?.setSitePermission(profile, origin, type, value) ?? Promise.resolve();
 
 export const webKitInfo = () => WebKit?.info() ?? Promise.resolve(null);
+
+/** A host's page zoom in WebKit's pages of a profile, as Chromium's setZoom: a page switching engines keeps its zoom. */
+export const setWebKitZoom = (profile: string, host: string, zoom: number) => WebKit?.setZoom?.(profile, host, zoom);
+
+/** Settings › Engines › Warn about deceptive sites, for WebKit pages opened from now on. */
+export const setWebKitFraudWarnings = (on: boolean) => WebKit?.setFraudWarnings?.(on);
+
+/** Whether WebKit pages can use the Mac's passkeys: Apple's browser entitlement, then the person's permission. */
+export type PasskeyAccess = { entitled: boolean; status: "entitlementRequired" | "deviceNotConfigured" | "notDetermined" | "denied" | "authorized" };
+
+export const webKitPasskeyAccess = () => WebKit?.passkeyAccess() ?? Promise.resolve(null);
+export const requestWebKitPasskeyAccess = () => WebKit?.requestPasskeyAccess() ?? Promise.resolve(null);

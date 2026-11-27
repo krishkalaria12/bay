@@ -29,7 +29,8 @@ import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
 import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
-import { protectedVideoSite, tabEngine } from "../../store/engines";
+import { canUseWebKit, ENGINE_NAMES, ENGINE_SYMBOLS, protectedVideoSite, siteDomainOf, siteRule, tabEngine } from "../../store/engines";
+import { alwaysOpenSiteIn, forgetSiteRule, reopenIn } from "../../lib/pageEngines";
 import { openSettings } from "../settings/windows";
 import { Favicon, useHover } from "../ui/primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../toolbar/buttons";
@@ -370,20 +371,19 @@ export function SiteControls({
                 <PopoverRow
                   icon="shield.lefthalf.filled"
                   title="Block ads and trackers"
+                  // A WebKit page blocks with content rules, which count nothing (WebKitContentRules.swift).
                   detail={
-                    webkitPage
-                      ? "Chromium only for now"
-                      : !blocker
-                        ? "Loading…"
-                        : !blocker.enabled
-                          ? "Off in Settings"
-                          : blocker.allowed
-                            ? "Off"
-                            : blocked > 0
-                              ? `On · ${blocked} blocked`
-                              : "On"
+                    !blocker
+                      ? "Loading…"
+                      : !blocker.enabled
+                        ? "Off in Settings"
+                        : blocker.allowed
+                          ? "Off"
+                          : blocked > 0 && !webkitPage
+                            ? `On · ${blocked} blocked`
+                            : "On"
                   }
-                  accessory={blocker?.enabled && !webkitPage ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
+                  accessory={blocker?.enabled ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
                 <PopoverRow
                   icon="chevron.left.forwardslash.chevron.right"
@@ -391,6 +391,7 @@ export function SiteControls({
                   detail={developer ? "Address, inspector and DevTools over the page" : undefined}
                   accessory={<Toggle value={developer} onChange={() => toggleDeveloperMode(tabId)} />}
                 />
+                <EngineRow tabId={tabId} url={url} onDone={close} />
                 <BoostRows tabId={tabId} url={url} />
               </>
             ) : null}
@@ -511,19 +512,19 @@ export function SiteControls({
   );
 }
 
-// Why a WebKit page has no extensions or DevTools. Bay chose the engine (store/engines.ts), so this explains; it offers
-// no switch.
+// Why a WebKit page has no extensions or DevTools: the switch to Chromium is the This site section's Opens in row.
 function ProtectedMedia({ url, host, onLearnMore }: { url: string; host: string; onLearnMore: () => void }) {
   const theme = useTheme();
+  const streaming = protectedVideoSite(url);
 
-  const why = protectedVideoSite(url)
+  const why = streaming
     ? `${displayHost(host).replace(/^www\./, "")} plays with Safari's engine, which has the DRM it needs.`
-    : "This page runs in Safari's engine, which has the DRM protected media needs.";
+    : "This page runs in WebKit, Safari's engine.";
 
   return (
     <>
       <Text style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 5, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
-        Protected Media
+        {streaming ? "Protected Media" : "WebKit"}
       </Text>
       <Text style={{ paddingHorizontal: 14, paddingBottom: 5, fontSize: 13, lineHeight: 18, color: theme.textPrimary }}>{why} Here, that means:</Text>
       <PopoverRow icon="person.crop.circle" title="You sign in here once" />
@@ -533,6 +534,45 @@ function ProtectedMedia({ url, host, onLearnMore }: { url: string; host: string;
         <Text style={{ fontSize: 12, color: theme.textSecondary }}>Learn more</Text>
       </Pressable>
     </>
+  );
+}
+
+// Opens in: the tab's engine, with a menu to reopen it in the other one or write a rule for its site (Settings ›
+// Engines). Only in Automatic mode on a build with WebKit (macOS).
+function EngineRow({ tabId, url, onDone }: { tabId: string; url: string; onDone: () => void }) {
+  const engine = useBrowser((s) => tabEngine(s, tabId));
+  const automatic = useBrowser((s) => s.settings.engineMode === "automatic");
+  const rule = useBrowser((s) => siteRule(s.settings, url));
+  const site = siteDomainOf(url);
+
+  if (!automatic || !site || !canUseWebKit(url)) return null;
+  const other = engine === "webkit" ? "chromium" : "webkit";
+
+  const choose = async () => {
+    const choice = await showMenu([
+      { id: "reopen", title: `Reopen in ${ENGINE_NAMES[other]}`, symbol: ENGINE_SYMBOLS[other] },
+      { separator: true },
+      { id: "always:chromium", title: `Always Open ${site} in Chromium`, checked: rule === "chromium" },
+      { id: "always:webkit", title: `Always Open ${site} in WebKit`, checked: rule === "webkit" },
+      ...(rule ? [{ separator: true as const }, { id: "forget", title: "Remove Site Rule" }] : []),
+    ]);
+
+    if (!choice) return;
+    onDone();
+
+    if (choice === "reopen") void reopenIn(tabId, other);
+    else if (choice === "forget") forgetSiteRule(site);
+    else if (choice === "always:chromium" || choice === "always:webkit") void alwaysOpenSiteIn(tabId, choice === "always:webkit" ? "webkit" : "chromium");
+  };
+
+  return (
+    <PopoverRow
+      icon={ENGINE_SYMBOLS[engine]}
+      title={`Opens in ${ENGINE_NAMES[engine]}`}
+      detail={rule ? `Always, for ${site}` : undefined}
+      accessory={<Symbol name="chevron.up.chevron.down" size={10} weight="semibold" color="#8E8E93" style={{ width: 14, height: 14 }} />}
+      onPress={() => void choose()}
+    />
   );
 }
 

@@ -1,25 +1,18 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 
-#include <map>
 #include <utility>
 
+#include "bay/core/nn_external_app_requests.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/bay/nn_external_apps_platform.h"
 #include "chrome/browser/bay/webui/window_registry.h"
-#include "chrome/browser/external_protocol/external_protocol_handler.h"
-#include "chrome/browser/profiles/profile.h"
-#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
-#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -34,18 +27,7 @@ extern bool (*g_bay_external_protocol_dialog)(
 namespace bay {
 namespace {
 
-struct Pending {
-  GURL url;
-  base::WeakPtr<content::WebContents> contents;
-  std::optional<url::Origin> origin;
-  content::WeakDocumentPtr initiator;
-  bool can_remember = false;
-};
-
-std::map<std::string, Pending>& PendingRequests() {
-  static base::NoDestructor<std::map<std::string, Pending>> pending;
-  return *pending;
-}
+namespace external_apps = nncore::external_apps;
 
 ExternalAppPrompts::ViewSink& Sink() {
   static base::NoDestructor<ExternalAppPrompts::ViewSink> sink;
@@ -65,11 +47,8 @@ void Asked(std::string request_id,
   if (!contents)
     return;
   const bool has_origin = origin && !origin->opaque();
-  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
-  // As Chrome's dialog: "always" only for a trustworthy origin, outside private.
-  const bool can_remember = !app.empty() && has_origin &&
-                            !profile->IsOffTheRecord() &&
-                            network::IsOriginPotentiallyTrustworthy(*origin);
+  const bool can_remember =
+      external_apps::CanRemember(contents.get(), origin, !app.empty());
   const base::Value no_icon;
   const base::Value* icon = handler.Find("icon");
   auto request = ExternalAppPrompts::Describe(
@@ -80,8 +59,8 @@ void Asked(std::string request_id,
     return;
   // With no handler the prompt only informs: there's nothing to answer.
   if (!app.empty()) {
-    PendingRequests()[request_id] = {std::move(url), contents, std::move(origin),
-                                     initiator, can_remember};
+    external_apps::Keep(request_id, std::move(url), contents.get(),
+                        std::move(origin), initiator, can_remember);
   }
 }
 
@@ -93,14 +72,13 @@ bool AskApp(const GURL& url,
   // A window Chrome made itself keeps Chrome's dialog.
   if (!WindowRegistry::Get().HoldsTab(contents))
     return false;
-  static int last_id = 0;
-  const std::string request_id = "x" + base::NumberToString(++last_id);
   // The desktop's application database can block: AppForScheme says so.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&AppForScheme, std::string(url.scheme())),
-      base::BindOnce(&Asked, request_id, url, contents->GetWeakPtr(),
-                     initiating_origin, initiator_document, program_name));
+      base::BindOnce(&Asked, external_apps::NextRequestId(), url,
+                     contents->GetWeakPtr(), initiating_origin,
+                     initiator_document, program_name));
   return true;
 }
 
@@ -115,35 +93,9 @@ base::DictValue ExternalAppPrompts::Describe(
     const std::string& app,
     const base::Value& icon,
     bool can_remember) {
-  const bool has_app = !app.empty();
-  auto request =
-      base::DictValue()
-          .Set("id", request_id)
-          .Set("url", url)
-          .Set("scheme", scheme)
-          .Set("origin", origin ? base::Value(*origin) : base::Value())
-          .Set("app", has_app ? base::Value(app) : base::Value())
-          .Set("appPath", base::Value())
-          .Set("icon", icon.Clone())
-          .Set("title", has_app ? base::StringPrintf("Open “%s”?", app.c_str())
-                                : "No application is set to open this link");
-  std::string message;
-  if (!has_app) {
-    message = base::StringPrintf(
-        "This computer doesn’t have an app for “%s:” links.", scheme.c_str());
-  } else if (origin) {
-    message = *origin + " wants to open this application.";
-  } else {
-    message = "This page wants to open this application.";
-  }
-  request.Set("message", message);
-  request.Set("remember",
-              can_remember && origin
-                  ? base::Value(base::StringPrintf(
-                        "Always allow %s to open links of this type in %s",
-                        origin->c_str(), app.c_str()))
-                  : base::Value());
-  return request;
+  return external_apps::Describe(request_id, url, scheme, origin, app,
+                                 std::nullopt, icon, can_remember,
+                                 "This computer");
 }
 
 // static
@@ -156,24 +108,8 @@ void ExternalAppPrompts::Start(ViewSink sink) {
 void ExternalAppPrompts::Resolve(const std::string& request_id,
                                  bool open,
                                  bool remember) {
-  auto it = PendingRequests().find(request_id);
-  if (it == PendingRequests().end())
-    return;
-  Pending pending = std::move(it->second);
-  PendingRequests().erase(it);
-  content::WebContents* contents = pending.contents.get();
-  // The page that asked must still be there (not navigated away from).
-  if (!open || !contents || !pending.initiator.AsRenderFrameHostIfValid())
-    return;
-  if (remember && pending.can_remember && pending.origin) {
-    // Chrome's own "always allow", as its dialog's checkbox.
-    ExternalProtocolHandler::SetBlockState(
-        std::string(pending.url.scheme()), *pending.origin,
-        ExternalProtocolHandler::DONT_BLOCK,
-        Profile::FromBrowserContext(contents->GetBrowserContext()));
-  }
-  ExternalProtocolHandler::LaunchUrlWithoutSecurityCheck(pending.url, contents,
-                                                         pending.initiator);
+  if (auto approval = external_apps::Resolve(request_id, open, remember))
+    external_apps::Launch(*approval);
 }
 
 }  // namespace bay

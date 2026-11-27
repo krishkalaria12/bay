@@ -55,19 +55,21 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/br
 diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-@@ -87,6 +87,7 @@
+@@ -87,6 +87,8 @@
  #include "chrome/browser/ui/tabs/tab_group_home/tab_group_home_ui.h"
  #include "chrome/browser/ui/webui/webui_toolbar/webui_toolbar_ui.h"
  #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
 +#include "chrome/browser/bay/webui/bay_webui.h"
++#include "chrome/browser/bay/webui/plugins.h"
  #if !BUILDFLAG(IS_CHROMEOS)
  #include "chrome/browser/ui/webui/app_home/app_home_ui.h"
  #endif  // !BUILDFLAG(IS_CHROMEOS)
-@@ -399,6 +400,7 @@
+@@ -399,6 +401,8 @@
    map.AddWebUIConfig(std::make_unique<WebNNInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<IndigoInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebUIBrowserUIConfig>());
 +  map.AddWebUIConfig(std::make_unique<bay::BayWebUIConfig>());
++  map.AddUntrustedWebUIConfig(std::make_unique<bay::BayPluginUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebuiGalleryUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebUIJsErrorUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebUIToolbarConfig>());

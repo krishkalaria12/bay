@@ -149,7 +149,8 @@ test("the catalog has the visible actions of macOS's menu", () => {
   const menus = readFileSync(new URL("../../../../packages/desktop/ios/Menus.swift", import.meta.url), "utf8");
   const ids = new Set(SHORTCUT_ACTIONS.map((action) => action.id));
   // WebKit is macOS's, and Move to New Window is under a menu Settings skips there too.
-  const notHere = new Set(["togglePageEngine", "moveTabToWindow:new"]);
+  // Reopen in… and Ask About This Page are macOS's too (WebKit, and Apple Intelligence on the device).
+  const notHere = new Set(["togglePageEngine", "moveTabToWindow:new", "reopenInEngine", "askPage"]);
   const missing = [];
 
   for (const match of menus.matchAll(/cmd\("[^"]*", "(\w+)"(?:, arg: "(\w+)")?[^\n]*/g)) {

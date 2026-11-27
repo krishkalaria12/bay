@@ -8,12 +8,6 @@ if (is_linux) {
   import("//build/config/features.gni")
   import("//build/config/linux/pkg_config.gni")
   import("//build/config/ui.gni")
-
-  # NSS is loaded at runtime from trusted system locations by the reader.
-  pkg_config("import_nss_headers") {
-    packages = [ "nss" ]
-    ignore_libs = true
-  }
 }
 
 # This is portable package code and vendored libraries, not Chromium code, so
@@ -27,24 +21,27 @@ static_library("data_services") {
   sources = [
     "data_services.cc",
     "data_services.h",
-    "packages/import/windows/Arc.cpp",
-    "packages/import/windows/BrowserDiscovery.cpp",
-    "packages/import/windows/BrowserDiscovery.h",
-    "packages/import/windows/ImportCore.h",
-    "packages/import/windows/ImportService.cpp",
-    "packages/import/windows/Readers.cpp",
-    "packages/import/windows/SQLite.h",
-    "packages/import/windows/Secrets.cpp",
-    "packages/import/windows/Sessions.cpp",
+    "packages/import/portable/BrowserDiscovery.cpp",
+    "packages/import/portable/BrowserDiscovery.h",
+    "packages/import/portable/ImportCore.h",
+    "packages/import/portable/ImportService.cpp",
+    "packages/import/portable/Readers.cpp",
+    "packages/import/portable/Secrets.cpp",
 
     # Sync dispatch reads engine passwords through the importer in this target.
-    "packages/sync/windows/SyncService.cpp",
+    "packages/sync/portable/SyncService.cpp",
     "vendor/nlohmann/json.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   configs -= chromium_style_checks
-  include_dirs = [ "vendor" ]
+
+  # rust/: bay_import.h, the import readers' C ABI (Bay's desktop Rust library,
+  # linked through :sync_services).
+  include_dirs = [
+    "vendor",
+    "rust",
+  ]
 
   # Native picker adapters use the host-only sync recovery continuation API.
   public_deps = [ ":sync_services" ]
@@ -65,14 +62,11 @@ static_library("data_services") {
       "shell32.lib",
       "user32.lib",
       "uuid.lib",
-      "winsqlite3.lib",
     ]
   } else {
     sources += [
       "packages/import/linux/ChromiumSecrets.cpp",
       "packages/import/linux/ChromiumSecrets.h",
-      "packages/import/linux/FirefoxNSS.cpp",
-      "packages/import/linux/FirefoxNSS.h",
       "packages/import/linux/SecretService.cpp",
       "packages/import/linux/SystemLibrary.h",
     ]
@@ -82,48 +76,57 @@ static_library("data_services") {
     cflags_cc = [ "-fno-char8_t" ]
     assert(use_gio && use_glib, "Bay Linux import requires GIO")
     configs += [
-      ":import_nss_headers",
       "//build/config/linux:glib",
       "//build/linux:gio_config",
     ]
-    deps = [
-      "//third_party/boringssl",
-      "//third_party/sqlite",
-    ]
+    deps = [ "//third_party/boringssl" ]
     libs = [ "dl" ]
   }
 }
 
 static_library("sync_services") {
   sources = [
-    "packages/sync/windows/Base64.h",
-    "packages/sync/windows/RecoveryKit.cpp",
-    "packages/sync/windows/RecoveryKit.h",
-    "packages/sync/windows/RecoveryKitInternal.h",
-    "packages/sync/windows/SyncCrypto.cpp",
-    "packages/sync/windows/SyncCrypto.h",
-    "packages/sync/windows/SyncService.h",
-    "packages/sync/windows/SyncVault.cpp",
-    "packages/sync/windows/SyncVault.h",
-    "packages/sync/windows/Wordlist.h",
-    "packages/sync/windows/vendor/qrcodegen.cpp",
-    "packages/sync/windows/vendor/qrcodegen.hpp",
+    "packages/sync/portable/Base64.h",
+    "packages/sync/portable/RecoveryKit.cpp",
+    "packages/sync/portable/RecoveryKit.h",
+    "packages/sync/portable/RecoveryKitInternal.h",
+    "packages/sync/portable/SyncCrypto.cpp",
+    "packages/sync/portable/SyncCrypto.h",
+    "packages/sync/portable/SyncService.h",
+    "packages/sync/portable/SyncVault.cpp",
+    "packages/sync/portable/SyncVault.h",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   configs -= chromium_style_checks
-  include_dirs = [ "vendor" ]
+  # vendor/: nlohmann JSON. rust/: bay_sync.h, the sync format's C ABI, from Bay's
+  # desktop Rust library (packages/rust), which scripts/engine.py builds.
+  include_dirs = [
+    "vendor",
+    "rust",
+  ]
+  if (is_win) {
+    # With what Rust's standard library needs on Windows, as webui/BUILD.gn.
+    libs = [
+      "$root_out_dir/bay_desktop/bay_desktop.lib",
+      "ntdll.lib",
+      "userenv.lib",
+      "ws2_32.lib",
+    ]
+  } else {
+    libs = [ "$root_out_dir/bay_desktop/libbay_desktop.a" ]
+  }
   if (is_win) {
     sources += [
-      "packages/sync/windows/RecoveryKitWindows.cpp",
-      "packages/sync/windows/SyncCryptoWindows.cpp",
+      "packages/sync/portable/RecoveryKitWindows.cpp",
+      "packages/sync/portable/SyncCryptoWindows.cpp",
     ]
     cflags_cc = [ "/Zc:char8_t-" ]
     defines = [
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",
     ]
-    libs = [
+    libs += [
       "advapi32.lib",
       "bcrypt.lib",
       "crypt32.lib",

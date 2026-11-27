@@ -1,3 +1,4 @@
+import CoreImage
 import Foundation
 import XCTest
 @testable import BaySyncCore
@@ -15,6 +16,19 @@ final class RecoveryPhraseTests: XCTestCase {
       XCTAssertEqual(RecoveryPhrase.words(for: entropy).joined(separator: " "), phrase)
       XCTAssertEqual(try RecoveryPhrase.entropy(from: phrase), entropy)
     }
+  }
+}
+
+final class RecoveryKitTests: XCTestCase {
+  // The kit's QR is bay-sync's modules, drawn here: a camera has to read the phrase back from it.
+  func testQRCodeReadsBackAsThePhrase() throws {
+    let words = RecoveryPhrase.words(for: Data((0..<32).map { UInt8($0 * 7 & 0xFF) }))
+    let image = try XCTUnwrap(RecoveryKit.qrCode(words: words))
+    let detector = try XCTUnwrap(CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
+                                            options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]))
+    let found = detector.features(in: CIImage(cgImage: image)).compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+    XCTAssertEqual(found, [words.joined(separator: " ")])
+    XCTAssertNil(RecoveryKit.qrCode(words: ["not", "a", "phrase"]))
   }
 }
 
@@ -67,12 +81,31 @@ final class SyncVaultTests: XCTestCase {
     for url in files {
       let name = url.deletingPathExtension().lastPathComponent
       XCTAssertTrue(Base32.isTag(name), name)
-      for secret in secrets + ["default", "app"] {
-        XCTAssertFalse(url.path.dropFirst(folder.path.count).contains(secret))
+      let relative = url.path.dropFirst(folder.path.count)
+      for secret in secrets { XCTAssertFalse(relative.contains(secret), "\(secret) in \(relative)") }
+      // Scope names are short enough to turn up inside a random base32 name, so only a whole name leaks one.
+      let components = relative.split(separator: "/").flatMap { $0.split(separator: ".") }
+      for scope in ["default", "app", "p:default"] {
+        XCTAssertFalse(components.contains { $0.lowercased() == scope }, "\(scope) in \(relative)")
       }
       guard let data = try? Data(contentsOf: url) else { continue }
       for secret in secrets { XCTAssertNil(data.range(of: Data(secret.utf8)), "\(secret) in \(url.lastPathComponent)") }
     }
+  }
+
+  func testLinksInTheFolderAreNotRead() throws {
+    try vault.createChain()
+    let id = try vault.write(scope: "app", payload: Data("mine".utf8))
+    let scope = try XCTUnwrap(FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil)?
+      .compactMap { $0 as? URL }.first { $0.lastPathComponent == "\(id).nns" }).deletingLastPathComponent()
+    let elsewhere = folder.deletingLastPathComponent().appendingPathComponent("nn-sync-elsewhere-\(UUID().uuidString).nns")
+    try FileManager.default.copyItem(at: scope.appendingPathComponent("\(id).nns"), to: elsewhere)
+    defer { try? FileManager.default.removeItem(at: elsewhere) }
+    let link = SyncKeys.newFileId()
+    try FileManager.default.createSymbolicLink(at: scope.appendingPathComponent("\(link).nns"), withDestinationURL: elsewhere)
+    let listing = vault.read(scope: "app", skipping: [])
+    XCTAssertEqual(listing.present, [id])
+    XCTAssertEqual(listing.files.map(\.id), [id])
   }
 
   func testDeleteChainLeavesOtherPhrases() throws {

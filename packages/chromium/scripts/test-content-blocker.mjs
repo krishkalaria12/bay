@@ -7,13 +7,21 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../..");
 const crate = join(root, "packages/adblock");
+const workspace = join(root, "packages/rust");
 const env = { ...process.env };
 
 env.DEVELOPER_DIR ??= "/Applications/Xcode.app/Contents/Developer";
 
-execFileSync("cargo", ["build", "--locked", "--manifest-path", join(crate, "Cargo.toml")], { stdio: "inherit", env });
+// As the app's Rust build (rust.sh), so the archive matches the test binary's deployment target.
+env.MACOSX_DEPLOYMENT_TARGET ??= "14.0";
 
-const library = join(env.CARGO_TARGET_DIR ?? join(crate, "target"), "debug");
+// The app links the desktop library (bay-desktop: the blocker and its lists); so does the test.
+execFileSync("cargo", ["build", "--locked", "--package", "bay-desktop", "--manifest-path", join(workspace, "Cargo.toml")], {
+  stdio: "inherit",
+  env,
+});
+
+const library = join(env.CARGO_TARGET_DIR ?? join(workspace, "target"), "debug");
 const temporary = mkdtempSync(join(tmpdir(), "bay-content-blocker-test-"));
 
 try {
@@ -34,11 +42,13 @@ try {
       "-I",
       join(crate, "include"),
       "-I",
+      join(workspace, "bay-lists/include"),
+      "-I",
       join(root, "packages/chromium/ios"),
       join(root, "packages/chromium/tests/content-blocker.mm"),
       "-L",
       library,
-      "-lbay_adblock",
+      "-lbay_desktop",
       "-framework",
       "AppKit",
       "-framework",
@@ -48,7 +58,6 @@ try {
     ],
     { stdio: "inherit", env },
   );
-  env.DYLD_LIBRARY_PATH = library;
   execFileSync(binary, [join(temporary, "data")], { stdio: "inherit", env });
 } finally {
   rmSync(temporary, { recursive: true, force: true });

@@ -16,6 +16,7 @@ import { Diagnostics } from "../effect/ports/diagnostics";
 import { platformWords } from "../lib/platformWords";
 import { GOOGLE_REDIRECT, GOOGLE_SCOPE } from "./constants";
 import { githubAnswer, githubBody, githubHeaders, VIEWER_QUERY, type ViewerAnswer } from "./github";
+import { gitlabBase, type GitlabUser } from "./gitlab";
 import { basic, deleteSecret, endpoints, form, getSecret, notionHeaders, request, setSecret } from "./net";
 import { live, setAccount, updateConfig } from "./activityStore";
 import { LiveError, type LiveAccount, type LiveSourceId } from "./types";
@@ -62,7 +63,7 @@ const parseTokens = (secret: string): GoogleTokens | null => {
 const account = (login: string, name: string | null, avatar: string | null): LiveAccount => ({ login, name, avatar, connectedAt: Date.now() });
 
 // Every account the app connects: an owner that goes moves each of them on.
-const ACCOUNTS: readonly LiveSourceId[] = ["github", "bitbucket", "notion", "confluence", "gdrive"];
+const ACCOUNTS: readonly LiveSourceId[] = ["github", "gitlab", "bitbucket", "notion", "confluence", "gdrive"];
 
 // The flow an account is having: the OAuth tab, or the device poll.
 type Flow = { readonly cancel: () => void };
@@ -78,6 +79,7 @@ const NOT_SIGNED_IN = "Not signed in";
 const REPORTS = {
   "connection.github": "GitHub didn't accept the sign-in",
   "connection.bitbucket": "Bitbucket didn't accept the sign-in",
+  "connection.gitlab": "GitLab didn't accept the sign-in",
   "connection.notion": "Notion didn't accept the sign-in",
   "connection.confluence": "Confluence didn't accept the sign-in",
   "connection.google": "Google didn't accept the sign-in",
@@ -184,6 +186,8 @@ export class ConnectionService extends Context.Service<
     readonly connectGithub: (token: string) => Effect.Effect<void, LiveError>;
     /** Connects Bitbucket with the user's name and an API token. */
     readonly connectBitbucket: (user: string, token: string) => Effect.Effect<void, LiveError>;
+    /** Connects GitLab (gitlab.com or a self-managed site) with a personal access token. */
+    readonly connectGitlab: (site: string, token: string) => Effect.Effect<void, LiveError>;
     /** Connects Notion with an integration secret. */
     readonly connectNotion: (token: string) => Effect.Effect<void, LiveError>;
     /** Connects Confluence with a site, an email and an API token. */
@@ -364,6 +368,28 @@ export class ConnectionService extends Context.Service<
 
           setAccount("bitbucket", account(me.account_id, me.display_name, me.links?.avatar?.href ?? null));
         }).pipe(Effect.catch((error) => report("connection.bitbucket", "bitbucket", error)));
+
+      const connectGitlab = (site: string, token: string): Effect.Effect<void, LiveError> =>
+        Effect.gen(function* () {
+          const base = gitlabBase(site);
+
+          if (!base) return yield* Effect.fail(new LiveError("notConfigured", "Enter the GitLab site's https address"));
+          const gen = generation("gitlab");
+
+          const me = yield* engine.send<GitlabUser>({
+            url: `${endpoints.gitlab(base)}/user`,
+            headers: { "PRIVATE-TOKEN": token.trim() },
+          });
+
+          // The account was disconnected while the token was being checked: it stays disconnected.
+          if (generation("gitlab") !== gen) return yield* Effect.fail(CANCELLED);
+
+          yield* writeCurrentSecret("gitlab", token.trim(), gen);
+
+          updateConfig({ gitlabSite: base });
+
+          setAccount("gitlab", account(me.username, me.name, me.avatar_url ?? null));
+        }).pipe(Effect.catch((error) => report("connection.gitlab", "gitlab", error)));
 
       const connectNotion = (token: string): Effect.Effect<void, LiveError> =>
         Effect.gen(function* () {
@@ -663,6 +689,7 @@ export class ConnectionService extends Context.Service<
       const service = ConnectionService.of({
         connectGithub,
         connectBitbucket,
+        connectGitlab,
         connectNotion,
         connectConfluence,
         signInWithGoogle,

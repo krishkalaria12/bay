@@ -141,7 +141,6 @@ public struct BrowserDiscovery {
       profiles = firefoxProfiles(def)
     case .chromium, .arc:
       profiles = chromiumProfiles(def)
-      if def.family == .arc { attachArcSpaces(&profiles) }
     case .automation:
       return nil
     }
@@ -184,84 +183,30 @@ public struct BrowserDiscovery {
     return dir
   }
 
+  // MARK: Profiles
+
+  /// The profiles in a browser's data folder, from the shared reader (bay-import's discovery, as Windows and Linux
+  /// list them). A data folder that is a profile (Opera) is ".".
+  func sharedProfiles(_ def: BrowserDefinition, root: URL) -> [BrowserProfile] {
+    var request: [String: Any] = ["reader": "profiles", "root": root.path, "firefox": def.family == .firefox,
+                                  "rootIsProfile": def.rootIsProfile, "rootId": ".", "chromiumCookies": true]
+    if def.family == .arc { request["arcSidebar"] = arcSidebarURL().path }
+    return (try? SharedReaders.read(request, as: [BrowserProfile].self)) ?? []
+  }
+
   // MARK: Chromium
 
   func chromiumProfiles(_ def: BrowserDefinition) -> [BrowserProfile] {
     guard let root = dataDirectory(def) else { return [] }
     let fm = FileManager.default
-    var infoCache: [String: [String: Any]] = [:]
-    var order: [String] = []
-    var lastUsed: String?
-    if let data = try? Data(contentsOf: root.appendingPathComponent("Local State")),
-       let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-       let profile = top["profile"] as? [String: Any] {
-      infoCache = profile["info_cache"] as? [String: [String: Any]] ?? [:]
-      order = profile["profiles_order"] as? [String] ?? []
-      lastUsed = profile["last_used"] as? String
-    }
-
-    var dirs: [String] = []
-    if def.rootIsProfile, isProfile(root) { dirs.append(".") }
-    for dir in order + infoCache.keys.sorted() where !dirs.contains(dir) { dirs.append(dir) }
-    for name in ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).sorted()
-    where (name == "Default" || name.hasPrefix("Profile ")) && !dirs.contains(name) {
-      dirs.append(name)
-    }
-    if def.rootIsProfile {
-      let side = root.appendingPathComponent("_side_profiles")
-      for name in ((try? fm.contentsOfDirectory(atPath: side.path)) ?? []).sorted() {
-        dirs.append("_side_profiles/\(name)")
-      }
-    }
-
-    var out: [BrowserProfile] = []
-    var fallbackIndex = 0
-    for dir in dirs {
-      let path = dir == "." ? root : root.appendingPathComponent(dir, isDirectory: true)
-      guard isProfile(path) else { continue }
-      let info = infoCache[dir] ?? (dir == "." ? infoCache["Default"] ?? infoCache[""] : nil) ?? [:]
-      fallbackIndex += 1
-      var name = (info["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-      if name == nil {
-        name = dir == "Default" || dir == "." ? "Default" : "Profile \(fallbackIndex)"
-      }
+    return sharedProfiles(def, root: root).map { shared in
+      var profile = shared
+      let path = URL(fileURLWithPath: profile.path, isDirectory: true)
       let picture = path.appendingPathComponent("Google Profile Picture.png")
-      let color = (info["profile_highlight_color"] as? Int ?? info["default_avatar_fill_color"] as? Int)
-        .flatMap { UInt32(truncatingIfNeeded: $0) == 0xFF00_0000 ? nil : Hex.color(skColor: $0) }
-      out.append(BrowserProfile(
-        id: dir,
-        name: name!,
-        path: path.path,
-        email: (info["user_name"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-        avatarPath: fm.fileExists(atPath: picture.path) ? picture.path : nil,
-        color: color,
-        isDefault: dir == (lastUsed ?? "Default") || (dir == "." && lastUsed == nil),
-        available: chromiumKinds(path, arc: def.family == .arc),
-        spaces: nil
-      ))
+      if fm.fileExists(atPath: picture.path) { profile.avatarPath = picture.path }
+      if !ChromiumExtensions.list(profile: path).isEmpty { profile.available.append(.extensions) }
+      return profile
     }
-    return out
-  }
-
-  func isProfile(_ dir: URL) -> Bool {
-    let fm = FileManager.default
-    return ["Preferences", "Secure Preferences", "Bookmarks", "History", "Login Data"].contains {
-      fm.fileExists(atPath: dir.appendingPathComponent($0).path)
-    }
-  }
-
-  func chromiumKinds(_ dir: URL, arc: Bool) -> [ImportKind] {
-    let fm = FileManager.default
-    func has(_ names: String...) -> Bool { names.contains { fm.fileExists(atPath: dir.appendingPathComponent($0).path) } }
-    var kinds: [ImportKind] = []
-    if has("Bookmarks", "AccountBookmarks") { kinds.append(.bookmarks) }
-    if has("History") { kinds.append(.history) }
-    if !arc, ChromiumSessions.latestFile(profile: dir) != nil { kinds.append(.tabs) }
-    if has("Login Data", "Login Data For Account") { kinds.append(.passwords) }
-    if has("Network/Cookies", "Cookies") { kinds.append(.cookies) }
-    if has("Web Data") { kinds.append(.autofill) }
-    if !ChromiumExtensions.list(profile: dir).isEmpty { kinds.append(.extensions) }
-    return kinds
   }
 
   // MARK: Arc
@@ -270,40 +215,23 @@ public struct BrowserDiscovery {
     applicationSupport.appendingPathComponent("Arc/StorableSidebar.json")
   }
 
-  func attachArcSpaces(_ profiles: inout [BrowserProfile]) {
-    guard let data = try? Data(contentsOf: arcSidebarURL()), let sidebar = try? ArcSidebar.parse(data) else { return }
-    for i in profiles.indices {
-      let spaces = sidebar.spaces.filter { $0.profileId == profiles[i].id }
-      profiles[i].spaces = spaces.map {
-        SpaceSummary(id: $0.id, name: $0.name, color: $0.color, emoji: $0.emoji, icon: $0.icon,
-                     pinnedCount: $0.pinned.reduce(0) { $0 + $1.linkCount }, tabCount: $0.tabs.count)
-      }
-      var kinds = profiles[i].available
-      if !spaces.isEmpty { kinds += [.spaces, .pinnedTabs, .tabs] }
-      if sidebar.favorites[profiles[i].id]?.isEmpty == false { kinds.append(.favorites) }
-      profiles[i].available = kinds
-    }
-  }
-
   // MARK: Firefox
 
+  /// Firefox profiles in the data folder, by their path there (an import names one that way).
   func firefoxProfiles(_ def: BrowserDefinition) -> [BrowserProfile] {
-    guard let root = dataDirectory(def),
-          let ini = try? String(contentsOf: root.appendingPathComponent("profiles.ini"), encoding: .utf8) else { return [] }
-    let fm = FileManager.default
-    return Firefox.profiles(ini: ini).compactMap { p in
-      guard !p.path.hasPrefix("/") else { return nil }
-      let dir = root.appendingPathComponent(p.path, isDirectory: true)
-      guard fm.fileExists(atPath: dir.path) else { return nil }
-      func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
-      var kinds: [ImportKind] = []
-      if has("places.sqlite") { kinds += [.bookmarks, .history] }
-      if Firefox.sessionFile(profile: dir) != nil { kinds.append(.tabs) }
-      if has("logins.json") { kinds.append(.passwords) }
-      if has("cookies.sqlite") { kinds.append(.cookies) }
-      if FirefoxExtensions.hasAddons(profile: dir) { kinds.append(.extensions) }
-      return BrowserProfile(id: p.path, name: p.name, path: dir.path, email: nil, avatarPath: nil, color: nil,
-                            isDefault: p.isDefault, available: kinds, spaces: nil)
+    guard let root = dataDirectory(def) else { return [] }
+    // The shared reader gives canonical paths (realpath's; resolvingSymlinksInPath drops /private instead).
+    let canonical = realpath(root.path, nil).map { pointer in
+      defer { free(pointer) }
+      return String(cString: pointer)
+    }
+    let base = (canonical ?? root.path) + "/"
+    return sharedProfiles(def, root: root).compactMap { shared in
+      guard shared.path.hasPrefix(base) else { return nil }
+      var profile = shared
+      profile.id = String(shared.path.dropFirst(base.count))
+      if FirefoxExtensions.hasAddons(profile: URL(fileURLWithPath: shared.path)) { profile.available.append(.extensions) }
+      return profile
     }
   }
 }

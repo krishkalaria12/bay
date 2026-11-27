@@ -81,7 +81,8 @@ public final class SyncVault {
   public func read(scope: String, skipping known: Set<String>) -> Listing {
     var listing = Listing()
     let directory = scopeURL(scope)
-    let keysToRead: [URLResourceKey] = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey, .contentModificationDateKey]
+    let keysToRead: [URLResourceKey] = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey, .contentModificationDateKey,
+                                        .isRegularFileKey, .isSymbolicLinkKey]
     guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return listing }
     let suffix = ".\(Self.fileExtension)"
     let scopeTag = keys.scopeTag(scope)
@@ -99,10 +100,12 @@ public final class SyncVault {
       guard name.hasSuffix(suffix) else { continue }
       let id = String(name.dropLast(suffix.count))
       guard Base32.isTag(id) else { continue }
-      if !listing.present.contains(id) { listing.present.append(id) }
-      if known.contains(id) { continue }
       let url = directory.appendingPathComponent(name)
       let values = try? url.resourceValues(forKeys: Set(keysToRead))
+      // As on Windows and Linux: only a file of the folder's own, never a link to one somewhere else.
+      guard values?.isSymbolicLink != true, values?.isRegularFile == true else { continue }
+      if !listing.present.contains(id) { listing.present.append(id) }
+      if known.contains(id) { continue }
       if values?.isUbiquitousItem == true, let status = values?.ubiquitousItemDownloadingStatus, status != .current {
         listing.pending.append(id)
         try? fileManager.startDownloadingUbiquitousItem(at: url)

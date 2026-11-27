@@ -18,7 +18,7 @@ import { HoverSlot } from "../ui/HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../ui/primitives";
 import { clickTab, commitRename, endRename, startRename, tabTitle } from "./actions";
-import { useDragItem } from "./dnd";
+import { useDragItem, useMergeTarget } from "./dnd";
 import { dismissHover, useHovered, useRowHover, useRowHoverFlag, type HoverFlag } from "./hover";
 import { openTabMenu } from "./contextMenus";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
@@ -126,7 +126,9 @@ function TabRowBody({ tab, renaming, hover, pressed }: { tab: DeepReadonly<Tab>;
   const hovered = useHovered(hover);
   const title = tabTitle(tab);
   // The active row's fill is its ActiveHighlight's, under it.
-  const fill = active ? "rgba(0,0,0,0)" : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
+  // A dragged tab held on it: letting go groups the two, so it shows as pressed, as a group's header does.
+  const mergeTarget = useMergeTarget(`t:${tabId}`);
+  const fill = mergeTarget ? theme.tabPressed : active ? "rgba(0,0,0,0)" : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
   const border = selected && !active ? 0.5 : 0;
   // What hovering and pressing don't change is memoized apart from them: hovering a row renders its fill and its slot
   // again, not its icon, badges, label and highlight.

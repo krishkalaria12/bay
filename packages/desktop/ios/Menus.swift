@@ -613,6 +613,12 @@ enum MainMenu {
       cmd("Rename…", "renameTab", "r", [.command, .control]),
       cmd("Change Icon…", "changeTabIcon"),
       cmd("Mute Site", "toggleMute"),
+      .separator(),
+      // The page in the other engine (apps/browser lib/pageEngines.ts): JS names it, and disables it where there's no
+      // choice of engine.
+      cmd("Reopen in WebKit", "reopenInEngine"),
+      // Apple Intelligence on the page (apps/browser components/ask); JS disables it without the model or a page.
+      cmd("Ask About This Page…", "askPage", "a", [.command, .option]),
     ])
 
     bookmarks = top("Bookmarks", [

@@ -36,6 +36,10 @@ export type PageState = {
   backToNewTab: boolean;
   /** A link moved the tab to its site's engine (lib/pageEngines.ts followSiteChoice): Back reopens this page in that one. */
   engineBack: { engine: PageEngine; url: string } | null;
+  /** "Play <host> in WebKit?": the page's protected video stalled in Chromium (lib/pageEngines.ts playInWebKit). */
+  engineOffer: string | null;
+  /** A picture of the page as it was, over it while it reloads in the other engine (lib/pageEngines.ts carryPage). */
+  engineHold: string | null;
 };
 
 export const IDLE_PAGE: PageState = {
@@ -56,6 +60,8 @@ export const IDLE_PAGE: PageState = {
   wasNewTab: false,
   backToNewTab: false,
   engineBack: null,
+  engineOffer: null,
+  engineHold: null,
 };
 
 type Store = {

@@ -32,7 +32,7 @@ export type NewFolderOptions = { tabIds?: string[]; name?: string; parentId?: st
 
 export type OrganizeCommand =
   | { method: "createGroup"; tabIds: string[]; options?: { name?: string; icon?: string | null; color?: GroupColor | null } }
-  | { method: "groupTabs"; tabIds: string[]; options?: { pinned?: boolean; name?: string } }
+  | { method: "groupTabs"; tabIds: string[]; options?: { pinned?: boolean; name?: string; inOrder?: boolean } }
   | { method: "updateGroup"; groupId: string; patch: GroupPatch }
   | { method: "addTabsToGroup"; groupId: string; tabIds: string[] }
   | { method: "removeTabsFromGroup"; tabIds: string[] }
@@ -138,7 +138,7 @@ export function parseOrganizeCommand(value: JsonInput): OrganizeCommand {
     case "groupTabs":
       fields("tabIds", "options");
 
-      return { method: c.method, tabIds: tabIds(), ...options(["pinned", "name"], { pinned: commandBoolean, name }) };
+      return { method: c.method, tabIds: tabIds(), ...options(["pinned", "name", "inOrder"], { pinned: commandBoolean, name, inOrder: commandBoolean }) };
     case "updateGroup":
       fields("groupId", "patch");
 

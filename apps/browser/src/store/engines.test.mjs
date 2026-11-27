@@ -1,11 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chosenEngine, engineForUrl, engineMark, protectedVideoSite, siteOf, tabEngine, visitRecorder } from "./engines.ts";
+import {
+  chosenEngine,
+  engineForUrl,
+  engineSwitchFor,
+  engineMark,
+  protectedVideoSite,
+  siteDomainOf,
+  siteOf,
+  tabEngine,
+  typedNavigationEngine,
+  visitRecorder,
+  wantedEngine,
+} from "./engines.ts";
 import { makeTab, snapshotTab } from "./model.ts";
+import { DEFAULT_SETTINGS, restoreSettings } from "./settings.ts";
 import { setWebKitAvailable } from "@bay/chromium";
 
 const tab = (id, patch = {}) => ({ id, url: "", navigation: null, openerId: null, ...patch });
-const state = (tabs) => ({ tabs: Object.fromEntries(tabs.map((t) => [t.id, t])) });
+
+const PREFS = {
+  engineMode: DEFAULT_SETTINGS.engineMode,
+  defaultEngine: DEFAULT_SETTINGS.defaultEngine,
+  siteEngines: DEFAULT_SETTINGS.siteEngines,
+  streamingInWebKit: DEFAULT_SETTINGS.streamingInWebKit,
+};
+
+const state = (tabs, settings = {}) => ({ tabs: Object.fromEntries(tabs.map((t) => [t.id, t])), settings: { ...PREFS, ...settings } });
 
 test("a site is its scheme, host and port, and nothing else", () => {
   assert.equal(siteOf("https://www.Netflix.com/watch/1?x=2#y"), "https://www.netflix.com");
@@ -65,16 +86,14 @@ test("a tab keeps its engine, else follows its adoption, its opener, then its si
   assert.equal(tabEngine(s, "gone"), "chromium");
 });
 
-test("every other page opens in Chromium, and leftover choices don't count", () => {
-  assert.equal(engineForUrl("https://example.com/"), "chromium");
-
-  const leftover = {
-    ...state([tab("t", { url: "https://example.com/" })]),
-    settings: { pageEngine: "webkit", websiteEngines: { "https://example.com": "webkit" } },
-  };
-
-  assert.equal(tabEngine(leftover, "t"), "chromium");
-  assert.equal(engineMark(leftover, "t"), null);
+test("every other page opens in Chromium, and choices from before 5 Nov 2026 don't come back", () => {
+  assert.equal(engineForUrl(PREFS, "https://example.com/"), "chromium");
+  const restored = restoreSettings({ pageEngine: "webkit", websiteEngines: { "https://example.com": "webkit" } });
+  assert.equal("pageEngine" in restored, false);
+  assert.equal("websiteEngines" in restored, false);
+  const s = state([tab("t", { url: "https://example.com/" })], restored);
+  assert.equal(tabEngine(s, "t"), "chromium");
+  assert.equal(engineMark(s, "t"), null);
 });
 
 test("streaming sites open in WebKit, over https, subdomains included", () => {
@@ -85,17 +104,17 @@ test("streaming sites open in WebKit, over https, subdomains included", () => {
   assert.equal(protectedVideoSite("https://netflix.com.example.com/"), false);
   assert.equal(protectedVideoSite("https://notnetflix.com/"), false);
   assert.equal(protectedVideoSite("http://www.netflix.com/"), false);
-  assert.equal(chosenEngine("https://example.com/"), undefined);
-  assert.equal(chosenEngine("https://www.netflix.com/"), "webkit");
-  assert.equal(engineForUrl("https://www.netflix.com/browse"), "webkit");
+  assert.equal(chosenEngine(PREFS, "https://example.com/"), undefined);
+  assert.equal(chosenEngine(PREFS, "https://www.netflix.com/"), "webkit");
+  assert.equal(engineForUrl(PREFS, "https://www.netflix.com/browse"), "webkit");
   assert.equal(tabEngine(state([tab("typed", { url: "https://www.netflix.com/" })]), "typed"), "webkit");
 });
 
 test("Chromium's own pages always open in Chromium", () => {
   const s = state([tab("v", { engine: "webkit", url: "bay://version" }), tab("w", { engine: "webkit", url: "https://a.com/" })]);
   assert.equal(tabEngine(s, "v"), "chromium");
-  assert.equal(engineForUrl("bay://extensions"), "chromium");
-  assert.equal(engineForUrl("chrome-extension://abc/options.html"), "chromium");
+  assert.equal(engineForUrl(PREFS, "bay://extensions"), "chromium");
+  assert.equal(engineForUrl(PREFS, "chrome-extension://abc/options.html"), "chromium");
 });
 
 test("the mark shows only on web pages away from Chromium", () => {
@@ -252,9 +271,125 @@ test("without the WebKit module (Windows, Linux) every page stays in Chromium", 
   try {
     assert.equal(tabEngine(s, "a"), "chromium");
     assert.equal(tabEngine(s, "b"), "chromium");
-    assert.equal(engineForUrl("https://www.netflix.com/"), "chromium");
-    assert.equal(chosenEngine("https://www.netflix.com/"), undefined);
+    assert.equal(engineForUrl(PREFS, "https://www.netflix.com/"), "chromium");
+    assert.equal(chosenEngine(PREFS, "https://www.netflix.com/"), undefined);
     assert.equal(engineMark(s, "a"), null);
+    // Synced choices from a Mac change nothing here.
+    const webkit = { engineMode: "webkit", defaultEngine: "webkit", siteEngines: { "example.com": "webkit" } };
+    const fresh = state([tab("c", { url: "https://example.com/" })], webkit);
+    assert.equal(tabEngine(fresh, "c"), "chromium");
+    assert.equal(wantedEngine(fresh, "c"), "chromium");
+    assert.equal(typedNavigationEngine(fresh, fresh.tabs.c, "https://example.com/"), "chromium");
+    assert.equal(engineMark(fresh, "c"), null);
+  } finally {
+    setWebKitAvailable(true);
+  }
+});
+
+test("site rules key by registrable domain, subdomains included", () => {
+  assert.equal(siteDomainOf("https://accounts.figma.com/login"), "figma.com");
+  assert.equal(siteDomainOf("https://www.bbc.co.uk/news"), "bbc.co.uk");
+  assert.equal(siteDomainOf("https://me.github.io/x"), "me.github.io");
+  assert.equal(siteDomainOf("http://localhost:3000/"), "localhost");
+  assert.equal(siteDomainOf("http://192.168.1.4/"), "192.168.1.4");
+  const prefs = { ...PREFS, siteEngines: { "figma.com": "webkit" } };
+  assert.equal(engineForUrl(prefs, "https://www.figma.com/file/1"), "webkit");
+  assert.equal(engineForUrl(prefs, "https://figma.community.example/"), "chromium");
+  assert.equal(chosenEngine(prefs, "https://example.com/"), undefined);
+});
+
+test("the order: Chromium-only pages, the mode, the tab's pick, the site's rule, streaming sites, the default", () => {
+  const pick = { engine: "webkit", site: "github.com" };
+
+  const tabs = [
+    tab("settings", { url: "bay://settings" }),
+    tab("picked", { url: "https://github.com/", engine: "webkit", enginePick: pick }),
+    tab("ruled", { url: "https://www.figma.com/" }),
+    tab("stream", { url: "https://www.netflix.com/" }),
+    tab("plain", { url: "https://example.com/" }),
+    tab("extension", { url: "https://example.com/", adoptId: "nncore:4" }),
+  ];
+
+  const automatic = state(tabs, { siteEngines: { "figma.com": "webkit", "github.com": "chromium" } });
+  assert.equal(wantedEngine(automatic, "settings"), "chromium");
+  assert.equal(wantedEngine(automatic, "picked"), "webkit", "a pick beats the site's rule");
+  assert.equal(wantedEngine(automatic, "ruled"), "webkit");
+  assert.equal(wantedEngine(automatic, "stream"), "webkit");
+  assert.equal(wantedEngine(automatic, "plain"), "chromium");
+
+  const noStreaming = state(tabs, { streamingInWebKit: false, defaultEngine: "webkit" });
+  assert.equal(wantedEngine(noStreaming, "stream"), "webkit", "the default engine");
+  assert.equal(wantedEngine(state(tabs, { streamingInWebKit: false }), "stream"), "chromium");
+  assert.equal(wantedEngine(state(tabs, { siteEngines: { "netflix.com": "chromium" } }), "stream"), "chromium", "a rule beats the streaming list");
+
+  const chromium = state(tabs, { engineMode: "chromium", siteEngines: { "figma.com": "webkit" } });
+
+  for (const id of ["picked", "ruled", "stream", "plain"]) assert.equal(wantedEngine(chromium, id), "chromium", id);
+
+  const webkit = state(tabs, { engineMode: "webkit", siteEngines: { "github.com": "chromium" } });
+
+  for (const id of ["picked", "ruled", "stream", "plain"]) assert.equal(wantedEngine(webkit, id), "webkit", id);
+  assert.equal(wantedEngine(webkit, "settings"), "chromium");
+  assert.equal(wantedEngine(webkit, "extension"), "chromium", "a page an extension or Chromium made stays there");
+});
+
+test("a pick holds only on its site", () => {
+  const t = tab("t", { url: "https://github.com/", enginePick: { engine: "webkit", site: "github.com" } });
+  const s = state([t]);
+  assert.equal(typedNavigationEngine(s, t, "https://gist.github.com/x"), "webkit");
+  assert.equal(typedNavigationEngine(s, t, "https://example.com/"), "chromium");
+  assert.equal(wantedEngine(state([{ ...t, url: "https://example.com/" }]), "t"), "chromium");
+});
+
+test("a typed address follows its site's rule or the default, not the page it replaces", () => {
+  const t = tab("t", { url: "https://www.netflix.com/", engine: "webkit" });
+  assert.equal(typedNavigationEngine(state([t]), t, "https://example.com/"), "chromium");
+  assert.equal(typedNavigationEngine(state([t], { defaultEngine: "webkit" }), t, "https://example.com/"), "webkit");
+  assert.equal(typedNavigationEngine(state([t]), t, "bay://settings"), "chromium");
+  assert.equal(typedNavigationEngine(state([t], { engineMode: "chromium" }), t, "https://www.netflix.com/x"), "chromium");
+});
+
+test("a fresh link's tab takes its opener's engine unless the mode decides", () => {
+  const tabs = [tab("o", { url: "https://www.netflix.com/", engine: "webkit" }), tab("l", { url: "https://example.com/", openerId: "o" })];
+  assert.equal(tabEngine(state(tabs), "l"), "webkit");
+  assert.equal(tabEngine(state(tabs, { engineMode: "chromium" }), "l"), "chromium");
+});
+
+test("the mark shows on a tab away from the engine other pages open in", () => {
+  const tabs = [tab("w", { url: "https://a.com/", engine: "webkit" }), tab("c", { url: "https://a.com/", engine: "chromium" })];
+  assert.equal(engineMark(state(tabs, { defaultEngine: "webkit" }), "w"), null);
+  assert.equal(engineMark(state(tabs, { defaultEngine: "webkit" }), "c"), "chromium");
+  assert.equal(engineMark(state(tabs, { engineMode: "webkit" }), "c"), "chromium");
+  assert.equal(engineMark(state(tabs, { engineMode: "chromium" }), "w"), "webkit");
+});
+
+test("saved and synced engine settings keep only valid values", () => {
+  const restored = restoreSettings({
+    engineMode: "safari",
+    defaultEngine: "webkit",
+    siteEngines: { "https://www.Figma.com/x": "webkit", "a.com": "gecko", "": "webkit" },
+  });
+
+  assert.equal(restored.engineMode, "automatic");
+  assert.equal(restored.defaultEngine, "webkit");
+  assert.deepEqual(restored.siteEngines, { "figma.com": "webkit" });
+  assert.equal(restoreSettings({}).protectedVideoFallback, "move");
+});
+
+test("a tab offers the other engine and its site's rule, only for a web page in Automatic mode", () => {
+  const tabs = [tab("w", { url: "https://www.figma.com/file/1", engine: "webkit" }), tab("b", { url: "bay://settings" })];
+  assert.deepEqual(engineSwitchFor(state(tabs, { siteEngines: { "figma.com": "webkit" } }), "w"), {
+    engine: "webkit",
+    other: "chromium",
+    site: "figma.com",
+    rule: "webkit",
+  });
+  assert.equal(engineSwitchFor(state(tabs), "b"), null);
+  assert.equal(engineSwitchFor(state(tabs, { engineMode: "chromium" }), "w"), null);
+  setWebKitAvailable(false);
+
+  try {
+    assert.equal(engineSwitchFor(state(tabs), "w"), null);
   } finally {
     setWebKitAvailable(true);
   }

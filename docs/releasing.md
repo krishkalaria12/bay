@@ -42,6 +42,9 @@ Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updat
    and bump `CURRENT_PROJECT_VERSION` by one in `apps/browser/macos/Bay.xcodeproj/project.pbxproj`, commit
    (`chore: prepare bay <version>`) and push to `main`.
 2. If `engine/` changed since the last published engine, publish it (below).
+   On each platform, run the acceptance suite (`packages/chromium/scripts/acceptance.mjs`) and go through the web
+   features checklist, `python3 scripts/web-features.py checklist`: the lines of `engine/web-features.json` no
+   check covers. An engine build already stops when a new Chromium reaches pages in a way that map doesn't cover.
 3. Run it: Actions › Release › Run workflow › channel `stable`, version `<version>`, or
 
    ```bash

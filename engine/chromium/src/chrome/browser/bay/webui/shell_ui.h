@@ -60,6 +60,13 @@ class ShellUI {
                           const std::string& root,
                           bool folder,
                           Response callback);
+  // BaySharedFolders.pick: the folder the user picks is granted
+  // (shared_folders.h). Answers {path, name}, or null when cancelled.
+  void PickSharedFolder(const HostContext& context, Response callback);
+  // BayPlugins.install: the plugin folder the user picks is copied into
+  // Bay's plugins folder (plugins.h). Answers bay_plugins_install's JSON, or
+  // null when cancelled.
+  void PickPluginFolder(const HostContext& context, Response callback);
 
  private:
   void StartFilePicker(const HostContext& context,

@@ -51,6 +51,25 @@
 // The arguments carry decrypted cookie values: they're parsed before the call
 // returns (the caller zeroes its buffer then), never logged, and the parsed
 // copy is zeroed once the cookies are built (nn_sensitive_args.h).
+//
+// A site's sign-in carried to the app's other engine (WebKit) and back, when a
+// page switches engines (apps/browser lib/engineSiteData.ts):
+//
+//   nn_cookies_site   {site} -> {cookies: [cookie…]}: the profile's
+//                     unpartitioned cookies whose domain is |site| (a
+//                     registrable domain, "example.com") or one of its
+//                     subdomains, in the import's shape (created, expires and
+//                     lastAccess in ms; no partitionKey).
+//   nn_cookies_apply  {set: [cookie…], remove: [{name, domain, path}…]} ->
+//                     {set: n, rejected: n, removed: n}: writes each cookie
+//                     of |set| as the import does (checked as fresh from its
+//                     URL, unpartitioned), and deletes the unpartitioned
+//                     cookies matching |remove|. Nothing else of the site's
+//                     is touched, unlike nn_cookies_import's replace.
+//
+// Both refuse a private profile ("private profile") and a call over 1000
+// cookies. Values are never logged; apply's arguments are zeroed as the
+// import's are.
 
 #ifndef CHROME_BROWSER_BAY_NN_COOKIES_H_
 #define CHROME_BROWSER_BAY_NN_COOKIES_H_
@@ -58,5 +77,7 @@
 #include "chrome/browser/bay/nn_engine.h"
 
 NN_ENGINE_CALL(nn_cookies_import);
+NN_ENGINE_CALL(nn_cookies_site);
+NN_ENGINE_CALL(nn_cookies_apply);
 
 #endif  // CHROME_BROWSER_BAY_NN_COOKIES_H_

@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay: engine choice and feature gaps</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfaf8;
+        --surface: #fff;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --sunken: #f3f1ed;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --radius: 10px;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --sunken: #232321;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      code {
+        font: 0.86em var(--mono);
+        background: var(--sunken);
+        padding: 0.06em 0.34em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.4rem;
+        margin-bottom: 0.8rem;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 1.6rem 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 1rem;
+        padding-left: 1.3rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      .page {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 2.5rem;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 5rem;
+      }
+      nav {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        font-size: 0.88rem;
+      }
+      nav strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        color: var(--muted);
+      }
+      nav ol {
+        list-style: none;
+        padding: 0;
+      }
+      nav li {
+        margin: 0;
+      }
+      nav a {
+        display: block;
+        padding: 0.3rem 0.5rem;
+        border-left: 2px solid var(--line);
+        text-decoration: none;
+        color: var(--muted);
+      }
+      nav a:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+      nav .sub a {
+        padding-left: 1.2rem;
+        font-size: 0.84rem;
+      }
+      main {
+        min-width: 0;
+      }
+      section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+        scroll-margin-top: 1rem;
+      }
+      .lede,
+      .prose {
+        max-width: 76ch;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.05rem;
+        margin-top: 0.8rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin: 0 0 1.2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        padding: 0.7rem 0.85rem;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-size: 0.8rem;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        white-space: nowrap;
+        font-weight: 600;
+      }
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0;
+        max-width: 76ch;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .callout p:last-child {
+        margin: 0;
+      }
+      .order {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+        max-width: 76ch;
+      }
+      .order li {
+        counter-increment: step;
+        position: relative;
+        padding: 0.55rem 0.8rem 0.55rem 2.8rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 0.45rem 0;
+      }
+      .order li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0.8rem;
+        top: 0.55rem;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+      }
+      .pri {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--sunken);
+        white-space: nowrap;
+      }
+      .pri.p0 {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .mock {
+        font: 0.82rem/1.5 var(--mono);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        overflow-x: auto;
+        white-space: pre;
+        max-width: 100%;
+        width: fit-content;
+      }
+      @media (max-width: 800px) {
+        .page {
+          grid-template-columns: 1fr;
+          gap: 1.5rem;
+          padding: 1.5rem 1rem 3rem;
+        }
+        nav {
+          position: static;
+        }
+        nav ol {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        nav a,
+        nav .sub a {
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          padding: 0.2rem 0.65rem;
+        }
+        td:first-child {
+          white-space: normal;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        nav {
+          display: none;
+        }
+        .page {
+          display: block;
+          padding: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav aria-label="Contents">
+        <strong>Plan</strong>
+        <ol>
+          <li><a href="#engine">1. Choose your engine</a></li>
+          <li class="sub"><a href="#engine-today">Today</a></li>
+          <li class="sub"><a href="#engine-surfaces">What people see</a></li>
+          <li class="sub"><a href="#engine-order">How a tab's engine is picked</a></li>
+          <li class="sub"><a href="#engine-switch">Switching a page</a></li>
+          <li class="sub"><a href="#engine-signins">Bringing sign-ins along</a></li>
+          <li class="sub"><a href="#engine-model">Settings and files</a></li>
+          <li class="sub"><a href="#engine-phases">Phases</a></li>
+          <li class="sub"><a href="#engine-accept">Acceptance</a></li>
+          <li class="sub"><a href="#engine-risks">Risks</a></li>
+          <li><a href="#keychain">2. iCloud passwords and passkeys</a></li>
+          <li><a href="#gaps">3. Other features to add</a></li>
+          <li><a href="#have">4. Already in Bay</a></li>
+          <li><a href="#decisions">5. Decisions</a></li>
+          <li><a href="#progress">6. Progress and known gaps</a></li>
+        </ol>
+      </nav>
+      <main>
+        <header>
+          <h1>Engine choice and feature gaps</h1>
+          <p class="lede">
+            Let people pick which engine their pages open in, per browser, per site and per tab. Then fill the gaps found in a feature sweep: local agents,
+            questions about a page, custom filters, secure DNS, hooks, plugins and a few smaller items.
+          </p>
+          <p class="meta">
+            Drafted 24 Nov 2026 against <code>main</code> at <code>4be8f6715</code>. Nothing here is built yet. Engine choice is macOS only, behind
+            <code>hasWebKit()</code>; every other item says which platforms it covers.
+          </p>
+        </header>
+
+        <section id="engine" aria-labelledby="engine-h">
+          <h2 id="engine-h">1. Choose your engine <span class="pri p0">P0</span></h2>
+          <p class="prose">
+            Every page opens in Chromium or WebKit. Today Bay picks the engine and there is nothing to set. This feature hands that choice to the person: one
+            setting for the whole browser, rules for single sites, and a switch on any open tab. Bay's automatic behaviour stays the default, so nobody who
+            ignores the setting notices a change.
+          </p>
+          <div class="callout warn">
+            <p>
+              <strong>This reverses a standing rule.</strong> On 5 Nov 2026 every engine choice was taken out: Bay decides, and Settings › Engines and Site
+              Controls only explain. This plan brings the choice back on purpose. The automatic rules from that change become the <em>Automatic</em> mode below.
+            </p>
+          </div>
+
+          <h3 id="engine-today">What Bay does today</h3>
+          <ul class="prose">
+            <li>
+              <code>store/engines.ts</code> resolves a tab's engine: Bay's and Chrome's own pages stay in Chromium, a fixed list of streaming sites opens in
+              WebKit, and everything else opens in Chromium.
+            </li>
+            <li>
+              <code>lib/pageEngines.ts</code> moves a page to WebKit when its protected video stalls in Chromium. It asks before a reload would lose unsaved
+              work (<code>PageWorkService.mayLeavePage</code>) and handles Back across engines (<code>goBackAcrossEngines</code>).
+            </li>
+            <li>A page's links stay in its engine, so cross-site sign-ins return signed in; a typed address goes to its own site's engine.</li>
+            <li><code>engineMark</code> badges a tab row whose page isn't in Chromium.</li>
+            <li>
+              Settings › Engines (<code>components/settings/panes/Engines.tsx</code>) is explanation only. Each engine keeps its own cookies, so people sign in
+              again after a move.
+            </li>
+          </ul>
+
+          <h3 id="engine-surfaces">What people see</h3>
+          <p class="prose"><strong>Settings › Engines</strong>, rewritten from an explanation into settings:</p>
+          <div class="mock" role="img" aria-label="Sketch of the Settings Engines pane">
+            Pages open in [ Automatic | Chromium | WebKit ] Most pages open in Chromium. Streaming sites open in WebKit to play protected video. (i) Default
+            engine [ Chromium (recommended) ▾ ] (Automatic only) Site rules [Add Streaming Sites] [+ Add Rule…] ▶ Streaming sites netflix.com, disneyplus.com …
+            and 12 more WebKit 🗑 ◉ figma.com [ Chromium ▾ ] ✎ 🗑 ◉ music.apple.com [ WebKit ▾ ] ✎ 🗑 When protected video won't play [ Ask ▾ ] Ask · Move to
+            WebKit · Stay Switching engines [✓] Keep the page in view while the other engine loads (scroll and zoom carried) [✓] Ask before switching a page
+            with unsaved work [✓] Bring sign-ins along WebKit pages [✓] Warn about deceptive sites How engines differ › (sign-ins, extensions, ad blocking,
+            DevTools, passkeys)
+          </div>
+          <ul class="prose">
+            <li>
+              <strong>Site Controls</strong> gets an <em>Opens in</em> row: a Chromium or WebKit pop-up for this tab, and <em>Always open &lt;site&gt; in…</em>,
+              which writes a site rule.
+            </li>
+            <li>
+              <strong>Tab menu, page menu and command bar</strong>: <em>Reopen in WebKit</em> or <em>Reopen in Chromium</em>, and
+              <em>Always Open &lt;site&gt; in…</em>. The command bar finds them by typing “engine”, “webkit”, “safari” or “chromium”.
+            </li>
+            <li>
+              <strong>Tab row mark</strong>: the badge shows whenever a tab's engine differs from the default engine, not only when it is WebKit. In WebKit-only
+              mode, a Chromium tab gets the mark.
+            </li>
+            <li>
+              <strong>Protected video prompt</strong> (when set to Ask): a popover under the address, “Play &lt;host&gt; in WebKit? This site's protected video
+              doesn't play in Chromium.”, with <em>Stay on Page</em>, <em>Open in WebKit</em> and <em>Don't ask again for this site</em>, which writes a rule.
+            </li>
+            <li>
+              <strong>Mode switch</strong>: changing <em>Pages open in</em> shows “Switching…” in the row and moves open tabs (see
+              <a href="#engine-switch">Switching a page</a>).
+            </li>
+          </ul>
+
+          <h3 id="engine-order">How a tab's engine is picked</h3>
+          <p class="prose">The first rule that answers wins. <code>store/engines.ts</code> stays pure and tested, and every caller still asks it.</p>
+          <ol class="order">
+            <li>
+              <strong>Chromium-only pages</strong> always open in Chromium: <code>bay:</code>, <code>chrome:</code>, extension pages, DevTools,
+              <code>view-source:</code> and the Chrome Web Store. So does any build without WebKit.
+            </li>
+            <li>
+              <strong>Single-engine mode</strong>: in <em>Chromium</em> or <em>WebKit</em> mode, every page opens in that engine. In WebKit mode, a tab an
+              extension opened or drives stays in Chromium, because extensions only exist there.
+            </li>
+            <li><strong>The tab's own choice</strong>: an engine picked with <em>Reopen in…</em> stays with the tab, including after a relaunch.</li>
+            <li><strong>Opener</strong>: a link or pop-up opens in its opener's engine, as today.</li>
+            <li><strong>Site rule</strong>: the person's rule for the site.</li>
+            <li><strong>Streaming sites</strong>: when the list is on, those sites open in WebKit, as today.</li>
+            <li><strong>Default engine</strong>: Chromium unless the person changed it.</li>
+          </ol>
+          <p class="prose">
+            Typed addresses keep today's rule: they skip step 4, so a typed address follows its own site's rule or the default. If protected video then stalls
+            in Chromium, the <em>When protected video won't play</em> setting decides: ask, move (today's behaviour) or stay.
+          </p>
+
+          <h3 id="engine-switch">Switching a page</h3>
+          <ul class="prose">
+            <li>
+              A switch reuses <code>lib/pageEngines.ts</code>: it asks about unsaved work first, then sets <code>tab.engine</code>, and ContentCard keys the
+              WebView by engine, so the other view loads the same address.
+            </li>
+            <li>
+              <strong>Keep the page in view</strong>: the old view stays on screen until the new one paints (first contentful paint, then two animation frames),
+              with a 3-second deadline. Scroll position is read before the swap and restored once the page is tall enough. Page zoom is written to the other
+              engine's per-host zoom.
+            </li>
+            <li>
+              <strong>Mode change</strong>: asks once when any open tab holds unsaved work, listing those tabs. The visible tab in each window switches now;
+              background, pinned and slept tabs switch when next shown, so a big session doesn't reload all at once.
+            </li>
+            <li>
+              Back across engines keeps working (<code>engineBack</code>). A redirect chain still can't bounce a tab between engines
+              (<code>SITE_MOVE_SPACING_MS</code>).
+            </li>
+          </ul>
+
+          <h3 id="engine-signins">Bringing sign-ins along</h3>
+          <p class="prose">
+            Without this, switching engines signs people out, which makes the switch feel broken. When the setting is on, a switch copies the site's data from
+            the engine it leaves to the one it opens in.
+          </p>
+          <ul class="prose">
+            <li>
+              Scope: the tab's space profile and the site's registrable domain (<code>accounts.example.com</code> and <code>example.com</code> together).
+              Cookies, HttpOnly cookies included, and <code>localStorage</code>.
+            </li>
+            <li>
+              Native work: Chromium needs a read and write of a profile's cookies for a domain in nncore (the missing <code>pageCookies</code> call), and WebKit
+              needs the same through <code>WKHTTPCookieStore</code> on the profile's <code>WKWebsiteDataStore</code> in
+              <code>packages/nncore/ios/WebKit*.swift</code>. Storage is copied by script in the page, before it unloads and after the new page commits.
+            </li>
+            <li>
+              Merge rule: a per-site ledger records what each engine last had, so only changes are carried. The newer value wins and removals carry over, which
+              means signing out in one engine signs out the other on the next switch.
+            </li>
+            <li>
+              Never: private spaces, sites whose cookies the person blocked, or partitioned third-party cookies. A carry runs on a deadline and never blocks the
+              switch. If it misses the deadline, the page loads signed out and the carry finishes for next time.
+            </li>
+          </ul>
+
+          <h3 id="engine-model">Settings and files</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting (synced)</th>
+                  <th>Values</th>
+                  <th>Default</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>engineMode</code></td>
+                  <td><code>"automatic" | "chromium" | "webkit"</code></td>
+                  <td>automatic</td>
+                </tr>
+                <tr>
+                  <td><code>defaultEngine</code></td>
+                  <td><code>"chromium" | "webkit"</code></td>
+                  <td>chromium</td>
+                </tr>
+                <tr>
+                  <td><code>siteEngines</code></td>
+                  <td><code>Record&lt;site, PageEngine&gt;</code>, keyed by registrable domain</td>
+                  <td>empty</td>
+                </tr>
+                <tr>
+                  <td><code>streamingInWebKit</code></td>
+                  <td>boolean</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td><code>protectedVideoFallback</code></td>
+                  <td><code>"ask" | "move" | "stay"</code></td>
+                  <td>move (today's behaviour)</td>
+                </tr>
+                <tr>
+                  <td><code>engineSwitchKeepsPage</code></td>
+                  <td>boolean</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td><code>engineSwitchCarriesSignIns</code></td>
+                  <td>boolean</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td><code>webKitFraudWarnings</code></td>
+                  <td>boolean</td>
+                  <td>true</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Area</th>
+                  <th>Files</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Resolution</td>
+                  <td><code>apps/browser/src/store/engines.ts</code>, <code>store/engines.test.mjs</code>, <code>store/settings.ts</code></td>
+                </tr>
+                <tr>
+                  <td>Moves</td>
+                  <td><code>lib/pageEngines.ts</code>, <code>components/window/pageState.ts</code>, ContentCard's engine key</td>
+                </tr>
+                <tr>
+                  <td>Settings UI</td>
+                  <td>
+                    <code>components/settings/panes/Engines.tsx</code>, <code>definitions.ts</code> (search words), <code>runtime/settingsActions.ts</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Switch surfaces</td>
+                  <td>
+                    <code>components/site/SiteControls.tsx</code>, <code>components/sidebar/contextMenus.ts</code>,
+                    <code>components/commandBar/commandBarActions.ts</code>, the app menu
+                  </td>
+                </tr>
+                <tr>
+                  <td>Sign-ins</td>
+                  <td>
+                    <code>packages/chromium/src</code> (JS API), <code>engine/nncore/src/bay/core/nncore_api.mm</code>,
+                    <code>packages/nncore/ios/WebKit*.swift</code>, a new <code>lib/engineSiteData.ts</code> with its ledger
+                  </td>
+                </tr>
+                <tr>
+                  <td>Copy and site</td>
+                  <td>README, <code>apps/web</code> features, release notes for mac</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="engine-phases">Phases</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Work</th>
+                  <th>Depends on</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>E1</td>
+                  <td>
+                    Resolution model: the settings above, the seven-step order in <code>store/engines.ts</code>, migration of today's behaviour into Automatic.
+                    Unit tests for every step, typed versus followed links, extension-driven tabs in WebKit mode, and builds without WebKit.
+                  </td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>E2</td>
+                  <td>
+                    Settings › Engines pane: mode, default engine, site rules (add, edit, remove; streaming row), protected-video fallback, How engines differ
+                    sheet, settings search words. The WebKit segment of <em>Pages open in</em> stays hidden until E7 lands.
+                  </td>
+                  <td>E1</td>
+                </tr>
+                <tr>
+                  <td>E3</td>
+                  <td>
+                    Per-tab and per-site switches: Site Controls row, tab and page menus, command bar actions, protected-video prompt, tab row mark against the
+                    default engine.
+                  </td>
+                  <td>E1</td>
+                </tr>
+                <tr>
+                  <td>E4</td>
+                  <td>
+                    Smooth switch: page held until the new one paints, scroll and zoom carried, mode change with one unsaved-work question and lazy moves.
+                  </td>
+                  <td>E3</td>
+                </tr>
+                <tr>
+                  <td>E5</td>
+                  <td>
+                    Bringing sign-ins along: native cookie read and write on both engines, storage by script, the ledger and merge, with unit tests on the
+                    merge.
+                  </td>
+                  <td>E4</td>
+                </tr>
+                <tr>
+                  <td>E6</td>
+                  <td>
+                    Finish: WebKit deceptive-site warnings, passkey access row, clean-up of leftover <code>.bay-download-*</code> staging folders, rules synced
+                    between Macs (a no-op on Windows and Linux), opt-in usage counts for switches, README, site and release notes.
+                  </td>
+                  <td>E2–E5</td>
+                </tr>
+                <tr>
+                  <td>E7</td>
+                  <td>
+                    Ad blocking on WebKit pages: compile the enabled filter lists, and the person's own rules from G3, into <code>WKContentRuleList</code>s
+                    (network rules, plus element hiding as <code>css-display-none</code>), split under WebKit's per-list rule limit. Recompile when the lists
+                    update and cache the compiled lists by version. Per-site pause applies to WebKit pages too. Scriptlets and other rules WebKit can't express
+                    are skipped, and How engines differ says so. This also blocks ads on streaming sites today.
+                  </td>
+                  <td>E1; can run alongside E2–E5</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="engine-accept">Acceptance</h3>
+          <ul class="prose">
+            <li>A new profile behaves exactly as today: Netflix opens in WebKit, everything else in Chromium, and a stalled DRM page moves.</li>
+            <li>WebKit mode: an ordinary site opens in WebKit; <code>bay://settings</code>, an extension's page and the Chrome Web Store open in Chromium.</li>
+            <li>A rule for <code>figma.com</code> set to WebKit opens it there from the command bar, a link and a pinned tab; removing the rule reverts it.</li>
+            <li><em>Reopen in Chromium</em> on a WebKit tab survives a relaunch and keeps the scroll position and zoom.</li>
+            <li>A tab with a half-typed form asks before switching; <em>Stay on Page</em> keeps the text.</li>
+            <li>Signed in to GitHub in Chromium, <em>Reopen in WebKit</em> shows GitHub signed in; signing out there signs out Chromium on the next switch.</li>
+            <li>A private space never carries sign-ins; a site with blocked cookies never carries.</li>
+            <li>In WebKit mode, a news site shows no ads and its tracker requests are blocked; pausing blocking for the site brings them back.</li>
+            <li>Windows and Linux builds show no engine UI, and synced rules don't change their behaviour.</li>
+            <li><code>pnpm typecheck</code>, <code>pnpm test</code>, <code>pnpm lint</code> and <code>pnpm slop</code> pass.</li>
+          </ul>
+
+          <h3 id="engine-risks">Risks</h3>
+          <ul class="prose">
+            <li>
+              <strong>WebKit pages have no extensions and weaker ad blocking.</strong> Content rules (E7) cover network and element-hiding rules but not
+              scriptlets, so some ads on some sites get through. The mode's footer says “no extensions”, and How engines differ explains the blocking gap.
+            </li>
+            <li>
+              <strong>Content rule limits.</strong> WebKit caps each compiled list and compiling takes seconds. Lists are compiled off the main thread, cached
+              by version, and the previous compiled lists keep working until the new ones are ready.
+            </li>
+            <li>
+              <strong>Copied cookies are sensitive.</strong> They are copied in memory between the app's own stores, never written to a file, and never from a
+              private space.
+            </li>
+            <li>
+              <strong>Sign-in flows that cross engines</strong> (OAuth pop-ups, SSO) can break if a rule sends the identity provider to the other engine. Links
+              stay in their opener's engine, which covers most of these.
+            </li>
+            <li>
+              <strong>Memory</strong>: a mode change across a large session could reload dozens of pages at once. Lazy moves keep that to the visible tabs.
+            </li>
+          </ul>
+        </section>
+
+        <section id="keychain" aria-labelledby="keychain-h">
+          <h2 id="keychain-h">2. Passwords and passkeys from iCloud Keychain <span class="pri p0">P1</span></h2>
+          <p class="prose">
+            Many Mac users keep their logins in Apple's Passwords app (iCloud Keychain), synced with their iPhone. Bay today fills only from its own Chromium
+            store or a password manager extension. This item lets a space use the Mac's Passwords instead: logins, verification codes and passkeys, in Chromium
+            and WebKit pages alike. Mac only; Windows and Linux keep Bay's store and extensions, and Chromium's Windows Hello passkeys already work there.
+          </p>
+
+          <h3 id="keychain-today">What Bay has today</h3>
+          <ul class="prose">
+            <li>Settings › Passwords: Chromium's password store per space, import and export, and a note on connecting 1Password, Bitwarden and others.</li>
+            <li>
+              <code>Bay-ICloudPasskeys.entitlements</code> already asks for Apple's browser passkey entitlement
+              (<code>com.apple.developer.web-browser.public-key-credential</code>) and Chromium's keychain groups. Apple hasn't granted it yet, so signed builds
+              ship without it.
+            </li>
+            <li><code>engine/patches/chromium-icloud-keychain-window.patch</code> attaches Chromium's iCloud Keychain passkey sheet to Bay's own window.</li>
+            <li>WebKit pages hide <code>PublicKeyCredential</code> while the entitlement is missing; Settings › Engines shows the passkey access state.</li>
+          </ul>
+
+          <h3 id="keychain-see">What people see</h3>
+          <ul class="prose">
+            <li>
+              <strong>Settings › Passwords › Password manager</strong>, per space: <em>Bay</em> (today's store), <em>Passwords app (iCloud Keychain)</em>, or
+              <em>None (an extension handles logins)</em>. Spaces that share a profile share the choice, and the row says so.
+            </li>
+            <li>
+              <strong>Filling</strong>: with Passwords chosen, focusing a username, password or one-time-code field opens the Mac's own AutoFill panel under the
+              field, the same one Safari shows. Bay stops offering to save logins in that space, and says why in the save prompt's place. Logins already in
+              Bay's store still fill until the person exports them.
+            </li>
+            <li>
+              <strong>Verification codes</strong>: a page showing a setup QR code or an <code>otpauth://</code> link offers <em>Set Up in Passwords</em>, which
+              hands the link to the Passwords app.
+            </li>
+            <li>
+              <strong>Passkeys</strong>: one <em>Passkeys</em> row (Settings › Passwords, and the existing one in Settings › Engines) with the Mac's state:
+              waiting for Apple's entitlement, not set up on this Mac, <em>Allow Passkeys…</em>, allowed, or turned off with a button to System Settings ›
+              Privacy &amp; Security › Passkeys Access for Web Browsers. Once allowed, Chromium and WebKit pages both offer the iCloud Keychain passkeys.
+            </li>
+            <li>
+              <strong>Moving in</strong>: <em>Export to Passwords…</em> writes Bay's saved logins as a CSV the Passwords app imports, then offers to delete
+              them.
+            </li>
+          </ul>
+
+          <h3 id="keychain-how">How it works</h3>
+          <ul class="prose">
+            <li>
+              <strong>The AutoFill panel</strong>: macOS shows its Passwords panel for native text fields. Chromium's fields aren't native, so the host tells
+              AppKit which page field has focus and what kind it is (username, password, code). The page script already classifies fields for Bay's own
+              autofill; that classification is shared TypeScript, and only the panel hand-off is Mac native code. The panel's insert goes back into the field
+              through the page, as a paste would.
+            </li>
+            <li>
+              <strong>Passkeys in Chromium</strong>: Chromium's iCloud Keychain authenticator
+              (<code>ASAuthorizationWebBrowserPlatformPublicKeyCredential</code>) needs the entitlement and the person's permission. The Passkeys row asks for
+              that permission once (<code>requestAuthorizationForPublicKeyCredentials</code>), and the engine's iCloud Keychain preference is turned on for
+              spaces that use it.
+            </li>
+            <li>
+              <strong>Passkeys in WebKit</strong>: <code>WKWebView</code> uses the same system passkeys once entitled; the hide-passkeys script is dropped then.
+            </li>
+            <li>
+              <strong>Choice storage</strong>: <code>passwordManager</code> on each space's profile settings, synced like other space settings. A
+              <em>None</em> choice turns off Chromium's own save prompt for that profile (<code>credentials_enable_service</code>), so the extension's own
+              prompt is the only one.
+            </li>
+          </ul>
+
+          <h3 id="keychain-phases">Phases</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Work</th>
+                  <th>Platforms</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>K1</td>
+                  <td>Password manager choice per space (Bay, None) and Chromium's save prompt off for None. Works without Apple's entitlement.</td>
+                  <td>All three</td>
+                </tr>
+                <tr>
+                  <td>K2</td>
+                  <td>
+                    The Passwords app choice: focused-field hand-off to the AutoFill panel, insert back into the page, and the save prompt replaced by a note.
+                  </td>
+                  <td>Mac</td>
+                </tr>
+                <tr>
+                  <td>K3</td>
+                  <td>Verification code setup links handed to the Passwords app; Export to Passwords.</td>
+                  <td>Mac</td>
+                </tr>
+                <tr>
+                  <td>K4</td>
+                  <td>Passkeys row and permission request; iCloud Keychain passkeys in Chromium and WebKit pages once the entitlement is granted.</td>
+                  <td>Mac (needs Apple's grant)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="keychain-risks">Risks</h3>
+          <ul class="prose">
+            <li>
+              <strong>The AutoFill panel hand-off uses AppKit internals</strong> that aren't public API and can change with a macOS update. It's feature
+              detected: when the hook is missing, the choice falls back to Bay's store and Settings says so.
+            </li>
+            <li><strong>Apple's entitlement is a request, not a setting.</strong> Until it's granted, passkeys stay off and the row says it's waiting.</li>
+            <li>
+              <strong>Two password managers at once</strong> (an extension and the Passwords panel) would both prompt. <em>None</em> exists for that case.
+            </li>
+          </ul>
+        </section>
+
+        <section id="gaps" aria-labelledby="gaps-h">
+          <h2 id="gaps-h">3. Other features to add</h2>
+          <p class="prose">
+            These came from comparing Bay's code with two other Mac browsers built on Chromium, item by item. Each row says what Bay already has, so the work
+            only builds what's missing. P1 items are the most visible, P2 make Bay stronger for power users or more reliable, and P3 are smaller or longer term.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Feature</th>
+                  <th>Bay today</th>
+                  <th>What to add</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>G1</td>
+                  <td>Local agents over MCP</td>
+                  <td>The <code>bay</code> command and its skill drive tabs over CDP once control is on.</td>
+                  <td>
+                    An MCP server for the agents people already run, off by default (Settings › Advanced). One click adds Bay to Claude Code, Codex, Cursor, VS
+                    Code and similar configs, editing only Bay's entry. Bay asks once per agent and remembers the answer by name and code-signing team. Tools:
+                    list tabs and spaces, open, read a page's text and accessibility tree, click, type, screenshot. The approval sheet lists the spaces the
+                    agent may use, with the current space ticked; Settings › Advanced changes them later. Private spaces are never offered.
+                  </td>
+                  <td><span class="pri">P1</span></td>
+                </tr>
+                <tr>
+                  <td>G2</td>
+                  <td>Ask on Page</td>
+                  <td>Apple Intelligence already powers Tidy Tabs, Tidy Titles and Tidy Downloads.</td>
+                  <td>
+                    A card that answers questions about the current page with the Mac's on-device model. The page's text stays on the Mac. Mac only, like Tidy;
+                    hidden where Apple Intelligence is off.
+                  </td>
+                  <td><span class="pri">P1</span></td>
+                </tr>
+                <tr>
+                  <td>G3</td>
+                  <td>Custom filter lists and your own rules</td>
+                  <td>Built-in lists by category and a per-site pause in Settings › Privacy.</td>
+                  <td>Add a list by URL (updated with the built-in lists), a <em>My filters</em> editor in adblock syntax, and import and export.</td>
+                  <td><span class="pri">P1</span></td>
+                </tr>
+                <tr>
+                  <td>G4</td>
+                  <td>Secure DNS</td>
+                  <td>Nothing: Chromium's default.</td>
+                  <td>
+                    Settings › Privacy: Off, Automatic, or a provider (Cloudflare, Quad9, NextDNS, a custom template), through Chromium's DNS-over-HTTPS
+                    settings. All platforms.
+                  </td>
+                  <td><span class="pri">P2</span></td>
+                </tr>
+                <tr>
+                  <td>G5</td>
+                  <td>Group by dropping a tab on a tab</td>
+                  <td>Tab groups, meeting groups and ⌘-click groups.</td>
+                  <td>Hold a dragged tab over another for a moment to make a group, named for its pages, with the same undo as other sidebar edits.</td>
+                  <td><span class="pri">P2</span></td>
+                </tr>
+                <tr>
+                  <td>G6</td>
+                  <td>Hooks and events for the <code>bay</code> command</td>
+                  <td>Commands and userscripts through the control file, with no events.</td>
+                  <td>
+                    <code>bay on &lt;event&gt;</code> hooks (tab opened, page loaded, window focused, download finished). Decide hooks that can rewrite or stop
+                    a navigation, or pick its space. Scheduled hooks, and command bar results from a hook. Hooks run as ordinary programs outside the app.
+                  </td>
+                  <td><span class="pri">P2</span></td>
+                </tr>
+                <tr>
+                  <td>G7</td>
+                  <td>More live folder sources</td>
+                  <td>GitHub pull requests and documents.</td>
+                  <td>
+                    GitLab merge requests next, then sources from plugins (G9). Outlook, Notion, Confluence, Figma and Linear previews stay deferred until asked
+                    for.
+                  </td>
+                  <td><span class="pri">P2</span></td>
+                </tr>
+                <tr>
+                  <td>G8</td>
+                  <td>Web features test map</td>
+                  <td>Acceptance scripts per feature.</td>
+                  <td>
+                    A table of every way a page reaches its browser (each <code>WebContentsDelegate</code> method, plus permissions, choosers, payments and
+                    sharing), each tied to a scenario or a checklist line. The engine build fails when a new Chromium adds a hook with no row. Runs as a release
+                    gate.
+                  </td>
+                  <td><span class="pri">P2</span></td>
+                </tr>
+                <tr>
+                  <td>G9</td>
+                  <td>Plugins</td>
+                  <td>Boosts, userscripts and Chrome extensions.</td>
+                  <td>
+                    A folder with a manifest, run out of process in a sandboxed JavaScript host. It can add command bar entries, toolbar buttons, menu items,
+                    sidebar views, live folder sources and themes. Settings rows keep their secrets in the Keychain, and plugins can use G6's decide hooks. Mac
+                    first.
+                  </td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G10</td>
+                  <td>Raycast extension</td>
+                  <td>—</td>
+                  <td>Search tabs, switch space, new tab or window and search history, over the <code>bay</code> command's control.</td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G11</td>
+                  <td>Folders that stay shared</td>
+                  <td>Share a folder as a link, which shares a copy.</td>
+                  <td>
+                    A pinned folder bound to a real directory (default <code>iCloud Drive › Bay Shared</code>) of <code>.webloc</code> files, synced both ways.
+                    Shared through the macOS share sheet's Collaborate; Dropbox or any synced folder also works.
+                  </td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G12</td>
+                  <td>Privacy endpoints test</td>
+                  <td>—</td>
+                  <td>
+                    A test that scans shipped sources for hard-coded hosts and fails when one isn't listed in a <code>docs/privacy.md</code> table of what Bay
+                    contacts and why.
+                  </td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G13</td>
+                  <td>Spare page</td>
+                  <td>—</td>
+                  <td>One pre-started renderer so a new tab or a typed address opens at once. Dropped under memory pressure and on battery saver.</td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G14</td>
+                  <td>Sidebar export</td>
+                  <td>Import only.</td>
+                  <td>Export a space's pinned tabs and folders, or all spaces, as bookmarks HTML or JSON.</td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G15</td>
+                  <td>Spell check settings</td>
+                  <td>Chromium's spell check with no settings.</td>
+                  <td>Turn it on or off, pick languages, and edit the custom dictionary.</td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+                <tr>
+                  <td>G16</td>
+                  <td>Remote kill switches</td>
+                  <td>Updates only.</td>
+                  <td>A small signed feed that lets a release turn off a broken feature without shipping an update, and says so in Settings.</td>
+                  <td><span class="pri">P3</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="have" aria-labelledby="have-h">
+          <h2 id="have-h">4. Already in Bay, no work needed</h2>
+          <p class="prose">
+            The sweep also checked these, and Bay already has them: spaces with their own profiles, live folders, cookie-banner and annoyance lists, the address
+            bar in the sidebar, two-finger swipe back, custom shortcuts, ask where to save downloads, tab groups, ⇧↩ to a search's top result, link previews
+            with summaries, copying clean links, the nightly channel, app icons, Pause All for media, a Picture in Picture window that can be stashed at the
+            screen edge, translation, Cast, device choosers, custom search engines, sums in the command bar, link rules, Little Bay, Easels, Boosts, the Tidy
+            features, encrypted sync, phone sync, import from other browsers, an AppleScript dictionary and the <code>bay</code> command.
+          </p>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">5. Decisions</h2>
+          <p class="prose">Settled on 24 Nov 2026. The sections above already follow these.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Question</th>
+                  <th>Decision</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>WebKit mode and ad blocking</td>
+                  <td>
+                    Compile Bay's filter lists into WebKit content rules (E7) before WebKit mode appears. Until then the mode stays hidden; Automatic, Chromium
+                    and site rules ship without waiting.
+                  </td>
+                  <td>
+                    Built-in blocking is one of Bay's main promises. A mode that quietly turns it off would surprise people, and streaming sites gain blocking
+                    too.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Rule scope</td>
+                  <td>Key site rules by registrable domain, so a rule for <code>example.com</code> covers its subdomains.</td>
+                  <td>
+                    People think in sites, not hosts. Sign-in and media subdomains (<code>accounts.</code>, <code>www.</code>, CDN hosts) would otherwise split
+                    one site across two engines and break sign-ins.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Protected-video default</td>
+                  <td>Keep <em>Move to WebKit</em>. <em>Ask</em> and <em>Stay</em> are available in Settings.</td>
+                  <td>Automatic mode promises today's behaviour. Video that just plays beats a prompt for most people.</td>
+                </tr>
+                <tr>
+                  <td>Per-space default engine</td>
+                  <td>Leave it out. Revisit only if people ask for it.</td>
+                  <td>
+                    Site rules and per-tab switches already cover the real cases. Another layer would make the order harder to explain and test, and sign-in
+                    carrying is per space already.
+                  </td>
+                </tr>
+                <tr>
+                  <td>MCP reach (G1)</td>
+                  <td>
+                    An agent sees only the spaces ticked when it is approved. The current space is ticked by default, and private spaces are never offered.
+                  </td>
+                  <td>
+                    An agent reads signed-in pages, so access should be opt-in per space. Changing it later in Settings › Advanced keeps the cost of starting
+                    narrow small.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="progress" aria-labelledby="progress-h">
+          <h2 id="progress-h">6. Progress and known gaps</h2>
+          <p class="prose">
+            Built on <code>feat/engine-choice</code>, stacked on the shared desktop core (PR #35). Logic all three platforms use lives in PR #35's Rust crates
+            or the shared engine C++ (<code>//chrome/browser/bay</code>); only WebKit's glue is Swift, since only the Mac has WebKit.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>E1</td>
+                  <td>
+                    Done: settings, the order in <code>store/engines.ts</code>, registrable-domain rules (<code>lib/siteDomain.ts</code>), per-tab picks, sync,
+                    tests.
+                  </td>
+                </tr>
+                <tr>
+                  <td>E2</td>
+                  <td>Done: Settings › Engines pane, WebKit mode included now that E7 is in.</td>
+                </tr>
+                <tr>
+                  <td>E3</td>
+                  <td>Done: Site Controls' Opens in row, tab menu, command bar actions, the Play in WebKit offer, the mark against the default engine.</td>
+                </tr>
+                <tr>
+                  <td>E4</td>
+                  <td>
+                    Done: the page held as a picture until the other engine loads (3 s at most), scroll restored, zoom carried, lazy moves on settings changes.
+                  </td>
+                </tr>
+                <tr>
+                  <td>E5</td>
+                  <td>
+                    Done in source: <code>nn_cookies_site</code> and <code>nn_cookies_apply</code> engine calls, WebKit cookie store glue, ledger merge, storage
+                    by script.
+                  </td>
+                </tr>
+                <tr>
+                  <td>E6</td>
+                  <td>
+                    Done in source: deceptive-site warnings, passkey row, staging clean-up, opt-in switch counts. README, site and release notes come with the
+                    PR.
+                  </td>
+                </tr>
+                <tr>
+                  <td>E7</td>
+                  <td>
+                    Done in source: <code>bay_lists_webkit_key</code> and <code>bay_lists_webkit_rules</code> in bay-lists (Rust, tested), compiled into content
+                    rule lists by <code>WebKitContentRules.swift</code>, cached in WebKit's store by key, none on paused sites. Site Controls' blocker toggle
+                    now works on WebKit pages.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K1</td>
+                  <td>
+                    Done: Settings › Passwords › Password manager (Bay, or None when an extension handles logins), per space, on all three platforms. It sets
+                    Chromium's <code>credentials_enable_service</code> for the space's profile, and says which other spaces share it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K2</td>
+                  <td>
+                    Not started: filling from the Mac's AutoFill panel needs a spike on a real build first (AppKit internals); until then the Passwords app
+                    isn't offered as a choice.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K3</td>
+                  <td>
+                    Export to Passwords done (CSV, then the Passwords app opens to import it). Verification-code links handed to Passwords wait for K2's page
+                    hooks.
+                  </td>
+                </tr>
+                <tr>
+                  <td>K4</td>
+                  <td>
+                    Passkeys row in Settings › Passwords and Settings › Engines, with Allow and Open System Settings. Passkeys themselves wait for Apple's
+                    entitlement.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G3</td>
+                  <td>
+                    Done in source, all three platforms: lists added by URL and My Filters live in bay-lists (Rust; <code>bay_lists_add_custom</code>,
+                    <code>bay_lists_remove_custom</code>, <code>bay_lists_user_filters</code>, <code>bay_lists_set_user_filters</code>, tested), so building,
+                    caching, updates and WebKit's content rules take them like any list. Hosts: <code>NNCoreContentBlocker.mm</code> and
+                    <code>webui/content_blocker.cc</code>. Settings › Privacy › Your lists and filters, with import and export of My Filters.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G4</td>
+                  <td>
+                    Done in source, all three platforms: <code>nn_prefs</code> takes the browser's <code>dns_over_https.mode</code> and
+                    <code>.templates</code> (local state); Settings › Privacy › Secure DNS offers Automatic, Off, Cloudflare, Quad9, Google, Mullvad, NextDNS
+                    and a custom template.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G15</td>
+                  <td>
+                    Done in source, all three platforms: Settings › General › Spelling turns spell checking on or off in every space; Windows and Linux pick
+                    languages (<code>spellcheck.dictionaries</code>) and edit Your Words (each profile's custom dictionary, <code>nn_spelling.cc</code>); macOS
+                    uses its own.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G2</td>
+                  <td>
+                    Done in source, Mac only: <code>BayAskPage</code> (<code>AskPageModule.swift</code>, FoundationModels, weakly linked) and the Ask card over
+                    the page, opened from the command bar's Ask About This Page or the Tabs menu (⌥⌘A). The page's text goes only to the on-device model; a long
+                    one is read a part at a time (9,000 characters a part, five at most) and answered from the model's notes.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G14</td>
+                  <td>
+                    Done, all three platforms: a space's menu › Export Pinned Tabs saves its Essentials, folders and pinned tabs (at their pinned pages) as
+                    bookmarks HTML, all spaces at once, or JSON (<code>lib/sidebarExport.ts</code>, tested).
+                  </td>
+                </tr>
+                <tr>
+                  <td>G12</td>
+                  <td>
+                    Done: <code>docs/privacy.md</code> lists every host Bay's code names, with when and why it's contacted, and
+                    <code>apps/browser/src/privacyEndpoints.test.mjs</code> fails on a host the table lacks or a listed one the code no longer names.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G1</td>
+                  <td>
+                    First part done, all three platforms: <code>bay mcp serve</code> (MCP over stdio: list_tabs, open_tab, navigate, read_page, click, type,
+                    screenshot) on the bay command's own connection and permission, and <code>bay mcp install --agent</code> for Claude Code, Codex, Cursor and
+                    VS Code, changing only Bay's entry. Settings › Advanced explains it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G16</td>
+                  <td>
+                    Done in source, all three platforms: the <code>bay-switches</code> crate checks the signed feed (Ed25519 over
+                    <code>apps/web/public/switches.json</code>, signed by <code>scripts/release/sign-switches.mjs</code>) and matches each switch's platforms,
+                    releases and end date; the Mac reaches it through <code>NNCoreSwitches</code>, Windows and Linux through <code>engine_services.cc</code>.
+                    The app keeps the last feed it accepted and refuses an older one (<code>lib/killSwitches.ts</code>, tested), and can switch off WebKit,
+                    sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. Settings › Advanced lists what's off and why.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G5</td>
+                  <td>
+                    Done, all three platforms: a dragged tab held for a moment on the middle of another list row marks it, and letting go groups the two in that
+                    row's place (<code>groupTabs</code> with <code>inOrder</code>), named for its pages; the sidebar's Undo takes the group back.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G7</td>
+                  <td>
+                    GitLab done, all three platforms: a GitLab source for pull request live folders, on GitLab.com or a self-managed site, with a personal
+                    access token (<code>activity/gitlab.ts</code>, tested). It lists your open merge requests and the ones waiting for your review, each with
+                    its head pipeline, line counts and who approved it (one GraphQL query a refresh), and says which were merged, closed or reviewed once they
+                    leave.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G6</td>
+                  <td>
+                    Watching hooks done, all three platforms: <code>bay on EVENT -- COMMAND</code> (<code>apps/cli/src/hooks.ts</code>, tested) runs a program
+                    when a web page tab opens, navigates, finishes loading or closes, with <code>--match</code>, <code>--once</code> and
+                    <code>--parallel</code>, over the bay command's own connection and permission. The program gets the event in its environment and as JSON on
+                    stdin. The agent skill documents it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G10</td>
+                  <td>
+                    Done in source, Mac (Raycast is): <code>apps/raycast</code>, a standalone npm project <code>ray build</code> builds. Search Tabs (every
+                    space, private windows aside), Switch Space, New Tab (optionally at an address) and New Window use Bay's AppleScript dictionary; Search
+                    History asks the bay command's <code>history()</code>. No site icons, so no favicon service sees your tabs.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G8</td>
+                  <td>
+                    Done: <code>engine/web-features.json</code> ties each of Chromium's 132 <code>WebContentsDelegate</code> methods, its 40 permission types
+                    and 18 other ways in (choosers, payments, sharing, credentials, DRM) to an acceptance check, a release checklist line, or why nothing of
+                    Bay's is involved. <code>scripts/web-features.py check</code> (tested) runs before both engine builds and stops one whose Chromium
+                    disagrees; <code>checklist</code> prints the 32 lines done by hand, a step of <code>docs/releasing.md</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G13</td>
+                  <td>
+                    Done in source, all three platforms: <code>nn_spare_warmup</code> (<code>//chrome/browser/bay/nn_spare.cc</code>, syntax checked) asks
+                    Chrome's spare renderer manager for one when the address bar, the command bar or a new tab opens, as Chrome's omnibox does; Bay's bars are
+                    the app's own, so nothing asked before. Chrome keeps one per profile and drops it under memory pressure; the call skips it on battery saver.
+                    At most every ten seconds a profile, never for a private window, and a kill switch can turn it off (<code>lib/sparePage.ts</code>, tested).
+                  </td>
+                </tr>
+                <tr>
+                  <td>G1, second part</td>
+                  <td>
+                    Done in source, all three platforms. The bay command, <code>bay exec</code> and agents never reach a private window's pages or workers
+                    (<code>nn_cli_token_policy_web_targets.cc</code>). Each agent gets its own token: <code>bay mcp install</code> writes
+                    <code>bay mcp serve --agent …</code>, which asks over the bay command's connection (<code>Bay.requestAgentAccess</code>). Bay asks once in
+                    the window in use, "Allow in ‹space›" or not, and the token policy keeps that agent's connection to its spaces
+                    (<code>nn_cli_agents.cc</code>, grants in an owner-only <code>BayAgents.json</code>). Settings › Advanced lists agents, changes their spaces
+                    and removes them; a removed agent's connection closes at its next message.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G11</td>
+                  <td>
+                    Done in source, all three platforms: a pinned folder's menu › Keep in a Shared Folder… binds it to a folder the person picks (iCloud Drive ›
+                    Bay Shared by default on the Mac) of <code>.webloc</code>, <code>.url</code> or <code>.desktop</code> files, which Bay reads in all three
+                    kinds and writes in its own. Sync is three-way against the last sync (<code>lib/sharedFolders.ts</code>, tested): a link added, removed,
+                    renamed or moved on one side goes to the other, and a link changed on both takes the folder's. New links come in as pinned rows that don't
+                    load. The menu shows the folder, syncs now, stops, and on the Mac invites people through the share sheet's Collaborate. Natives:
+                    <code>SharedFoldersModule.swift</code> and <code>webui/shared_folders.cc</code>, each reaching only folders picked in its picker.
+                  </td>
+                </tr>
+                <tr>
+                  <td>G9</td>
+                  <td>
+                    Done in source, all three platforms. A plugin is a folder with a <code>manifest.json</code> and a script, which the
+                    <code>bay-plugins</code> crate checks, copies into Bay's plugins folder and serves (Rust, tested; <code>docs/plugins.md</code>, with
+                    <code>docs/plugins/hello-bay</code> as the example the tests install). Each runs out of process in a sandboxed page of its own: a WebKit
+                    page on the Mac (<code>PluginsModule.swift</code>), a <code>chrome-untrusted://bay-plugin/</code> frame of the coordinator's document on
+                    Windows and Linux (<code>webui/plugins.cc</code>), under one content security policy: its own files, no network, a unique origin. It reaches
+                    Bay only through <code>bay</code> calls, which <code>lib/plugins/protocol.ts</code> checks against the manifest (tested): fetches to the
+                    hosts it lists (never with cookies; the engine makes them on Windows and Linux, where a <code>chrome://</code> document meets CORS), the
+                    page a command runs on with <code>permissions.tabs</code>, tabs opened only while something the person chose runs. It can add command bar
+                    entries, toolbar buttons, tab menu items, sidebar views, live folder sources and space themes; settings rows keep secrets in the system's
+                    keychain; and with <code>permissions.links</code> it decides which space a link from another app opens in, before Bay's link rules (G6's
+                    decide hooks, for plugins). Settings › Plugins adds, turns on and off, configures and removes them, and a kill switch can turn them all off.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 id="known-gaps">Known gaps</h3>
+          <ul class="prose">
+            <li>
+              The Mac's engine and app are built (2026-11-27) and the plugins tried in them: a plugin's WebKit sandbox has an opaque origin, no network,
+              storage, <code>eval</code> or remote subresources of its own, and its <code>bay</code> calls, commands, live source, sidebar view, toolbar badge,
+              settings, keychain secrets and links decide hook work; Your Words' engine calls too. Windows and Linux aren't built: their WebUI code is syntax
+              checked as Linux code against the local Chromium tree (the tree's Linux sysroot, with <code>native_host.mojom</code>'s bindings generated for the
+              check), and Windows-only files (<code>shared_folders_trash_win.cc</code> and the rest) aren't compiled anywhere yet, nor is the
+              <code>chrome-untrusted://bay-plugin/</code> sandbox tried in Chromium.
+            </li>
+            <li>
+              Carried storage (<code>localStorage</code> and the tab's <code>sessionStorage</code>, of the page's own origin) is written after the new page
+              commits, so a page that reads it during load sees it on the next load. IndexedDB and other stores don't carry.
+            </li>
+            <li>WebKit pages show no blocked count in Site Controls: content rules count nothing.</li>
+            <li>
+              On Linux a spelling language's dictionary downloads from Google's servers the first time, which the ungoogled engine may block. The Mac's spelling
+              uses its own learned words, so Your Words is on Windows and Linux.
+            </li>
+            <li>
+              G1's agent access limits what an agent's MCP tools reach; it isn't a sandbox. An agent that can run programs as you can still read the bay
+              command's own token and run <code>bay exec</code>. A space-limited agent's new tab opens in one of its spaces now, even when another space's
+              window is in front (<code>g_bay_devtools_target_context</code>, in the two DevTools patches); with none of them open, it's refused.
+            </li>
+            <li>
+              G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the website
+              deploy. Six features can be switched off: WebKit, sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. A switch for
+              anything else shows in Settings but turns nothing off.
+            </li>
+            <li>
+              G5's merge makes a group from list rows; a group holds list tabs only, so pinned rows and Essentials aren't offered it. Dropping a tab among an
+              open group's rows adds it to that group, as before.
+            </li>
+            <li>
+              G9 on Windows and Linux (the CSP <code>sandbox</code> directive in a <code>chrome-untrusted://</code> frame, subresource loads from its opaque
+              origin) hasn't been tried in a running Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in
+              Site Controls, so with the toolbar hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins
+              can't see private windows, history or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes
+              in a hidden document may have their timers slowed by the engine.
+            </li>
+            <li>
+              G7's GitLab items get line counts and who approved them from one GraphQL query each refresh; a site whose GraphQL is off shows them without.
+              Outlook, Notion, Confluence, Figma and Linear previews stay deferred.
+            </li>
+            <li>
+              G6 has no decide hooks for the bay command: its token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code> domain, so
+              a hook can't hold, rewrite or stop a navigation. Plugins can decide where links from other apps open (G9). Window focus and finished downloads
+              aren't events the bay command can see either (no focus event over DevTools; <code>Browser.setDownloadBehavior</code> isn't allowed). Scheduled
+              hooks and command bar results from a hook aren't built; a hook runs while <code>bay on</code> does, so keeping one running is the system's job
+              (launchd, systemd, Task Scheduler).
+            </li>
+            <li>
+              G10's AppleScript calls weren't run against a live Bay (that would read the tabs and ask for Automation access); they follow
+              <code>Bay.sdef</code>. New Tab takes addresses only, since a search from Raycast would skip the engine chosen in Bay. Not in the Raycast Store
+              yet.
+            </li>
+            <li>
+              G8's checklist lines are by hand: 32 features (file and color pickers, dialogs, pointer and keyboard lock, payments, Web Share, passkeys…) have no
+              automated scenario yet, and the map follows the Mac's Chromium tree, so a Windows or Linux pin on another Chromium may need rows of its own.
+            </li>
+            <li>
+              G13 warms a renderer, not a whole page: the tab's web view and its WebContents are still made when the page opens. A pre-made page the next tab
+              adopts would need the engine's adoption to take one; it isn't measured yet either.
+            </li>
+            <li>
+              G11 keeps one level: a shared folder's subfolders, and the pinned folder's own subfolders, aren't synced. A Finder-made binary
+              <code>.webloc</code> reads on the Mac only. On Linux a removed link goes to the home folder's Trash, so one on another disk is deleted.
+            </li>
+            <li>K2 (filling from the Passwords app's AutoFill panel) still waits on a spike in a real Mac build; the Passwords app isn't offered meanwhile.</li>
+          </ul>
+          <h3 id="gaps-closed">Closed in the gaps pass</h3>
+          <ul class="prose">
+            <li>A settings change that moves pages on screen asks once, naming the pages with unsaved work, instead of once a tab.</li>
+            <li>
+              A background tab's deferred move is kept in <code>engine-moves.json</code>, so it survives a quit: the tab takes its engine when it's next shown.
+            </li>
+            <li>The sign-in ledger is kept in <code>engine-sign-ins.json</code> (cookie names, never values), so a sign-out carries after a relaunch.</li>
+            <li>The Mac's Tabs menu has Reopen in WebKit/Chromium and Ask About This Page… (⌥⌘A).</li>
+            <li>Deceptive-site warnings reach open WebKit pages too.</li>
+            <li>Settings › General › Spelling › Your Words edits each space's custom dictionary (<code>nn_spell_words</code>, <code>nn_spell_word</code>).</li>
+            <li>Ask About This Page reads a long page a part at a time (five at most) and answers from its notes, instead of cutting the page.</li>
+            <li>Windows sends a removed shared link to the Recycle Bin, Linux to the Trash.</li>
+            <li>
+              Found building the Mac app: the toolbar's eased colour style called valibot inside a worklet, which crashed the app whenever a toolbar showed
+              (main has it too); <code>nn_external_apps.cc</code> and <code>.mm</code> shared one object file; a Swift notification name.
+            </li>
+            <li>Earlier: Windows and Linux windows see the kill switches, coding agents and shared folders, and the native service checks accept GitLab.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

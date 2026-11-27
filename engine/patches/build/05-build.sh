@@ -6,4 +6,6 @@ source ~/chromium-build/scripts/env.sh
 cd "$CB/chromium_git/chromium/src"
 # NNCore is Chrome's own framework (the app stages it from out/Release_GN_arm64).
 TARGETS="${TARGETS:-chrome_framework}"
+# Every way a page reaches the browser is covered (engine/web-features.json) before this Chromium builds.
+python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/web-features.py" check --src "$PWD"
 exec autoninja ${JOBS:+-j "$JOBS"} -k "${KEEP_GOING:-0}" -C out/Release_GN_arm64 $TARGETS

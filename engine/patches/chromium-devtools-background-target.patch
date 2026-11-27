@@ -9,18 +9,19 @@ diff --git a/content/browser/devtools/protocol/target_handler.cc b/content/brows
  #include "base/base64.h"
  #include "base/containers/flat_map.h"
  #include "base/functional/bind.h"
-@@ -40,6 +41,10 @@
+@@ -40,6 +41,11 @@
  #include "content/public/common/url_constants.h"
  #include "url/url_constants.h"
  
 +#include "bay/core/nn_content_hooks.h"  // nogncheck
 +
 +bool g_bay_devtools_background_target = false;
++content::BrowserContext* g_bay_devtools_target_context = nullptr;
 +
  namespace content::protocol {
  
  namespace {
-@@ -1432,6 +1437,8 @@
+@@ -1432,6 +1438,8 @@
                         DevToolsSession::Mode::kSupportsTabTarget)
            ? DevToolsManagerDelegate::kTab
            : DevToolsManagerDelegate::kFrame;
@@ -40,10 +41,15 @@ diff --git a/chrome/browser/devtools/chrome_devtools_manager_delegate.cc b/chrom
  #include "build/build_config.h"
  #include "cef/libcef/features/features.h"
  #include "chrome/browser/devtools/chrome_devtools_session.h"
-@@ -446,7 +447,9 @@
+@@ -446,7 +447,12 @@
      bool new_window) {
-   NavigateParams params(ProfileManager::GetLastUsedProfile(), url,
-                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+-  NavigateParams params(ProfileManager::GetLastUsedProfile(), url,
+-                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
++  NavigateParams params(g_bay_devtools_target_context
++                            ? Profile::FromBrowserContext(
++                                  g_bay_devtools_target_context)
++                            : ProfileManager::GetLastUsedProfile(),
++                        url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
 -  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 +  params.disposition = g_bay_devtools_background_target
 +                           ? WindowOpenDisposition::NEW_BACKGROUND_TAB

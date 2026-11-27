@@ -1,0 +1,47 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1787961600000.0,
+          "title": "Dia",
+          "type": "url",
+          "url": "https://dia.example/"
+        },
+        {
+          "children": [
+            {
+              "dateAdded": 1787961600000.0,
+              "title": "Long read",
+              "type": "url",
+              "url": "https://read.example/"
+            }
+          ],
+          "dateAdded": 1787961600000.0,
+          "title": "Reading",
+          "type": "folder"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1787961600000.0,
+          "title": "Other",
+          "type": "url",
+          "url": "https://other.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "other",
+      "title": "Other bookmarks",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

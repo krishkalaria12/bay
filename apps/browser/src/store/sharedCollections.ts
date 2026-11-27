@@ -4,9 +4,19 @@ import type { BrowserState } from "./browserStore";
 import { MAX_FOLDER_DEPTH } from "./folders";
 import { orderSections } from "./groups";
 import { IDLE_LIVE, isIncognitoSpace, listIds, makeTab, newId, spaceListKey } from "./model";
+import { removeTabs } from "./tabs";
+
+export type SharedLinkChanges = {
+  add: { url: string; title: string }[];
+  remove: string[];
+  update: { tabId: string; url: string; title: string }[];
+};
 
 export type SharedCollectionsSlice = {
   importSharedCollection(windowId: string, collection: SharedCollection, spaceId?: string): string;
+  /** A shared folder's directory changed (lib/sharedFolderService.ts): its links come in as pinned rows that don't
+   *  load, go, or take a new address. The added tabs' ids, in order; none if the folder is gone. */
+  applySharedLinks(folderId: string, changes: SharedLinkChanges): string[];
 };
 
 export function checkSharedFolderDepth(collection: SharedCollection) {
@@ -66,5 +76,47 @@ export const createSharedCollectionsSlice: StateCreator<BrowserState, [], [], Sh
     set({ tabs, live, pinnedFolders, tabLists: { ...s.tabLists, [key]: tabIds } });
 
     return rootId;
+  },
+
+  applySharedLinks(folderId, { add, remove, update }) {
+    const s = get();
+    const folder = s.pinnedFolders[folderId];
+
+    const windowId =
+      s.windowOrder.find((id) => s.windows[id]?.spaceId === folder?.spaceId && !s.windows[id]?.incognito) ??
+      s.windowOrder.find((id) => !s.windows[id]?.incognito);
+
+    if (!folder || !windowId) return [];
+
+    let next = removeTabs(
+      s,
+      remove.filter((id) => s.tabs[id]?.folderId === folderId),
+      false,
+    );
+
+    const tabs = { ...next.tabs };
+    const live = { ...next.live };
+    const added: string[] = [];
+
+    for (const change of update) {
+      const t = tabs[change.tabId];
+
+      // A page that's open keeps showing what it shows; its pinned page is the new address.
+      if (t?.folderId === folderId) tabs[t.id] = { ...t, pinnedUrl: change.url, customTitle: change.title, ...(t.unloaded ? { url: change.url } : undefined) };
+    }
+
+    for (const link of add) {
+      const tab = makeTab(windowId, folder.spaceId, link.url, { title: link.title, customTitle: link.title, pinnedRow: true, pinnedUrl: link.url });
+      tabs[tab.id] = { ...tab, folderId, navigation: null, unloaded: true };
+      live[tab.id] = IDLE_LIVE;
+      added.push(tab.id);
+    }
+
+    const key = spaceListKey(next, folder.spaceId);
+    const tabIds = orderSections([...listIds(next, key), ...added], tabs, next.groups, next.pinnedFolders);
+    next = { ...next, tabs, live, tabLists: { ...next.tabLists, [key]: tabIds } };
+    set(next);
+
+    return added;
   },
 });

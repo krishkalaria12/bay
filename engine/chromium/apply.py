@@ -77,14 +77,23 @@ def layer_source(here: Path, owned: str):
             "#pragma once\nnamespace bay {\n"
             f'inline constexpr char kPageScript[] = R"{delimiter}({script}){delimiter}";\n'
             "}  // namespace bay\n", encoding="utf-8")
-        # The blocker's C ABI; scripts/engine.py builds the library behind it.
+        # The blocker's and its lists' C ABI; scripts/engine.py builds the library behind them.
         shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
+        shutil.copy2(repository / "packages/adblock/include/bay_blocker_hooks.h", staged / "webui/bay_blocker_hooks.h")
+        shutil.copy2(repository / "packages/rust/bay-lists/include/bay_lists.h", staged / "webui/bay_lists.h")
+        shutil.copy2(repository / "packages/rust/bay-switches/include/bay_switches.h", staged / "webui/bay_switches.h")
+        shutil.copy2(repository / "packages/rust/bay-plugins/include/bay_plugins.h", staged / "webui/bay_plugins.h")
+        # The sync format's C ABI, for the portable sync code (data/BUILD.gn include_dirs).
+        (staged / "data/rust").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repository / "packages/rust/bay-sync/include/bay_sync.h", staged / "data/rust/bay_sync.h")
+        shutil.copy2(repository / "packages/rust/bay-import/include/bay_import.h", staged / "data/rust/bay_import.h")
+        # portable/ builds on Windows and Linux; linux/ holds the Linux-only adapters.
         for package in ("import", "sync"):
-            for platform in ("windows", "linux"):
-                canonical = repository / "packages" / package / platform
-                if platform == "linux" and not canonical.exists():
+            for folder in ("portable", "linux"):
+                canonical = repository / "packages" / package / folder
+                if folder == "linux" and not canonical.exists():
                     continue
-                destination = staged / "data/packages" / package / platform
+                destination = staged / "data/packages" / package / folder
                 shutil.copytree(canonical, destination,
                                 ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
         yield staged

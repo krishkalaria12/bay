@@ -758,6 +758,8 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
       }
       if flags.contains(.option) { return decisionHandler(.download) }
     }
+    // The page's ad blocking rules follow its main frame's site (paused sites get none).
+    if action.targetFrame?.isMainFrame == true { WebKitContentRules.shared.apply(to: webView.configuration.userContentController, url: url) }
     decisionHandler(action.shouldPerformDownload ? .download : .allow)
   }
 

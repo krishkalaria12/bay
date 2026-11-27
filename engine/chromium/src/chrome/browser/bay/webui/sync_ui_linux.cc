@@ -12,7 +12,7 @@
 #include "base/path_service.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/bay/data/packages/sync/windows/SyncService.h"
+#include "chrome/browser/bay/data/packages/sync/portable/SyncService.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "content/public/browser/browser_thread.h"

@@ -1,0 +1,20 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1788220800000.0,
+          "title": "Brave Search",
+          "type": "url",
+          "url": "https://search.brave.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

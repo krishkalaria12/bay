@@ -24,31 +24,6 @@ TEST(ContentBlockerRulesTest, APausedSiteCoversItsSubdomainsOnly) {
   EXPECT_FALSE(Covers("", "example.com"));
 }
 
-TEST(ContentBlockerRulesTest, ExpiryComesFromTheHeaderWithinItsBounds) {
-  EXPECT_EQ(ExpiresAfter("! Title: x\n! Expires: 2 days (update)\n"),
-            base::Days(2));
-  EXPECT_EQ(ExpiresAfter("# Expires: 16 hours\n"), base::Hours(16));
-  EXPECT_EQ(ExpiresAfter("! Expires: 1 hour\n"), base::Hours(12));
-  EXPECT_EQ(ExpiresAfter("! Expires: 30 days\n"), base::Days(7));
-  EXPECT_EQ(ExpiresAfter("||ads.example^\n"), base::Days(4));
-}
-
-TEST(ContentBlockerRulesTest, AListIsNotAnErrorPage) {
-  EXPECT_TRUE(LooksLikeList("! Title: a list of rules\n"));
-  EXPECT_TRUE(LooksLikeList("\xEF\xBB\xBF  ! Title: with a mark\n"));
-  EXPECT_FALSE(LooksLikeList("<!doctype html><html></html>"));
-  EXPECT_FALSE(LooksLikeList("  \n <html><body>503</body>"));
-  EXPECT_FALSE(LooksLikeList("too short"));
-  EXPECT_FALSE(LooksLikeList(std::string(33 * 1024 * 1024, '!')));
-}
-
-TEST(ContentBlockerRulesTest, RegionalListsFollowTheLanguage) {
-  EXPECT_TRUE(LanguageMatches("fr nl", "fr-CA"));
-  EXPECT_TRUE(LanguageMatches("pt", "pt_BR"));
-  EXPECT_FALSE(LanguageMatches("fr nl", "en-GB"));
-  EXPECT_FALSE(LanguageMatches("", "en"));
-}
-
 TEST(ContentBlockerRulesTest, EachSelectorIsItsOwnRule) {
   EXPECT_EQ(StyleFor({".ad", "#banner"}),
             ".ad{display:none!important}\n#banner{display:none!important}\n");

@@ -519,6 +519,27 @@ export const nativeContracts = {
       "events": [],
       "constants": {}
     },
+    "BayAskPage": {
+      "source": "desktop/src/index.tsx",
+      "methods": {
+        "status": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "status(): Promise<TidyModelStatus | \"unavailable\">;"
+        },
+        "ask": {
+          "async": true,
+          "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "ask(title: string, url: string, text: string, question: string): Promise<string | null>;"
+        }
+      },
+      "events": [],
+      "constants": {}
+    },
     "BayApp": {
       "source": "desktop/src/appMenu.ts",
       "methods": {
@@ -1182,6 +1203,71 @@ export const nativeContracts = {
       ],
       "constants": {}
     },
+    "BaySharedFolders": {
+      "source": "desktop/src/sharedFolders.ts",
+      "methods": {
+        "pick": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "pick(): Promise<SharedFolderPick | null>;"
+        },
+        "read": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "read(path: string): Promise<SharedFolderRead>;"
+        },
+        "write": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "write(path: string, name: string, text: string): Promise<boolean>;"
+        },
+        "remove": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "remove(path: string, name: string): Promise<boolean>;"
+        },
+        "watch": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "watch(path: string, on: boolean): Promise<void>;"
+        },
+        "forget": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "forget(path: string): Promise<void>;"
+        },
+        "reveal": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "reveal(path: string): Promise<boolean>;"
+        },
+        "share": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "share?(path: string): Promise<boolean>;"
+        }
+      },
+      "events": [
+        "onChange"
+      ],
+      "constants": {}
+    },
     "BayLocalFiles": {
       "source": "desktop/src/localFilesNative.ts",
       "methods": {
@@ -1493,6 +1579,20 @@ export const nativeContracts = {
           "maxArgs": 3,
           "signature": "engineCall(name: string, profile: string, args: string | null): Promise<string>;"
         },
+        "siteCookies": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "siteCookies?(profile: string, site: string): Promise<string>;"
+        },
+        "applySiteCookies": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "applySiteCookies?(profile: string, args: string): Promise<string>;"
+        },
         "releaseProfile": {
           "async": true,
           "optional": false,
@@ -1535,6 +1635,34 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "setFilterListEnabled(id: string, enabled: boolean): Promise<void>;"
         },
+        "addFilterList": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "addFilterList?(url: string, title: string): Promise<string>;"
+        },
+        "removeFilterList": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "removeFilterList?(id: string): Promise<void>;"
+        },
+        "getUserFilters": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "getUserFilters?(): Promise<string>;"
+        },
+        "setUserFilters": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setUserFilters?(text: string): Promise<void>;"
+        },
         "isContentBlockerAllowed": {
           "async": true,
           "optional": false,
@@ -1555,6 +1683,13 @@ export const nativeContracts = {
           "minArgs": 3,
           "maxArgs": 3,
           "signature": "setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;"
+        },
+        "checkSwitches": {
+          "async": true,
+          "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "checkSwitches?(feed: string, signature: string, lastIssued: number): Promise<string>;"
         },
         "setSiteSetting": {
           "async": true,
@@ -2106,6 +2241,48 @@ export const nativeContracts = {
           "minArgs": 0,
           "maxArgs": 0,
           "signature": "info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;"
+        },
+        "setZoom": {
+          "async": true,
+          "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "setZoom?(profile: string, host: string, zoom: number): Promise<void>;"
+        },
+        "siteCookies": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;"
+        },
+        "setFraudWarnings": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setFraudWarnings?(on: boolean): Promise<void>;"
+        },
+        "passkeyAccess": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "passkeyAccess(): Promise<PasskeyAccess>;"
+        },
+        "requestPasskeyAccess": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "requestPasskeyAccess(): Promise<PasskeyAccess>;"
+        },
+        "applySiteCookies": {
+          "async": true,
+          "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;"
         }
       },
       "events": [
@@ -2113,6 +2290,69 @@ export const nativeContracts = {
         "onPermission",
         "onPermissionDismissed"
       ],
+      "constants": {}
+    },
+    "BayPlugins": {
+      "source": "chromium/src/plugins.ts",
+      "methods": {
+        "list": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "list(): Promise<string>;"
+        },
+        "install": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "install(): Promise<string | null>;"
+        },
+        "remove": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "remove(id: string): Promise<boolean>;"
+        },
+        "reveal": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "reveal(): Promise<void>;"
+        },
+        "fetch": {
+          "async": true,
+          "optional": true,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "fetch?(url: string, method: string, headers: Record<string, string>, body: string | null): Promise<PluginFetchAnswer>;"
+        },
+        "start": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "start?(id: string): Promise<boolean>;"
+        },
+        "stop": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "stop?(id: string): Promise<void>;"
+        },
+        "post": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "post?(id: string, message: string): Promise<void>;"
+        }
+      },
+      "events": [],
       "constants": {}
     },
     "BaySync": {
@@ -2587,7 +2827,7 @@ export const nativeContracts = {
       "WebViewHost": "{\n  mount(tag: number, windowId: string, props: EmbeddedTabProps): Promise<EmbeddedTab>;\n  update(tag: number, props: EmbeddedTabProps): Promise<void>;\n  call(tag: number, method: string, args: JsonValue[]): Promise<JsonValue>;\n  unmount(tag: number): Promise<void>;\n}"
     },
     "desktop/src/index.tsx": {
-      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"editTheme\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"clearCookiesAndCache\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"tidyTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  // The Chrome-hosted desktop's in-window app menu (F10), and the window it lists to go to.\n  | \"showAppMenu\"\n  | \"focusWindow\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
+      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"editTheme\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"clearCookiesAndCache\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"tidyTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  // The Chrome-hosted desktop's in-window app menu (F10), and the window it lists to go to.\n  | \"showAppMenu\"\n  | \"focusWindow\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"askPage\"\n  | \"reopenInEngine\"\n  | \"alwaysOpenSiteIn\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)\n  // Windows: the pointer entered or left the band the window's caption names (`reveal`).\n  | { type: \"caption\"; id: string; revealed: boolean }",
       "WindowState": "{\n  maximized: boolean;\n  fullscreen: boolean;\n  /** Ephemeral native state, never restored from a session. */\n  minimized?: boolean;\n  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */\n  size?: [number, number];\n}",
@@ -2625,6 +2865,7 @@ export const nativeContracts = {
       "TidyNamesModule": "{\n  readonly available: boolean;\n  suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;\n}",
       "TidyModelStatus": "\"available\" | \"off\" | \"preparing\" | \"ineligible\" | \"needsNewerMacOS\" | \"unavailable\"",
       "TidyTabsModule": "{\n  modelStatus(): TidyModelStatus;\n  /** Named groups of tab ids from the prompt, or null when the model couldn't answer. */\n  group(prompt: string): Promise<{ name: string; tabs: number[] }[] | null>;\n}",
+      "AskPageModule": "{\n  status(): TidyModelStatus | \"unavailable\";\n  /** The model's answer to a question about a page, or null when it couldn't answer. */\n  ask(title: string, url: string, text: string, question: string): Promise<string | null>;\n}",
       "TidySquiggleProps": "ViewProps & { running: boolean; color: string }"
     },
     "desktop/src/appMenu.ts": {
@@ -2692,6 +2933,12 @@ export const nativeContracts = {
     "desktop/src/userScripts.ts": {
       "UserScriptsFolder": "{ token?: string } & (\n  | { state: \"empty\" | \"busy\" | \"pending\"; generation?: number }\n  | { state: \"absent\"; generation: number; path: string }\n  | { state: \"invalid\"; generation?: number; error: string; path?: string }\n  | { state: \"ready\"; generation: number; path: string }\n)",
       "UserScriptsNative": "{\n  watch(on: boolean): void;\n  read(): Promise<UserScriptsFolder>;\n  readStatus(): Promise<string | null>;\n  writeStatus(json: string): Promise<void>;\n  addListener(name: \"onChange\", listener: () => void): EventSubscription;\n}"
+    },
+    "desktop/src/sharedFolders.ts": {
+      "SharedFolderPick": "{ path: string; name: string }",
+      "SharedFolderEntry": "{ name: string; text: string; modified: number }",
+      "SharedFolderRead": "{ status: \"available\"; entries: SharedFolderEntry[] } | { status: \"missing\" | \"inaccessible\" }",
+      "SharedFoldersNative": "{\n  pick(): Promise<SharedFolderPick | null>;\n  read(path: string): Promise<SharedFolderRead>;\n  write(path: string, name: string, text: string): Promise<boolean>;\n  remove(path: string, name: string): Promise<boolean>;\n  watch(path: string, on: boolean): Promise<void>;\n  forget(path: string): Promise<void>;\n  reveal(path: string): Promise<boolean>;\n  // macOS: the share sheet, with iCloud Drive's Collaborate.\n  share?(path: string): Promise<boolean>;\n  addListener(name: \"onChange\", listener: (e: { path: string }) => void): EventSubscription;\n}"
     },
     "desktop/src/localFiles.tsx": {
       "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"
@@ -2794,7 +3041,17 @@ export const nativeContracts = {
     },
     "chromium/src/webkit.ts": {
       "PageEngine": "\"chromium\" | \"webkit\"",
-      "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n}"
+      "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n  // Optional: native code from before engine choice has no per-host zoom setter, and can't carry sign-ins.\n  setZoom?(profile: string, host: string, zoom: number): void;\n  siteCookies?(profile: string, site: string): Promise<SiteCookie[]>;\n  setFraudWarnings?(on: boolean): void;\n  passkeyAccess(): Promise<PasskeyAccess>;\n  requestPasskeyAccess(): Promise<PasskeyAccess>;\n  applySiteCookies?(profile: string, set: SiteCookie[], remove: CookieName[]): Promise<CookiesApplied>;\n}",
+      "PasskeyAccess": "{ entitled: boolean; status: \"entitlementRequired\" | \"deviceNotConfigured\" | \"notDetermined\" | \"denied\" | \"authorized\" }"
+    },
+    "chromium/src/plugins.ts": {
+      "PluginManifest": "v.InferOutput<typeof PluginManifestSchema>",
+      "PluginSetting": "PluginManifest[\"settings\"][number]",
+      "PluginListing": "v.InferOutput<typeof ListSchema>",
+      "PluginInstall": "v.InferOutput<typeof InstallSchema>",
+      "PluginFetchAnswer": "{ status: number; url: string; headers: Record<string, string>; body: string }",
+      "PluginSandboxEvent": "{ id: string; message?: string; reason?: string }",
+      "PluginsNative": "{\n  list(): Promise<string>;\n  // The person picks a plugin folder, which is copied in: bay_plugins_install's JSON, or null when cancelled.\n  install(): Promise<string | null>;\n  remove(id: string): Promise<boolean>;\n  reveal(): Promise<void>;\n  // Windows and Linux: bay.fetch through the engine, as a chrome:// document's own fetch meets CORS. macOS's fetch\n  // has none.\n  fetch?(url: string, method: string, headers: Record<string, string>, body: string | null): Promise<PluginFetchAnswer>;\n  // macOS: the sandbox is the host's WebKit page (Windows and Linux frame it in the document).\n  start?(id: string): Promise<boolean>;\n  stop?(id: string): Promise<void>;\n  post?(id: string, message: string): Promise<void>;\n  addListener?(name: \"onMessage\" | \"onExit\", listener: (event: PluginSandboxEvent) => void): EventSubscription;\n}"
     },
     "sync/src/native.ts": {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",

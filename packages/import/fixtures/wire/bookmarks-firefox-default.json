@@ -1,0 +1,61 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1788134400000.0,
+          "title": "Mozilla",
+          "type": "url",
+          "url": "https://www.mozilla.example/"
+        },
+        {
+          "children": [
+            {
+              "dateAdded": 1788134400000.0,
+              "title": "MDN",
+              "type": "url",
+              "url": "https://developer.mozilla.example/docs"
+            }
+          ],
+          "dateAdded": 1788134400000.0,
+          "title": "Dev & Docs",
+          "type": "folder"
+        }
+      ],
+      "dateAdded": 1788134400000.0,
+      "role": "toolbar",
+      "title": "Bookmarks Toolbar",
+      "type": "folder"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1788134400000.0,
+          "title": "Never visited",
+          "type": "url",
+          "url": "https://bookmarked-never-visited.example/"
+        }
+      ],
+      "dateAdded": 1788134400000.0,
+      "role": "menu",
+      "title": "Bookmarks Menu",
+      "type": "folder"
+    },
+    {
+      "children": [
+        {
+          "dateAdded": 1788220800000.0,
+          "title": "WAL bookmark",
+          "type": "url",
+          "url": "https://in-wal.example/"
+        }
+      ],
+      "dateAdded": 1788134400000.0,
+      "role": "other",
+      "title": "Other Bookmarks",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

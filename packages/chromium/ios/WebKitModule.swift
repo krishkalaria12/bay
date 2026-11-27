@@ -9,6 +9,10 @@ public class WebKitModule: Module {
 
     OnCreate {
       WebKitHub.shared.events = { [weak self] name, payload in self?.sendEvent(name, payload) }
+      DispatchQueue.main.async {
+        WebKitHub.shared.downloads.removeLeftoverStaging()
+        WebKitContentRules.shared.start()
+      }
     }
 
     Function("prepareTransfer") { (key: String) in WebKitHub.shared.prepareTransfer(key) }
@@ -42,6 +46,16 @@ public class WebKitModule: Module {
     AsyncFunction("deleteProfileData") { (profile: String, promise: Promise) in
       WebKitHub.shared.deleteProfileData(profile) { promise.resolve($0) }
     }.runOnQueue(.main)
+    AsyncFunction("siteCookies") { (profile: String, site: String, promise: Promise) in
+      WebKitHub.shared.siteCookies(profile: profile, site: site) { promise.resolve($0) }
+    }.runOnQueue(.main)
+    AsyncFunction("applySiteCookies") { (profile: String, set: [[String: Any]], remove: [[String: Any]], promise: Promise) in
+      WebKitHub.shared.applySiteCookies(profile: profile, set: set, remove: remove) { promise.resolve($0) }
+    }.runOnQueue(.main)
+    // Open pages' web views are the main thread's.
+    Function("setFraudWarnings") { (on: Bool) in DispatchQueue.main.async { WebKitHub.shared.setFraudWarnings(on) } }
+    // A page moving here from Chromium keeps its zoom (lib/pageEngines.ts openPageIn).
+    Function("setZoom") { (profile: String, host: String, zoom: Double) in WebKitHub.shared.setZoom(zoom, profile: profile, host: host) }
     AsyncFunction("info") { () -> [String: Any] in
       [
         "safariVersion": WebKitHub.safariVersion, "userAgentSuffix": "Version/\(WebKitHub.safariVersion) Safari/605.1.15",

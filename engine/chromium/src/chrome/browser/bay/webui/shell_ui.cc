@@ -17,6 +17,8 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/bay/webui/host_context.h"
+#include "chrome/browser/bay/webui/plugins.h"
+#include "chrome/browser/bay/webui/shared_folders.h"
 #include "chrome/browser/bay/webui/local_files.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
@@ -359,6 +361,28 @@ ShellFilePickerRequest LocalFileGrantRequest(const std::string& root,
       root);
   return request;
 }
+ShellFilePickerRequest SharedFolderRequest() {
+  ShellFilePickerRequest request;
+  request.type = ui::SelectFileDialog::SELECT_FOLDER;
+  request.title = u"Choose a Shared Folder";
+  request.cancelled = Success(std::nullopt);
+  request.disk_work = base::BindOnce([](const base::FilePath& path) {
+    std::optional<base::DictValue> folder = SharedFolders::Grant(path);
+    return folder ? base::WriteJson(base::DictValue().Set(
+                                        "value", std::move(*folder)))
+                        .value_or("{\"value\":null}")
+                  : Success(std::nullopt);
+  });
+  return request;
+}
+ShellFilePickerRequest PluginFolderRequest() {
+  ShellFilePickerRequest request;
+  request.type = ui::SelectFileDialog::SELECT_FOLDER;
+  request.title = u"Choose a Plugin Folder";
+  request.cancelled = Success(std::nullopt);
+  request.disk_work = base::BindOnce(&Plugins::Install);
+  return request;
+}
 ShellFilePickerRequest OpenTextRequest(
     std::vector<base::FilePath::StringType> extensions) {
   ShellFilePickerRequest request;
@@ -625,6 +649,14 @@ void ShellUI::PickLocalFileGrant(const HostContext& context,
                                  Response callback) {
   StartFilePicker(context, LocalFileGrantRequest(root, folder),
                   std::move(callback));
+}
+void ShellUI::PickSharedFolder(const HostContext& context,
+                               Response callback) {
+  StartFilePicker(context, SharedFolderRequest(), std::move(callback));
+}
+void ShellUI::PickPluginFolder(const HostContext& context,
+                               Response callback) {
+  StartFilePicker(context, PluginFolderRequest(), std::move(callback));
 }
 void ShellUI::StartFilePicker(const HostContext& context,
                               ShellFilePickerRequest request,

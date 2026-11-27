@@ -177,6 +177,19 @@ export function startDevHarness() {
     get developer(): typeof import("../components/developer/devMode") {
       return require("../components/developer/devMode");
     },
+    // Plugins (lib/plugins): what windows see of them, the coordinator's service and the window-side actions.
+    get plugins() {
+      return {
+        state: require("./plugins/pluginStore").usePlugins,
+        service: require("./plugins/pluginService"),
+        actions: require("./plugins/pluginActions"),
+        panel: require("../components/plugins/PluginPanel"),
+      };
+    },
+    // The engine's own calls (spelling's words, coding agents' access), for scripts that check them directly.
+    get engine(): typeof import("@bay/chromium") {
+      return require("@bay/chromium");
+    },
     // Boosts: the store, the editor and the model (scripts/boosts-test.mjs).
     get boosts() {
       return { state: require("../components/boosts/state"), editor: require("../components/boosts/editor"), model: require("./boosts") };

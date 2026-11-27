@@ -1,13 +1,36 @@
-import { addHistoryVisits, hasWebKit, type PageEngine } from "@bay/chromium";
+import { confirm, readDocument, writeDocument } from "@bay/desktop";
+import { addHistoryVisits, hasWebKit, setWebKitFraudWarnings, setWebKitZoom, setZoom, type ActiveSwitch, type PageEngine } from "@bay/chromium";
+import { useKillSwitches } from "./killSwitches";
 import * as Effect from "effect/Effect";
+import * as v from "valibot";
 import { PageWorkService } from "../components/site/pageWorkService";
 import { pageOf, patchPage } from "../components/window/pageState";
 import { runDesktop } from "../effect/runtime";
 import { showToast } from "../components/ui/toasts";
 import { useBrowser } from "../store/browserStore";
-import { canUseWebKit, chosenEngine, ENGINE_NAMES, siteOf, tabEngine, visitRecorder, type WebKitPage } from "../store/engines";
+import { reportBrowserCommand } from "../runtime/commands";
+import { updateSettings } from "../runtime/settingsActions";
+import {
+  canUseWebKit,
+  chosenEngine,
+  ENGINE_NAMES,
+  engineForUrl,
+  siteDomainOf,
+  siteOf,
+  siteRule,
+  tabEngine,
+  tabPick,
+  visitRecorder,
+  wantedEngine,
+  type WebKitPage,
+} from "../store/engines";
+import type { Settings } from "../store/settings";
+import { webviews } from "./webviews";
+import { capture } from "../telemetry/client";
+import { carrySignIns, READ_STORAGE, storageFrom, writeStorageScript, type CarriedStorage } from "./engineSiteData";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
+import { parseJson } from "./json";
 import { wantsPage } from "./tabNavigation";
 
 // Moving pages between Chromium and WebKit (store/engines.ts decides which a tab is in). A move reloads the page in the
@@ -23,6 +46,14 @@ const siteMoves = new Map<string, number>();
 // A redirect chain across sites with different engines can't bounce a tab between them.
 const SITE_MOVE_SPACING_MS = 10_000;
 const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "");
+
+const siteHost = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+};
 
 /** A tab keeps the engine its first view chose. */
 export function persistEngine(tabId: string, engine: PageEngine) {
@@ -72,7 +103,9 @@ export async function goBackAcrossEngines(tabId: string): Promise<boolean> {
 }
 
 /** Reloads the tab's page in `engine`, first asking when the page has input that would be lost. */
-async function openPageIn(tabId: string, engine: PageEngine, options: { checkWork?: boolean } = {}): Promise<boolean> {
+type SwitchReason = "person" | "protectedVideo" | "siteLink" | "settings";
+
+async function openPageIn(tabId: string, engine: PageEngine, options: { checkWork?: boolean; reason?: SwitchReason } = {}): Promise<boolean> {
   const t = store().tabs[tabId];
 
   if (!t) return false;
@@ -93,24 +126,288 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
   if (!now || pageUrl(now) !== url) return false;
 
   if (tabEngine(store(), tabId) === engine) return true;
-  store().updateTab(tabId, wantsPage(now) ? { engine, adoptId: undefined, navigation: navigationTo(now.url || url, true) } : { engine });
+
+  if (wantsPage(now)) await carryPage(now, engine);
+  const moved = store().tabs[tabId];
+
+  if (!moved || pageUrl(moved) !== url) return false;
+  store().updateTab(tabId, wantsPage(moved) ? { engine, adoptId: undefined, navigation: navigationTo(moved.url || url, true) } : { engine });
+  // Only when the person shares usage (Settings › Privacy): which way pages move, and why.
+  capture("engine_switch", { to: engine, reason: options.reason ?? "person" });
 
   return true;
 }
 
-/** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can play it. */
+// MARK: Keeping the page in view
+
+// How long a switching page's picture covers it at most, while the other engine loads it.
+const HOLD_MS = 3000;
+// How long a switch waits for the site's cookies to reach the other engine.
+
+const CARRY_DEADLINE_MS = 1500;
+const carriedStorage = new Map<string, CarriedStorage & { engine: PageEngine }>();
+const SCROLL_TIMEOUT_MS = 3000;
+const restoring = new Map<string, { engine: PageEngine; x: number; y: number }>();
+const holdTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const ScrollSchema = v.tuple([v.number(), v.number()]);
+
+/** Before a page switches engines: its zoom goes to the other engine's zoom for its host, and (Settings › Engines ›
+ *  Keep the page in view) a picture of it stays on screen, its scroll position to be restored once the other engine
+ *  has loaded it (engineViewLoaded). */
+async function carryPage(t: Tab, engine: PageEngine) {
+  const host = siteHost(pageUrl(t));
+  const profile = engineProfile(t.spaceId);
+
+  if (host && Math.abs(t.zoom - 1) > 0.001) {
+    if (engine === "webkit") setWebKitZoom(profile, host, t.zoom);
+    else await setZoom(profile, host, t.zoom).catch(() => {});
+  }
+
+  const view = webviews.get(t.id);
+  const settings = store().settings;
+  const site = siteDomainOf(pageUrl(t));
+
+  // Bringing sign-ins along: the site's cookies are in the other engine before it loads the page, unless the copy is
+  // slow, when the page loads signed out and the copy finishes for next time. Storage follows once the page commits.
+  if (settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId)) {
+    const from = tabEngine(store(), t.id);
+    const origin = siteOf(pageUrl(t)) ?? "";
+    const storage = view ? storageFrom(await view.evaluate<string>(READ_STORAGE).catch(() => null)) : null;
+
+    if (storage && (storage.local.length || storage.session.length)) carriedStorage.set(t.id, { origin, entries: storage, engine });
+    await Promise.race([carrySignIns(from, engine, profile, site, origin), new Promise((done) => setTimeout(done, CARRY_DEADLINE_MS))]);
+  }
+
+  if (!settings.engineSwitchKeepsPage || !view) return;
+  const [picture, scroll] = await Promise.all([view.capturePicture(1).catch(() => null), view.evaluate("[window.scrollX, window.scrollY]").catch(() => null)]);
+  const position = v.safeParse(ScrollSchema, scroll);
+
+  if (position.success && (position.output[0] > 0 || position.output[1] > 0)) restoring.set(t.id, { engine, x: position.output[0], y: position.output[1] });
+
+  if (!picture) return;
+  patchPage(t.id, { engineHold: `data:image/jpeg;base64,${picture.data}` });
+  clearTimeout(holdTimers.get(t.id));
+  holdTimers.set(
+    t.id,
+    setTimeout(() => releaseHold(t.id), HOLD_MS),
+  );
+}
+
+function releaseHold(tabId: string) {
+  clearTimeout(holdTimers.get(tabId));
+  holdTimers.delete(tabId);
+
+  if (pageOf(tabId).engineHold) patchPage(tabId, { engineHold: null });
+}
+
+/** A tab's view in `engine` reported its page: once it has loaded, the page goes back to where it was scrolled and its
+ *  picture goes. */
+export function engineViewLoaded(tabId: string, engine: PageEngine, isLoading: boolean) {
+  const scroll = restoring.get(tabId);
+  const storage = carriedStorage.get(tabId);
+
+  if (!isLoading && storage?.engine === engine) {
+    carriedStorage.delete(tabId);
+
+    if (siteOf(pageUrl(store().tabs[tabId])) === storage.origin)
+      void webviews
+        .get(tabId)
+        ?.executeJavaScript(writeStorageScript(storage.entries))
+        .catch(() => {});
+  }
+
+  if (isLoading || (!scroll && !holdTimers.has(tabId))) return;
+
+  if (scroll && scroll.engine === engine) {
+    restoring.delete(tabId);
+    // Pages that build themselves after load aren't tall enough at once: try until they are, for a few seconds.
+    void webviews
+      .get(tabId)
+      ?.executeJavaScript(
+        `(() => { const x = ${scroll.x}, y = ${scroll.y}, until = Date.now() + ${SCROLL_TIMEOUT_MS}; const go = () => { window.scrollTo(x, y); if (Math.abs(window.scrollY - y) > 2 && Date.now() < until) setTimeout(go, 100); }; go(); })()`,
+      )
+      .catch(() => {});
+  }
+
+  // Two frames after the load, so the page has painted under the picture.
+  requestAnimationFrame(() => requestAnimationFrame(() => releaseHold(tabId)));
+}
+
+// MARK: Following settings
+
+// Awake tabs in the background whose engine a settings change moved: they move when next shown, so a big session
+// doesn't reload at once. Kept in a document, so a move Bay quits before survives: after the relaunch the tab (asleep
+// until shown) takes its engine at once.
+const MOVES_DOC = "engine-moves.json";
+const MovesSchema = v.record(v.string(), v.picklist(["chromium", "webkit"]));
+const pendingMoves = new Map<string, PageEngine>();
+let unwatchSettings: (() => void) | null = null;
+
+function saveMoves() {
+  try {
+    writeDocument(MOVES_DOC, JSON.stringify(Object.fromEntries(pendingMoves)));
+  } catch {}
+}
+
+/** The moves left from the last run: a tab still wanting that engine takes it, asleep, or when next shown. */
+function resumeMoves() {
+  const parsed = v.safeParse(MovesSchema, parseJson(readDocument(MOVES_DOC) ?? "null"));
+
+  if (!parsed.success) return;
+
+  for (const [id, engine] of Object.entries(parsed.output)) {
+    if (!store().tabs[id] || wantedEngine(store(), id) !== engine || tabEngine(store(), id) === engine) continue;
+
+    if (webviews.get(id)) pendingMoves.set(id, engine);
+    else store().updateTab(id, { engine, wakeAdoptId: undefined });
+  }
+
+  saveMoves();
+}
+
+const sameEnginePrefs = (a: Settings, b: Settings) =>
+  a.engineMode === b.engineMode && a.defaultEngine === b.defaultEngine && a.siteEngines === b.siteEngines && a.streamingInWebKit === b.streamingInWebKit;
+
+/** Open tabs follow a change to Settings › Engines (the mode, the default engine, a site rule, the streaming list):
+ *  a tab in the engine the old settings wanted moves to the one the new settings want. A tab another engine for a
+ *  reason of its own (an opener's engine, a pick) stays. A sleeping tab just takes the new engine; a shown one moves
+ *  now, asking first if it holds unsaved work; one awake in the background moves when shown. Once, on a Mac. */
+export function followEngineSettings() {
+  if (!hasWebKit() || unwatchSettings) return;
+  setWebKitFraudWarnings(store().settings.webKitFraudWarnings);
+  resumeMoves();
+
+  const unwatchBrowser = useBrowser.subscribe((s, prev) => {
+    if (s.settings.webKitFraudWarnings !== prev.settings.webKitFraudWarnings) setWebKitFraudWarnings(s.settings.webKitFraudWarnings);
+
+    if (s.tabs !== prev.tabs) {
+      const moves = pendingMoves.size;
+
+      for (const map of [pendingMoves, restoring, carriedStorage]) {
+        for (const id of map.keys()) if (!s.tabs[id]) map.delete(id);
+      }
+
+      if (pendingMoves.size !== moves) saveMoves();
+    }
+
+    if (s.settings === prev.settings || sameEnginePrefs(s.settings, prev.settings)) return;
+    const before = { tabs: s.tabs, settings: prev.settings };
+    const shownMoves: [string, PageEngine][] = [];
+
+    for (const id of Object.keys(s.tabs)) {
+      const t = s.tabs[id]!;
+      const was = wantedEngine(before, id);
+      const wanted = wantedEngine(s, id);
+
+      if (was === wanted || !t.engine || t.engine !== was) continue;
+
+      if (!webviews.get(id)) {
+        store().updateTab(id, { engine: wanted, wakeAdoptId: undefined });
+        const site = siteDomainOf(pageUrl(t));
+
+        if (s.settings.engineSwitchCarriesSignIns && site && !isIncognitoSpace(t.spaceId))
+          void carrySignIns(was, wanted, engineProfile(t.spaceId), site, siteOf(pageUrl(t)) ?? "");
+      } else if (shownTabs.has(id)) shownMoves.push([id, wanted]);
+      else pendingMoves.set(id, wanted);
+    }
+
+    saveMoves();
+    void moveShownTabs(shownMoves);
+  });
+  // Bay switched WebKit off remotely (lib/killSwitches.ts): its pages reopen in Chromium.
+
+  const webKitSwitchedOff = (active: readonly ActiveSwitch[]) => active.some((k) => k.feature === "webkit");
+
+  const unwatchSwitches = useKillSwitches.subscribe((k, prev) => {
+    if (!webKitSwitchedOff(k.active) || webKitSwitchedOff(prev.active)) return;
+
+    for (const [id, t] of Object.entries(store().tabs)) if (t.engine === "webkit") store().updateTab(id, { engine: "chromium", wakeAdoptId: undefined });
+  });
+
+  unwatchSettings = () => {
+    unwatchBrowser();
+    unwatchSwitches();
+  };
+}
+
+const shownTabs = new Set<string>();
+
+function unsavedWork(tabId: string): Promise<boolean> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const pageWork = yield* PageWorkService;
+
+      return yield* pageWork.unsavedWork(tabId);
+    }),
+  ).catch(() => false);
+}
+
+/** The pages on screen a settings change moves: asked about once, naming the ones holding unsaved work. */
+async function moveShownTabs(moves: [string, PageEngine][]) {
+  if (!moves.length) return;
+  const unsaved = await Promise.all(moves.map(([id]) => unsavedWork(id)));
+  const holding = moves.flatMap(([id], i) => (unsaved[i] && store().tabs[id] ? [store().tabs[id]!] : []));
+  let kept = new Set<string>();
+
+  if (holding.length) {
+    const one = holding.length === 1;
+
+    const { confirmed } = await confirm({
+      title: one ? "Reload this page in the other engine?" : `Reload ${holding.length} pages in other engines?`,
+      message: `Your Engines settings now open ${one ? "it" : "them"} elsewhere, which reloads ${one ? "it" : "them"}, so changes you made may not be saved:\n${holding
+        .map((t) => `• ${t.customTitle || t.title || siteHost(pageUrl(t))}`)
+        .join("\n")}`,
+      confirmTitle: one ? "Reload Page" : "Reload Pages",
+      cancelTitle: one ? "Keep It as It Is" : "Keep Them as They Are",
+      windowId: holding[0]!.windowId,
+    }).catch(() => ({ confirmed: false }));
+
+    if (!confirmed) kept = new Set(holding.map((t) => t.id));
+  }
+
+  for (const [id, engine] of moves) {
+    if (!kept.has(id) && wantedEngine(store(), id) === engine) void openPageIn(id, engine, { reason: "settings", checkWork: false });
+  }
+}
+
+/** A tab's page is on screen (or not): a move a settings change left for it happens now. */
+export function engineTabShown(tabId: string, shown: boolean) {
+  if (!shown) return void shownTabs.delete(tabId);
+  shownTabs.add(tabId);
+  const engine = pendingMoves.get(tabId);
+
+  if (!engine) return;
+  pendingMoves.delete(tabId);
+  saveMoves();
+
+  // Only if nothing has moved it since.
+  if (wantedEngine(store(), tabId) === engine && tabEngine(store(), tabId) !== engine) void openPageIn(tabId, engine, { reason: "settings" });
+}
+
+/** A Chromium page's protected video couldn't play (page_script.js › Protected video): it moves to WebKit, which can
+ *  play it, or offers to, as Settings › Engines › When protected video won't play says. A site or tab the person put
+ *  in Chromium stays there. */
 export async function playInWebKit(tabId: string) {
   const s = store();
   const t = s.tabs[tabId];
 
-  if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit") return;
+  if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit" || s.settings.engineMode === "chromium") return;
+
+  if (s.settings.protectedVideoFallback === "stay" || siteRule(s.settings, t.url) === "chromium" || tabPick(t) === "chromium") return;
   const site = siteOf(t.url);
 
   if (!site || declinedSites.has(site) || movingTabs.has(tabId)) return;
+
+  if (s.settings.protectedVideoFallback === "ask") return patchPage(tabId, { engineOffer: hostLabel(site) });
+  await moveForProtectedVideo(tabId, site);
+}
+
+async function moveForProtectedVideo(tabId: string, site: string) {
   movingTabs.add(tabId);
 
   try {
-    if (!(await openPageIn(tabId, "webkit"))) {
+    if (!(await openPageIn(tabId, "webkit", { reason: "protectedVideo" }))) {
       declinedSites.add(site);
 
       return;
@@ -127,6 +424,57 @@ export async function playInWebKit(tabId: string) {
     });
 }
 
+/** The person's answer to "Play <site> in WebKit?": stay this time, open it there, or keep the site in Chromium. */
+export function answerEngineOffer(tabId: string, answer: "stay" | "open" | "never") {
+  const t = store().tabs[tabId];
+  const site = siteOf(t?.url);
+  patchPage(tabId, { engineOffer: null });
+
+  if (!t || !site) return;
+
+  if (answer === "open") return void moveForProtectedVideo(tabId, site);
+  declinedSites.add(site);
+
+  if (answer === "never") void alwaysOpenSiteIn(tabId, "chromium");
+}
+
+/** Reopen in…: the tab's page reloads in `engine`, which stays the tab's while it's on this site. */
+export async function reopenIn(tabId: string, engine: PageEngine): Promise<boolean> {
+  const t = store().tabs[tabId];
+  const site = siteDomainOf(pageUrl(t));
+
+  if (!t || !site || !(await openPageIn(tabId, engine))) return false;
+  const now = store().tabs[tabId];
+
+  if (!now) return false;
+  // A pick the site's own choice already makes isn't kept, so a later rule still reaches the tab.
+  const follows = engineForUrl(store().settings, pageUrl(now)) === engine;
+  store().updateTab(tabId, { enginePick: follows ? undefined : { engine, site } });
+
+  return true;
+}
+
+/** Always Open <site> in…: a site rule, and the tab moves there now. */
+export async function alwaysOpenSiteIn(tabId: string, engine: PageEngine): Promise<void> {
+  const s = store();
+  const t = s.tabs[tabId];
+  const site = siteDomainOf(pageUrl(t));
+
+  if (!t || !site) return;
+  reportBrowserCommand(updateSettings({ siteEngines: { ...s.settings.siteEngines, [site]: engine } }));
+
+  if (t.enginePick) store().updateTab(tabId, { enginePick: undefined });
+
+  if (tabEngine(store(), tabId) !== engine) await openPageIn(tabId, engine);
+}
+
+/** Forgets a site's rule; its pages follow the default engine again. */
+export function forgetSiteRule(site: string) {
+  const rules = { ...store().settings.siteEngines };
+  delete rules[site];
+  reportBrowserCommand(updateSettings({ siteEngines: rules }));
+}
+
 /** A link followed in the tab to a site that needs another engine (a streaming site): the page moves there once it
  *  commits, and Back returns to the page before in the engine it was in. Tabs a page opened keep their opener's engine. */
 export function followSiteChoice(tabId: string, engine: PageEngine, url: string, previousUrl: string) {
@@ -136,14 +484,14 @@ export function followSiteChoice(tabId: string, engine: PageEngine, url: string,
   const t = store().tabs[tabId];
 
   if (!t || t.openerId) return;
-  const chosen = chosenEngine(url);
+  const chosen = chosenEngine(store().settings, url);
 
   if (!chosen || chosen === engine) return;
   const now = Date.now();
 
   if (now - (siteMoves.get(tabId) ?? 0) < SITE_MOVE_SPACING_MS) return;
   siteMoves.set(tabId, now);
-  void openPageIn(tabId, chosen, { checkWork: false }).then((moved) => {
+  void openPageIn(tabId, chosen, { checkWork: false, reason: "siteLink" }).then((moved) => {
     if (moved && canUseWebKit(previousUrl)) patchPage(tabId, { engineBack: { engine, url: previousUrl } });
   });
 }

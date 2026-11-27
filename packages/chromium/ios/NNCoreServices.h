@@ -106,10 +106,27 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 @end
 
 // The built-in content blocker (Bay's own, packages/adblock). A change that fails (error) changed nothing.
+// Posted on the main thread when the blocker's engine or settings change (WebKit pages' rules follow).
+extern NSNotificationName const NNCoreContentBlockerChangedNotification;
+
 @interface NNCoreContentBlocker : NSObject
+// WebKit pages' rules (WebKitContentRules.swift), on the main thread: whether the blocker is on and the hosts it's
+// paused on (read at once, so a page reloaded after a pause gets it), and the key of the chosen lists' rules.
+// {"enabled": bool, "paused": [host…]}
++ (NSDictionary<NSString *, id> *)webKitRulesState NS_SWIFT_NAME(webKitRulesState());
++ (void)webKitRulesKey:(void (^)(NSString *key))completion NS_SWIFT_NAME(webKitRulesKey(_:));
+// The chosen lists as WKContentRuleList JSON (seconds for the default lists, off the main thread); null if unreadable.
++ (void)webKitRules:(void (^)(NSString *_Nullable rules))completion NS_SWIFT_NAME(webKitRules(_:));
 + (void)state:(void (^)(NSDictionary<NSString *, id> *state))completion NS_SWIFT_NAME(state(_:));
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setEnabled(_:completion:));
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setList(_:enabled:completion:));
+// The person's own lists: added by URL (http or https; title may be empty), done once the engine has it (its id, or
+// the error), removed by id; and My Filters, their own rules in adblock syntax.
++ (void)addListWithURL:(NSString *)url title:(NSString *)title completion:(void (^)(NSString *_Nullable listId, NSString *_Nullable error))completion
+    NS_SWIFT_NAME(addList(url:title:completion:));
++ (void)removeList:(NSString *)listId completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(removeList(_:completion:));
++ (NSString *)userFilters NS_SWIFT_NAME(userFilters());
++ (void)setUserFilters:(NSString *)text completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setUserFilters(_:completion:));
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL allowed))completion NS_SWIFT_NAME(isAllowed(host:completion:));
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setAllowed(_:host:completion:));
 // Visit Anyway on a page the blocker stops: for this run of the app, or kept (remember). The site's requests are still
@@ -119,6 +136,29 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 + (void)devFailNextMessage;
 // Tests: the next engine build goes into force `ms` later.
 + (void)devDelayNextLoad:(double)ms;
+@end
+
+// Remote kill switches (bay-switches, packages/rust/bay-switches): which switches in Bay's signed feed apply to this
+// platform and release, as bay_switches_check's JSON ({"ok":true,"issued":N,"switches":[…]} or {"ok":false,"error":…}).
+@interface NNCoreSwitches : NSObject
++ (NSString *)check:(NSString *)feed
+          signature:(NSString *)signature
+            version:(NSString *)version
+                now:(int64_t)now
+         lastIssued:(int64_t)lastIssued NS_SWIFT_NAME(check(feed:signature:version:now:lastIssued:));
+@end
+
+// Plugins (bay-plugins, packages/rust/bay-plugins): the plugins folder, and the files a plugin's sandbox may read
+// (PluginsModule.swift). JSON as bay_plugins_list and bay_plugins_install answer it.
+@interface NNCorePlugins : NSObject
++ (NSString *)listIn:(NSString *)root NS_SWIFT_NAME(list(root:));
++ (NSString *)install:(NSString *)source into:(NSString *)root NS_SWIFT_NAME(install(source:root:));
++ (BOOL)remove:(NSString *)pluginId from:(NSString *)root NS_SWIFT_NAME(remove(id:root:));
+// {"data": NSData, "mime": NSString}, or nil for a file the sandbox may not read.
++ (nullable NSDictionary<NSString *, id> *)file:(NSString *)path
+                                       ofPlugin:(NSString *)pluginId
+                                             in:(NSString *)root NS_SWIFT_NAME(file(path:id:root:));
++ (NSString *)contentSecurityPolicy;
 @end
 
 NS_ASSUME_NONNULL_END

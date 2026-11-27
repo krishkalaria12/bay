@@ -1,0 +1,20 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1787961600000.0,
+          "title": "Work",
+          "type": "url",
+          "url": "https://work.dia.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

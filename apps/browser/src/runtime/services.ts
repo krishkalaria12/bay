@@ -3,6 +3,11 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { createBrowserPersistence, type PersistenceOwner } from "../lib/persist";
 import { AUTO_CLEAN_EVERY_MS } from "../lib/constants";
+import { startKillSwitches, useKillSwitches } from "../lib/killSwitches";
+import { startAgentApprovals } from "../components/cli/agentApprovals";
+import { startSharedFolders } from "../lib/sharedFolderService";
+import { reloadPlugins, startPlugins } from "../lib/plugins/pluginService";
+import { appPluginHost } from "../lib/plugins/pluginHost";
 import { startLive } from "../activity/index";
 import { flushLivePersistence, resumeLivePersistence, startLivePersistence } from "../activity/activityStore";
 import type { BrowserStore } from "../store/browserStore";
@@ -139,6 +144,16 @@ export function startCoordinatorServices({
     });
 
     stops.push(() => events.remove());
+    // Bay's remote kill switches (lib/killSwitches.ts), checked at launch and every few hours.
+    stops.push(startKillSwitches());
+    // Coding agents asking for their own access to the bay command's control (components/cli/agentApprovals.ts).
+    stops.push(startAgentApprovals());
+    // Pinned folders kept in a shared folder of link files (lib/sharedFolderService.ts).
+    stops.push(startSharedFolders(store));
+    // Plugins (lib/plugins): the turned-on ones run in their sandboxes for the coordinator's life.
+    stops.push(startPlugins(appPluginHost(store)));
+    // A kill switch for plugins stops them at once, and lifting it starts the turned-on ones again.
+    stops.push(useKillSwitches.subscribe((s, prev) => s.active !== prev.active && void reloadPlugins().catch(() => {})));
     const timer = setInterval(() => store.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
     stops.push(() => clearInterval(timer));
 

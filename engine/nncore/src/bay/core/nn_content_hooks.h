@@ -8,6 +8,7 @@
 
 class GURL;
 namespace content {
+class BrowserContext;
 class DevToolsAgentHost;
 class DevToolsAgentHostClient;
 class DevToolsSocketFactory;
@@ -59,5 +60,9 @@ extern bool (*g_bay_devtools_may_input)(
 // Target.createTarget's `background`, for the delegate that makes the tab: upstream it only skips activating the
 // window, and the tab still opens in front.
 extern bool g_bay_devtools_background_target;
+
+// The profile Target.createTarget opens its tab in, where the last used one isn't the client's to reach (a coding agent
+// kept to some spaces): set by the client's FilterCommand, cleared once the command has run. Null: the last used one.
+extern content::BrowserContext* g_bay_devtools_target_context;
 
 #endif

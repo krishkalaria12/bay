@@ -24,6 +24,7 @@ import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { TidyModelNote } from "../TidyModelNote";
+import { SpellingSection } from "./Spelling";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
@@ -135,6 +136,8 @@ export function GeneralPane() {
       </Group>
 
       <UpdatesSection />
+
+      <SpellingSection />
 
       <SectionHeader title="Import" />
       <Group>

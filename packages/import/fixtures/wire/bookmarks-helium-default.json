@@ -1,0 +1,26 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "dateAdded": 1787788800000.0,
+          "title": "Helium",
+          "type": "url",
+          "url": "https://helium.example/"
+        },
+        {
+          "dateAdded": 1787788800000.0,
+          "title": "Imput",
+          "type": "url",
+          "url": "https://imput.example/"
+        }
+      ],
+      "dateAdded": 1753660800000.0,
+      "role": "toolbar",
+      "title": "Bookmarks bar",
+      "type": "folder"
+    }
+  ],
+  "title": "Bookmarks",
+  "type": "folder"
+}

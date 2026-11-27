@@ -106,6 +106,26 @@ public class CefModule: Module {
       NNCoreEngineBridge.call(name, profile: profile, args: args) { promise.resolve($0) }
     }.runOnQueue(.main)
 
+    // A site's sign-in carried to WebKit and back when a page switches engines (engine nn_cookies_site, nn_cookies_apply;
+    // apps/browser lib/engineSiteData.ts). Never for a private window. The arguments carry cookie values, so they go as
+    // a secret the engine zeroes once parsed.
+    AsyncFunction("siteCookies") { (profile: String, site: String, promise: Promise) in
+      if profile.hasPrefix("incognito") { return promise.resolve(#"{"error":"private profile"}"#) }
+      let args = (try? JSONSerialization.data(withJSONObject: ["site": site])).flatMap { String(data: $0, encoding: .utf8) }
+      NNCoreEngineBridge.call("nn_cookies_site", profile: profile, args: args) { promise.resolve($0) }
+    }.runOnQueue(.main)
+    AsyncFunction("applySiteCookies") { (profile: String, args: String, promise: Promise) in
+      if profile.hasPrefix("incognito") { return promise.resolve(#"{"error":"private profile"}"#) }
+      var bytes = Data(args.utf8)
+      bytes.append(0)
+      NNCoreEngineBridge.callWithSecret("nn_cookies_apply", profile: profile, args: NSMutableData(data: bytes)) { promise.resolve($0) }
+    }.runOnQueue(.main)
+
+    // Remote kill switches: what in Bay's signed feed applies to this release (NNCoreSwitches, bay-switches).
+    AsyncFunction("checkSwitches") { (feed: String, signature: String, lastIssued: Double) -> String in
+      let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+      return NNCoreSwitches.check(feed: feed, signature: signature, version: version, now: Int64(Date().timeIntervalSince1970), lastIssued: Int64(lastIssued))
+    }
     AsyncFunction("getContentBlocker") { (promise: Promise) in
       NNCoreContentBlocker.state { promise.resolve($0) }
     }.runOnQueue(.main)
@@ -114,6 +134,18 @@ public class CefModule: Module {
     }.runOnQueue(.main)
     AsyncFunction("setFilterListEnabled") { (id: String, enabled: Bool, promise: Promise) in
       NNCoreContentBlocker.setList(id, enabled: enabled) { CefModule.settle(promise, $0) }
+    }.runOnQueue(.main)
+    AsyncFunction("addFilterList") { (url: String, title: String, promise: Promise) in
+      NNCoreContentBlocker.addList(url: url, title: title) { id, error in
+        if let error { promise.reject("ERR_CONTENT_BLOCKER", error) } else { promise.resolve(id) }
+      }
+    }.runOnQueue(.main)
+    AsyncFunction("removeFilterList") { (id: String, promise: Promise) in
+      NNCoreContentBlocker.removeList(id) { CefModule.settle(promise, $0) }
+    }.runOnQueue(.main)
+    AsyncFunction("getUserFilters") { () -> String in NNCoreContentBlocker.userFilters() }.runOnQueue(.main)
+    AsyncFunction("setUserFilters") { (text: String, promise: Promise) in
+      NNCoreContentBlocker.setUserFilters(text) { CefModule.settle(promise, $0) }
     }.runOnQueue(.main)
     AsyncFunction("isContentBlockerAllowed") { (host: String, promise: Promise) in
       NNCoreContentBlocker.isAllowed(host: host) { promise.resolve($0) }

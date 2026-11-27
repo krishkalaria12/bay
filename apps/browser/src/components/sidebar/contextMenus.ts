@@ -1,9 +1,22 @@
 import { capabilities } from "@bay/platform";
+import { alwaysOpenSiteIn, forgetSiteRule, reopenIn } from "../../lib/pageEngines";
+import { ENGINE_NAMES, ENGINE_SYMBOLS, engineSwitchFor } from "../../store/engines";
 import { boostHost } from "../../lib/boosts";
 import { shareCollection } from "../../lib/sharedLinkEncoding";
 import { boostsAvailable } from "../boosts/state";
 import { openBoostEditor } from "../boosts/editor";
-import { showMenu, type MenuItem } from "@bay/desktop";
+import { platformWords } from "../../lib/platformWords";
+import { canShareFolderSheet, sharedFoldersAvailable, showMenu, type MenuItem } from "@bay/desktop";
+import { runPluginCommandIn } from "../../lib/plugins/pluginActions";
+import { activePlugins, usePlugins } from "../../lib/plugins/pluginStore";
+import {
+  inviteToSharedFolder,
+  keepInSharedFolder,
+  showSharedFolder,
+  stopSharingFolder,
+  syncSharedFolderNow,
+  useSharedFolders,
+} from "../../lib/sharedFolderService";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { withFolderMoveUndo } from "../../lib/folderUndo";
 import { normalizeAwakeSite, siteKeptAwake } from "../../lib/keptAwakeSites";
@@ -201,6 +214,8 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const site = normalizeAwakeSite(tab.url);
   const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
+  // Reopen in WebKit or Chromium, and a rule for the site (Settings › Engines). Only on a Mac, in Automatic mode.
+  const engines = engineSwitchFor(s, tab.id);
 
   // The everyday actions up top; the rest under More, so the menu stays short.
   const more: MenuItem[] = [
@@ -217,6 +232,22 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
+    ...(engines
+      ? [
+          sep,
+          { id: `reopenIn:${engines.other}`, title: `Reopen in ${ENGINE_NAMES[engines.other]}`, symbol: ENGINE_SYMBOLS[engines.other] },
+          {
+            id: "alwaysOpenIn",
+            title: `Always Open ${engines.site} in`,
+            symbol: "safari",
+            children: (["chromium", "webkit"] as const).map((engine) => ({
+              id: `alwaysIn:${engine}`,
+              title: ENGINE_NAMES[engine],
+              checked: engines.rule === engine,
+            })),
+          },
+        ]
+      : []),
     sep,
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
@@ -260,6 +291,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
     ...(split ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash", ...hint("-", "shift", "control") }] : []),
     { id: "more", title: "More", symbol: "ellipsis.circle", children: more },
+    ...pluginTabItems(),
     sep,
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },
     {
@@ -274,6 +306,9 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const t = { kind: "tab" as const, id: tab.id };
 
   if (runCalendarMenu(choice)) return;
+  const plugin = /^plugin:([^:]+):(.+)$/.exec(choice);
+
+  if (plugin) return void runPluginCommandIn(windowId, plugin[1]!, plugin[2]!, "tabMenu", tab.id).catch(() => {});
 
   if (choice === "backToPin") reportBrowserCommand(returnToPinnedUrl(tab.id));
   else if (choice === "replacePin") reportBrowserCommand(setPinnedUrl(tab.id));
@@ -307,7 +342,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
       updateSettings({ awakeSites: siteKeptAwake(tab.url, sites) ? sites.filter((entry) => !siteKeptAwake(tab.url, [entry])) : [...sites, site] }),
     );
   } else if (choice === "sleep") void sleepTab(tab.id);
-  else if (choice === "icon") void openIconPicker(windowId, t);
+  else if (choice === "reopenIn:webkit" || choice === "reopenIn:chromium") void reopenIn(tab.id, choice === "reopenIn:webkit" ? "webkit" : "chromium");
+  else if ((choice === "alwaysIn:webkit" || choice === "alwaysIn:chromium") && engines) {
+    const engine = choice === "alwaysIn:webkit" ? "webkit" : "chromium";
+
+    if (engines.rule === engine) forgetSiteRule(engines.site);
+    else void alwaysOpenSiteIn(tab.id, engine);
+  } else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") reportBrowserCommand(updateTabDetails(tab.id, { customIcon: null }));
   else if (choice === "mute") toggleMute(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
@@ -455,6 +496,57 @@ function firstAfterFolder(folderId: string): string | null {
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
 
+// Plugins' tab menu items (lib/plugins), while their plugin runs: each runs a command on this tab.
+function pluginTabItems(): MenuItem[] {
+  const items = activePlugins(usePlugins.getState()).flatMap((p) =>
+    p.manifest.contributes.tabMenu.map((item) => {
+      const command = p.manifest.contributes.commands.find((c) => c.id === item.command);
+
+      return { id: `plugin:${p.manifest.id}:${item.command}`, title: item.title, symbol: command?.icon ?? "puzzlepiece.extension" };
+    }),
+  );
+
+  return items.length ? [sep, ...items] : [];
+}
+
+// A folder kept in a shared folder of link files (lib/sharedFolderService.ts), on hosts that have them.
+function sharedFolderItems(folderId: string) {
+  if (!sharedFoldersAvailable()) return [];
+  const shared = useSharedFolders.getState().folders[folderId];
+
+  if (!shared) return [{ id: "shared:keep", title: "Keep in a Shared Folder…", symbol: "person.2" }];
+  const missing = shared.status === "missing" || shared.status === "inaccessible";
+
+  return [
+    {
+      id: "shared",
+      title: missing
+        ? `Shared Folder Missing: ${shared.name}`
+        : shared.status === "paused"
+          ? `Shared Folder (Turned Off by Bay): ${shared.name}`
+          : `Shared Folder: ${shared.name}`,
+      symbol: missing ? "folder.badge.questionmark" : "person.2",
+      children: [
+        { id: "shared:show", title: platformWords.revealTitle, symbol: "folder", enabled: !missing },
+        ...(canShareFolderSheet() ? [{ id: "shared:invite", title: "Invite People…", symbol: "person.crop.circle.badge.plus", enabled: !missing }] : []),
+        { id: "shared:sync", title: "Sync Now", symbol: "arrow.triangle.2.circlepath" },
+        sep,
+        { id: "shared:stop", title: "Stop Keeping in Shared Folder", symbol: "xmark.circle" },
+      ],
+    },
+  ];
+}
+
+function runSharedFolderItem(folderId: string, choice: string) {
+  const failed = (error: Error) => console.error("Shared folder", choice, error);
+
+  if (choice === "shared:keep") void keepInSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:show") void showSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:invite") void inviteToSharedFolder(folderId).catch(failed);
+  else if (choice === "shared:sync") void syncSharedFolderNow(folderId).catch(failed);
+  else if (choice === "shared:stop") void stopSharingFolder(folderId).catch(failed);
+}
+
 // Folder operations apply to its descendant tabs too.
 export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
@@ -475,7 +567,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
     ...(!isIncognitoSpace(f.spaceId) && !s.windows[windowId]?.incognito
-      ? [{ id: "share", title: "Share Folder…", symbol: "square.and.arrow.up", enabled: members.length > 0 }]
+      ? [{ id: "share", title: "Share Folder…", symbol: "square.and.arrow.up", enabled: members.length > 0 }, ...sharedFolderItems(folderId)]
       : []),
     sep,
     // Its tabs stay pinned, loose, where they were.
@@ -492,6 +584,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   else if (choice === "copy") copyUrls(members, false);
   else if (choice === "copyMd") copyUrls(members, true);
   else if (choice === "share") void shareCollection(windowId, { kind: "folder", id: folderId });
+  else if (choice.startsWith("shared:")) runSharedFolderItem(folderId, choice);
   else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId, [], folderId));
   else if (choice === "moveOut")
     withFolderMoveUndo(windowId, () => movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));

@@ -18,9 +18,29 @@ import { connectCalendar, refreshCalendar, setCalendarHidden, useCalendar } from
 import { dismiss } from "../activity/meetingAlerts";
 import { groupCallInStore, joinMeetingInStore } from "../activity/meetingGroups";
 import { joinLink } from "../activity/meetings";
-import { connectBitbucket, connectConfluence, connectGithub, connectNotion, disconnect, startGithubDeviceFlow, type DeviceFlow } from "../activity/sources";
+import {
+  connectBitbucket,
+  connectConfluence,
+  connectGithub,
+  connectGitlab,
+  connectNotion,
+  disconnect,
+  startGithubDeviceFlow,
+  type DeviceFlow,
+} from "../activity/sources";
 import { connectGoogleDrive } from "../activity/googleAuth";
 import * as sync from "../sync/engine";
+import { bindSharedFolder, syncSharedFolder, unbindSharedFolder } from "../lib/sharedFolderService";
+import {
+  deletePlugin,
+  reloadPlugins,
+  runPluginCommand,
+  selectPluginItem,
+  setPluginEnabled,
+  setPluginSecret,
+  setPluginSetting,
+} from "../lib/plugins/pluginService";
+import { commandPage } from "../lib/plugins/pluginContext";
 
 const flows = new Map<string, DeviceFlow>();
 let nextFlow = 0;
@@ -234,6 +254,7 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
       if (id === "github") await connectGithub(a[0]!);
       else if (id === "bitbucket") await connectBitbucket(a[0]!, a[1]!);
+      else if (id === "gitlab") await connectGitlab(a[0]!, a[1]!);
       else if (id === "notion") await connectNotion(a[0]!);
       else if (id === "confluence") await connectConfluence(a[0]!, a[1]!, a[2]!);
       break;
@@ -241,6 +262,41 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
     case "liveDisconnect":
       await disconnect(...command.args);
+      break;
+    case "sharedFolderBind":
+      requireCommandSpace(browser.getState(), browser.getState().pinnedFolders[command.args[0]]?.spaceId ?? "");
+      await bindSharedFolder(...command.args);
+      break;
+    case "sharedFolderUnbind":
+      await unbindSharedFolder(command.args[0]);
+      break;
+    case "sharedFolderSync":
+      await syncSharedFolder(command.args[0]);
+      break;
+    case "pluginsReload":
+      await reloadPlugins();
+      break;
+    case "pluginEnable":
+      await setPluginEnabled(...command.args);
+      break;
+    case "pluginRemove":
+      await deletePlugin(command.args[0]);
+      break;
+    case "pluginSetting":
+      await setPluginSetting(...command.args);
+      break;
+    case "pluginSecret":
+      await setPluginSecret(...command.args);
+      break;
+    case "pluginRun": {
+      const [windowId, plugin, commandId, from, tabId] = command.args;
+      requireCommandWindow(browser.getState(), windowId);
+      await runPluginCommand(plugin, commandId, { source: from, tab: commandPage(browser.getState(), windowId, tabId) });
+      break;
+    }
+
+    case "pluginSelect":
+      await selectPluginItem(...command.args);
       break;
     case "githubStart": {
       if (flows.size >= 8) return invalidCommand("too many account requests");

@@ -12,16 +12,18 @@ import {
   connectBitbucket,
   connectConfluence,
   connectGithub,
+  connectGitlab,
   connectGoogleDrive,
   connectNotion,
   disconnect,
   startGithubDeviceFlow,
   type DeviceSignIn,
 } from "../../../activity/connections";
+import { GITLAB_SITE } from "../../../activity/gitlab";
 import { isMocked } from "../../../activity/net";
-import { SOURCES } from "../../../activity/sources";
+import { liveSource, SOURCES } from "../../../activity/sources";
 import { live, updateConfig, useLive } from "../../../activity/activityStore";
-import type { LiveAccount, LiveSourceId } from "../../../activity/types";
+import type { BuiltInSourceId, LiveAccount } from "../../../activity/types";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { Favicon } from "../../ui/primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
@@ -29,8 +31,9 @@ import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 
-const DESCRIPTIONS: Record<LiveSourceId, string> = {
+const DESCRIPTIONS: Record<BuiltInSourceId, string> = {
   github: "Your open pull requests and the ones waiting for your review, with checks and conflicts.",
+  gitlab: "Your open merge requests and the ones waiting for your review, on GitLab.com or your own site, with pipelines.",
   bitbucket: "Your open pull requests on Bitbucket Cloud, with build status.",
   notion: "Pages recently edited in your workspace.",
   confluence: "Pages you created, edited or watch.",
@@ -55,7 +58,7 @@ export function LiveFoldersPane() {
             <Row
               key={f.id}
               title={f.name}
-              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => liveSource(s).name).join(", ")} · ${statusText(f.id)}`}
             >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
@@ -69,6 +72,7 @@ export function LiveFoldersPane() {
       <SectionHeader title="Pull Requests" />
       <Group>
         <SourceRow id="github" />
+        <SourceRow id="gitlab" />
         <SourceRow id="bitbucket" />
       </Group>
 
@@ -83,13 +87,13 @@ export function LiveFoldersPane() {
   );
 }
 
-function connectedAs(id: LiveSourceId, account: LiveAccount): string {
+function connectedAs(id: BuiltInSourceId, account: LiveAccount): string {
   if (!account.name || account.name === account.login) return account.login;
 
   return id === "github" || id === "gdrive" ? `${account.name} (${account.login})` : account.name;
 }
 
-function SourceRow({ id }: { id: LiveSourceId }) {
+function SourceRow({ id }: { id: BuiltInSourceId }) {
   const account = useLive((s) => s.accounts[id]);
   const source = SOURCES[id];
 
@@ -134,7 +138,7 @@ async function attempt(task: () => Promise<void>): Promise<string | null> {
   }
 }
 
-function ConnectSheet({ id }: { id: LiveSourceId }) {
+function ConnectSheet({ id }: { id: BuiltInSourceId }) {
   const theme = useTheme();
   const source = SOURCES[id];
   const [busy, setBusy] = useState(false);
@@ -155,6 +159,9 @@ function ConnectSheet({ id }: { id: LiveSourceId }) {
   switch (id) {
     case "github":
       body = <GithubConnect busy={busy} run={run} />;
+      break;
+    case "gitlab":
+      body = <GitlabConnect busy={busy} run={run} />;
       break;
     case "bitbucket":
       body = <BitbucketConnect busy={busy} run={run} />;
@@ -257,6 +264,31 @@ function GithubConnect({ busy, run }: ConnectProps) {
       </Field>
       <Actions>
         <Button title="Sign In with GitHub…" disabled={!clientId.trim() || busy} onPress={() => void signIn()} />
+      </Actions>
+    </View>
+  );
+}
+
+function GitlabConnect({ busy, run }: ConnectProps) {
+  const [site, setSite] = useState(live().config.gitlabSite || GITLAB_SITE);
+  const [token, setToken] = useState("");
+  const go = () => void run(() => connectGitlab(site, token));
+
+  return (
+    <View>
+      <Help>
+        Create a personal access token with the read_api scope (your avatar › Edit profile › Access tokens). For a self-managed GitLab, enter its address
+        instead of GitLab.com.
+      </Help>
+      <Field label="Site">
+        <TextField value={site} onChangeText={setSite} placeholder={GITLAB_SITE} />
+      </Field>
+      <Field label="Personal access token">
+        <TextField value={token} onChangeText={setToken} placeholder="glpat-…" secure onSubmit={go} />
+      </Field>
+      <Actions>
+        <Button title="Cancel" onPress={closeSettingsSheet} />
+        <Button title={busy ? "Checking…" : "Connect"} kind="primary" disabled={!site.trim() || !token.trim() || busy} onPress={go} />
       </Actions>
     </View>
   );

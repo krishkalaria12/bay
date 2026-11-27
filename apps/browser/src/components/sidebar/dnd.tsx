@@ -16,7 +16,7 @@ import Animated, {
 } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { withFolderMoveUndo } from "../../lib/folderUndo";
-import { moveGroup, movePinnedFolder, placeTabs } from "../../runtime/organizeActions";
+import { groupTabs, moveGroup, movePinnedFolder, placeTabs } from "../../runtime/organizeActions";
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
@@ -61,7 +61,12 @@ type Drop =
   | { type: "tabs"; placement: TabPlacement }
   | { type: "group"; placement: { pinned: boolean; beforeId?: string | null } }
   | { type: "folder"; folderId: string; beforeId: string | null; parentId: string | null }
+  // Held over another tab's row: the two make a group, in that tab's place.
+  | { type: "merge"; tabId: string }
   | { type: "none" };
+
+// How long a dragged tab rests on another tab's row before letting go there groups them.
+const MERGE_DWELL_MS = 450;
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
 export type Ghost = {
@@ -123,8 +128,12 @@ class DragController {
   private pointer = { x: 0, y: 0 };
   private ghost: Ghost | null = null;
   private gapKey: string | null = null;
-  // The collapsed group the drop goes into.
+  // The collapsed group the drop goes into, or the row a merge makes a group with (its item key).
   private into: string | null = null;
+  // The row the pointer rests on, and since when: held there long enough, the drop groups with it.
+  private resting: { key: string; since: number } | null = null;
+  private restTimer: ReturnType<typeof setTimeout> | undefined;
+  private restSeen = false;
   private dropKey = "";
   private drop: Drop = { type: "none" };
   private scrollTimer: ReturnType<typeof setInterval> | undefined;
@@ -270,6 +279,8 @@ class DragController {
       if (drop.type === "tabs") withFolderMoveUndo(this.windowId, () => placeTabs(ids, drop.placement));
       else if (drop.type === "group" && groupId) withFolderMoveUndo(this.windowId, () => moveGroup(groupId, drop.placement));
       else if (drop.type === "folder") withFolderMoveUndo(this.windowId, () => movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId));
+      // The sidebar's edit history records the new group, so Undo takes it back as it does a menu's Group Tabs.
+      else if (drop.type === "merge") reportBrowserCommand(groupTabs([drop.tabId, ...ids], { pinned: false, inOrder: true }));
     }
 
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
@@ -284,6 +295,8 @@ class DragController {
     this.dropKey = "";
     this.drop = { type: "none" };
     this.into = null;
+    this.resting = null;
+    clearTimeout(this.restTimer);
     this.ghost = null;
     this.measured = false;
     suppressHover(false);
@@ -406,8 +419,36 @@ class DragController {
     return f && { ...f, y: f.y - (this.scrollY - this.startScrollY) };
   }
 
+  /** A drag that can make a group with a row: tabs from the list (not pinned ones, which a group can't hold). */
+  private mergeable() {
+    return this.sources.every((i) => i.kind === "row" && i.section === "list");
+  }
+
+  /** The list row the pointer rests on, in its middle band, once it has rested there long enough. */
+  private restingOn(blocks: Item[], x: number, y: number): Item | null {
+    const row = blocks.find((b) => {
+      const f = b.kind === "row" ? this.at(b.frame) : null;
+
+      return !!f && inside(f, x, y) && Math.abs(y - (f.y + f.h / 2)) < f.h / 4;
+    });
+
+    if (!row) return null;
+    this.restSeen = true;
+
+    if (this.resting?.key !== row.key) {
+      this.resting = { key: row.key, since: Date.now() };
+      clearTimeout(this.restTimer);
+      this.restTimer = setTimeout(() => this.sources.length && this.retarget(), MERGE_DWELL_MS);
+
+      return null;
+    }
+
+    return Date.now() - this.resting.since >= MERGE_DWELL_MS ? row : null;
+  }
+
   private retarget() {
     const { x, y } = this.pointer;
+    this.restSeen = false;
     const source = this.sources[0]!;
     const sourceKeys = new Set(this.sources.map((s) => s.key));
     const state = useBrowser.getState();
@@ -541,14 +582,26 @@ class DragController {
         // A block holding nothing but what's dragged (a group's last member) isn't a place to land before; an empty
         // folder is (its rows would land before the folders that follow, as it shows after them).
         const before = blocks.find((b) => cy(b) > y && (firstTab(b) !== null || (b.kind === "folder" && !b.tabIds.length)));
+        const onto = section === "list" && this.mergeable() ? this.restingOn(blocks, x, y) : null;
         gapKey = before?.key ?? `tail:${section}`;
-        drop =
-          source.kind === "group"
-            ? { type: "group", placement: { pinned, beforeId: firstTab(before) } }
-            : source.kind === "folder"
-              ? { type: "folder", folderId: source.folderId!, beforeId: before?.folderId ?? firstTab(before), parentId: null }
-              : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
+
+        if (onto) {
+          drop = { type: "merge", tabId: onto.tabIds[0]! };
+          into = onto.key;
+          gapKey = null;
+        } else
+          drop =
+            source.kind === "group"
+              ? { type: "group", placement: { pinned, beforeId: firstTab(before) } }
+              : source.kind === "folder"
+                ? { type: "folder", folderId: source.folderId!, beforeId: before?.folderId ?? firstTab(before), parentId: null }
+                : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
       }
+    }
+
+    if (!this.restSeen) {
+      this.resting = null;
+      clearTimeout(this.restTimer);
     }
 
     const key = JSON.stringify(drop);
@@ -679,6 +732,9 @@ export function DragScope({ enabled, children }: { enabled: boolean; children: R
 
 export const useDragController = () => useContext(DragContext) ?? undefined;
 export const useDropInto = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.dropInto);
+/** Whether a drag held on this item will make a group with it (its item key). */
+
+export const useMergeTarget = (key: string) => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.dropInto === key);
 
 /** The item with `key` is being dragged (hidden, its room closing). */
 export const useDragSource = (key: string) => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.sources.has(key));
