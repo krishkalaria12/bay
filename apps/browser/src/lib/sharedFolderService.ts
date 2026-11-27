@@ -17,6 +17,7 @@ import { create } from "zustand";
 import { requestService, hasServiceClient } from "../runtime/serviceClient";
 import type { BrowserStore } from "../store/browserStore";
 import { withoutSidebarUndo } from "../store/sidebarUndo";
+import { switchedOff, useKillSwitches } from "./killSwitches";
 import { linkText, parseLink, planChanges, planSync, type DirectoryLink, type FolderTab, type Known, type LinkFormat } from "./sharedFolders";
 
 // Folders that stay shared (G11; the format and the sync plan are lib/sharedFolders.ts). The coordinator keeps each
@@ -28,7 +29,7 @@ const DOC = "shared-folders.json";
 const SETTLE_MS = 800;
 
 /** What a window shows of a shared folder. */
-export type SharedFolderStatus = { path: string; name: string; status: "synced" | "syncing" | "missing" | "inaccessible"; syncedAt: number | null };
+export type SharedFolderStatus = { path: string; name: string; status: "synced" | "syncing" | "paused" | "missing" | "inaccessible"; syncedAt: number | null };
 
 export const useSharedFolders = create<{ folders: Readonly<Record<string, SharedFolderStatus>> }>(() => ({ folders: {} }));
 
@@ -111,6 +112,9 @@ async function syncOnce(store: BrowserStore, folderId: string) {
   if (!binding) return;
 
   if (!store.getState().pinnedFolders[folderId]) return unbind(folderId, false);
+
+  // Bay turned shared folders off for this release (lib/killSwitches.ts): nothing is read or written until it's lifted.
+  if (switchedOff("sharedFolders")) return setStatus(folderId, { status: "paused" });
   setStatus(folderId, { status: "syncing" });
   const read = await readSharedFolder(binding.path);
 
@@ -202,6 +206,11 @@ export function startSharedFolders(store: BrowserStore): () => void {
     void syncFolder(store, folderId);
   }
 
+  // A kill switch lifted: every folder syncs again.
+  const switches = useKillSwitches.subscribe((k, prev) => {
+    if (k.active !== prev.active) for (const folderId of bindings.keys()) soon(folderId);
+  });
+
   const changes = onSharedFolderChange(({ path }) => {
     for (const [folderId, binding] of bindings) if (binding.path === path) soon(folderId);
   });
@@ -225,6 +234,7 @@ export function startSharedFolders(store: BrowserStore): () => void {
 
   return () => {
     owner = null;
+    switches();
     changes.remove();
     unwatch();
 

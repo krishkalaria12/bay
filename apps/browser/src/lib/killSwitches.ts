@@ -20,6 +20,7 @@ export const SWITCHABLE = {
   askPage: "Ask About This Page",
   sparePage: "Starting the next page early",
   plugins: "Plugins",
+  sharedFolders: "Keeping folders in shared folders",
 } as const;
 
 export type SwitchFeature = keyof typeof SWITCHABLE;

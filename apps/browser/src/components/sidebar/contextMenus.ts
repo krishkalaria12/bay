@@ -520,7 +520,11 @@ function sharedFolderItems(folderId: string) {
   return [
     {
       id: "shared",
-      title: missing ? `Shared Folder Missing: ${shared.name}` : `Shared Folder: ${shared.name}`,
+      title: missing
+        ? `Shared Folder Missing: ${shared.name}`
+        : shared.status === "paused"
+          ? `Shared Folder (Turned Off by Bay): ${shared.name}`
+          : `Shared Folder: ${shared.name}`,
       symbol: missing ? "folder.badge.questionmark" : "person.2",
       children: [
         { id: "shared:show", title: platformWords.revealTitle, symbol: "folder", enabled: !missing },
