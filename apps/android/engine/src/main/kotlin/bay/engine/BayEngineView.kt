@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.net.Uri
@@ -166,8 +167,34 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     set(value) {
       if (field == value) return
       field = value
-      tab?.setBottomControlsHeight(value)
+      tab?.let(::fitBar)
     }
+
+  /**
+   * How much of the bar stays as the page scrolls it away, in pixels: the room of the pill it shrinks to. The page ends
+   * that far above the view's foot, always, so what it pins to its bottom rests above the pill instead of under it;
+   * Chromium's toolbar is the rest of the bar, the part that slides away. The page's size never changes while it
+   * scrolls (Chromium's own minimum height would need the page resized as the bar moves, which shook it).
+   */
+  var barMinHeight = 0
+    set(value) {
+      if (field == value) return
+      field = value
+      tab?.let(::fitBar)
+    }
+
+  /** The part of the bar that slides away with the page: all of it above the pill's room. */
+  private val slidingBar get() = (barHeight - barMinHeight).coerceAtLeast(0)
+
+  private fun fitBar(tab: BayTab) {
+    tab.setBottomControlsHeight(slidingBar)
+    (tab.view.layoutParams as? LayoutParams)?.let { params ->
+      if (params.bottomMargin != barMinHeight) {
+        params.bottomMargin = barMinHeight
+        tab.view.layoutParams = params
+      }
+    }
+  }
 
   /** Brings the bar back with the page's room for it, as a new page does. */
   fun showBar() {
@@ -203,6 +230,16 @@ class BayEngineView(context: Context) : FrameLayout(context) {
 
   // MARK: The tab
 
+  /** Pages are told the look the app has (`prefers-color-scheme`): dark in night mode. */
+  private fun prefersDark(configuration: Configuration) =
+    configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
+  /** Night mode turned on or off while Bay runs (the activity keeps itself through it): pages hear it at once. */
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    tab?.setPrefersDark(prefersDark(newConfig))
+  }
+
   private fun createTab() {
     val activity = activityFor(context) ?: Engine.host?.currentActivity
     if (activity == null) {
@@ -220,9 +257,10 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     created.view.importantForAccessibility = accessibility()
     created.setDesktopMode(desktopMode)
     created.setForceDark(forceDark)
+    created.setPrefersDark(prefersDark(activity.resources.configuration))
     created.setVisible(!isSuspended)
-    created.setBottomControlsHeight(barHeight)
     addView(created.view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    fitBar(created)
     if (isActive) {
       lastActive = this
       created.showPage()
@@ -363,9 +401,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     }
     current.captureSnapshot(EDGE_SAMPLE_WIDTH) { bitmap ->
       val readable = bitmap?.let { if (it.config == android.graphics.Bitmap.Config.HARDWARE) it.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else it }
-      // The picture runs to the view's foot, under the room the page leaves the bar while it shows (blank there): the
-      // page's own bottom edge is that far above it.
-      val room = readable?.let { (barHeight * (1 - barHidden) * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
+      // The picture runs to the page's foot, under the room it leaves the sliding bar while that shows (blank there):
+      // the page's own bottom edge is that far above it.
+      val room = readable?.let { (slidingBar * (1 - barHidden) * it.width / width.coerceAtLeast(1)).toInt() } ?: 0
       val edges = readable?.takeIf { it.height - room >= 4 }?.let { edgeColor(it, 0) to edgeColor(it, it.height - room - 2) }
       if (readable !== bitmap) readable?.recycle()
       bitmap?.recycle()
@@ -639,8 +677,9 @@ class BayEngineView(context: Context) : FrameLayout(context) {
     }
 
     override fun onBottomControlsChanged(offset: Int) {
-      if (disposed || barHeight <= 0) return
-      val hidden = (offset.toFloat() / barHeight).coerceIn(0f, 1f)
+      if (disposed || slidingBar <= 0) return
+      // Gone as far as the sliding part goes: the bar is down to its pill.
+      val hidden = (offset.toFloat() / slidingBar).coerceIn(0f, 1f)
       // The bar goes only with the person's own scrolling. A new page's first frames report the controls hidden until
       // the engine brings them back, which slid the bar away and in again mid-load; a page scrolling itself is ignored too.
       if (hidden == barHidden || (hidden > barHidden && !touchedLately())) return
