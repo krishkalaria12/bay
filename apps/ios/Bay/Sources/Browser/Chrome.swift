@@ -229,7 +229,7 @@ struct BrowserBar: View {
   private static let segmentWidth: CGFloat = 64
   private static let searchWidth: CGFloat = 136
   private static let capsuleWidth = segmentWidth * 2 + searchWidth + 2
-  private static let miniSize = CGSize(width: 96, height: 38)
+  static let miniSize = CGSize(width: 96, height: 38)
 
   /// Over a page or the start page the bar is one capsule: tabs, search, and more (settings on the start page), split
   /// by thin lines. Scrolled down a page it shrinks to a small pill with the site's icon and the tabs' count, and grows

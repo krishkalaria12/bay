@@ -23,10 +23,12 @@ struct BrowserScreen: View {
   private static let switcherFrom: CGFloat = 0.94
 
   /// What the floating bar covers at the bottom of a page: from the screen's edge up past its top, with a little room.
-  /// It stays put while the bar scrolls away: a change lays the page out again, and mid-scroll that shook the page.
-  /// Only a fullscreen site, which has no bar, gets the whole screen.
+  /// Shrunk to its pill it covers only the pill, so what a page pins to its bottom (YouTube's tabs) comes down to rest
+  /// just above it, never under it. It changes once as the bar shrinks or grows, not with every scroll: a change lays
+  /// the page out again. Only a fullscreen site, which has no bar, gets the whole screen.
   private var coveredBottom: CGFloat {
-    browser.fullscreen ? 0 : max(safeBottom, Space.md) + Space.xs + Self.barHeight + Space.sm
+    guard !browser.fullscreen else { return 0 }
+    return max(safeBottom, Space.md) + Space.xs + (browser.barShrunk ? BrowserBar.miniSize.height : Self.barHeight) + Space.sm
   }
 
   var body: some View {
