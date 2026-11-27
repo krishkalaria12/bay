@@ -110,19 +110,23 @@ export function carrySignIns(from: PageEngine, to: PageEngine, profile: string, 
 
 // MARK: Storage
 
-// localStorage has no store-to-store copy in either engine: it's read by script from the page as it leaves and written
-// into the new page once that has committed (lib/pageEngines.ts engineViewLoaded).
+// Web storage has no store-to-store copy in either engine: localStorage and the tab's sessionStorage are read by
+// script from the page as it leaves and written into the new page once that has committed (lib/pageEngines.ts
+// engineViewLoaded).
 
-const StorageSchema = v.array(v.tuple([v.string(), v.string()]));
+const EntriesSchema = v.array(v.tuple([v.string(), v.string()]));
+const StorageSchema = v.object({ local: EntriesSchema, session: EntriesSchema });
 const MAX_STORAGE_CHARS = 2 * 1024 * 1024;
 
-export type CarriedStorage = { origin: string; entries: [string, string][] };
+export type PageStorage = v.InferOutput<typeof StorageSchema>;
 
-/** The script that reads a page's localStorage, as JSON entries (null when it's too large to carry or unreadable). */
-export const READ_STORAGE = `(() => { try { const s = JSON.stringify(Object.entries(localStorage)); return s.length > ${MAX_STORAGE_CHARS} ? null : s; } catch { return null; } })()`;
+export type CarriedStorage = { origin: string; entries: PageStorage };
+
+/** The script that reads a page's storage, as JSON entries of each (null when it's too large to carry or unreadable). */
+export const READ_STORAGE = `(() => { try { const s = JSON.stringify({ local: Object.entries(localStorage), session: Object.entries(sessionStorage) }); return s.length > ${MAX_STORAGE_CHARS} ? null : s; } catch { return null; } })()`;
 
 /** The entries a page's READ_STORAGE reply holds, or null. */
-export function storageFrom(reply: string | null | undefined): [string, string][] | null {
+export function storageFrom(reply: string | null | undefined): PageStorage | null {
   if (!reply) return null;
 
   try {
@@ -134,6 +138,6 @@ export function storageFrom(reply: string | null | undefined): [string, string][
   }
 }
 
-/** The script that writes carried entries into the new page's localStorage, leaving its other keys alone. */
-export const writeStorageScript = (entries: [string, string][]) =>
-  `(() => { try { for (const [k, v] of ${JSON.stringify(entries)}) if (localStorage.getItem(k) !== v) localStorage.setItem(k, v); } catch {} })()`;
+/** The script that writes carried entries into the new page's storage, leaving its other keys alone. */
+export const writeStorageScript = (storage: PageStorage) =>
+  `(() => { const put = (area, entries) => { try { for (const [k, v] of entries) if (area.getItem(k) !== v) area.setItem(k, v); } catch {} }; try { put(localStorage, ${JSON.stringify(storage.local)}); } catch {} try { put(sessionStorage, ${JSON.stringify(storage.session)}); } catch {} })()`;

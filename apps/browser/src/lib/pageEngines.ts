@@ -175,7 +175,7 @@ async function carryPage(t: Tab, engine: PageEngine) {
     const origin = siteOf(pageUrl(t)) ?? "";
     const storage = view ? storageFrom(await view.evaluate<string>(READ_STORAGE).catch(() => null)) : null;
 
-    if (storage?.length) carriedStorage.set(t.id, { origin, entries: storage, engine });
+    if (storage && (storage.local.length || storage.session.length)) carriedStorage.set(t.id, { origin, entries: storage, engine });
     await Promise.race([carrySignIns(from, engine, profile, site, origin), new Promise((done) => setTimeout(done, CARRY_DEADLINE_MS))]);
   }
 

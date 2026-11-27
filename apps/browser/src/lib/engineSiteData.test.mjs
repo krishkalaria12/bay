@@ -35,18 +35,25 @@ test("cookie identity is its name, domain (any case) and path", () => {
 });
 
 test("storage carries as entries, and the write leaves the page's other keys alone", () => {
-  assert.deepEqual(storageFrom('[["a","1"],["b","2"]]'), [
-    ["a", "1"],
-    ["b", "2"],
-  ]);
+  assert.deepEqual(storageFrom('{"local":[["a","1"],["b","2"]],"session":[["tab","3"]]}'), {
+    local: [
+      ["a", "1"],
+      ["b", "2"],
+    ],
+    session: [["tab", "3"]],
+  });
+  assert.equal(storageFrom('[["a","1"]]'), null);
   assert.equal(storageFrom('{"a":1}'), null);
   assert.equal(storageFrom("not json"), null);
   assert.equal(storageFrom(null), null);
   const store = new Map([["keep", "x"]]);
-  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const session = new Map();
+  const area = (map) => ({ getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) });
+  globalThis.localStorage = area(store);
+  globalThis.sessionStorage = area(session);
 
   try {
-    new Function(writeStorageScript([["a", "1"]]))();
+    new Function(writeStorageScript({ local: [["a", "1"]], session: [["tab", "3"]] }))();
     assert.deepEqual(
       [...store],
       [
@@ -54,8 +61,10 @@ test("storage carries as entries, and the write leaves the page's other keys alo
         ["a", "1"],
       ],
     );
+    assert.deepEqual([...session], [["tab", "3"]]);
   } finally {
     delete globalThis.localStorage;
+    delete globalThis.sessionStorage;
   }
 });
 
