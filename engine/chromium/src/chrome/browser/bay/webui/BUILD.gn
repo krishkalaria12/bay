@@ -364,12 +364,10 @@ if (is_linux) {
   }
 
   test("autostart_linux_unittests") {
-    sources = [
-      "autostart_linux_unittest.cc",
-      "host_context.cc",
-    ]
+    sources = [ "autostart_linux_unittest.cc" ]
     deps = [
       ":autostart_linux",
+      ":impl",
       "//base/test:test_support",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/browser_window",
@@ -396,12 +394,10 @@ if (is_linux) {
   }
 
   test("app_services_linux_unittests") {
-    sources = [
-      "app_services_linux_unittest.cc",
-      "host_context.cc",
-    ]
+    sources = [ "app_services_linux_unittest.cc" ]
     deps = [
       ":app_services_linux",
+      ":impl",
       "//base/test:test_support",
       "//chrome/browser:platform_util_internal",
       "//chrome/browser/ui:test_support",
@@ -443,11 +439,9 @@ if (is_win || is_linux) {
 
 if (is_linux) {
   test("shell_files_unittests") {
-    sources = [
-      "host_context.cc",
-      "shell_files_unittest.cc",
-    ]
+    sources = [ "shell_files_unittest.cc" ]
     deps = [
+      ":impl",
       ":shell_files",
       "//base/test:test_support",
       "//chrome/browser/ui/browser_window",
@@ -979,11 +973,9 @@ if (is_linux) {
   }
 
   test("sync_ui_linux_unittests") {
-    sources = [
-      "host_context.cc",
-      "sync_ui_linux_unittest.cc",
-    ]
+    sources = [ "sync_ui_linux_unittest.cc" ]
     deps = [
+      ":impl",
       ":sync_ui_linux",
       ":webui",
       "//base/test:test_support",
