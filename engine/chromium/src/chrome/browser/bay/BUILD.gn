@@ -159,7 +159,7 @@ source_set("bay") {
   if (is_mac) {
     sources += [
       "nn_downloads_mac.mm",
-      "nn_external_apps.mm",
+      "nn_external_apps_mac.mm",
       "pip/nn_pip_mac.mm",
     ]
 
