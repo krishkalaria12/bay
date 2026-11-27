@@ -537,7 +537,7 @@ private val SEGMENT_WIDTH = 64.dp
 private val SEARCH_WIDTH = 136.dp
 private val CAPSULE_WIDTH = SEGMENT_WIDTH * 2 + SEARCH_WIDTH + 2.dp
 private val MINI_WIDTH = 88.dp
-private val MINI_HEIGHT = 36.dp
+internal val MINI_HEIGHT = 36.dp
 
 /**
  * Over a page or the start page, the bar is one capsule: tabs, search, and more (settings on the start page), split by
