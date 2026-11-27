@@ -1135,14 +1135,16 @@
                   <td>G15</td>
                   <td>
                     Done in source, all three platforms: Settings › General › Spelling turns spell checking on or off in every space; Windows and Linux pick
-                    languages (<code>spellcheck.dictionaries</code>), macOS uses its own.
+                    languages (<code>spellcheck.dictionaries</code>) and edit Your Words (each profile's custom dictionary, <code>nn_spelling.cc</code>);
+                    macOS uses its own.
                   </td>
                 </tr>
                 <tr>
                   <td>G2</td>
                   <td>
                     Done in source, Mac only: <code>BayAskPage</code> (<code>AskPageModule.swift</code>, FoundationModels, weakly linked) and the Ask card over
-                    the page, opened from the command bar's Ask About This Page. The page's text (first 9,000 characters) goes only to the on-device model.
+                    the page, opened from the command bar's Ask About This Page or the Tabs menu (⌥⌘A). The page's text goes only to the on-device model;
+                    a long one is read a part at a time (9,000 characters a part, five at most) and answered from the model's notes.
                   </td>
                 </tr>
                 <tr>
@@ -1174,7 +1176,7 @@
                     <code>apps/web/public/switches.json</code>, signed by <code>scripts/release/sign-switches.mjs</code>) and matches each switch's platforms,
                     releases and end date; the Mac reaches it through <code>NNCoreSwitches</code>, Windows and Linux through <code>engine_services.cc</code>.
                     The app keeps the last feed it accepted and refuses an older one (<code>lib/killSwitches.ts</code>, tested), and can switch off WebKit,
-                    sign-in carrying and Ask About This Page. Settings › Advanced lists what's off and why.
+                    sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. Settings › Advanced lists what's off and why.
                   </td>
                 </tr>
                 <tr>
@@ -1189,7 +1191,8 @@
                   <td>
                     GitLab done, all three platforms: a GitLab source for pull request live folders, on GitLab.com or a self-managed site, with a personal
                     access token (<code>activity/gitlab.ts</code>, tested). It lists your open merge requests and the ones waiting for your review, each with
-                    its head pipeline, and says which were merged, closed or reviewed once they leave.
+                    its head pipeline, line counts and who approved it (one GraphQL query a refresh), and says which were merged, closed or reviewed once
+                    they leave.
                   </td>
                 </tr>
                 <tr>
@@ -1272,62 +1275,57 @@
           <h3 id="known-gaps">Known gaps</h3>
           <ul class="prose">
             <li>
-              Nothing native is built yet: the engine (nncore, the Mac's Chromium) needs a rebuild for <code>nn_cookies_site</code> and
-              <code>nn_cookies_apply</code>, and the app for the Swift changes. The C++ is syntax checked against the local Chromium tree.
+              Nothing native is built yet. The engine (nncore, the Mac's Chromium) needs a rebuild for every engine change on this branch, and the Mac app
+              a <code>pod install</code> for its new modules (<code>BayAskPage</code>, <code>BaySharedFolders</code>, <code>BayPlugins</code>). The C++
+              is syntax checked against the local Chromium tree: the shared code as Mac code, and the Windows and Linux WebUI code as Linux code (the
+              tree's Linux sysroot, with <code>native_host.mojom</code>'s bindings generated for the check), which now covers
+              <code>native_host.cc</code>, <code>engine_services.cc</code>, <code>runtime_state.cc</code>, <code>shell_ui.cc</code>,
+              <code>shared_folders.cc</code>, <code>content_blocker.cc</code> and <code>plugins.cc</code>. Windows-only files
+              (<code>shared_folders_trash_win.cc</code> and the rest) aren't compiled anywhere yet. The Swift is parsed, and type-checked against
+              stand-ins for Expo where it's new (<code>PluginsModule.swift</code>, <code>AskPageModule.swift</code>, with the real FoundationModels);
+              the first Mac build may still need small fixes.
             </li>
-            <li>A mode change asks about unsaved work per tab, when each tab moves, rather than once with a list of tabs.</li>
-            <li>A background tab a settings change left for later forgets the move if Bay quits first; it moves on its next settings change or pick.</li>
-            <li>The sign-in ledger lives for the app's run: after a relaunch, the first switch of a site copies cookies but carries no sign-outs.</li>
             <li>
-              Storage carries only <code>localStorage</code> of the page's own origin, written after the new page commits, so a page that reads it during load
-              sees it on the next load.
+              Carried storage (<code>localStorage</code> and the tab's <code>sessionStorage</code>, of the page's own origin) is written after the new
+              page commits, so a page that reads it during load sees it on the next load. IndexedDB and other stores don't carry.
             </li>
-            <li>No <em>Reopen in…</em> item in the app menu yet; the tab menu, Site Controls and the command bar have it.</li>
-            <li>Deceptive-site warnings apply to WebKit pages opened after the setting changes.</li>
             <li>WebKit pages show no blocked count in Site Controls: content rules count nothing.</li>
-            <li>The Objective-C++ and Swift for E5–E7 are parse-checked only; the first Mac build may need small fixes.</li>
             <li>
-              G3's Windows and Linux dispatch (<code>engine_services.cc</code>) isn't syntax checked on the Mac (it needs generated mojom headers);
-              <code>content_blocker.cc</code> is.
-            </li>
-            <li>
-              Spelling has no custom dictionary editor yet, and on Linux a language's dictionary downloads from Google's servers the first time, which the
-              ungoogled engine may block.
-            </li>
-            <li>
-              Ask on Page needs <code>pod install</code> before the Mac build, so Expo registers the new <code>BayAskPage</code> module. It has no keyboard
-              shortcut or menu item yet, and long pages are cut to fit the model's context.
+              On Linux a spelling language's dictionary downloads from Google's servers the first time, which the ungoogled engine may block. The Mac's
+              spelling uses its own learned words, so Your Words is on Windows and Linux.
             </li>
             <li>
               G1's agent access limits what an agent's MCP tools reach; it isn't a sandbox. An agent that can run programs as you can still read the bay
-              command's own token and run <code>bay exec</code>. A space-limited agent's <code>open_tab</code> works only when the new tab lands in one of its
-              spaces (it opens in the front window's). The engine needs a rebuild for the policy changes; they are syntax checked only.
+              command's own token and run <code>bay exec</code>. A space-limited agent's new tab opens in one of its spaces now, even when another
+              space's window is in front (<code>g_bay_devtools_target_context</code>, in the two DevTools patches); with none of them open, it's
+              refused.
             </li>
             <li>
               G16's feed signing key is in <code>~/Documents/bay-switches-key</code>, not in CI, so a switch is signed on the Mac and goes out with the website
-              deploy. Only three features can be switched off so far; a switch for anything else shows in Settings but turns nothing off. The Windows and Linux
-              <code>checkSwitches</code> dispatch is unbuilt, like G3's.
+              deploy. Six features can be switched off: WebKit, sign-in carrying, Ask About This Page, the spare page, plugins and shared folders. A
+              switch for anything else shows in Settings but turns nothing off.
             </li>
-            <li>G5 groups list rows only: a tab held on a pinned row, an Essential or a row already in a group moves as before.</li>
             <li>
-              G9's natives are unbuilt: the engine needs a rebuild for <code>webui/plugins.cc</code> (syntax checked) and the WebUI registration in
-              <code>chromium-bay-webui-window.patch</code> (applies to the local tree); the Mac needs <code>pod install</code> for the new
-              <code>BayPlugins</code> module, whose Swift is type-checked against stand-ins for Expo's only. The <code>sandbox</code> directive and
-              subresource loads from the opaque origin haven't been tried in a running WebKit or Chromium. Plugins add no menu bar items and no
-              page context menu items; their toolbar buttons don't show in Site Controls, so with the address bar in the sidebar and the toolbar
-              hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private
+              G5's merge makes a group from list rows; a group holds list tabs only, so pinned rows and Essentials aren't offered it. Dropping a tab
+              among an open group's rows adds it to that group, as before.
+            </li>
+            <li>
+              G9's sandbox (the CSP <code>sandbox</code> directive and subresource loads from its opaque origin) hasn't been tried in a running WebKit or
+              Chromium. Plugins add no menu bar items and no page context menu items; their toolbar buttons don't show in Site Controls, so with the
+              toolbar hidden they're reached from the command bar. A sidebar view is a list, not a page of the plugin's own. Plugins can't see private
               windows, history or bookmarks, and a decide hook sees only links from other apps, not navigations inside Bay. Plugin sandboxes in a
               hidden document may have their timers slowed by the engine.
             </li>
             <li>
-              G7's GitLab items have no line counts, and approval shows only as required, not who approved. Plugins can add sources now (G9); Outlook, Notion,
-              Confluence, Figma and Linear previews stay deferred.
+              G7's GitLab items get line counts and who approved them from one GraphQL query each refresh; a site whose GraphQL is off shows them without.
+              Outlook, Notion, Confluence, Figma and Linear previews stay deferred.
             </li>
             <li>
-              G6 has no decide hooks yet: the bay command's token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code> domain, so a
-              hook can't hold, rewrite or stop a navigation or pick its space. Window focus and finished downloads aren't events the bay command can see either
-              (no focus event over DevTools; <code>Browser.setDownloadBehavior</code> isn't allowed). Scheduled hooks and command bar results from a hook aren't
-              built; a hook runs while <code>bay on</code> does, so keeping one running is the system's job (launchd, systemd, Task Scheduler).
+              G6 has no decide hooks for the bay command: its token policy (<code>nn_cli_token_policy_methods.cc</code>) allows no <code>Fetch</code>
+              domain, so a hook can't hold, rewrite or stop a navigation. Plugins can decide where links from other apps open (G9). Window focus and
+              finished downloads aren't events the bay command can see either (no focus event over DevTools; <code>Browser.setDownloadBehavior</code>
+              isn't allowed). Scheduled hooks and command bar results from a hook aren't built; a hook runs while <code>bay on</code> does, so keeping
+              one running is the system's job (launchd, systemd, Task Scheduler).
             </li>
             <li>
               G10's AppleScript calls weren't run against a live Bay (that would read the tabs and ask for Automation access); they follow
@@ -1340,19 +1338,25 @@
             </li>
             <li>
               G13 warms a renderer, not a whole page: the tab's web view and its WebContents are still made when the page opens. A pre-made page the next tab
-              adopts would need the engine's adoption to take one; it isn't measured yet either, and the engine needs a rebuild for the call.
+              adopts would need the engine's adoption to take one; it isn't measured yet either.
             </li>
             <li>
               G11 keeps one level: a shared folder's subfolders, and the pinned folder's own subfolders, aren't synced. A Finder-made binary
-              <code>.webloc</code> reads on the Mac only. Windows and Linux delete a removed link (the Mac moves it to the Trash). The
-              <code>BayShell</code>/<code>BaySharedFolders</code> WebUI dispatch in <code>native_host.cc</code> isn't syntax checked here (it needs a generated
-              mojom header); <code>shared_folders.cc</code>, <code>shell_ui.cc</code> and <code>runtime_state.cc</code> are, and the Swift is parse-checked.
-              <code>pod install</code> registers the new Mac module.
+              <code>.webloc</code> reads on the Mac only. On Linux a removed link goes to the home folder's Trash, so one on another disk is deleted.
             </li>
-            <li>
-              Fixed with G11: Windows and Linux windows now see the kill switches, coding agents and shared folders (mirrored through the service state), and
-              the native service checks accept GitLab, which G7 had missed.
-            </li>
+            <li>K2 (filling from the Passwords app's AutoFill panel) still waits on a spike in a real Mac build; the Passwords app isn't offered meanwhile.</li>
+          </ul>
+          <h3 id="gaps-closed">Closed in the gaps pass</h3>
+          <ul class="prose">
+            <li>A settings change that moves pages on screen asks once, naming the pages with unsaved work, instead of once a tab.</li>
+            <li>A background tab's deferred move is kept in <code>engine-moves.json</code>, so it survives a quit: the tab takes its engine when it's next shown.</li>
+            <li>The sign-in ledger is kept in <code>engine-sign-ins.json</code> (cookie names, never values), so a sign-out carries after a relaunch.</li>
+            <li>The Mac's Tabs menu has Reopen in WebKit/Chromium and Ask About This Page… (⌥⌘A).</li>
+            <li>Deceptive-site warnings reach open WebKit pages too.</li>
+            <li>Settings › General › Spelling › Your Words edits each space's custom dictionary (<code>nn_spell_words</code>, <code>nn_spell_word</code>).</li>
+            <li>Ask About This Page reads a long page a part at a time (five at most) and answers from its notes, instead of cutting the page.</li>
+            <li>Windows sends a removed shared link to the Recycle Bin, Linux to the Trash.</li>
+            <li>Earlier: Windows and Linux windows see the kill switches, coding agents and shared folders, and the native service checks accept GitLab.</li>
           </ul>
         </section>
       </main>
