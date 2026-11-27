@@ -1,0 +1,96 @@
+# The native mobile apps (docs/mobile-native-plan.html): the shared Rust core's checks, the Android app's debug build
+# and the iOS app's simulator build, only when they change. The iOS job runs on macOS, whose minutes cost more.
+name: Mobile native
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/mobile-core/**"
+      - "packages/mobile-pagescripts/**"
+      - "apps/ios/**"
+      - "apps/android/**"
+      - ".github/workflows/mobile-native.yml"
+  pull_request:
+    paths:
+      - "packages/mobile-core/**"
+      - "packages/mobile-pagescripts/**"
+      - "apps/ios/**"
+      - "apps/android/**"
+      - ".github/workflows/mobile-native.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-native-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Rust core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/mobile-core
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --locked
+      # BayTokens.swift and BayTokens.kt are written from design/tokens.json and icons.json.
+      - name: Design tokens are current
+        run: node scripts/build-design.mjs --check
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install the NDK and cargo-ndk
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.1.12297006" >/dev/null
+          cargo install cargo-ndk --locked
+      # Bay's Chromium (bay-engine.aar), the version apps/android/engine-pin.json pins.
+      - name: Install the engine
+        run: node apps/android/scripts/fetch-engine.mjs
+      - name: Build
+        working-directory: apps/android
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+  ios:
+    name: iOS app
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+      - name: Install Tuist
+        run: brew install --cask tuist
+      - name: Generate the project
+        working-directory: apps/ios
+        run: scripts/generate.sh
+      - name: Build
+        working-directory: apps/ios
+        run: >-
+          xcodebuild -workspace Bay.xcworkspace -scheme Bay -configuration Debug
+          -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData
+          CODE_SIGNING_ALLOWED=NO build -quiet

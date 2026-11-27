@@ -1,7 +1,9 @@
 # The order Bay's changes go into the CEF/Chromium tree.
 #
-# Every step has an explicit platform: all, mac, win, linux, or a comma list (win,linux).
-# Select with series.py --platform after the command.
+# Every step has an explicit platform: all, mac, win, linux, android, or a comma list (win,linux). `all` means every
+# desktop platform; Android's engine (docs/android-chromium-plan.html) takes only the steps that name it, so a desktop
+# patch never reaches it by default. Select with series.py --platform after the command.
+#
 #   cef <patch>       a patch to CEF's own tree (chromium/src/cef), step 2, before CEF's gclient hook
 #   chromium <patch>  a patch to chromium/src, after ungoogled-chromium and domain substitution (step 4)
 #   layer <dir>       our own files, copied in by <dir>/apply.sh (engine/<layer>/src mirrors chromium/src)
@@ -115,5 +117,6 @@ chromium win,linux chromium-webui-tests-ungoogled.patch
 # Chrome's test support, for what CEF and ungoogled-chromium change under it: neither builds it.
 chromium win,linux chromium-test-support-upstream-api.patch
 
+layer mac,win,linux,android engine/shared
 layer all engine/chromium
 layer all engine/nncore

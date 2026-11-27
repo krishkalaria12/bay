@@ -1,0 +1,10 @@
+[package]
+name = "uniffi-bindgen"
+version = "0.1.0"
+description = "UniFFI's binding generator at the core's UniFFI version, so the generated Swift and Kotlin always match it."
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+uniffi = { workspace = true, features = ["cli"] }

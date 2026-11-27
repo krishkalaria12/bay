@@ -241,6 +241,7 @@ export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[na
 
 // The platform's native helpers: a test runs without a native host, so the fallback answers.
 export const nativeRandomUUID = (fallback) => fallback();
+export const nativeRandomBytes = (_count, fallback) => fallback();
 export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 
 // Saved passwords, one store per simulated device (sync tests).

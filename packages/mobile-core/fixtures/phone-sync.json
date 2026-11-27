@@ -1,0 +1,281 @@
+{
+ "phone": {
+  "spaces": [
+   {
+    "id": "personal",
+    "name": "Personal",
+    "color": "blue",
+    "icon": "🏠"
+   },
+   {
+    "id": "sync-work",
+    "name": "Work",
+    "color": "violet",
+    "icon": "💼"
+   }
+  ],
+  "bookmarks": {
+   "personal": {
+    "folder-1": {
+     "kind": "folder",
+     "id": "folder-1",
+     "parentId": "bay-sync-bar",
+     "title": "Work",
+     "children": [
+      "link-1"
+     ],
+     "addedAt": 1
+    },
+    "link-1": {
+     "kind": "url",
+     "id": "link-1",
+     "parentId": "folder-1",
+     "title": "Docs",
+     "url": "https://docs.example/",
+     "addedAt": 2
+    },
+    "link-2": {
+     "kind": "url",
+     "id": "link-2",
+     "parentId": "bookmarks",
+     "title": "News",
+     "url": "https://news.example/",
+     "addedAt": 3
+    },
+    "bookmarks": {
+     "kind": "folder",
+     "id": "bookmarks",
+     "parentId": null,
+     "title": "",
+     "children": [
+      "bay-sync-bar",
+      "link-2"
+     ],
+     "addedAt": 0
+    },
+    "bay-sync-bar": {
+     "kind": "folder",
+     "id": "bay-sync-bar",
+     "parentId": "bookmarks",
+     "title": "Bookmarks bar",
+     "children": [
+      "folder-1"
+     ],
+     "addedAt": 0
+    }
+   }
+  },
+  "history": [
+   {
+    "spaceId": "personal",
+    "url": "https://phone.example/",
+    "title": "On the phone",
+    "favicon": null,
+    "visits": 1,
+    "lastVisit": 1794830399000
+   },
+   {
+    "url": "https://visited.example/",
+    "title": "Visited",
+    "favicon": null,
+    "visits": 3,
+    "lastVisit": 1794830340000,
+    "spaceId": "personal"
+   }
+  ],
+  "pinnedSites": [
+   {
+    "id": "essential-1",
+    "url": "https://tube.example/",
+    "title": "Tube",
+    "favicon": null,
+    "spaceId": "personal",
+    "kind": "essential",
+    "folderId": null
+   },
+   {
+    "id": "row-1",
+    "url": "https://songs.example/",
+    "title": "Songs",
+    "favicon": null,
+    "spaceId": "personal",
+    "kind": "row",
+    "folderId": "music"
+   },
+   {
+    "id": "row-2",
+    "url": "https://notes.example/",
+    "title": "Notes",
+    "favicon": null,
+    "spaceId": "personal",
+    "kind": "row",
+    "folderId": null
+   },
+   {
+    "id": "gmail",
+    "url": "https://mail.example/",
+    "title": "Mail",
+    "favicon": null,
+    "spaceId": "sync-work",
+    "kind": "essential",
+    "folderId": null
+   },
+   {
+    "id": "phone-pin",
+    "url": "https://phone.example/",
+    "title": "On the phone",
+    "favicon": null,
+    "spaceId": "personal",
+    "kind": "essential",
+    "folderId": null
+   }
+  ],
+  "folders": [
+   {
+    "id": "music",
+    "spaceId": "personal",
+    "name": "Music"
+   }
+  ],
+  "links": {
+   "personal": "personal",
+   "sync-work": "work"
+  },
+  "profile": "personal"
+ },
+ "computerSees": {
+  "app": {
+   "dev:mac": {
+    "n": "Krish's MacBook"
+   },
+   "prof:personal": {
+    "n": "Personal",
+    "c": "blue",
+    "i": "🏠",
+    "d": true
+   },
+   "prof:work": {
+    "n": "Work",
+    "c": "purple",
+    "i": "💼"
+   },
+   "dev:phone": {
+    "n": "Krish's iPhone"
+   }
+  },
+  "p:work": {
+   "pin:t:gmail": {
+    "g": null,
+    "u": "https://mail.example/",
+    "t": null,
+    "i": null,
+    "ti": "Mail",
+    "pos": "V"
+   },
+   "tabs:phone": {
+    "n": "Krish's iPhone",
+    "tabs": []
+   }
+  },
+  "p:personal": {
+   "tabs:mac": {
+    "n": "Krish's MacBook",
+    "tabs": [
+     {
+      "u": "https://bay.example/",
+      "t": "Bay"
+     }
+    ]
+   },
+   "bm:folder-1": {
+    "k": "f",
+    "p": "bar",
+    "t": "Work",
+    "a": 1,
+    "pos": "V"
+   },
+   "bm:link-1": {
+    "k": "u",
+    "p": "folder-1",
+    "t": "Docs",
+    "u": "https://docs.example/",
+    "a": 2,
+    "pos": "V"
+   },
+   "bm:link-2": {
+    "k": "u",
+    "p": "other",
+    "t": "News",
+    "u": "https://news.example/",
+    "a": 3,
+    "pos": "V"
+   },
+   "h:https://visited.example/": {
+    "t": "Visited",
+    "n": 3,
+    "vt": [
+     1794830340000
+    ]
+   },
+   "pin:t:essential-1": {
+    "g": null,
+    "u": "https://tube.example/",
+    "t": null,
+    "i": null,
+    "ti": "Tube",
+    "pos": "V"
+   },
+   "pin:g:music": {
+    "n": "Music",
+    "i": null,
+    "c": null,
+    "pos": "V",
+    "f": true
+   },
+   "pin:t:row-1": {
+    "g": "music",
+    "u": "https://songs.example/",
+    "t": "Songs",
+    "i": null,
+    "ti": "Songs",
+    "pos": "V",
+    "r": true,
+    "o": "V"
+   },
+   "pin:t:row-2": {
+    "g": null,
+    "u": "https://notes.example/",
+    "t": null,
+    "i": null,
+    "ti": "Notes",
+    "pos": "X",
+    "r": true,
+    "o": "X"
+   },
+   "tabs:phone": {
+    "n": "Krish's iPhone",
+    "tabs": [
+     {
+      "u": "https://phone.example/",
+      "t": "On the phone"
+     }
+    ]
+   },
+   "h:https://phone.example/": {
+    "t": "On the phone",
+    "n": 1,
+    "vt": [
+     1794830399000
+    ]
+   },
+   "pin:t:phone-pin": {
+    "g": null,
+    "u": "https://phone.example/",
+    "t": null,
+    "i": null,
+    "ti": "On the phone",
+    "pos": "m"
+   }
+  }
+ }
+}

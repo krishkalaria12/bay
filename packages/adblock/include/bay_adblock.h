@@ -96,7 +96,8 @@ char *bay_blocker_list_counts(const BayBlocker *blocker);
 bool bay_blocker_use_resources(const BayBlocker *blocker, const char *json);
 
 // Mobile: the engine cached at `cache` for `version`, or built from `count` list files and cached, with the resources
-// file (may be NULL) loaded. platform: 0 desktop, 1 Android, 2 iOS. NULL when the lists can't be read.
+// file (may be NULL) loaded. platform: 0 desktop, 2 iOS, 3 Android Chromium (1 was the system WebView). NULL when the
+// lists can't be read.
 BayBlocker *bay_blocker_load(const char *const *files, size_t count, const char *cache, const char *version,
                              const char *resources, uint8_t platform);
 

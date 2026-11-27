@@ -1,0 +1,26 @@
+# Bay's content-blocking filter: the request and cookie filters every engine runs over the shared Rust blocker
+# (packages/adblock), desktop's (//bay/core) and Android's (//bay/mobile) alike. engine/shared/apply.sh copies it
+# into a desktop tree; scripts/android/engine.py into Android's.
+
+source_set("filter") {
+  sources = [
+    "nn_cookie_filter.cc",
+    "nn_cookie_filter.h",
+    "nn_request_filter.cc",
+    "nn_request_filter.h",
+  ]
+  public_deps = [
+    "//bay/filter/mojom",
+    "//content/public/browser",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//net",
+    "//url",
+  ]
+}

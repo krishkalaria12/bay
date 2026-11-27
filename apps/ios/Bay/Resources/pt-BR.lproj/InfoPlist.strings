@@ -1,0 +1,9 @@
+/* Info.plist strings: the permission prompts and the Home Screen quick actions (keyed by their English titles). */
+NSLocationWhenInUseUsageDescription = "O Bay compartilha sua localização com os sites que você permitir.";
+NSCameraUsageDescription = "O Bay deixa os sites que você permitir usarem a câmera.";
+NSMicrophoneUsageDescription = "O Bay usa o microfone para a pesquisa por voz e para os sites que você permitir.";
+NSSpeechRecognitionUsageDescription = "O Bay transforma suas palavras em uma pesquisa no próprio aparelho.";
+NSPhotoLibraryAddUsageDescription = "O Bay salva na sua fototeca as imagens que você pedir.";
+NSFaceIDUsageDescription = "O Bay usa o Face ID para desbloquear suas abas privadas.";
+"New tab" = "Nova aba";
+"Private tab" = "Aba privada";

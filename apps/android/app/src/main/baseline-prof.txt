@@ -1,0 +1,14 @@
+# Bay's own code compiled ahead of time at install (with the Compose and AndroidX libraries' own profiles): without it,
+# ART interprets the app's Kotlin until it warms up, and the first tab switcher, page menu and Settings miss frames.
+# Startup classes (L) and hot methods (HSP), by package.
+HSPLbay/app/**->**(**)**
+Lbay/app/**;
+HSPLbay/design/**->**(**)**
+Lbay/design/**;
+HSPLbay/engine/**->**(**)**
+Lbay/engine/**;
+# The core's bindings, and the JNA they call it through: every store read and string goes this way.
+HSPLbay/core/**->**(**)**
+Lbay/core/**;
+HSPLcom/sun/jna/**->**(**)**
+Lcom/sun/jna/**;

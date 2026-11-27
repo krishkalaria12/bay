@@ -29,6 +29,9 @@ class DocumentStore {
   // <user data>/BayDocuments.
   static base::FilePath DefaultDirectory();
   static base::ListValue SupportedMethods();
+  // The shared sequence belongs to the thread pool that made it; a test's
+  // next task environment needs a new one.
+  static void ResetDiskSequenceForTesting();
 
   // `changed` runs after any store's write changes documents().
   DocumentStore(base::FilePath directory, base::RepeatingClosure changed);

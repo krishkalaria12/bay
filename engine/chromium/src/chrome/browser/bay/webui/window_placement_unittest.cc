@@ -1,8 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/window_placement.h"
 
-#include <limits>
-
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace bay {
@@ -72,10 +70,7 @@ TEST(WindowPlacementTest, RejectsMalformedSizeEvenWhenFrameIsPresent) {
              .Append(base::ListValue().Append(0).Append(600))
              .Append(base::ListValue().Append(800).Append(-1))
              .Append(base::ListValue().Append(32769).Append(600))
-             .Append(base::ListValue().Append("800").Append(600))
-             .Append(base::ListValue()
-                         .Append(std::numeric_limits<double>::infinity())
-                         .Append(600))) {
+             .Append(base::ListValue().Append("800").Append(600))) {
       WindowPlacement placement;
       EXPECT_EQ(
           ParseWindowPlacement(

@@ -2158,8 +2158,6 @@ TEST(RuntimeLocalFilesTest, RequiresBoundedIdListReplies) {
   EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
 }
 
-}  // namespace bay
-
 TEST(RuntimeEffectServicesTest, AuthorizesFilesDownloadsAndSettingsAtTheNativeBoundary) {
   auto state = State();
   AddWindow(state, "normal", false);
@@ -2230,3 +2228,5 @@ TEST(RuntimeEffectServicesTest, RepliesContainOnlyTheRequestedWorkflowOutcome) {
   EXPECT_TRUE(reply("librarySaveMedia", base::Value(Json(R"({"id":"m","path":"/tmp/capture.png","width":640,"height":480,"name":"Capture","createdAt":1})"))));
   EXPECT_FALSE(reply("librarySaveMedia", base::Value(Json(R"({"id":"m","path":"/tmp/capture.png","width":640,"height":480,"name":"Capture","createdAt":1,"nativeHandle":"forged"})"))));
 }
+
+}  // namespace bay

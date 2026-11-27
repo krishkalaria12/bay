@@ -10,14 +10,15 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/test/test_future.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/permissions_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
+#include "url/origin.h"
 
 namespace bay {
 namespace {
@@ -56,12 +57,14 @@ class PageMessageEventsTest : public ChromeRenderViewHostTestHarness {
     return content::NavigationSimulator::NavigateAndCommitFromDocument(
         GURL("https://child.test/"), child);
   }
+  // Granted at the permission controller, which the handler asks, rather than
+  // through each platform's content settings and system permission layers.
   void AllowNotifications() {
-    HostContentSettingsMapFactory::GetForProfile(profile())
-        ->SetContentSettingDefaultScope(GURL("https://example.test/"),
-                                         GURL("https://example.test/"),
-                                         ContentSettingsType::NOTIFICATIONS,
-                                         CONTENT_SETTING_ALLOW);
+    const auto origin = url::Origin::Create(GURL("https://example.test/"));
+    content::SetPermissionControllerOverride(
+        profile()->GetPermissionController(), origin, origin,
+        blink::PermissionType::NOTIFICATIONS,
+        blink::mojom::PermissionStatus::GRANTED);
   }
   std::vector<std::pair<std::string, base::DictValue>> events_;
 };

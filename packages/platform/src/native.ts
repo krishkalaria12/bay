@@ -13,6 +13,11 @@ export function nativeRandomUUID(fallback: () => string): string {
   return fallback();
 }
 
+/** Random bytes as base64: Hermes has no CSPRNG, so the Mac's come from native. */
+export function nativeRandomBytes(_count: number, fallback: () => string): string {
+  return fallback();
+}
+
 export function nativeDocumentWrite(_name: string, _contents: string | null, fallback: () => void): void {
   fallback();
 }

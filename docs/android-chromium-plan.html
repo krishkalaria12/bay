@@ -1,0 +1,1841 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Repository audit and implementation plan for Bay's own Chromium engine on Android, with iOS staying on WebKit." />
+    <title>Bay mobile engines: Android Chromium, iOS WebKit</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: var(--foreground, light-dark(#28242b, #ede7ef));
+        --quiet: var(--muted-foreground, light-dark(#655b6b, #bdb1c4));
+        --rule: var(--border, light-dark(#dcd2df, #483d4e));
+        --panel: var(--card, light-dark(#f4eef5, #29222e));
+        --link: var(--primary, light-dark(#70485f, #e3accb));
+        --ios-ink: var(--chart-1, light-dark(#65519a, #c4b4ee));
+        --android-ink: var(--chart-2, light-dark(#276e50, #97d6b6));
+        --round: var(--radius, 10px);
+        font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+        color: var(--ink);
+        line-height: 1.65;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 1080px;
+        margin-inline: auto;
+        padding-block: 20px 48px;
+      }
+      h1 {
+        font-size: clamp(28px, 4.6vw, 42px);
+        line-height: 1.15;
+        letter-spacing: -0.035em;
+        margin: 10px 0 18px;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 23px;
+        line-height: 1.35;
+        letter-spacing: -0.02em;
+        margin: 42px 0 16px;
+        padding-top: 20px;
+        border-top: 1px solid var(--rule);
+      }
+      h2 span {
+        font: 12px var(--font-mono, ui-monospace, monospace);
+        color: var(--quiet);
+        margin-right: 8px;
+      }
+      h3 {
+        font-size: 17px;
+        margin: 26px 0 8px;
+        line-height: 1.4;
+      }
+      p {
+        margin: 10px 0 16px;
+        max-width: 85ch;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 70ch;
+      }
+      .meta,
+      small,
+      figcaption {
+        color: var(--quiet);
+        font-size: 13px;
+      }
+      small {
+        display: block;
+        margin-top: 5px;
+        font-weight: 400;
+      }
+      a {
+        color: var(--link);
+        text-underline-offset: 3px;
+      }
+      a:focus-visible,
+      .table-wrap:focus-visible {
+        outline: 3px solid var(--link);
+        outline-offset: 4px;
+      }
+      code,
+      pre {
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+        font-size: 0.86em;
+      }
+      code {
+        overflow-wrap: anywhere;
+      }
+      pre {
+        padding: 16px;
+        background: var(--code-background, var(--panel));
+        border-radius: var(--round);
+        overflow: auto;
+        line-height: 1.6;
+      }
+      pre code {
+        font-size: inherit;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        margin: 24px 0;
+        font-size: 14px;
+      }
+      ul,
+      ol {
+        padding-left: 24px;
+      }
+      li {
+        margin-block: 8px;
+        max-width: 90ch;
+      }
+      .note {
+        border-left: 3px solid var(--link);
+        padding: 3px 16px;
+        margin-block: 20px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        margin: 18px 0 26px;
+        border-top: 1px solid var(--rule);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 650px;
+        table-layout: fixed;
+        font-size: 14px;
+        text-align: left;
+      }
+      th,
+      td {
+        vertical-align: top;
+        padding: 12px 12px;
+        border-bottom: 1px solid var(--rule);
+      }
+      thead th {
+        background: var(--panel);
+        font-weight: 600;
+      }
+      thead th:first-child {
+        width: 22%;
+      }
+      thead th:nth-child(2):not(:last-child) {
+        width: 30%;
+      }
+      .sequence thead th:first-child {
+        width: 20%;
+      }
+      .sequence thead th:nth-child(2) {
+        width: 15%;
+      }
+      .sequence thead th:nth-child(3) {
+        width: 28%;
+      }
+      tbody th {
+        width: 25%;
+        font-weight: 550;
+      }
+      td p {
+        margin: 0 0 8px;
+      }
+      figure {
+        margin: 22px 0;
+      }
+      .shared {
+        padding: 16px;
+        border: 1px solid var(--rule);
+        border-radius: var(--round);
+        text-align: center;
+      }
+      .lanes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 14px;
+      }
+      .lane {
+        border-top: 3px solid var(--ios-ink);
+        padding: 12px 16px;
+        background: var(--panel);
+        border-radius: var(--round);
+      }
+      .lane.android {
+        border-color: var(--android-ink);
+      }
+      .lane h3 {
+        margin-top: 0;
+      }
+      .lane ol {
+        margin-bottom: 0;
+      }
+      figcaption {
+        margin-top: 10px;
+      }
+      .gate {
+        padding: 14px 16px;
+        border: 1px solid var(--rule);
+        border-radius: var(--round);
+        margin-bottom: 22px;
+      }
+      .gate p:last-child {
+        margin-bottom: 0;
+      }
+      .sources li {
+        font-size: 14px;
+      }
+      footer {
+        margin-top: 38px;
+        padding-top: 16px;
+        border-top: 1px solid var(--rule);
+        font-size: 13px;
+        color: var(--quiet);
+      }
+      @media (max-width: 620px) {
+        .lanes {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        h2 {
+          font-size: 21px;
+        }
+      }
+      @media print {
+        :root {
+          color-scheme: light;
+        }
+        nav {
+          display: none;
+        }
+        main {
+          max-width: none;
+        }
+        .table-wrap {
+          overflow: visible;
+        }
+        table {
+          min-width: 0;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        tr,
+        .lane,
+        .gate {
+          break-inside: avoid;
+        }
+        a {
+          color: inherit;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">Bay engineering plan · 13 November 2026 · proposal, no engine implementation in this change</p>
+        <h1>Android on Chromium.<br />iOS on WebKit.</h1>
+        <p class="lead">
+          Build Bay's own Chromium engine for Android on Linux GitHub runners, embed it in the existing Expo app, and keep iPhone pages on system WebKit. This
+          document maps the source changes, build pipeline, data migration, and proof needed to ship that split.
+        </p>
+        <p>
+          This expands <a href="mobile-plan.html">the mobile plan</a>, phase 7. The implementation unit is an Android engine and its native adapter. The shared
+          browser UI, tab model, and iOS engine already exist.
+        </p>
+      </header>
+      <nav aria-label="Plan sections">
+        <a href="#decision">Engine boundary</a><a href="#audit">Repository audit</a><a href="#reuse">Desktop reuse</a><a href="#runner">GitHub runners</a
+        ><a href="#artifact">Engine artifact</a><a href="#native">Native code</a><a href="#app">App integration</a><a href="#migration">Existing data</a
+        ><a href="#sequence">Implementation order</a><a href="#validation">Acceptance tests</a><a href="#release">Release and updates</a
+        ><a href="#sources">Sources and open gates</a>
+      </nav>
+
+      <section id="decision">
+        <h2><span>01</span> Keep the platform boundary explicit</h2>
+        <p>
+          The requested decision is fixed: Android uses Bay's bundled Chromium; iOS uses <code>WKWebView</code> only. The proposed implementation uses
+          Chromium's <code>content/public</code> APIs and a new <code>//bay/mobile</code> embedder. Names marked "proposed" below do not exist in the audited
+          tree.
+        </p>
+        <figure aria-label="Shared mobile app with distinct native page engines">
+          <div class="shared">
+            <strong>Shared Expo / React Native browser</strong><br /><code>BrowserScreen → TabPage → @bay/engine</code><br />Tabs, spaces, search, panels, page
+            tools, preferences, history
+          </div>
+          <div class="lanes">
+            <div class="lane">
+              <h3>iOS · WebKit</h3>
+              <ol>
+                <li>Expo Swift module and <code>BayEngineView.swift</code></li>
+                <li><code>WKWebView</code> and <code>WKWebsiteDataStore</code></li>
+                <li>WebKit content rules plus Rust-generated scriptlets</li>
+                <li>System WebKit updates with iOS</li>
+              </ol>
+            </div>
+            <div class="lane android">
+              <h3>Android · Bay Chromium</h3>
+              <ol>
+                <li>Expo Kotlin module and Chromium view adapter</li>
+                <li><code>bay-engine.aar → //bay/mobile</code>, Java / JNI / C++</li>
+                <li><code>WebContents</code>, browser contexts, network service, sandboxed renderers</li>
+                <li><code>//bay/content</code> and the shared Rust blocker</li>
+              </ol>
+            </div>
+          </div>
+          <figcaption>The Android AAR is a build dependency bundled into the APK / AAB. It is not fetched as executable code by the installed app.</figcaption>
+        </figure>
+        <p>
+          A successful <code>content_shell_apk</code> proves the compiler and a basic Chromium runtime. It is a test shell, not the finished engine. A content
+          embedder does not provide Chrome's profile services, password manager, default browser UI, permission policy, or download product integration
+          automatically. Those responsibilities must be supplied below.
+        </p>
+        <ul>
+          <li>
+            Keep <code>@bay/engine</code> as the shared UI boundary. Implement Android callbacks behind it, with only the explicit API additions in section 7.
+          </li>
+          <li>
+            Ship a self-contained engine with its subprocess services and data. Do not require replacing the phone's system WebView provider or installing a
+            second browser.
+          </li>
+          <li>Do not carry CEF, AppKit, <code>NSWindow</code>, desktop WebUI, or the desktop tab strip into Android. NNCore remains the desktop host.</li>
+          <li>
+            Keep WebKit imports and the iOS Pod dependency graph free of Chromium. iOS still needs its Rust blocker artifact; "WebKit only" refers to page
+            rendering.
+          </li>
+        </ul>
+      </section>
+      <section id="audit">
+        <h2><span>02</span> What the repository already does</h2>
+        <p>
+          Audit baseline: <code>main 9e4d894f8947</code>. Additional read-only references: <code>feat/linux ce3f40481be9</code> and
+          <code>feat/windows 12640f7f75dc</code>. Source links pin these commits so a later branch update cannot silently change the evidence.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Repository evidence" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Area</th>
+                <th scope="col">Evidence at the audited commit</th>
+                <th scope="col">Consequence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Shared native contract</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts#L7"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  >
+                </td>
+                <td>
+                  Navigation commands, state and errors, snapshots, page evaluation and messages, dialogs, private mode, downloads, media and sharing already
+                  have a common API. Preserve the existing payloads and command completion semantics.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Shared tab lifecycle</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/BrowserScreen.tsx#L76"
+                    ><code>apps/mobile/src/browser/BrowserScreen.tsx</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/TabPage.tsx#L67"
+                    ><code>apps/mobile/src/browser/TabPage.tsx</code></a
+                  >
+                </td>
+                <td>
+                  <code>MAX_LIVE = 4</code>; media tabs stay mounted, hidden pages can suspend, and unmount saves state. Chromium must respect these rules
+                  rather than introducing a second tab store.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Android engine</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt#L233"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt#L112"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt</code></a
+                  >
+                </td>
+                <td>
+                  The view creates <code>android.webkit.WebView</code>. The module also calls <code>view.webView</code> directly. Replacing a Gradle dependency
+                  alone cannot swap engines.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Android privacy and blocking</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayContentBlocker.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayContentBlocker.kt</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/src/jni_bridge.rs#L37"
+                    ><code>packages/adblock/src/jni_bridge.rs</code></a
+                  >
+                </td>
+                <td>
+                  Interception, CSS, scriptlets, cookie profiles and rule caching depend on WebView. Rust JNI currently selects
+                  <code>Platform::AndroidWebView</code>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Android downloads and uploads</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloads.kt#L45"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloads.kt</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloader.kt#L154"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloader.kt</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayFileChooser.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayFileChooser.kt</code></a
+                  >
+                </td>
+                <td>
+                  Downloads use a cookie callback and <code>HttpURLConnection</code>; file selection uses <code>android.webkit.ValueCallback</code>. Keep the OS
+                  integration, replace its engine dependencies.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">iOS engine</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayEngineView.swift#L98"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayEngineView.swift</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayContentBlocker.swift#L16"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayContentBlocker.swift</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayEngine.podspec"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayEngine.podspec</code></a
+                  >
+                </td>
+                <td>
+                  Already WebKit. Preserve nonpersistent private stores, interaction-state restore, the isolated client world, compiled rule lists, WK
+                  downloads, auth and permission delegates.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Native packaging</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/build.gradle"
+                    ><code>apps/mobile/modules/bay-engine/android/build.gradle</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/app.plugin.js#L18"
+                    ><code>apps/mobile/modules/bay-engine/app.plugin.js</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/scripts/adblock"
+                    ><code>apps/mobile/scripts/adblock</code></a
+                  >
+                </td>
+                <td>
+                  Android is arm64-only today. Rust outputs and blocker assets are generated and ignored. The Rust script assumes a macOS NDK path. It cannot
+                  run unchanged on a Linux runner.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Mobile release CI</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/.github/workflows/mobile.yml#L37"
+                    ><code>.github/workflows/mobile.yml</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/eas.json"
+                    ><code>apps/mobile/eas.json</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/.github/workflows/ci.yml#L89"
+                    ><code>.github/workflows/ci.yml</code></a
+                  >
+                </td>
+                <td>
+                  The manual workflow submits an EAS build. It does not compile Chromium or resolve an AAR. PR CI checks mobile TypeScript and JS tests, without
+                  native engine proof.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Desktop builds on main</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/scripts/download-engine#L25"
+                    ><code>scripts/download-engine</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/patches/build/env.sh"
+                    ><code>engine/patches/build/env.sh</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/scripts/publish-engine.sh"
+                    ><code>scripts/publish-engine.sh</code></a
+                  >
+                </td>
+                <td>
+                  CEF branch 8037 and a pinned CEF commit drive macOS source setup. The publisher packages macOS frameworks. Main has no cross-platform
+                  <code>scripts/engine.py</code> or Android lock.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Other branch helpers</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/ce3f40481be9a28cf45b4bf9aa088413e206e402/.github/workflows/linux-build.yml"
+                    ><code>.github/workflows/linux-build.yml</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/ce3f40481be9a28cf45b4bf9aa088413e206e402/scripts/engine.py"
+                    ><code>scripts/engine.py</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/ce3f40481be9a28cf45b4bf9aa088413e206e402/scripts/windows/engine-state.py"
+                    ><code>scripts/windows/engine-state.py</code></a
+                  >
+                </td>
+                <td>
+                  Useful staged compilation, identity and archive code exists on the Linux branch. These files are reference material, not dependencies
+                  available on main. Copy only reviewed utilities; do not merge the Linux / Windows product stack for this work.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Keep the standalone mobile workspace. Root <code>pnpm-workspace.yaml</code> excludes <code>apps/mobile</code>; its Expo 58 / React Native 0.88
+          dependencies and lockfile must stay separate from desktop's React Native macOS workspace. Both installs are needed because mobile links
+          <code>@bay/core</code>.
+        </p>
+      </section>
+      <section id="reuse">
+        <h2><span>03</span> Reuse browser logic, build an Android host</h2>
+        <div class="table-wrap" role="region" aria-label="Desktop reuse and extraction" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Piece</th>
+                <th scope="col">Current source</th>
+                <th scope="col">Required change</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Network and cookie filters</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/nn_request_filter.cc"
+                    ><code>engine/nncore/src/bay/core/nn_request_filter.cc</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/nn_cookie_filter.cc"
+                    ><code>engine/nncore/src/bay/core/nn_cookie_filter.cc</code></a
+                  >
+                </td>
+                <td>
+                  Extract portable code into <code>engine/content/src/bay/content/</code> <small>proposed new file or directory</small>. Retain browser-context
+                  inputs, URLLoaderFactory chaining, redirect policy, request types, response/body limits, CORS handling and async lifetimes. Both hosts depend
+                  on one implementation.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Renderer and IPC</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/renderer/nn_content_renderer_client.cc"
+                    ><code>engine/nncore/src/bay/core/renderer/nn_content_renderer_client.cc</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/mojom/nncore.mojom"
+                    ><code>engine/nncore/src/bay/core/mojom/nncore.mojom</code></a
+                  >
+                </td>
+                <td>
+                  Split document-start scriptlets, style insertion and message plumbing from desktop Boosts and main-world evaluation. Extract the minimum
+                  shared Mojo definitions and provide a mobile isolated-world evaluator. Existing desktop evaluation is not already the required isolated
+                  Android bridge.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Host registration</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/nn_main_delegate.cc#L305"
+                    ><code>engine/nncore/src/bay/core/nn_main_delegate.cc</code></a
+                  >
+                </td>
+                <td>
+                  Keep the Chrome-derived delegate on desktop. New Android <code>ContentBrowserClient</code> and <code>ContentRendererClient</code> register the
+                  extracted hooks. Do not inherit the desktop delegate or its Chrome profile assumptions.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">GN and overlay application</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/BUILD.gn#L8"
+                    ><code>engine/nncore/src/bay/core/BUILD.gn</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/apply.sh"
+                    ><code>engine/nncore/apply.sh</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/chromium/src/chrome/browser/bay/BUILD.gn#L12"
+                    ><code>engine/chromium/src/chrome/browser/bay/BUILD.gn</code></a
+                  >
+                </td>
+                <td>
+                  Both existing targets assert <code>is_mac</code>. Add separate <code>//bay/content</code> and <code>//bay/mobile</code> targets; do not remove
+                  the assertion and hope desktop code becomes portable. Scope NNCore copying to owned directories: its current <code>rsync --delete</code> of
+                  <code>bay/</code> would erase a sibling shared layer.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Rust blocker</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/src/ffi.rs#L430"
+                    ><code>packages/adblock/src/ffi.rs</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/src/preprocess.rs"
+                    ><code>packages/adblock/src/preprocess.rs</code></a
+                  >
+                </td>
+                <td>
+                  Use the existing C ABI from native Chromium, with one blocker instance per configured context and safe shared ownership. Add an explicit
+                  Android Chromium platform value, keep the existing numeric values stable, and test the <code>env_mobile</code> rule selection and cache
+                  identity.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Chrome browser services</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/chromium/src/chrome/browser/bay/BUILD.gn"
+                    ><code>engine/chromium/src/chrome/browser/bay/BUILD.gn</code></a
+                  >
+                </td>
+                <td>
+                  Do not link the full desktop target into a content embedder. Retain shared app history / tabs / settings in TypeScript. Integrate required
+                  components such as permissions and WebAuthn explicitly; desktop password bubbles, extensions and native window hosts are outside this engine
+                  migration.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The shared extraction must preserve desktop behavior before Android uses it. Update includes, namespaces where necessary, GN dependencies, generated
+          Mojo paths, apply checks, freshness hashing, and existing native blocker tests together. Ensure the shared target has no dependency on CEF,
+          <code>//chrome/browser/ui</code>, AppKit or <code>//ui/views</code>. Code that needs them stays in its host adapter.
+        </p>
+        <h3>Patch policy</h3>
+        <p>
+          Main's <code>engine/patches/series</code> has 18 CEF patches and 33 Chromium patches, followed by both desktop layers. Add explicit platform routing
+          to <code>series</code> / <code>series.py</code>, adapting the selector support on the Linux branch. Existing macOS selection must remain equivalent.
+          Android gets an allowlist, not every line lacking "mac" in its name.
+        </p>
+        <ul>
+          <li>Exclude all <code>cef-*.patch</code> entries, the existing <code>chromium-bay-layer.patch</code>, and the desktop layers from Android.</li>
+          <li>
+            Exclude desktop window, toolbar, DevTools UI, extension, Touch Bar, iCloud, Safe Storage and PiP window patches. Android uses its own host and
+            credentials integrations.
+          </li>
+          <li>
+            Review <code>chromium-injected-author-sheet-order.patch</code> for the shared renderer. Rework branding, file chooser, local password generation and
+            scripts policy only if the mobile target actually compiles the affected code and the feature is needed. A promising filename is not proof of
+            compatibility.
+          </li>
+          <li>
+            Add Android integration patches only where public embedder hooks cannot supply the behavior. Record each selected patch's target, purpose, apply
+            order and regression test. Apply and verify against a clean pinned tree with no fuzz.
+          </li>
+          <li>
+            Audit ungoogled core patches and domain substitution against Android. The old plan's statement about Android variants is not a verified dependency
+            here. Require a compatible pinned source or explicitly port the needed changes. Keep the first upstream shell proof unpatched, then repeat after
+            privacy patches.
+          </li>
+        </ul>
+        <p>
+          Domain substitution and privacy settings must preserve site login, media and WebRTC behavior. System WebView previously supplied its own security
+          defaults. The content embedder must explicitly configure certificate verification, storage policy, network contexts and supported browser services; it
+          does not inherit Chrome's product configuration. Record the anti-phishing and malware-protection policy explicitly when replacing WebView defaults;
+          privacy patching must not silently remove protections that the app claims to provide.
+        </p>
+      </section>
+      <section id="runner">
+        <h2><span>04</span> Prove GitHub runner capacity first</h2>
+        <p>
+          Use Linux x86-64 for Android Chromium compilation. Chromium's build instructions call for at least 8 GB RAM, recommend more than 16 GB, and require at
+          least 100 GB free disk. Cross-building on macOS is unsupported.
+          <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md">Upstream build requirements</a>.
+        </p>
+        <p>
+          GitHub lists standard public Linux runners at 4 CPU / 16 GB RAM / 14 GB SSD, and caps a hosted job at six hours. Disk recovered by deleting installed
+          tools is runner-image-dependent. The earlier "about 90 GB" estimate is not a guaranteed capacity and is below upstream's disk requirement. No build
+          duration or stage count is measured for this Android engine.
+          <a href="https://docs.github.com/en/actions/reference/runners/github-hosted-runners">Runner specifications</a>,
+          <a href="https://docs.github.com/en/actions/reference/limits">job limits</a>.
+        </p>
+        <div class="gate">
+          <strong>Gate A · capacity report before engine implementation</strong>
+          <p>
+            Run a manual capacity job on <code>ubuntu-24.04</code>. Measure free bytes and inodes after safe cleanup, source sync / hooks, GN generation,
+            compile / link, compression, artifact download and restore. Budget peak tree plus compressed state plus final artifacts plus toolchains and a
+            measured margin. Record RAM / swap peaks and archive transfer times. A source checkout fitting is insufficient.
+          </p>
+          <p>
+            If a standard runner cannot complete this cycle, move the engine job to a provisioned Linux self-hosted runner attached to GitHub Actions, or a
+            larger hosted runner if the account supports it. Use storage above upstream's minimum, sized from the report. Do not remove runtime resources to
+            force a fit. App assembly can still run on ordinary runners.
+          </p>
+        </div>
+        <h3>Proposed build pipeline</h3>
+        <ol>
+          <li><strong>Resolve.</strong> Read a committed Android lock and compute engine identity. Reuse an artifact only for an exact match.</li>
+          <li>
+            <strong>Sync.</strong> Fetch direct Chromium at its resolved commit with <code>target_os = ["android"]</code>, run its pinned dependency hooks, and
+            verify the version and revision. Pin depot_tools and the privacy patch source. Do not use CEF's <code>automate-git.py</code> for Android.
+          </li>
+          <li>
+            <strong>Generate.</strong> Start with <code>target_os="android"</code>, <code>target_cpu="arm64"</code>, <code>is_debug=false</code>,
+            <code>is_component_build=false</code>, and local compilation with remote execution disabled. Validate every GN argument against the pin. Use low
+            debug information for the capacity proof; establish symbol retention before release.
+          </li>
+          <li>
+            <strong>Prove upstream.</strong> Build <code>content_shell_apk</code>, run it on the arm64 emulator / device, and retain the capacity report. Repeat
+            with selected patches. This proof does not produce Bay's AAR.
+          </li>
+          <li>
+            <strong>Build Bay.</strong> Apply the shared and Android layers, build the Rust Android static library with a Linux NDK toolchain, then build the
+            new mobile engine and package its AAR plus a small Gradle host APK.
+          </li>
+          <li>
+            <strong>Verify and publish.</strong> Install the host APK, validate the final package and provenance, then publish the engine artifact. App builds
+            consume that exact artifact independently of the expensive compile.
+          </li>
+        </ol>
+        <h3>Resume behavior to implement and test</h3>
+        <p>
+          Reuse the Linux branch's timed compile and nanosecond-preserving zstd archive utility after review. Use a stable absolute engine root, separate
+          Android / ABI state names, versioned state metadata and archive checksums. Keep SDK / NDK / JDK outside the archived tree where possible, reinstalling
+          the exact versions on each runner.
+        </p>
+        <ul>
+          <li>
+            The existing Linux cleanup deletes <code>/usr/local/lib/android</code> and <code>/usr/lib/jvm</code>. Write an Android-specific cleanup that
+            preserves or deliberately reinstalls the required toolchains. Do not invoke <code>scripts/linux/ci-disk.sh</code> unchanged.
+          </li>
+          <li>
+            Use explicit stage dependencies or a serial controller. A matrix with <code>max-parallel: 1</code> is not a dependency chain. Reserve measured time
+            for compression and upload before the six-hour limit; a forced kill cannot save state.
+          </li>
+          <li>
+            Distinguish success, deliberate pause <code>124</code>, compile failure and cancellation. Preserve state and logs after a genuine compile error,
+            then fail the run. Retain the reference workflow's explicit <code>!cancelled()</code> archive / upload conditions and verify them with an injected
+            compile failure; do not replace them with ordinary success-only steps.
+          </li>
+          <li>
+            Verify restored revision, toolchain, GN args, patch baseline and source identity before resuming. An unchanged identity can resume directly. A
+            changed patch requires a clean base and reapply; reuse compatible build outputs only after proving the invalidation logic. Never compile stale
+            patched sources under a new artifact ID.
+          </li>
+          <li>
+            Preserve symlinks and timestamps, check the archive lives outside the tree, and verify a restored no-op build performs no unexpected full rebuild.
+            Track the larger peak required while downloading and extracting state.
+          </li>
+          <li>
+            Restrict state reuse to trusted builds from this repository and the intended workflow / branch. Do not execute build files restored from untrusted
+            PR artifacts. Names alone do not establish trust.
+          </li>
+          <li>
+            End with a required final job that checks the engine artifact exists for the requested ID and passed smoke tests. Exhausting stages after pauses
+            must fail, even if individual stages exited successfully.
+          </li>
+          <li>
+            Use Actions artifacts for transient checkpoints with bounded retention. Check actual account storage and transfer feasibility; do not assume the
+            dependency cache can store a Chromium tree. Final engine releases and build-state archives have separate retention policies.
+          </li>
+        </ul>
+      </section>
+      <section id="artifact">
+        <h2><span>05</span> Treat the AAR as a product boundary</h2>
+        <div class="table-wrap" role="region" aria-label="Engine artifact contract" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Contract</th>
+                <th scope="col">Required contents and behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Lock and identity</th>
+                <td>
+                  New <code>engine/android/lock.json</code>: resolved Chromium commit / version, depot_tools commit, privacy source commit, GN args, target ABI,
+                  SDK / NDK / JDK / Rust versions, API level and AAR schema version. Hash these plus selected patches, shared / mobile overlays, blocker source
+                  / resources and packaging scripts into an Android-specific artifact ID.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">AAR contents</th>
+                <td>
+                  Compile Java / JNI with the Chromium toolchain and export the needed classes, generated JNI registration, Android resources and IDs, asset
+                  access, native library and child-process components. Include manifest declarations, consumer R8 rules, required ICU / V8 / pak / locale data
+                  and transitive dependencies. A zip of <code>classes.jar</code> and one <code>.so</code> is not sufficient evidence.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Process startup</th>
+                <td>
+                  Initialize Chromium once per app process after the application context is available, dispatch child-process startup separately from the Expo /
+                  React activity, and register sandboxed renderer and required utility / GPU services. Preserve upstream sandbox behavior. Test process restart,
+                  renderer death and app backgrounding in the Gradle host.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Rust ownership</th>
+                <td>
+                  Prefer one Android static Rust blocker linked into the engine and reached through its native API. Extend the existing C ABI for the Android
+                  Chromium platform. Stop also packaging the old <code>libbay_adblock.so</code> in the Chromium build, avoiding duplicate blocker state and
+                  duplicate resources. iOS keeps <code>BayAdblock.xcframework</code>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Runtime proof</th>
+                <td>
+                  Ship a tiny native host APK from the same engine ID. Its merged manifest, resource linking, JNI loading and child-process startup must work
+                  before integrating Expo. Then test a shrunk release Expo APK / AAB, not only a debug host.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Artifact manifest</th>
+                <td>
+                  Publish <code>engine.json</code> with artifact ID, engine API schema, exact revisions, GN args digest, toolchain versions, ABI list, minimum
+                  Android API, runtime file inventory and SHA-256 hashes. Include license / notice files and keep symbols / mappings separately with matching
+                  native build IDs.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">ABI and platform compatibility</th>
+                <td>
+                  Start with <code>arm64-v8a</code>, matching the app and this Mac's emulator. If Linux emulator CI needs <code>x86_64</code>, build a separate
+                  x64 engine and every other native dependency; never claim one arm64 APK proves x64. Set minimum API to the higher of the Chromium pin and Expo
+                  requirements and verify merged app metadata.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Packaging checks</th>
+                <td>
+                  Validate ELF and APK alignment and run on 16 KB pages. Verify all native dependencies, including React Native / Skia and Rust. Check
+                  uncompressed native-library loading, JNI symbol registration, resource shrinking, child services, R8 mapping and bundle-generated APKs.
+                  Preserve locales, codecs and GPU fallback resources selected by the supported configuration.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Main's macOS source setup pins CEF <code>564dd6c4aafff558154bd3176eb5d13551db6734</code>. The Linux reference lock reports Chromium
+          <code>154.0.8037.58</code>. Resolve the actual Chromium commit associated with the intended desktop baseline and record it directly in the new Android
+          lock; the CEF commit and a Linux sysroot metadata commit are not interchangeable Chromium source pins. Review security freshness when implementation
+          starts. "Same pin as desktop" is a compatibility starting point, not permission to ship an outdated engine.
+        </p>
+        <p>
+          The AAR packaging method is an early research gate. Inspect the pinned tree's Android GN templates, JNI generation and content-shell packaging, then
+          choose the smallest supported export path. If it needs companion artifacts, declare and version them explicitly. There is no existing
+          <code>bay-engine.aar</code> target in this repository.
+        </p>
+        <p>
+          Android's <a href="https://developer.android.com/guide/practices/page-sizes">16 KB page-size guidance</a> covers both ELF and APK alignment.
+          Chromium's <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_native_libraries.md">native-library packaging notes</a> explain
+          why loaders, JNI and subprocess data must be considered together.
+        </p>
+      </section>
+      <section id="native">
+        <h2><span>06</span> Native implementation work</h2>
+        <div class="table-wrap" role="region" aria-label="Native Chromium implementation work" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Work item</th>
+                <th scope="col">Files or source contract</th>
+                <th scope="col">Implementation and acceptance intent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">N1 · startup and contexts</th>
+                <td>
+                  <code>engine/android/src/bay/mobile/BUILD.gn</code> <small>proposed new file or directory</small><br /><code
+                    >engine/android/src/bay/mobile/browser/</code
+                  >
+                  <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Implement content clients, process entry points, browser main parts, normal persistent and private off-the-record browser contexts, storage
+                  partitions, network / cert verifier setup and preference defaults. No WebView provider APIs. Child processes must not initialize Expo.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N2 · native tab</th>
+                <td>
+                  <code>engine/android/src/bay/mobile/bay_tab.*</code> <small>proposed new file or directory</small><br /><code
+                    >engine/android/src/bay/mobile/android/</code
+                  >
+                  <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Own a <code>WebContents</code> per mounted engine view, Android window / content view and compositor attachment, navigation controller,
+                  observer and delegate. Expose typed Java / JNI commands. Keep UI-thread ownership and settle callbacks exactly once on navigation, detach or
+                  destruction.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N3 · navigation</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts#L33"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  >
+                </td>
+                <td>
+                  Implement URL / title / progress / history events, main-frame errors, stop / reload, redirects, same-document changes, desktop user agent plus
+                  viewport behavior, HTTPS upgrade / fallback and tracking cleanup. Preserve HTTP support and certificate / mixed-content policy. A failed
+                  subresource must not become a whole-page error.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N4 · isolated page tools</th>
+                <td>
+                  <code>engine/android/src/bay/mobile/renderer/</code> <small>proposed new file or directory</small><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/pagescripts/media.ts"
+                    ><code>apps/mobile/src/pagescripts/media.ts</code></a
+                  >
+                </td>
+                <td>
+                  Create an isolated world for async <code>evaluate</code> with JSON results and <code>post(message)</code>. Bind messages to the current frame,
+                  document generation and tab. Reject stale replies and settle promises when navigation or a renderer crash destroys the world. Web content must
+                  not invoke privileged native operations. Keep document-start blocker scriptlets in their deliberately separate main-world path.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N5 · blocker and tracking</th>
+                <td>
+                  <code>engine/content/src/bay/content/BUILD.gn</code> <small>proposed new file or directory</small><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/src/ffi.rs"
+                    ><code>packages/adblock/src/ffi.rs</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/privacy/contentBlocking.ts"
+                    ><code>apps/mobile/src/privacy/contentBlocking.ts</code></a
+                  >
+                </td>
+                <td>
+                  Register network hooks for navigation, subresources, redirects, fetch / XHR and WebSockets as supported by the extracted filter. Preserve
+                  request classification, exceptions, synthetic redirect responses, response / body modifiers and limits, paused hosts, cosmetic CSS, generic
+                  hiding, trusted scriptlets and list generations. Keep parsing and matching off the UI / JS threads. Load list file paths and resources through
+                  the native C ABI, with ownership safe across configuration changes.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N6 · private lifecycle and deletion</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt#L65"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt</code></a
+                  >
+                </td>
+                <td>
+                  Replace <code>ProfileStore</code>, <code>WebStorageCompat</code> and WebView cookie APIs with Chromium context deletion. Share one private
+                  session between private tabs and their popups, isolated from normal tabs. Own the context for the lifetime of logical private tabs, not
+                  mounted views: the four-view limit can evict every private view while private tabs still exist. Use the explicit app-to-native session signal
+                  in section 7. After the last logical private tab closes, end the session and remove transient data. This plan proposes cancelling in-flight
+                  private downloads then; that is a policy change from the current contract, which allows downloads to outlive their tab, and must be settled
+                  before release. Await storage / network deletion before <code>clearData</code> resolves, then clear snapshots and saved tab state.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N7 · dialogs and permissions</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts#L118"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/panels/PageRequest.tsx"
+                    ><code>apps/mobile/src/panels/PageRequest.tsx</code></a
+                  >
+                </td>
+                <td>
+                  Translate JS dialogs, HTTP auth, external schemes, camera / microphone and geolocation into existing request IDs and answers. Tie permission
+                  decisions to the requesting origin / frame and OS grant; cancel on navigation or close. Add real permission / device / geolocation delegates.
+                  File picker maps accept, capture, multiple selection, content-URI grants and cancellation through Android activity results.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N8 · WebAuthn and credentials</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/AndroidManifest.xml"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/AndroidManifest.xml</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/credentials.ts"
+                    ><code>apps/mobile/src/browser/credentials.ts</code></a
+                  >
+                </td>
+                <td>
+                  A manifest origin permission alone does not implement passkeys in a content embedder. Integrate and test Chromium's Android authenticator /
+                  Credential Manager path, RP-origin validation, user activation and cancellation. Preserve secure-store HTTP auth. Verify OS password Autofill
+                  separately; do not assume Chrome's full password manager appears automatically.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N9 · popups and external apps</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts#L112"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  >
+                </td>
+                <td>
+                  Wire <code>WebContentsDelegate</code> new-window creation, opener session / private inheritance, user-gesture and popup policy. Existing
+                  <code>onNewWindow</code> carries only a URL; first prove URL transfer preserves supported flows. If OAuth needs adoption of a precreated
+                  WebContents, add an opaque one-use pending-window ID to the event / view creation path, consumed exactly once in the same context. Never
+                  serialize a native pointer into JavaScript.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N10 · downloads</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloads.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloads.kt</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloader.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayDownloader.kt</code></a
+                  >
+                </td>
+                <td>
+                  Use Chromium's request / download path in the originating storage partition, preserving POST bodies, cookies, auth, referrer, redirects and
+                  content disposition. Stream bytes through a bounded native-to-Android sink or file descriptor to the existing MediaStore writer / foreground
+                  notifications. Replace <code>HttpURLConnection</code> transport rather than exporting raw cookie strings as the new engine boundary. Retain
+                  event states, cancellation and stable <code>b-</code> ID mapping used by TypeScript. Handle <code>blob:</code>, <code>data:</code>, renderer
+                  loss and size limits without base64 copies of whole large files.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N11 · media and fullscreen</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayMediaService.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayMediaService.kt</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/useTabMedia.ts"
+                    ><code>apps/mobile/src/browser/useTabMedia.ts</code></a
+                  >
+                </td>
+                <td>
+                  Keep the Android media session / foreground service and shared mini player. Connect native media / fullscreen / PiP delegates to them;
+                  preserve audio focus, background play, orientation and system-bar restoration on Back / close. Prevent duplicate media sessions. Verify H.264
+                  / AAC, WebM, MSE, WebRTC and supported GPU fallback behavior. DRM / Widevine access must be established separately, not inferred from a GN
+                  flag.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N12 · host view behavior</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt</code></a
+                  >
+                </td>
+                <td>
+                  Reimplement touch routing, pull-to-refresh, edge navigation, throttled logical-point scroll events, normalized long-press hit tests,
+                  image/link menus, text selection, keyboard / IME, accessibility, insets and focus. Use compositor-backed snapshots and avoid bitmap work on
+                  the UI thread. A SurfaceView / TextureView choice must pass React Native overlays, tab zoom and the Skia welcome snapshot.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N13 · suspension and recovery</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/BrowserScreen.tsx#L169"
+                    ><code>apps/mobile/src/browser/BrowserScreen.tsx</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/crashReports.ts"
+                    ><code>apps/mobile/src/crashReports.ts</code></a
+                  >
+                </td>
+                <td>
+                  Map <code>active</code> / <code>suspended</code> to visibility, drawing and lifecycle policy, while playing tabs remain alive. Handle
+                  trim-memory / renderer death, bounded recovery and error events. Persist native crash IDs and matching symbols with appropriate redaction;
+                  current JS crash reports are not native crash coverage.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">N14 · saved state</th>
+                <td><code>engine/android/src/bay/mobile/bay_tab_state.*</code> <small>proposed new file or directory</small></td>
+                <td>
+                  Version a Chromium navigation / page-state envelope by engine family and schema. Restore before initial URL load, retain normal back / forward
+                  history, and test actual scroll / form restoration. Keep private state off disk, use atomic writes and safe keys, and prune with the existing
+                  APIs. Do not promise restoration of credentials, file inputs or arbitrary script state.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          These are separate reviewable units, not a proposal to put another 1,400 lines into <code>BayEngineView.kt</code>. Keep context ownership, network /
+          blocker integration, tab state, downloads and page messaging in their responsible native components. The Expo view should forward commands and
+          callbacks.
+        </p>
+      </section>
+      <section id="app">
+        <h2><span>07</span> Integrate without replacing the shared UI</h2>
+        <div class="table-wrap" role="region" aria-label="App integration changes" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Change</th>
+                <th scope="col">Existing / proposed files</th>
+                <th scope="col">Required edit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Kotlin view and module</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineView.kt</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/java/expo/modules/bayengine/BayEngineModule.kt</code></a
+                  >
+                </td>
+                <td>
+                  Replace WebView creation, direct <code>view.webView</code> commands, feature checks and clear-data calls with the typed AAR API. Keep Expo
+                  event names and existing payloads, share intents, voice, widgets and shortcuts. Remove AndroidX WebKit only after the remaining supported
+                  WebView code is gone.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Native build dependency</th>
+                <td>
+                  <a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/build.gradle"
+                    ><code>apps/mobile/modules/bay-engine/android/build.gradle</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/android/src/main/AndroidManifest.xml"
+                    ><code>apps/mobile/modules/bay-engine/android/src/main/AndroidManifest.xml</code></a
+                  >
+                </td>
+                <td>
+                  Resolve the verified local AAR and declared dependencies, merge its child-process services, consumer rules and resources, and align minimum
+                  SDK / ABI filters. Check conflicts with app services and generated Expo application startup. No edits only inside generated
+                  <code>apps/mobile/android/</code>.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Reproducible prebuild</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/scripts/native"
+                    ><code>apps/mobile/scripts/native</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/app.plugin.js"
+                    ><code>apps/mobile/modules/bay-engine/app.plugin.js</code></a
+                  ><br /><code>apps/mobile/scripts/fetch-android-engine.mjs</code> <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Fetch a committed manifest's exact artifact into an ignored dependency directory outside generated native projects. Verify SHA-256, API
+                  schema, ABI and engine ID before an atomic install. Invoke from local Android setup and an Android-only Expo config-plugin prebuild step; add
+                  a Gradle preflight for direct builds. This mobile script should call the canonical resolver in <code>scripts/android/fetch-engine.mjs</code>,
+                  with the shared script available in the remote build workspace. A stale / missing artifact is an error. iOS never downloads it.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Engine identity in app</th>
+                <td>
+                  <code>apps/mobile/modules/bay-engine/android-engine.json</code> <small>proposed new file or directory</small><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  >
+                </td>
+                <td>
+                  Commit only the immutable URL / release ID, SHA-256, ABI and API version selection. Add read-only native engine metadata so tests assert
+                  <code>chromium</code> plus artifact ID on Android and <code>webkit</code> plus OS metadata on iOS. The user agent alone is not engine identity
+                  proof.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Small explicit API changes</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/src/index.ts"
+                    ><code>apps/mobile/modules/bay-engine/src/index.ts</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/BrowserScreen.tsx"
+                    ><code>apps/mobile/src/browser/BrowserScreen.tsx</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayEngineModule.swift"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayEngineModule.swift</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayEngineView.swift"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayEngineView.swift</code></a
+                  >
+                </td>
+                <td>
+                  Preserve the current contract except additive identity metadata, the private-session signal below, a per-tab
+                  <code>saveImage(url)</code> command, and the pending-window token only if the OAuth proof requires it. Page image saves must use the active
+                  tab's context; today the global Android method reads the default WebView cookie manager with <code>private=false</code>. Implement the per-tab
+                  operation on iOS with its WK store as well, keeping WebKit rendering. Update both adapters, caller types and docs in the same change.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Logical private-session ownership</th>
+                <td>
+                  <code>@bay/engine.setPrivateSessionActive(active): Promise&lt;void&gt;</code> <small>proposed API</small><br />
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/BrowserScreen.tsx#L158"
+                    ><code>apps/mobile/src/browser/BrowserScreen.tsx</code></a
+                  ><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/ios/BayContentBlocker.swift#L238"
+                    ><code>apps/mobile/modules/bay-engine/ios/BayContentBlocker.swift</code></a
+                  >
+                </td>
+                <td>
+                  Derive session activity from logical private tabs in the shared store. Serialize native updates, await activation before mounting private
+                  views, and signal last-close / clear independently of React view cleanup. Android retains its private browser context; iOS retains its
+                  nonpersistent <code>WKWebsiteDataStore</code> strongly for the same lifetime. Eviction or remount releases a view, never the session. End the
+                  session on last logical close and fresh process startup without private tabs. Update both native modules and the TypeScript API together.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Rust and resources</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/scripts/adblock"
+                    ><code>apps/mobile/scripts/adblock</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/.gitignore"
+                    ><code>apps/mobile/.gitignore</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/include/bay_adblock.h"
+                    ><code>packages/adblock/include/bay_adblock.h</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/packages/adblock/src/preprocess.rs"
+                    ><code>packages/adblock/src/preprocess.rs</code></a
+                  >
+                </td>
+                <td>
+                  Add / version the Android Chromium C ABI platform value and preprocessing tests. The Chromium artifact owns its Rust binary and resources;
+                  stop the separate Android JNI build on that path. Preserve iOS generation. During migration any developer-only legacy variant must package
+                  exactly one blocker and maintain separate caches.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Shared page scripts</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/browser/TabPage.tsx"
+                    ><code>apps/mobile/src/browser/TabPage.tsx</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/tree/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/src/pagescripts/"
+                    ><code>apps/mobile/src/pagescripts/</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/tests/pageScripts.test.ts"
+                    ><code>apps/mobile/tests/pageScripts.test.ts</code></a
+                  >
+                </td>
+                <td>
+                  Verify reader, find, inspector, hide elements, image watcher, media, page color, tweaks and YouTube scripts in the new isolated world. Update
+                  Android-specific <code>Symbol.for</code> / bridge comments only after proving isolation. Keep main-world scriptlet behavior separate. Do not
+                  rewrite tools that already work against the shared API.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Remote EAS builds</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/package.json"
+                    ><code>apps/mobile/package.json</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/eas.json"
+                    ><code>apps/mobile/eas.json</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/.github/workflows/mobile.yml"
+                    ><code>.github/workflows/mobile.yml</code></a
+                  >
+                </td>
+                <td>
+                  Make engine resolution run inside the actual EAS builder too. A local ignored AAR is not uploaded by default. Run the Android fetch during
+                  prebuild before Gradle; do not rely solely on <code>eas-build-post-install</code> for prebuild inputs. For iOS the post-install hook is after
+                  CocoaPods, too late to create its vendored Rust framework. Supply that framework before pod installation through platform prebuild, or an
+                  explicitly configured custom build. Validate with clean remote builds on both platforms.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Generated artifacts and docs</th>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/modules/bay-engine/README.md"
+                    ><code>apps/mobile/modules/bay-engine/README.md</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/AGENTS.md"
+                    ><code>apps/mobile/AGENTS.md</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/docs/mobile-releasing.md"
+                    ><code>docs/mobile-releasing.md</code></a
+                  >
+                </td>
+                <td>
+                  Document engine ownership, local setup, state migration, supported ABIs / Android versions, exact fetch / build commands and release rollback.
+                  Keep binaries / state archives out of git. Recheck EAS upload contents and any <code>.easignore</code> rules, including access to shared
+                  blocker sources for iOS.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The config plugin currently forces <code>reactNativeArchitectures=arm64-v8a</code> because the Rust JNI library is arm64-only. Keep arm64 as the
+          initial supported ABI. Expanding it later requires Chromium, the blocker, React Native and every other native library for each added ABI, with
+          separate device proof.
+        </p>
+        <p>
+          Voice search, share extensions, widgets, incoming links, panels, local tab / space state, translation and secure-store HTTP credentials stay in their
+          current app components. Their engine-facing behavior remains in the parity suite. This work does not add desktop sync, extensions or a new UI design.
+        </p>
+        <p>
+          Expo documents the <a href="https://docs.expo.dev/build-reference/npm-hooks/">build lifecycle hook ordering</a> and
+          <a href="https://docs.expo.dev/build-reference/easignore/">ignored upload behavior</a>. The repository has generated Rust artifacts but no
+          corresponding remote build preparation hooks in <code>apps/mobile/package.json</code>; clean EAS preparation is work to prove, not an existing
+          guarantee.
+        </p>
+      </section>
+      <section id="migration">
+        <h2><span>08</span> Keep app data, version engine data</h2>
+        <p>
+          The shared JSON tab / space / preferences model is not a Chromium profile. Keep it intact. WebView cookies, storage and saved Android
+          <code>Bundle</code> history cannot simply be copied into a Chromium browser context.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Migration and rollback data" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Data</th>
+                <th scope="col">Migration / rollback behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Tabs, pins, history, spaces, preferences</th>
+                <td>
+                  Preserve the existing store schema. Reopen normal tab URLs through the new engine. Include background tabs, archive / restore and no-page
+                  start tabs in the upgrade fixture.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Normal cookies and site storage</th>
+                <td>
+                  Use a new versioned Chromium profile directory. Plan for site sign-in to be required again; do not promise transparent cookie or IndexedDB
+                  migration. Show a one-time Android engine upgrade notice before switching and preserve old data until rollback policy is settled. Never merge
+                  private cookies into normal state.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Saved native tab state</th>
+                <td>
+                  Use engine-tagged filenames / directories and a versioned envelope. Detect old WebView bundles, ignore them for Chromium, and open the saved
+                  URL. New Chromium states must not be read by a WebView build. Preserve unsupported state separately until cleanup is explicitly allowed by the
+                  migration version.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Private tabs and generated previews</th>
+                <td>
+                  Close / discard old private sessions during upgrade; do not import them or create private state files. Inspect snapshots, notifications, logs
+                  and crash metadata for private-page details. Files the user explicitly saved to Downloads are user exports and follow the existing product
+                  policy, not silent browser-data deletion.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Downloads and secure-store logins</th>
+                <td>
+                  Keep saved content URIs, download metadata and HTTP credentials compatible. Preserve <code>DownloadUpdate</code> identifiers / reference
+                  lookup or migrate them explicitly. Verify an old finished download still opens and old private records stay out of persistent lists.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Clear all website data</th>
+                <td>
+                  Close live pages, stop requests and clear the active Chromium contexts asynchronously, then remove tab states and snapshots. If legacy WebView
+                  data is retained for rollback, the clear-data action must also delete it and mark it unavailable for restoration. A later rollback must not
+                  resurrect data the user cleared.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Rollback is a rebuilt, signed Android app using the previous compatible engine selection, with a higher store version code where needed. It is not an
+          executable download or a silent runtime switch back to system WebView. Never open a newer Chromium profile with an older incompatible engine; use an
+          isolated profile and retain the shared tab URLs. Reverting a code commit alone is not a data rollback.
+        </p>
+      </section>
+      <section id="sequence">
+        <h2><span>09</span> Land the work in reviewable steps</h2>
+        <p>
+          The labels below define implementation order, not calendar estimates. Ownership follows the code: engine / CI work in P0–P4; the mobile native / app
+          integration in P5; joint release verification in P6. No individual owner or completion date is assigned by this plan.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Implementation sequence" tabindex="0">
+          <table class="sequence">
+            <thead>
+              <tr>
+                <th scope="col">PR-sized stage</th>
+                <th scope="col">Depends on</th>
+                <th scope="col">Code to add or change</th>
+                <th scope="col">Exit condition</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">P0 · lock and runner proof</th>
+                <td>No dependency</td>
+                <td>
+                  <code>engine/android/lock.json</code> <small>proposed new file or directory</small><br /><code>scripts/android/engine.py</code>
+                  <small>proposed new file or directory</small><br /><code>scripts/android/ci-disk.sh</code> <small>proposed new file or directory</small
+                  ><br /><code>.github/workflows/android-engine.yml</code> <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Resolve direct pins, verify toolchains / GN args, measure disk and timing, build and run upstream arm64 content shell. Stop here if runner
+                  capacity is insufficient. Choose the measured runner before proceeding. Include minimal timed compile / checkpoint support here if the shell
+                  proof exceeds one job; P4 hardens that mechanism for delivery rather than introducing resume only after the expensive builds.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P1 · shared content extraction</th>
+                <td>P0 pin established</td>
+                <td>
+                  <code>engine/content/</code> <small>proposed new file or directory</small><br /><a
+                    href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/src/bay/core/BUILD.gn"
+                    ><code>engine/nncore/src/bay/core/BUILD.gn</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/nncore/apply.sh"
+                    ><code>engine/nncore/apply.sh</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/engine/patches/series.py"
+                    ><code>engine/patches/series.py</code></a
+                  >
+                </td>
+                <td>
+                  Move only portable filter / renderer pieces; add platform routing and ownership-safe overlays. Desktop builds and native blocker tests must
+                  pass after the move. No Android UI swap yet.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P2 · embeddable engine and AAR</th>
+                <td>P0 complete, P1 interfaces stable</td>
+                <td>
+                  <code>engine/android/src/bay/mobile/</code> <small>proposed new file or directory</small><br /><code>engine/android/apply.sh</code>
+                  <small>proposed new file or directory</small><br /><code>scripts/android/package-engine.py</code> <small>proposed new file or directory</small
+                  ><br /><code>engine/android/host/</code> <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Implement N1–N2 and packaging. A Gradle host loads a real page using sandboxed child services. Prove JNI / resources / loader / release
+                  shrinking and React Native overlay feasibility before committing to the packaging method.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P3 · browser behavior</th>
+                <td>P2 host works, P1 complete</td>
+                <td>N3–N14 native components, shared Rust C ABI / preprocessing and native tests</td>
+                <td>
+                  Implement navigation, isolation, blocking, profiles, permissions, credentials, popups, downloads, media, view lifecycle and state. Complete
+                  deterministic host tests before replacing the production adapter.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P4 · reproducible engine delivery</th>
+                <td>P2 packaging fixed; publish only tested P3 engine</td>
+                <td>
+                  <code>scripts/lib/engine-state.py</code> <small>proposed new file or directory</small><br /><code>scripts/android/test_engine.py</code>
+                  <small>proposed new file or directory</small><br /><code>scripts/android/publish-engine.sh</code> <small>proposed new file or directory</small
+                  ><br /><code>scripts/android/fetch-engine.mjs</code> <small>proposed new file or directory</small>
+                </td>
+                <td>
+                  Copy and test only the reviewed archive utility from the reference branch; add exact identity reuse, failure checkpoints, serial stages, final
+                  completion gate, manifest validation and immutable publication. Restore / resume and corrupted / wrong-ID artifact tests pass.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P5 · Expo integration and migration</th>
+                <td>P3 parity and P4 tested artifact</td>
+                <td>
+                  Files in section 7, <code>apps/mobile/src/browser/engineMigration.ts</code> <small>proposed new file or directory</small> and migration
+                  fixtures
+                </td>
+                <td>
+                  Switch the Kotlin adapter, add fetch / prebuild and EAS preparation, migrate engine state, add metadata / per-tab image save and any required
+                  popup adoption. Both clean dev clients and clean remote preview builds pass. iOS remains WebKit.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">P6 · release qualification</th>
+                <td>P5 complete</td>
+                <td>
+                  <a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/.github/workflows/ci.yml"
+                    ><code>.github/workflows/ci.yml</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/tree/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/.argent/e2e/"
+                    ><code>apps/mobile/.argent/e2e/</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/docs/mobile-releasing.md"
+                    ><code>docs/mobile-releasing.md</code></a
+                  ><br /><a href="https://github.com/krishkalaria12/bay/blob/9e4d894f8947fae3bafc04ff162ca69a4bc2fafb/apps/mobile/AGENTS.md"
+                    ><code>apps/mobile/AGENTS.md</code></a
+                  >
+                </td>
+                <td>
+                  Run the acceptance matrix, inspect APK / AAB and iOS dependency graphs, record performance against the current baseline, rehearse rollback and
+                  security update. Publish preview first, then store builds using the tested engine ID.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          P1 and the early P2 host work can proceed together after pin selection, but P2 must use the shared interfaces before P3. Resume infrastructure can be
+          developed during engine work; no release may depend on unverified checkpoint restore. Keep the plan PR separate from all these implementation changes.
+        </p>
+      </section>
+      <section id="validation">
+        <h2><span>10</span> Acceptance requires native proof</h2>
+        <p>
+          Keep all existing <code>.argent/e2e</code> flows on both platforms. They cover smoke, navigation / tabs, settings, privacy, downloads, reading tools,
+          link menus, mini player, zoom, wallpaper and YouTube. Extend them with deterministic fixtures; passing the existing UI paths alone does not prove
+          subprocess isolation, profile deletion or native cookie handling.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Acceptance and regression matrix" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Area</th>
+                <th scope="col">Evidence</th>
+                <th scope="col">Pass condition</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Engine identity / packaging</th>
+                <td>Native host plus release Expo builds</td>
+                <td>
+                  Android reports the committed Chromium artifact ID; renderer runs in the intended sandboxed child process; no WebView fallback. Resource / JNI
+                  / child-service checks pass after R8 and bundle splits. iOS reports WebKit, links WebKit, and contains no Chromium AAR / native engine.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Contract and navigation</th>
+                <td>Native tests and shared e2e</td>
+                <td>
+                  Initial URL once, redirects, progress, history, back / forward, stop / reload, same-document changes, desktop mode, tracking removal, HTTPS
+                  fallback, main-frame errors, TLS failures and downloads that leave a blank tab. Stale callbacks never update another tab.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Tools and isolation</th>
+                <td>Deterministic adversarial page fixtures</td>
+                <td>
+                  All shared tools work. Page scripts cannot discover or call the isolated privileged bridge, forge another frame's message, or finish an old
+                  document's request. Test subframes, same-origin changes, about:blank / srcdoc, navigation during evaluation and renderer crash. Scriptlets
+                  still run at document start in the intended world.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Privacy / blocking</th>
+                <td>Native network tests plus fixtures</td>
+                <td>
+                  Compare allow / block / redirect / exceptions, cosmetic CSS, scriptlets, response modifiers, paused hosts, generations and tracking against
+                  shared Rust fixtures. Include third-party cookies, redirects, fetch, workers / service workers, WebSockets, blob documents and cross-origin
+                  frames. State explicitly where WebKit's static rules differ from Chromium network hooks.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Private and clear data</th>
+                <td>Native plus upgrade e2e</td>
+                <td>
+                  Normal cookies persist across restart; private cookies / storage never reach normal tabs. Private popups inherit their session. Evict every
+                  private view while logical private tabs remain, reopen one and verify its private session survives on both engines. Last logical close deletes
+                  the session; assert the chosen in-flight private-download policy. Clear-data completion really removes active and retained legacy website
+                  data. Check disk, snapshots, notifications and logs, not only UI lists.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Dialogs / upload / credentials</th>
+                <td>Native callback tests plus device tests</td>
+                <td>
+                  Alert, confirm, prompt and HTTP auth answer or cancel exactly once; external schemes require the intended gesture / confirmation; upload
+                  cancel / multiple / capture / MIME filters work; OS and site permissions deny / grant / revoke correctly. Passkeys and password Autofill are
+                  tested separately, including OAuth / window.open handoff and return links.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Downloads / image saves</th>
+                <td>Local HTTP fixture and devices</td>
+                <td>
+                  Signed-in GET and POST downloads, redirects across hosts, content-disposition names, MIME, cancel, service timeout, background progress, blob
+                  / data, large payloads, deleted files, finished-download opening and private context. Old download IDs keep working. Per-tab image save uses
+                  the right normal / private session without exporting cookies.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Media / lifecycle / UI</th>
+                <td>Android and iOS devices / simulators</td>
+                <td>
+                  Mini player, background audio, audio focus, fullscreen / PiP and Back restore correctly. Hidden pages suspend while playing pages survive.
+                  Check keyboard / IME, TalkBack / VoiceOver, selection, gestures, focus, overlays, tab thumbnails, Skia onboarding capture, low memory and
+                  bounded crash recovery.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Artifact failure / resume</th>
+                <td>Script unit tests plus actual staged build</td>
+                <td>
+                  Reject hash / schema / ABI / ID mismatch and partial downloads; atomic installation preserves a good artifact on failure. Resume at the same
+                  path without full rebuild. Real compile errors retain usable state, then fail; exhausted stages without a final artifact fail.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Upgrade / rollback</th>
+                <td>Install old signed build, upgrade with data</td>
+                <td>
+                  Preserve app tabs / spaces / settings / logins / completed downloads. Ignore old native bundles safely, explain site sign-in reset, discard
+                  private sessions, clear both engine stores and roll back without opening incompatible profiles or reviving cleared data.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Size and performance</th>
+                <td>Same hardware, fixture, lists and release configuration</td>
+                <td>
+                  Record APK download / installed size, AAB device split size, cold start to usable page, navigation latency, total browser + renderer / GPU /
+                  utility memory with five logical tabs, media behavior, Speedometer and blocker fixtures against system WebView. Account for the app's
+                  four-live-tab limit. Establish budgets from that baseline before qualification; do not invent "2–4 stages" or download-size targets.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Checks to wire into the implementation PRs</h3>
+        <pre><code># Root workspace
+pnpm lint
+pnpm typecheck
+pnpm slop
+pnpm fmt:check
+
+# Standalone mobile workspace, from apps/mobile
+pnpm typecheck
+pnpm test
+pnpm native
+pnpm e2e
+
+# Shared blocker
+cargo fmt --check --manifest-path packages/adblock/Cargo.toml
+cargo test --locked --manifest-path packages/adblock/Cargo.toml</code></pre>
+        <p>
+          Add native host / JNI / manifest / engine script checks to <code>.github/workflows/ci.yml</code> after the pinned artifact exists. Keep full engine
+          compilation on an explicit workflow with exact-identity reuse. Use arm64 local QA initially; an x64 Linux emulator job is a later separately built
+          ABI, not a reason to delay all device proof. Run a physical Android device for real credential, media and background behavior before store release.
+        </p>
+        <p>
+          Desktop extraction proof includes its native blocker suite and an engine build / smoke run. iOS qualification includes WebKit e2e and a native
+          dependency inspection. Record actual results, artifact ID, OS / ABI and failed cases in each implementation PR; this document is not a claim that
+          those engine tests have already passed.
+        </p>
+      </section>
+      <section id="release">
+        <h2><span>11</span> Separate engine compilation from app releases</h2>
+        <ol>
+          <li>
+            Build / test an engine on the new explicit Android engine workflow, then publish an immutable prerelease asset set keyed by Android engine ID. The
+            job that publishes needs narrowly scoped release write access; build and fetch jobs remain read-only. Avoid release URLs that select "latest."
+          </li>
+          <li>
+            Open a small app dependency update changing <code>android-engine.json</code>, verify fetch and native parity, then produce preview APK / production
+            AAB with the existing EAS workflow. The CI runner currently submitting EAS does not itself assemble the app. Keep iOS IPA builds separate from the
+            Linux engine compile.
+          </li>
+          <li>
+            Validate generated device APKs from the AAB, all declared ABIs / supported API levels and 16 KB runtime. Keep licenses, resource inventory, R8
+            mapping and matching native build IDs / symbols with the release.
+          </li>
+          <li>
+            Roll out to internal testers before Google Play testing tracks. iOS ships the same shared feature behavior on WebKit. Store signing remains in the
+            existing credentials setup, with no secrets committed into the engine lock.
+          </li>
+          <li>
+            With bundled Chromium, Bay owns engine security updates. Monitor upstream fixes, update pins / privacy patches, rebuild the full tested artifact,
+            and ship an app update. Do not wait for a desktop feature release when an Android security fix is needed.
+          </li>
+          <li>
+            Keep the previous compatible engine artifact and signed app inputs for rollback; rehearse the profile isolation rules from section 8. Never let
+            artifact expiration make a released app impossible to rebuild.
+          </li>
+        </ol>
+        <p>
+          The broader mobile plan originally allowed an initial system-WebView release before phase 7. This document defines the requested Chromium destination.
+          During implementation, label any legacy preview explicitly. The Chromium release gate cannot be marked complete with a system-WebView APK, and no
+          runtime fallback should hide an engine startup failure.
+        </p>
+      </section>
+      <section id="sources">
+        <h2><span>12</span> Evidence, assumptions and unresolved gates</h2>
+        <p>
+          Accepted decisions are Android Chromium, iOS WebKit, the existing shared app API and Linux GitHub Actions as the engine build coordinator. The content
+          embedder / AAR layout, file names and PR boundaries are proposed implementation choices. The following questions require measured or executable
+          evidence before their dependent stage proceeds.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Open implementation gates" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Gate</th>
+                <th scope="col">What must be resolved</th>
+                <th scope="col">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Runner capacity</th>
+                <td>
+                  Will source, tools, outputs, checkpoint and restore peaks fit on the selected hosted image? If not, select a provisioned Linux runner with
+                  sufficient storage and record its cost / capacity.
+                </td>
+                <td>P0, before committing to hosted staged builds</td>
+              </tr>
+              <tr>
+                <th scope="row">Exact pin and privacy support</th>
+                <td>
+                  Resolve the Chromium source commit for the selected desktop baseline, validate Android build support and patch compatibility, then assess
+                  security freshness. No compatible ungoogled Android variant is proven by this audit.
+                </td>
+                <td>P0 and patched shell proof</td>
+              </tr>
+              <tr>
+                <th scope="row">AAR export / subprocesses</th>
+                <td>
+                  Confirm the pinned GN / JNI / resource export path and merged child-service startup in a plain Gradle app, then in Expo. Determine any
+                  required companion artifacts.
+                </td>
+                <td>P2, before the Kotlin swap</td>
+              </tr>
+              <tr>
+                <th scope="row">Credential and popup parity</th>
+                <td>
+                  Prove WebAuthn / OS Autofill and OAuth popup semantics with a content embedder. Decide whether the proposed pending-window token is necessary;
+                  unsupported promised browser behavior blocks shipping.
+                </td>
+                <td>P3</td>
+              </tr>
+              <tr>
+                <th scope="row">Private download lifetime</th>
+                <td>
+                  Decide the proposed cancellation of in-flight private downloads on last logical private-tab close. Current download updates can continue after
+                  a tab closes. If transfers continue instead, retain only the necessary private context lease and delay final teardown until transfer
+                  completion; document and test that exception. Explicitly saved files remain user exports.
+                </td>
+                <td>P3 policy, P5 lifecycle integration</td>
+              </tr>
+              <tr>
+                <th scope="row">Media and protected content</th>
+                <td>
+                  Verify codecs, GPU fallback, DRM availability and background / PiP semantics on supported Android versions. Any deliberate limitation needs an
+                  explicit product decision and accurate documentation.
+                </td>
+                <td>P3 before P6</td>
+              </tr>
+              <tr>
+                <th scope="row">API / ABI / performance budgets</th>
+                <td>
+                  Record supported minimum Android version, initial arm64-only scope, 16 KB proof, baseline performance and acceptable regressions. Stage count
+                  and build duration remain unestimated until measured.
+                </td>
+                <td>P0 baseline, P2 packaging, P6 qualification</td>
+              </tr>
+              <tr>
+                <th scope="row">Clean remote builds</th>
+                <td>
+                  Prove Android artifact resolution and iOS Rust framework preparation from a clean EAS workspace. Check upload contents / shared sources and
+                  hook order.
+                </td>
+                <td>P5 before preview release</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Known gaps</h3>
+        <p>
+          Recorded 14 November 2026, when P2–P5 were written without a runner build in between (the first run after them builds the engine and the APK
+          together). Each row is work still owed, or a limit outside Bay's code.
+        </p>
+        <div class="table-wrap" role="region" aria-label="Known gaps" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Gap</th>
+                <th scope="col">Where it stands</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Not compiled yet</th>
+                <td>
+                  Nothing in <code>engine/android/src/bay</code> since P0 has compiled: Android Chromium can't build on a Mac. The Kotlin compiles against
+                  <code>engine/android/api-stub</code>; expect the first run to stop on native compile errors.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Shared filter on desktop</th>
+                <td>
+                  The request and cookie filters moved to <code>engine/shared</code> (<code>//bay/filter</code>), which both engines build on (P1). The patch
+                  series applies it in a scratch tree, but desktop's framework hasn't been rebuilt against it yet.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Passkey providers</th>
+                <td>
+                  Sites can ask for passkeys on Android (WebAuthn in browser mode, through Credential Manager), but a provider only answers a browser it trusts:
+                  Google Password Manager's list of privileged browsers is a request to Google. iOS needs Apple's
+                  <code>web-browser.public-key-credential</code> entitlement (<code>BAY_WEB_PASSKEYS=1</code>), also granted on request.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Interrupted downloads</th>
+                <td>On Android an interrupted download is reported as failed and not resumed; iOS resumes once from WebKit's resume data.</td>
+              </tr>
+              <tr>
+                <th scope="row">Device proof</th>
+                <td>
+                  The Chromium page view hasn't run on a device: that needs the first built AAR. On iOS, the desktop content mode and the private download
+                  store, added in the same work, haven't been tried on a device either.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Primary references</h3>
+        <ul class="sources">
+          <li>
+            <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md">Chromium Android build instructions</a>: Linux
+            host requirements, target ABI selection, content-shell build and direct source setup. The implementation must recheck commands against the chosen
+            revision.
+          </li>
+          <li>
+            <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_native_libraries.md">Chromium native libraries on Android</a>: library
+            loading, generated JNI, subprocess-related packaging and symbols.
+          </li>
+          <li>
+            <a href="https://docs.github.com/en/actions/reference/runners/github-hosted-runners">GitHub hosted runner specifications</a> and
+            <a href="https://docs.github.com/en/actions/reference/limits">Actions limits</a>: hosted hardware / disk guarantees, job timeout and account storage
+            constraints.
+          </li>
+          <li>
+            <a href="https://developer.android.com/guide/practices/page-sizes">Android 16 KB page-size guidance</a>: final ELF / APK validation and runtime
+            tests.
+          </li>
+          <li>
+            <a href="https://docs.expo.dev/build-reference/npm-hooks/">Expo build lifecycle hooks</a> and
+            <a href="https://docs.expo.dev/build-reference/easignore/">EAS ignore rules</a>: remote preparation timing and upload behavior.
+          </li>
+        </ul>
+        <p class="meta">
+          External documentation checked 13 November 2026. It describes upstream requirements, not a successful Bay Android engine build. All repository audit
+          claims above link to immutable source snapshots.
+        </p>
+      </section>
+      <footer>
+        The engine, its runner workflow, the APK release and the mobile engine swap are written; the known gaps above are what remains before the first build is
+        proven. Existing mobile scope is in <a href="mobile-plan.html">mobile-plan.html</a>; store release procedures are in
+        <a href="mobile-releasing.md">mobile-releasing.md</a>.
+      </footer>
+    </main>
+  </body>
+</html>

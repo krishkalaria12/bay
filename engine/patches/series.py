@@ -112,8 +112,20 @@ def host_platform():
     return "win" if sys.platform == "win32" else "mac" if sys.platform == "darwin" else "linux"
 
 
+DESKTOP = ("mac", "win", "linux")
+PLATFORMS = (*DESKTOP, "android")
+
+
+def selects(platforms, target):
+    """Whether a step for `platforms` (a series column) goes into `target`'s tree. `all` means every desktop."""
+    if platforms == "all":
+        return target in DESKTOP
+    return target in platforms.split(",")
+
+
 def read_series(target=None):
-    supported = {"mac", "win", "linux"}
+    """The steps in order: every one, or only those `target` takes."""
+    supported = set(PLATFORMS)
     if target is not None and target not in supported:
         sys.exit(f"unknown series platform: {target}")
     steps = []
@@ -123,7 +135,7 @@ def read_series(target=None):
             continue
         fields = line.split()
         if len(fields) != 3:
-            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win|linux[,platform...] <name>`: {raw.rstrip()}")
+            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win|linux|android[,platform...] <name>`: {raw.rstrip()}")
         kind, platforms, name = fields
         selected = platforms.split(",")
         if (kind not in ("cef", "chromium", "layer") or
@@ -141,7 +153,7 @@ def read_series(target=None):
     unlisted = sorted(set(f for f in os.listdir(HERE) if f.endswith(".patch")) - set(names))
     if unlisted:
         sys.exit("patches missing from series: " + ", ".join(unlisted))
-    return [step for step in steps if target is None or step.platforms == "all" or target in step.platforms.split(",")]
+    return [step for step in steps if target is None or selects(step.platforms, target)]
 
 
 def layer_command(step):
@@ -399,7 +411,7 @@ def main():
     sub.add_parser("files")
     # Put --platform after the subcommand, like --phase.
     for command_parser in sub.choices.values():
-        command_parser.add_argument("--platform", choices=["mac", "win", "linux"], default=host_platform())
+        command_parser.add_argument("--platform", choices=list(PLATFORMS), default=host_platform())
     args = parser.parse_args()
     handler = {"apply": cmd_apply, "check": cmd_check, "capture-base": cmd_capture_base,
                "materialize": cmd_materialize, "files": cmd_files}[args.command]
