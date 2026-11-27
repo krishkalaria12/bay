@@ -136,8 +136,11 @@ fun BrowserScreen(browser: BrowserModel, strings: Strings, onSettings: () -> Uni
             // a resize mid-scroll lays the page out again and reallocates its surface, which shook the whole page. The
             // engine takes the bar as the page's bottom toolbar instead, lifting what a site pins to its bottom above it.
             val density = LocalDensity.current
-            val barCover = WindowInsets.navigationBars.getBottom(density) + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
-            LaunchedEffect(barCover) { browser.barCoverChanged(barCover) }
+            // Scrolled away, the bar keeps its pill's room: what a site pins to its bottom comes down to rest above the pill.
+            val navigation = WindowInsets.navigationBars.getBottom(density)
+            val barCover = navigation + with(density) { (Space.xs + BAR_HEIGHT + Space.sm).roundToPx() }
+            val pillCover = navigation + with(density) { (Space.xs + MINI_HEIGHT + Space.sm).roundToPx() }
+            LaunchedEffect(barCover, pillCover) { browser.barCoverChanged(barCover, pillCover) }
             if (shown) {
                 // Behind the page until it draws its first frame: the colour along its bottom edge, else the engine's blank white.
                 Box(Modifier.fillMaxSize().graphicsLayer { translationX = browser.tabSwipe.offset.value }.background(footColor ?: Color.White).clearAndSetSemantics {})
