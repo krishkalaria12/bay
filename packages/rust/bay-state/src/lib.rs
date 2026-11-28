@@ -9,8 +9,10 @@ pub mod downloads;
 pub mod model;
 pub mod number;
 pub mod session;
+pub mod store;
 
 pub use documents::{DataDir, DocumentError};
 pub use downloads::Downloads;
 pub use number::JsNumber;
 pub use session::Session;
+pub use store::Browser;

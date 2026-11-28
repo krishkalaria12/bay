@@ -148,8 +148,52 @@ pub struct Tab {
     pub engine_pick: Option<EnginePick>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub new_tab_history: Option<NewTabHistory>,
+    /// What the page is to load next. This and the two below live only while the app runs: they're never saved.
+    #[serde(skip)]
+    pub navigation: Option<Navigation>,
+    /// A page the engine already made, to adopt instead of loading the address.
+    #[serde(skip)]
+    pub adopt_id: Option<String>,
+    /// What a tab that hasn't loaded adopts when first shown: a reopened window's "restore:<tab>".
+    #[serde(skip)]
+    pub wake_adopt_id: Option<String>,
     #[serde(flatten)]
     pub extra: Extra,
+}
+
+/// A load the tab asks its page for. `seq` tells two loads of one address apart.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Navigation {
+    pub url: String,
+    pub seq: u64,
+    pub user_initiated: bool,
+}
+
+impl Tab {
+    /// A pinned page: an Essential (a pinned tile) or a pinned row.
+    pub fn pinned_page(&self) -> bool {
+        self.pinned || self.is_row()
+    }
+
+    pub fn is_row(&self) -> bool {
+        self.pinned_row == Some(true)
+    }
+
+    pub fn is_unloaded(&self) -> bool {
+        self.unloaded == Some(true)
+    }
+
+    /// It has a page, or will once shown: an address and a load or a page to adopt.
+    pub fn is_loaded(&self) -> bool {
+        !self.url.is_empty() && (self.navigation.is_some() || self.adopt_id.is_some())
+    }
+}
+
+impl BrowserWindow {
+    /// Little Bay: one page, no sidebar.
+    pub fn is_small(&self) -> bool {
+        self.kind.as_deref() == Some("small")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

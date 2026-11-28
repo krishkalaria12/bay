@@ -13,6 +13,8 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_with = "3"
 thiserror = "2"
+# Hosts as the TypeScript reads them (`new URL(url).hostname`).
+url = "2"
 
 [dev-dependencies]
 tempfile.workspace = true

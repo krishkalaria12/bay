@@ -516,7 +516,8 @@
                     host glue and links NNCore; <code>bay-app</code>, the spike (<code>scripts/gpui/build-app.sh</code>): a 500-row sidebar on GPUI's virtual
                     list, the tab's page as a GPUI native view, and a command bar (⌘L) drawn over it. Checked 28 Nov: the engine starts with the content blocker
                     and page script, the page loads and draws inside GPUI's rounded frame, the bar paints over the page, and the workspace's format, lint and
-                    tests pass with and without the framework. The <a href="#p0-checks">gate checks</a> that need someone at the keyboard are open.
+                    tests pass with and without the framework. Checked at the keyboard 28 Nov: the bar takes keys over the page. The other
+                    <a href="#p0-checks">gate checks</a> are open.
                   </td>
                 </tr>
                 <tr>
@@ -525,8 +526,12 @@
                     In progress. <code>bay-state</code> reads and writes <code>session.json</code> and <code>downloads.json</code> in place (D6): every record
                     typed, nulls and missing fields kept apart, fields it doesn't model carried through. Its fixtures are the React Native app's own output
                     (<code>apps/browser/scripts/state-fixtures.mjs</code>: the 200-tab benchmark seed, and a session holding every optional field), and
-                    <code>apps/browser/scripts/state-compare.mjs</code> checks that app loads what <code>bay-state</code> writes to the same state. Next: the
-                    store's commands and their tests, the other documents, the engine ABI, primitives.
+                    <code>apps/browser/scripts/state-compare.mjs</code> checks that app loads what <code>bay-state</code> writes to the same state.
+                    <code>bay_state::store</code> holds the store while the app runs and its tab commands: opening (Chrome's opener order), showing, closing
+                    (which tab shows next), moving, pinning, groups, splits, windows, and loading and saving the session. Its tests are the store's own
+                    (<code>store/tabs.test.mjs</code>, ported), and the session it saves after loading the app's matches what the app's store saves (each
+                    fixture's <code>reloaded.json</code>). Next: spaces and moving tabs between windows and spaces, page events (navigating, loads, engines),
+                    then the other documents, the engine ABI, primitives.
                   </td>
                 </tr>
                 <tr>
@@ -568,7 +573,7 @@
                 </tr>
                 <tr>
                   <td>Bar over the page</td>
-                  <td>Draws over it. Taking clicks and keys over the page: open.</td>
+                  <td>Passes: it draws over the page and takes keys there (checked at the keyboard, 28 Nov).</td>
                 </tr>
                 <tr>
                   <td>Resize without tearing</td>
@@ -621,6 +626,14 @@
             <li>
               Settings and downloads are kept as written JSON until each has a typed home; history, bookmarks, Library, Boosts and the other documents aren't
               read yet.
+            </li>
+            <li>
+              <code>bay_state::store</code> leaves out, for now: giving a space without an icon an emoji on load (<code>withSpaceEmoji</code>); history and
+              bookmarks, so unloading a pinned page back at its pinned address keeps the title it had; private windows' own site mutes; Find; peeks;
+              <code>openAppUrl</code> (an app address typed into a tab opens in the tab); a pinned row's tidied title (<code>tidyTabTitles</code>); placing tabs
+              into a pinned folder; the local files' order (<code>normalizeLocalFiles</code>); and creating a window from given tabs. It takes addresses already
+              resolved by a function it's given: the input rules (<code>@bay/core</code> <code>resolveInput</code>) have a Rust port in the mobile core
+              (<code>packages/mobile-core/crates/bay-core/src/input</code>) to share rather than copy.
             </li>
             <li>
               The spike links the engine built on 20 Nov (<code>~/chromium-build</code>); <code>engine/</code> has changed since and has no published prebuilt.
