@@ -32,3 +32,8 @@ Bay builds on and ships third-party software under its own licenses, including:
   colours, fonts and icons, a desktop page in place of Yab's Mac sync, and on Android Compose in place of SwiftUI. "Yab" and its marks are Serafim Korablev's; Bay is not Yab
   and isn't endorsed by it
 - Caveat (SIL Open Font License 1.1), the welcome's handwritten notes
+- GPUI (Apache-2.0, Copyright Zed Industries, https://github.com/zed-industries/zed), the desktop app's UI framework,
+  vendored in packages/rust/third_party/gpui at Zed a3ce8d5e88e35697b2ba1cf9cb3c6816089b8281 with changes from Ardia
+  (Apache-2.0, Copyright 2026 Mantra Patel, https://github.com/ardia-browser/ardia): native views under GPUI's drawing,
+  hosting in another app's windows and run loop, Liquid Glass and system materials, gestures and frame timing
+  (packages/rust/third_party/gpui/bay-base.patch). Bay's own changes to it follow under Apache-2.0
