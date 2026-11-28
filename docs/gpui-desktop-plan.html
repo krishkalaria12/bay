@@ -463,6 +463,8 @@
           <li><a href="#why">1. Why GPUI, and what is proven</a></li>
           <li><a href="#today">2. Where Bay stands</a></li>
           <li><a href="#target">3. Target layout</a></li>
+          <li class="sub"><a href="#crates">Crates</a></li>
+          <li class="sub"><a href="#libraries">Libraries</a></li>
           <li><a href="#carry">4. What carries over</a></li>
           <li><a href="#phases">5. Phases</a></li>
           <li class="sub"><a href="#p0">0. Spike and gate</a></li>
@@ -488,10 +490,11 @@
             and Linux follow once macOS ships, replacing the WebUI host there.
           </p>
           <p class="meta">
-            Drafted 28 Nov 2026 against <code>main</code> at <code>1add157c2</code>. Proposed; nothing is built. It replaces the "one host for all three"
-            question in Phase 6 of the shared desktop core plan: the single host becomes GPUI rather than WebUI. A reference port shaped it: a draft GPUI
-            rewrite of a sibling Chromium browser's React Native macOS app, opened 27 Nov 2026, whose own source is Apache-2.0. Line counts are tracked files
-            without tests or vendored code, rounded.
+            Drafted 28 Nov 2026 against <code>main</code> at <code>6787688f0</code>, which holds the shared desktop core (#35), engine choice (#36) and the
+            browser gaps (#38). Work happens on <code>refactor/gpui-port</code>; <a href="#progress">Progress</a> says what is built. It replaces the "one host
+            for all three" question in Phase 6 of the shared desktop core plan: the single host becomes GPUI rather than WebUI. A reference port shaped it: a
+            draft GPUI rewrite of a sibling Chromium browser's React Native macOS app, opened 27 Nov 2026, whose own source is Apache-2.0. Line counts are
+            tracked files without tests or vendored code, rounded.
           </p>
         </header>
 
@@ -508,7 +511,7 @@
               <tbody>
                 <tr>
                   <td>0 · Spike and gate</td>
-                  <td>Not started. Waits on decisions D2, D4 and D9.</td>
+                  <td>Not started. Waits on decisions D2 and D4.</td>
                 </tr>
                 <tr>
                   <td>1 · Foundations</td>
@@ -546,8 +549,9 @@
         <section id="summary" aria-labelledby="summary-h">
           <h2 id="summary-h">Decisions at a glance</h2>
           <p class="prose">
-            One decision is made: desktop moves to GPUI, macOS first (28 Nov 2026). The rest are open, each with a recommendation. Details and reasons are in
-            <a href="#decisions">section 10</a>. Phase 0 needs D2, D4 and D9; the others can wait until the phase that needs them.
+            Decided on 28 Nov 2026: desktop moves to GPUI, macOS first; the work is a workspace of Rust crates and may use any Rust library; it lives on
+            <code>refactor/gpui-port</code>. The rest are open, each with a recommendation. Details and reasons are in <a href="#decisions">section 10</a>.
+            Phase 0 needs D2 and D4; the others can wait until the phase that needs them.
           </p>
           <div class="table-wrap">
             <table>
@@ -564,6 +568,15 @@
                   <td>D1</td>
                   <td>Move desktop to GPUI?</td>
                   <td><span class="state done">Decided</span> Yes, macOS first.</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>D1a</td>
+                  <td>Code shape and dependencies</td>
+                  <td>
+                    <span class="state done">Decided</span> A workspace of crates; any Rust library may be used (<a href="#crates">Crates</a>,
+                    <a href="#libraries">Libraries</a>).
+                  </td>
                   <td>—</td>
                 </tr>
                 <tr>
@@ -605,13 +618,19 @@
                 <tr>
                   <td><a href="#d8">D8</a></td>
                   <td>Where the code lives</td>
-                  <td>New crates in the <code>packages/rust</code> workspace, GPUI under <code>packages/rust/third_party/gpui</code>.</td>
+                  <td>
+                    New crates in the <code>packages/rust</code> workspace, GPUI under <code>packages/rust/third_party/gpui</code>; the app gets its own release
+                    profile.
+                  </td>
                   <td>Phase 0</td>
                 </tr>
                 <tr>
                   <td><a href="#d9">D9</a></td>
                   <td>Branch and PR</td>
-                  <td>One branch, <code>feat/gpui-desktop</code>, from #35, in a sibling worktree; one PR; merges, not rebases.</td>
+                  <td>
+                    <span class="state done">Decided</span> <code>refactor/gpui-port</code> from <code>main</code>, worktree <code>bay-gpui</code>; one PR;
+                    merges, not rebases.
+                  </td>
                   <td>Phase 0</td>
                 </tr>
                 <tr>
@@ -762,8 +781,8 @@
                 <tr>
                   <td>Rust</td>
                   <td>
-                    <code>packages/rust</code> (PR #35: <code>bay-desktop</code>, <code>bay-lists</code>, <code>bay-sync</code>, <code>bay-import</code>),
-                    <code>packages/adblock</code>, <code>packages/mobile-core</code>
+                    <code>packages/rust</code> (<code>bay-desktop</code>, <code>bay-lists</code>, <code>bay-sync</code>, <code>bay-import</code>,
+                    <code>bay-plugins</code>, <code>bay-switches</code>), <code>packages/adblock</code>, <code>packages/mobile-core</code>
                   </td>
                   <td class="num">~49k</td>
                   <td>The workspace the new crates join (D8).</td>
@@ -796,7 +815,7 @@
               <div class="tag">UI</div>
               <div class="cells">
                 <div class="cell new"><strong>bay-ui</strong><span>sidebar, command bar, pages, settings, Library, Easels</span></div>
-                <div class="cell new"><strong>bay-ui primitives</strong><span>tokens, virtual list, text input, menus, icons, glass</span></div>
+                <div class="cell new"><strong>bay-widgets</strong><span>tokens, virtual list, text input, menus, icons, glass</span></div>
                 <div class="cell new"><strong>bay-theme</strong><span>space themes, grain, backdrop</span></div>
               </div>
             </div>
@@ -804,13 +823,16 @@
               <div class="tag">State</div>
               <div class="cells">
                 <div class="cell new"><strong>bay-state</strong><span>tabs, spaces, folders, history, settings, commands, persistence</span></div>
-                <div class="cell shared"><strong>bay-lists · bay-sync · bay-import</strong><span>from PR #35, unchanged</span></div>
+                <div class="cell shared">
+                  <strong>bay-lists · bay-sync · bay-import · bay-switches · bay-plugins</strong><span>already on main, unchanged</span>
+                </div>
               </div>
             </div>
             <div class="layer" role="listitem">
               <div class="tag">Engine</div>
               <div class="cells">
                 <div class="cell new"><strong>bay-engine</strong><span>engine trait, C ABI client, stand-in engine, macOS view bridge</span></div>
+                <div class="cell new"><strong>bay-mac</strong><span>window hooks, native menus, Swift services' C functions</span></div>
                 <div class="cell">
                   <strong>NNCore</strong><span>Chromium, exports <code>bay_engine_api</code></span>
                 </div>
@@ -827,13 +849,189 @@
             </div>
           </div>
           <p class="legend"><i class="new"></i>new <i class="shared"></i>shared with the other desktop platforms today <i></i>exists, changed little</p>
-          <h3>Files</h3>
-          <div class="mock">
-            packages/rust/ Cargo.toml workspace: add the crates below and the GPUI copy rust-toolchain.toml one pinned toolchain crates/bay-engine/
-            src/{lib,abi,events,mock}.rs, src/macos/bridge.mm crates/bay-state/ one module per store; persistence/; tests/ with fixtures crates/bay-theme/
-            crates/bay-ui/ primitives/, sidebar/, command_bar/, pages/, settings/ … crates/bay-app/ main.rs, menus, AppleScript, dev harness; build.rs builds
-            the Swift services third_party/gpui/ gpui, gpui_macos, gpui_platform (+ gpui_windows, gpui_linux) scripts/gpui/ build-app.sh (bundle, NNCore
-            framework, helpers, signing), check-fast.sh
+          <h3 id="crates">Crates</h3>
+          <p class="prose">
+            The port is a set of Rust crates in the existing <code>packages/rust</code> workspace, beside the crates already there. Each crate has one job, its
+            own tests, and depends only on crates below it. Crates sit flat in the workspace folder, as the existing ones do.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Crate</th>
+                  <th scope="col">Holds</th>
+                  <th scope="col">Depends on</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>bay-app</code></td>
+                  <td>The binary: startup, windows, app menus, AppleScript, Sparkle, the release profile</td>
+                  <td>everything below</td>
+                </tr>
+                <tr>
+                  <td><code>bay-ui</code></td>
+                  <td>Screens: sidebar, tab bar, command bar, pages, settings, Library, Easels, prompts</td>
+                  <td><code>bay-widgets</code>, <code>bay-state</code>, <code>bay-theme</code>, <code>gpui</code></td>
+                </tr>
+                <tr>
+                  <td><code>bay-widgets</code></td>
+                  <td>Primitives: tokens, virtual list, text input, buttons, menus, icons, glass, accessibility roles</td>
+                  <td><code>bay-theme</code>, <code>gpui</code></td>
+                </tr>
+                <tr>
+                  <td><code>bay-theme</code></td>
+                  <td>Space themes, colour maths, grain and backdrop settings, typography scale</td>
+                  <td>none (plain types; <code>bay-widgets</code> converts to GPUI's)</td>
+                </tr>
+                <tr>
+                  <td><code>bay-state</code></td>
+                  <td>The model and its commands: tabs, spaces, folders, history, settings, Little Bay, sync state; persistence of today's documents</td>
+                  <td>
+                    <code>bay-engine</code> (types only), <code>bay-lists</code>, <code>bay-sync</code>, <code>bay-import</code>, <code>bay-switches</code>,
+                    <code>bay-plugins</code>. Never <code>gpui</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>bay-engine</code></td>
+                  <td>
+                    The engine trait, the C ABI client, events, the stand-in engine; <code>src/macos/</code> view and window bridge (<code>bridge.mm</code>)
+                  </td>
+                  <td>none of Bay's</td>
+                </tr>
+                <tr>
+                  <td><code>bay-mac</code></td>
+                  <td>macOS glue: objc2 window hooks, native menus, the Swift services' C functions (built by its <code>build.rs</code>)</td>
+                  <td><code>bay-engine</code></td>
+                </tr>
+                <tr>
+                  <td><code>bay-dev</code></td>
+                  <td>The dev-eval harness the benches and acceptance runs use; built in Debug and bench builds only</td>
+                  <td><code>bay-state</code>, <code>bay-engine</code></td>
+                </tr>
+                <tr>
+                  <td><code>third_party/gpui/*</code></td>
+                  <td><code>gpui</code>, <code>gpui_macos</code>, <code>gpui_platform</code>; later <code>gpui_windows</code>, <code>gpui_linux</code></td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="prose">
+            <li>
+              <strong><code>bay-state</code> has no GPUI.</strong> It runs in plain <code>cargo test</code>, the Windows and Linux hosts can link it before they
+              move, and the UI reads it through thin GPUI entities in <code>bay-ui</code>.
+            </li>
+            <li>
+              <strong>Split for build time.</strong> When <code>bay-ui</code> takes too long to rebuild, split it by screen (<code>bay-sidebar</code>,
+              <code>bay-command-bar</code>, <code>bay-settings</code> …) under the same rules.
+            </li>
+            <li>
+              <strong>Its own release profile.</strong> The workspace's release profile is tuned for size (<code>opt-level = "s"</code>) for
+              <code>bay-desktop</code>. The app builds with a <code>[profile.app]</code> that inherits release at <code>opt-level = 3</code>, so the UI gets
+              speed and the static library keeps its size.
+            </li>
+            <li><strong>One toolchain.</strong> <code>packages/rust/rust-toolchain.toml</code> pins the Rust version GPUI needs.</li>
+          </ul>
+          <pre class="mock">
+packages/rust/
+  Cargo.toml              workspace: the crates below, the GPUI copy, [profile.app]
+  rust-toolchain.toml
+  bay-app/                src/main.rs, menus, AppleScript, updater; resources/Info.plist
+  bay-ui/                 src/{sidebar,tab_bar,command_bar,pages,settings,library,easels}/
+  bay-widgets/            src/{tokens,virtual_list,text_input,menu,icon,glass,a11y}.rs
+  bay-theme/
+  bay-state/              src/{model,commands,tabs,spaces,folders,history,…}.rs, persistence/, tests/fixtures/
+  bay-engine/             src/{lib,abi,events,mock}.rs, src/macos/bridge.mm
+  bay-mac/                src/, swift/, build.rs
+  bay-dev/
+  third_party/gpui/       gpui, gpui_macos, gpui_platform
+  bay-desktop/ bay-lists/ bay-sync/ bay-import/ bay-plugins/ bay-switches/   (already here)
+scripts/gpui/             build-app.sh (bundle, NNCore framework, helpers, signing), check.sh</pre>
+
+          <h3 id="libraries">Libraries</h3>
+          <p class="prose">
+            Any Rust library may be used. Take a maintained crate over writing the same thing. Add it to <code>[workspace.dependencies]</code> so every crate
+            shares one version. <code>cargo deny</code> runs in CI to list each dependency's licence and flag security advisories; licences go in
+            <code>NOTICE</code>. A GPL or AGPL crate would put Bay's own source under that licence, so check before adding one. Starting picks:
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Need</th>
+                  <th scope="col">Crates</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>AppKit and Foundation</td>
+                  <td>
+                    <code>objc2</code>, <code>objc2-app-kit</code>, <code>objc2-foundation</code>, <code>objc2-quartz-core</code>, <code>block2</code>,
+                    <code>dispatch2</code> (what GPUI's macOS layer uses)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Native code in builds</td>
+                  <td>
+                    <code>cc</code> for <code>bridge.mm</code>; <code>swiftc</code> from <code>build.rs</code> for the Swift services, or
+                    <code>swift-rs</code> if the glue grows
+                  </td>
+                </tr>
+                <tr>
+                  <td>Accessibility</td>
+                  <td><code>accesskit</code> through GPUI, <code>accesskit_macos</code></td>
+                </tr>
+                <tr>
+                  <td>Data</td>
+                  <td>
+                    <code>serde</code>, <code>serde_json</code> (already in the workspace), <code>rusqlite</code> (already, bundled) where a store outgrows JSON
+                    documents
+                  </td>
+                </tr>
+                <tr>
+                  <td>Errors and logs</td>
+                  <td>
+                    <code>thiserror</code> in libraries, <code>anyhow</code> in the binary, <code>tracing</code> with <code>tracing-oslog</code> for Console.app
+                  </td>
+                </tr>
+                <tr>
+                  <td>Concurrency</td>
+                  <td>
+                    GPUI's foreground and background executors, <code>futures</code>, <code>async-channel</code> for engine events, <code>parking_lot</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>URLs and text</td>
+                  <td><code>url</code>, <code>idna</code>, <code>psl</code> (site and domain rules), <code>unicode-segmentation</code></td>
+                </tr>
+                <tr>
+                  <td>Command bar</td>
+                  <td><code>nucleo-matcher</code> (fuzzy matching), <code>fend-core</code> (calculator and units) if it matches today's answers</td>
+                </tr>
+                <tr>
+                  <td>Time and IDs</td>
+                  <td><code>jiff</code>, <code>uuid</code></td>
+                </tr>
+                <tr>
+                  <td>Files</td>
+                  <td>
+                    <code>notify</code> (Finder folders in the sidebar), <code>dirs</code>, <code>tempfile</code> (atomic saves, already in the workspace)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Network outside the engine</td>
+                  <td><code>reqwest</code> with rustls, for the few calls the app makes itself (kill-switch feed, sync relay)</td>
+                </tr>
+                <tr>
+                  <td>Tests and benches</td>
+                  <td>
+                    <code>insta</code> (snapshots), <code>proptest</code>, <code>pretty_assertions</code>, <code>divan</code>; <code>cargo-nextest</code>,
+                    <code>cargo-deny</code>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -881,7 +1079,7 @@
                 </tr>
                 <tr>
                   <td>Filter lists, sync, import</td>
-                  <td><code>packages/rust</code> (#35)</td>
+                  <td><code>packages/rust</code></td>
                   <td>Called directly instead of through the pod.</td>
                 </tr>
                 <tr>
@@ -951,7 +1149,7 @@
               NNCore and its helpers, a <code>pnpm gpui</code> dev run, and the dev-eval harness.
             </li>
             <li>
-              <strong>Services.</strong> Swift services linked through C functions from <code>bay-app/build.rs</code>, starting with Keychain and Sparkle.
+              <strong>Services.</strong> Swift services linked through C functions from <code>bay-mac/build.rs</code>, starting with Keychain and Sparkle.
             </li>
             <li>Windows and Linux CI runs <code>cargo check</code> on the new crates, so nothing macOS-only leaks into the shared ones.</li>
           </ul>
@@ -1317,7 +1515,7 @@
           <ul class="prose">
             <li>The engine: Chromium patches, NNCore internals, the WebKit engine. NNCore only gains an exported ABI.</li>
             <li>The phones: SwiftUI and Compose on <code>packages/mobile-core</code>.</li>
-            <li>The shared desktop core (#35) and its crates.</li>
+            <li>The shared desktop crates already in <code>packages/rust</code>; the GPUI app links them as Rust libraries instead of through the pod.</li>
             <li>The Windows and Linux WebUI host, until Phase 6.</li>
             <li>User data folders, keychain names, entitlements, bundle ID and the Sparkle feed.</li>
             <li><code>bay exec</code> and the CLI, which talk to the engine over CDP.</li>
@@ -1389,7 +1587,7 @@
             <p class="rec">
               <strong>Recommend keeping Swift</strong> where it wraps Apple frameworks: Sparkle, Keychain, Calendar, Handoff, Translation, Apple Intelligence
               (Tidy), capture, WebKit. Remove the React Native module layer. Write the thin window and menu glue in Rust. Move pure logic (import, sync) to the
-              Rust crates #35 already started.
+              shared Rust crates (<code>bay-import</code>, <code>bay-sync</code>).
             </p>
           </article>
 
@@ -1404,15 +1602,13 @@
           </article>
 
           <article class="decision" id="d9">
-            <h3><span class="id">D9</span> Branch and PR <span class="state open">open</span></h3>
-            <p>Options: one long branch and PR; a stack of PRs per phase; commits on <code>main</code> behind a build flag.</p>
+            <h3><span class="id">D9</span> Branch and PR <span class="state done">decided 28 Nov 2026</span></h3>
             <p class="rec">
-              <strong>Recommend one branch, <code>feat/gpui-desktop</code></strong
-              >, from <code>refactor/shared-desktop-core</code> (#35, which owns <code>packages/rust</code>), in a sibling worktree <code>bay-gpui</code>. One
-              PR, commits in validated chunks, pushed often. Bring in #35 and <code>main</code> by merging, not rebasing. The GPUI app is a separate target, so
-              nothing on <code>main</code> changes for users until Phase 5.
+              <strong><code>refactor/gpui-port</code></strong
+              >, branched from <code>main</code> at <code>6787688f0</code> (which holds #35, #36 and #38), in the sibling worktree <code>bay-gpui</code>. One
+              PR, commits in validated chunks, pushed often. Bring in <code>main</code> by merging, not rebasing. The GPUI app is a separate target, so nothing
+              on <code>main</code> changes for users until Phase 5.
             </p>
-            <p>If #35 merges first, branch from <code>main</code> instead.</p>
           </article>
 
           <article class="decision" id="d10">
@@ -1431,7 +1627,7 @@
               <strong>Recommend fixes only from Phase 3.</strong> Until then the React Native app moves on as usual and its changes become parity rows. From
               Phase 3, new desktop features go into the GPUI app (and into the WebUI host only if Windows or Linux needs them before Phase 6).
             </p>
-            <p>This also covers open work on #36 and #38: features there are parity rows.</p>
+            <p>Engine choice (#36) and the browser gaps (#38) are on <code>main</code>, so their features are parity rows too.</p>
           </article>
 
           <article class="decision" id="d12">
