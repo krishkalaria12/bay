@@ -434,6 +434,7 @@ impl Browser {
             c.tabs.retain(|t| t.tab.space_id != id);
         }
         self.pinned_folders.retain(|_, f| f.space_id != id);
+        self.local_files.retain(|_, f| f.space_id != id);
         let windows: Vec<String> = self.windows.keys().cloned().collect();
         for w in windows {
             if self.view_tab_ids(&w, None).is_empty() {

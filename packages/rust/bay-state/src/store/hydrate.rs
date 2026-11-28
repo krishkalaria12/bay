@@ -281,19 +281,6 @@ impl Browser {
                 (id, f)
             })
             .collect();
-        // A row whose folder is gone, or another space's, leaves it.
-        for t in tabs.values_mut() {
-            let kept = t.folder_id.as_ref().is_some_and(|f| {
-                t.pinned_row == Some(true)
-                    && pinned_folders
-                        .get(f)
-                        .is_some_and(|x| x.space_id == t.space_id)
-            });
-            if !kept {
-                t.folder_id = None;
-            }
-        }
-
         let focused = data
             .focused_window_id
             .filter(|f| windows.contains_key(f))
@@ -342,7 +329,7 @@ impl Browser {
         self.tab_lists = tab_lists;
         self.groups = groups;
         self.pinned_folders = pinned_folders;
-        self.local_files = data.local_files;
+        self.local_files = super::normalize_local_files(&data.local_files, Some(&self.spaces));
         self.splits = splits;
         self.closed_tabs = data.closed_tabs;
         self.closed_windows = data.closed_windows;
@@ -367,6 +354,10 @@ impl Browser {
         self.bookmarks = bookmarks;
         self.bookmarks_ready = bookmarks_ready;
         self.bookmark_undo.clear();
+        self.folder_move_undo.clear();
+        self.private_cleaned_tabs.clear();
+        self.private_site_mutes.clear();
+        self.prune_pinned_folders();
 
         // Each window shows the tab it showed, else its space's most recent one, else a new tab. A launch that starts
         // on a new tab shows a blank one, its space's tabs waiting in the sidebar.
@@ -460,12 +451,12 @@ impl Browser {
                 .cloned()
                 .collect(),
             pinned_folders: self.pinned_folders.values().cloned().collect(),
-            local_files: self
-                .local_files
-                .iter()
-                .filter(|f| self.spaces.contains_key(&f.space_id))
-                .cloned()
-                .collect(),
+            local_files: super::normalize_local_files(
+                self.local_files.values(),
+                Some(&self.spaces),
+            )
+            .into_values()
+            .collect(),
             splits: self
                 .splits
                 .values()

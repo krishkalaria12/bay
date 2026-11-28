@@ -8,10 +8,12 @@
 
 mod bookmarks;
 mod engines;
+mod folders;
 mod groups;
 mod history;
 mod hydrate;
 mod launch;
+mod local_files;
 mod model;
 mod moves;
 mod names;
@@ -44,9 +46,11 @@ pub use engines::{
     CHROMIUM, PROTECTED_VIDEO_SITES, WEBKIT, protected_video_site, registrable_domain,
     site_domain_of, site_of, tab_pick,
 };
+pub use folders::{FolderMove, MAX_FOLDER_DEPTH, PinState, folder_depth, normalize_pinned_folders};
 pub use groups::GroupPatch;
 pub use history::{HistoryEntry, HistoryRow, MAX_HISTORY, without_visits_since};
 pub use hydrate::{HydrateData, default_space};
+pub use local_files::{FileDescriptor, local_file_path, normalize_local_files};
 pub use model::{TabList, incognito_space_id, is_incognito_space, pinned_first, snapshot_tab};
 pub use names::auto_group_name;
 pub use names::tidy_tab_title;
@@ -232,7 +236,7 @@ pub struct Browser {
     pub live: HashMap<String, TabLive>,
     pub groups: IndexMap<String, TabGroup>,
     pub pinned_folders: IndexMap<String, PinnedFolder>,
-    pub local_files: Vec<LocalFilePin>,
+    pub local_files: IndexMap<String, LocalFilePin>,
     pub splits: IndexMap<String, SplitView>,
     pub closed_tabs: Vec<ClosedTab>,
     pub closed_windows: Vec<ClosedWindow>,
@@ -255,6 +259,8 @@ pub struct Browser {
     /// Private windows' cleaned-up tabs and site mutes, by window: memory only, gone with the window.
     pub private_cleaned_tabs: HashMap<String, Vec<ClosedTab>>,
     pub private_site_mutes: PrivateSiteMutes,
+    /// Folder moves and placements Undo can put back, newest last. Not saved.
+    pub folder_move_undo: Vec<FolderMove>,
     /// Each window's selected tabs.
     pub selection: HashMap<String, Vec<String>>,
     pub ui: Ui,
@@ -292,7 +298,7 @@ impl Browser {
             live: HashMap::new(),
             groups: IndexMap::new(),
             pinned_folders: IndexMap::new(),
-            local_files: Vec::new(),
+            local_files: IndexMap::new(),
             splits: IndexMap::new(),
             closed_tabs: Vec::new(),
             closed_windows: Vec::new(),
@@ -309,6 +315,7 @@ impl Browser {
             effects: Vec::new(),
             private_cleaned_tabs: HashMap::new(),
             private_site_mutes: HashMap::new(),
+            folder_move_undo: Vec::new(),
             selection: HashMap::new(),
             ui: Ui::default(),
             window_ui: HashMap::new(),

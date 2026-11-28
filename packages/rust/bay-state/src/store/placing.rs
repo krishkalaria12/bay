@@ -15,6 +15,8 @@ pub struct TabPlacement {
     pub row: Option<bool>,
     pub before_id: Option<String>,
     pub group_id: Option<String>,
+    /// The pinned folder a row goes into (with `row: Some(true)`); none puts it loose.
+    pub folder_id: Option<String>,
 }
 
 impl Browser {
@@ -61,16 +63,30 @@ impl Browser {
         {
             return;
         }
+        let folder = (!p.pinned && p.row == Some(true))
+            .then(|| {
+                p.folder_id
+                    .as_ref()
+                    .and_then(|f| self.pinned_folders.get(f))
+            })
+            .flatten()
+            .cloned();
+        if p.folder_id.is_some()
+            && p.row == Some(true)
+            && folder.as_ref().is_none_or(|f| f.space_id != first.space_id)
+        {
+            return;
+        }
         let moving_set: HashSet<String> = moving.iter().cloned().collect();
         let mut tabs = self.tabs.clone();
         for id in &moving {
             let t = &tabs[id];
             // A tab into a group leaves the Pinned section; one placed with no word on it keeps its row.
             let row = !p.pinned && target.is_none() && p.row.unwrap_or(t.is_row());
-            let folder_id = if row && p.row != Some(true) {
-                t.folder_id.clone()
-            } else {
-                None
+            let folder_id = match (row, p.row) {
+                (false, _) => None,
+                (true, Some(true)) => folder.as_ref().map(|f| f.id.clone()),
+                (true, _) => t.folder_id.clone(),
             };
             if t.pinned == p.pinned && t.is_row() == row && t.folder_id == folder_id {
                 continue;
@@ -127,6 +143,20 @@ impl Browser {
                     .copied()
                     .unwrap_or(0)
                     .min(rest.len()),
+            }
+        } else if let Some(folder) = &folder {
+            let subtree: HashSet<String> =
+                self.folder_tab_ids(&folder.id, true).into_iter().collect();
+            if subtree.iter().any(|id| !moving_set.contains(id)) {
+                after_last(&|id| subtree.contains(id))
+            } else {
+                match self
+                    .folder_insertion_before_id(&folder.id, &moving)
+                    .and_then(|a| rest.iter().position(|id| *id == a))
+                {
+                    Some(at) => at,
+                    None => after_last(&|id| tabs.get(id).is_some_and(|t| t.pinned_page())),
+                }
             }
         } else if p.pinned {
             after_last(&|id| tabs.get(id).is_some_and(|t| t.pinned))
@@ -215,6 +245,7 @@ impl Browser {
                 row: Some(pinned),
                 before_id,
                 group_id: None,
+                folder_id: None,
             },
         );
     }
