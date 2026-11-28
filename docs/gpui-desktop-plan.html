@@ -521,7 +521,13 @@
                 </tr>
                 <tr>
                   <td>1 · Foundations</td>
-                  <td>Not started.</td>
+                  <td>
+                    In progress. <code>bay-state</code> reads and writes <code>session.json</code> and <code>downloads.json</code> in place (D6): every record
+                    typed, nulls and missing fields kept apart, fields it doesn't model carried through. Its fixtures are the React Native app's own output
+                    (<code>apps/browser/scripts/state-fixtures.mjs</code>: the 200-tab benchmark seed, and a session holding every optional field), and
+                    <code>apps/browser/scripts/state-compare.mjs</code> checks that app loads what <code>bay-state</code> writes to the same state. Next: the
+                    store's commands and their tests, the other documents, the engine ABI, primitives.
+                  </td>
                 </tr>
                 <tr>
                   <td>2 · The window</td>
@@ -607,6 +613,15 @@
 
           <h3 id="gaps">Known gaps</h3>
           <ul class="prose">
+            <li>
+              <code>bay-state</code> refuses a session from before spaces had that name (<code>profiles</code>) rather than migrate it, and doesn't yet split
+              spaces that shared a profile without choosing to (<code>isolateSavedSpaces</code>) or put a launch's tabs away when the session isn't restored
+              (<code>restoreSession: false</code>). The React Native app does all three on load.
+            </li>
+            <li>
+              Settings and downloads are kept as written JSON until each has a typed home; history, bookmarks, Library, Boosts and the other documents aren't
+              read yet.
+            </li>
             <li>
               The spike links the engine built on 20 Nov (<code>~/chromium-build</code>); <code>engine/</code> has changed since and has no published prebuilt.
             </li>

@@ -3,7 +3,7 @@
 # docs/shared-desktop-core-plan.html, docs/gpui-desktop-plan.html.
 [workspace]
 resolver = "3"
-members = ["bay-app", "bay-desktop", "bay-engine", "bay-import", "bay-lists", "bay-plugins", "bay-switches", "bay-sync"]
+members = ["bay-app", "bay-desktop", "bay-engine", "bay-import", "bay-lists", "bay-plugins", "bay-state", "bay-switches", "bay-sync"]
 # The vendored GPUI stays a path dependency, not a member: workspace-wide fmt, clippy and tests cover Bay's crates.
 exclude = ["third_party"]
 
