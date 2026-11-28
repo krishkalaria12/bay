@@ -478,7 +478,7 @@
           <li><a href="#accept">7. Gates</a></li>
           <li><a href="#risks">8. Risks</a></li>
           <li><a href="#stays">9. What doesn't change</a></li>
-          <li><a href="#decisions">10. Open decisions</a></li>
+          <li><a href="#decisions">10. Decisions</a></li>
         </ol>
       </nav>
       <main>
@@ -511,7 +511,7 @@
               <tbody>
                 <tr>
                   <td>0 · Spike and gate</td>
-                  <td>Not started. Waits on decisions D2 and D4.</td>
+                  <td>In progress.</td>
                 </tr>
                 <tr>
                   <td>1 · Foundations</td>
@@ -551,7 +551,7 @@
           <p class="prose">
             Decided on 28 Nov 2026: desktop moves to GPUI, macOS first; the work is a workspace of Rust crates and may use any Rust library; it lives on
             <code>refactor/gpui-port</code>. The rest are open, each with a recommendation. Details and reasons are in <a href="#decisions">section 10</a>.
-            Phase 0 needs D2 and D4; the others can wait until the phase that needs them.
+            D2 and D4 were decided on 28 Nov 2026 too. The others can wait until the phase that needs them.
           </p>
           <div class="table-wrap">
             <table>
@@ -582,7 +582,7 @@
                 <tr>
                   <td><a href="#d2">D2</a></td>
                   <td>Which GPUI?</td>
-                  <td>Vendor the reference port's GPUI snapshot and patch; own it from then on.</td>
+                  <td><span class="state done">Decided</span> Vendor the reference port's GPUI snapshot and patch; own it from then on.</td>
                   <td>Phase 0</td>
                 </tr>
                 <tr>
@@ -594,7 +594,7 @@
                 <tr>
                   <td><a href="#d4">D4</a></td>
                   <td>Engine boundary</td>
-                  <td>A versioned C ABI on NNCore (JSON verbs and an event sink), plus a small <code>.mm</code> for views and window hooks.</td>
+                  <td><span class="state done">Decided</span> A versioned C ABI on NNCore (JSON verbs and an event sink), plus a small <code>.mm</code> for views and window hooks.</td>
                   <td>Phase 0</td>
                 </tr>
                 <tr>
@@ -1533,20 +1533,21 @@ scripts/gpui/             build-app.sh (bundle, NNCore framework, helpers, signi
         </section>
 
         <section id="decisions" aria-labelledby="decisions-h">
-          <h2 id="decisions-h">10. Open decisions</h2>
+          <h2 id="decisions-h">10. Decisions</h2>
           <p class="prose">Each has a recommendation. Taking all of them as written is a coherent plan; changing one may change others, noted where it does.</p>
 
           <article class="decision" id="d2">
-            <h3><span class="id">D2</span> Which GPUI? <span class="state open">open</span></h3>
+            <h3><span class="id">D2</span> Which GPUI? <span class="state done">decided 28 Nov 2026</span></h3>
             <p>
-              Options: (a) vendor the reference port's GPUI snapshot and its patch; (b) upstream GPUI, with Bay writing its own native view element; (c) the
-              snapshot gpui-kit pins.
+              Options were: (a) vendor the reference port's GPUI snapshot and its patch; (b) upstream GPUI, with Bay writing its own native view element; (c)
+              the snapshot gpui-kit pins.
             </p>
             <p class="rec">
-              <strong>Recommend (a).</strong> The native view element, hosted windows and input routing are the hardest part of this plan, and they exist and
-              are Apache-2.0. Take them whole, credit them in <code>NOTICE</code>, and own the copy from then on: no syncing with the reference port.
+              <strong>(a).</strong> The native view element, hosted windows and input routing are the hardest part of this plan, and they exist and are
+              Apache-2.0. Taken whole into <code>packages/rust/third_party/gpui</code> (Zed <code>a3ce8d5e8</code> plus the patch, kept beside it as
+              <code>bay-base.patch</code>), credited in <code>NOTICE</code>, and owned from then on: no syncing with the reference port. Upstream merges go on
+              a schedule.
             </p>
-            <p>(b) repeats the hardest work. (c) has no native views. Changes D3 if (c).</p>
           </article>
 
           <article class="decision" id="d3">
@@ -1559,17 +1560,21 @@ scripts/gpui/             build-app.sh (bundle, NNCore framework, helpers, signi
           </article>
 
           <article class="decision" id="d4">
-            <h3><span class="id">D4</span> Engine boundary <span class="state open">open</span></h3>
+            <h3><span class="id">D4</span> Engine boundary <span class="state done">decided 28 Nov 2026</span></h3>
             <p>
-              Options: (a) Rust calls NNCore's Objective-C API through a <code>.mm</code> bridge; (b) NNCore exports a versioned C ABI (JSON verbs, an event
-              sink) and Rust calls that, with a small <code>.mm</code> only for views and window hooks.
+              Options were: (a) Rust calls NNCore's Objective-C API through a <code>.mm</code> bridge; (b) NNCore exports a versioned C ABI (JSON verbs, an
+              event sink) and Rust calls that, with a small <code>.mm</code> only for views and window hooks.
             </p>
             <p class="rec">
-              <strong>Recommend (b).</strong> The same ABI can come from the Windows and Linux engine in Phase 6, so <code>bay-engine</code> is written once.
-              JSON verbs match what the TS bridge sends today, which makes each call a mechanical port and lets the stand-in engine replay real traffic. Hot
-              paths (tab views, frames, input) stay native.
+              <strong>(b).</strong> The same ABI can come from the Windows and Linux engine in Phase 6, so <code>bay-engine</code> is written once. JSON verbs
+              match what the TS bridge sends today, which makes each call a mechanical port and lets the stand-in engine replay real traffic. Hot paths (tab
+              views, frames, input) stay native. It grows from what NNCore already exports: <code>nncore_engine_call</code> and its event sink
+              (<code>nncore_engine.h</code>, ABI version 1) for profile services; window and tab verbs join it.
             </p>
-            <p>(a) is faster for Phase 0. The spike can start on (a) for the view hosting while the ABI is defined.</p>
+            <p>
+              Phase 0 runs on (a) for the view hosting: <code>bay-engine</code> compiles the current host glue (<code>packages/chromium/ios/*.mm</code>), so the
+              spike keeps today's data folder, keychain item and content blocker. Phase 1 moves the app onto (b).
+            </p>
           </article>
 
           <article class="decision" id="d5">
