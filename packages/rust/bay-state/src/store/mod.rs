@@ -6,18 +6,25 @@
 //! anything. Maps keep their insertion order, as a JavaScript object's string keys do, and removing keeps the rest in
 //! order, so every "the first group holding this tab" finds the same group.
 
+mod bookmarks;
+mod engines;
 mod groups;
+mod history;
 mod hydrate;
+mod launch;
 mod model;
+mod moves;
 mod names;
 mod openers;
+mod pages;
 mod placing;
+mod spaces;
 mod splits;
 mod tabs;
 mod windows;
 
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
@@ -27,11 +34,26 @@ use crate::model::{
     BrowserWindow, ClosedGroup, ClosedTab, ClosedWindow, Extra, LocalFilePin, Navigation,
     PinnedFolder, Space, SplitView, Tab, TabGroup,
 };
+use crate::session::Session;
 
+pub use bookmarks::{
+    BookmarkDraft, BookmarkNode, BookmarkUndo, Bookmarks, RemovedBookmarks, Roots, root_ids_for,
+};
+pub use engines::{
+    CHROMIUM, PROTECTED_VIDEO_SITES, WEBKIT, protected_video_site, registrable_domain,
+    site_domain_of, site_of, tab_pick,
+};
 pub use groups::GroupPatch;
+pub use history::{HistoryEntry, HistoryRow, MAX_HISTORY, without_visits_since};
+pub use hydrate::{HydrateData, default_space};
 pub use model::{TabList, incognito_space_id, is_incognito_space, pinned_first, snapshot_tab};
 pub use names::auto_group_name;
+pub use pages::{LivePatch, TabPatch};
 pub use placing::TabPlacement;
+pub use spaces::{
+    Isolated, SPACE_EMOJI, SpacePatch, engine_id_of, isolate_saved_spaces, profile_id_of,
+    theme_of_color, unused_space_color, unused_space_look,
+};
 pub use tabs::NewTab;
 pub use windows::CreateWindow;
 
@@ -90,17 +112,35 @@ pub struct WindowUi {
     pub downloads_open: bool,
 }
 
+/// What the store asks of the engine: the app sends each to it (the engine ABI) and the engine reports back.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Effect {
+    DeleteHistoryUrls {
+        profile: String,
+        urls: Vec<String>,
+    },
+    ImportHistory {
+        profile: String,
+        rows: Vec<HistoryRow>,
+    },
+    /// An address the app opens itself (settings, the new tab panel), from this window.
+    OpenAppUrl {
+        url: String,
+        window_id: String,
+    },
+}
+
 /// The app's settings, kept as the session wrote them: a setting reads its default when it isn't there, and every
 /// setting this build doesn't read is written back unchanged.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Settings(pub Map<String, Value>);
 
 impl Settings {
-    fn str(&self, key: &str) -> Option<&str> {
+    pub(crate) fn str(&self, key: &str) -> Option<&str> {
         self.0.get(key).and_then(Value::as_str)
     }
 
-    fn flag(&self, key: &str) -> Option<bool> {
+    pub(crate) fn flag(&self, key: &str) -> Option<bool> {
         self.0.get(key).and_then(Value::as_bool)
     }
 
@@ -127,6 +167,33 @@ impl Settings {
         self.str("launchTab") != Some("lastTab")
     }
 
+    /// A deleted space's mentions go: it's no longer the default, a link rule's or a translation exception's.
+    pub fn forget_space(&mut self, id: &str, fallback: &str) {
+        if self.default_space_id() == id {
+            self.set("defaultSpaceId", fallback);
+        }
+        if let Some(Value::Object(sites)) = self.0.get_mut("neverTranslateSites") {
+            sites.shift_remove(id);
+        }
+        let to_space = |v: &Value, space: &str| {
+            v.get("kind").and_then(Value::as_str) == Some("space")
+                && v.get("spaceId").and_then(Value::as_str) == Some(space)
+        };
+        if let Some(Value::Array(rules)) = self.0.get_mut("externalLinkRules") {
+            rules.retain(|rule| !rule.get("destination").is_some_and(|d| to_space(d, id)));
+        }
+        if self
+            .0
+            .get("externalLinkDefault")
+            .is_some_and(|d| to_space(d, id))
+        {
+            self.set(
+                "externalLinkDefault",
+                serde_json::json!({ "kind": "space", "spaceId": fallback }),
+            );
+        }
+    }
+
     pub fn site_muted(&self, host: &str) -> bool {
         self.0
             .get("mutedSites")
@@ -139,6 +206,8 @@ struct Env {
     clock: Clock,
     launch: String,
     ids: Cell<u64>,
+    /// xorshift64*: emoji and bookmark ids, seeded from the clock.
+    random: Cell<u64>,
     navigations: Cell<u64>,
     resolve: ResolveInput,
 }
@@ -164,6 +233,19 @@ pub struct Browser {
     pub closed_groups: Vec<ClosedGroup>,
     pub deleted_groups: Vec<ClosedGroup>,
     pub cleaned_tabs: Vec<ClosedTab>,
+    /// The engine's history, as the app shows it, by space. Never saved.
+    pub history: HashMap<String, Vec<HistoryEntry>>,
+    /// Spaces whose history the engine has reported (until then it's empty, not "no history").
+    pub history_ready: HashSet<String>,
+    pub bookmarks: Bookmarks,
+    pub bookmarks_ready: HashSet<String>,
+    /// Recent bookmark removals Undo can put back, newest last. Not saved.
+    pub bookmark_undo: Vec<BookmarkUndo>,
+    /// WebKit is in this build and Bay hasn't switched it off (macOS); every page is Chromium's without it.
+    webkit_on: bool,
+    app_urls: Option<fn(&str) -> bool>,
+    /// What the store asks of the engine, in order, until the app takes it (`take_effects`).
+    pub effects: Vec<Effect>,
     /// Each window's selected tabs.
     pub selection: HashMap<String, Vec<String>>,
     pub ui: Ui,
@@ -185,6 +267,10 @@ impl Browser {
             base36(now_ms() as u64),
             base36(u64::from(std::process::id()) % 1_679_616)
         );
+        let seed = match &clock {
+            Clock::System => now_ms().to_bits() ^ u64::from(std::process::id()),
+            Clock::Manual(at) => at.get().to_bits(),
+        };
         let mut browser = Self {
             spaces: IndexMap::new(),
             space_order: Vec::new(),
@@ -204,6 +290,14 @@ impl Browser {
             closed_groups: Vec::new(),
             deleted_groups: Vec::new(),
             cleaned_tabs: Vec::new(),
+            history: HashMap::new(),
+            history_ready: HashSet::new(),
+            bookmarks: Bookmarks::default(),
+            bookmarks_ready: HashSet::new(),
+            bookmark_undo: Vec::new(),
+            webkit_on: cfg!(target_os = "macos"),
+            app_urls: None,
+            effects: Vec::new(),
             selection: HashMap::new(),
             ui: Ui::default(),
             window_ui: HashMap::new(),
@@ -212,11 +306,12 @@ impl Browser {
                 clock,
                 launch,
                 ids: Cell::new(0),
+                random: Cell::new(seed | 1),
                 navigations: Cell::new(0),
                 resolve,
             },
         };
-        browser.hydrate(Default::default(), false);
+        browser.hydrate(Session::default(), false);
         browser
     }
 
@@ -249,6 +344,28 @@ impl Browser {
             url: url.to_owned(),
             seq,
             user_initiated,
+        }
+    }
+
+    /// What the store asked of the engine since the last call.
+    pub fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.effects)
+    }
+
+    pub(crate) fn random_u32(&self) -> u32 {
+        let mut x = self.env.random.get();
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.env.random.set(x);
+        (x.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 32) as u32
+    }
+
+    pub(crate) fn random_below(&self, n: usize) -> usize {
+        if n == 0 {
+            0
+        } else {
+            self.random_u32() as usize % n
         }
     }
 

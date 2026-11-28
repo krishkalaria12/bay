@@ -158,6 +158,23 @@ impl Browser {
             .collect()
     }
 
+    /// A space's pinned tiles, in their list's order (the window's space by default); none in Little Bay.
+    pub fn favorite_tab_ids(&self, window_id: &str, space_id: Option<&str>) -> Vec<String> {
+        let Some(w) = self.windows.get(window_id).filter(|w| !w.is_small()) else {
+            return Vec::new();
+        };
+        let space = space_id.unwrap_or(&w.space_id);
+        self.list_ids(&self.space_list_key(space))
+            .iter()
+            .filter(|id| {
+                self.tabs
+                    .get(*id)
+                    .is_some_and(|t| t.space_id == space && t.pinned)
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Whether another window shows the tab now.
     pub fn shown_elsewhere(&self, id: &str, window_id: &str) -> bool {
         self.windows.values().any(|w| {

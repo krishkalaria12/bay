@@ -19,6 +19,8 @@ pub struct CreateWindow {
     pub small: bool,
     /// Opened behind: the focused window keeps focus.
     pub background: bool,
+    /// Tabs the window shows: their pages move there.
+    pub tab_ids: Vec<String>,
 }
 
 fn valid_size(size: &[JsNumber]) -> bool {
@@ -46,14 +48,46 @@ impl Browser {
     }
 
     /// A new Little Bay uses the space the frontmost main window shows, else the default space.
-    fn little_bay_space(&self) -> String {
+    pub(crate) fn little_bay_space(&self) -> String {
         self.main_window_for(None).map_or_else(
             || self.settings.default_space_id().to_owned(),
             |w| self.windows[&w].space_id.clone(),
         )
     }
 
-    fn with_window(&mut self, w: BrowserWindow) {
+    pub(crate) fn empty_window(
+        &self,
+        id: &str,
+        space_id: &str,
+        incognito: bool,
+        frame: Option<[JsNumber; 4]>,
+    ) -> BrowserWindow {
+        BrowserWindow {
+            id: id.to_owned(),
+            space_id: space_id.to_owned(),
+            incognito,
+            active_tab_ids: Default::default(),
+            sidebar_open: true,
+            tab_layout: None,
+            frame,
+            size: None,
+            maximized: None,
+            created_at: JsNumber(self.now()),
+            kind: None,
+            extra: Default::default(),
+        }
+    }
+
+    /// Little Bay opens centred at its remembered size, so it keeps no frame.
+    pub(crate) fn small_window(&self, id: &str, space_id: &str) -> BrowserWindow {
+        BrowserWindow {
+            sidebar_open: false,
+            kind: Some("small".to_owned()),
+            ..self.empty_window(id, space_id, false, None)
+        }
+    }
+
+    pub(crate) fn with_window(&mut self, w: BrowserWindow) {
         let id = w.id.clone();
         self.windows.insert(id.clone(), w);
         self.window_order.push(id.clone());
@@ -61,7 +95,7 @@ impl Browser {
         self.ui.focused_window_id = Some(id);
     }
 
-    fn without_windows(&mut self, ids: &[String]) {
+    pub(crate) fn without_windows(&mut self, ids: &[String]) {
         if ids.is_empty() {
             return;
         }
@@ -92,19 +126,14 @@ impl Browser {
         };
         // macOS places windows in global coordinates: the frame is kept, a size and maximized beside it.
         let size = o.size.filter(|s| valid_size(s));
-        let w = BrowserWindow {
-            id: id.clone(),
-            space_id,
-            incognito: o.incognito,
-            active_tab_ids: Default::default(),
-            sidebar_open: !small,
-            tab_layout: None,
-            frame: if small { None } else { o.frame },
-            size: if small { None } else { size },
-            maximized: if small { None } else { o.maximized },
-            created_at: JsNumber(self.now()),
-            kind: small.then(|| "small".to_owned()),
-            extra: Default::default(),
+        let w = if small {
+            self.small_window(&id, &space_id)
+        } else {
+            BrowserWindow {
+                size,
+                maximized: o.maximized,
+                ..self.empty_window(&id, &space_id, o.incognito, o.frame)
+            }
         };
         let focused = self
             .ui
@@ -112,14 +141,28 @@ impl Browser {
             .clone()
             .filter(|f| self.windows.contains_key(f));
         self.with_window(w);
-        self.with_new_tab(
-            &id,
-            &NewTab {
-                url: o.url,
-                adopt_id: o.adopt_id,
-                ..Default::default()
-            },
-        );
+        if !o.tab_ids.is_empty() {
+            self.move_tabs_into(&o.tab_ids, &id);
+        }
+        let shown = o
+            .tab_ids
+            .iter()
+            .rev()
+            .find(|t| self.tabs.get(*t).is_some_and(|t| t.window_id == id))
+            .cloned();
+        match shown {
+            Some(shown) => self.activate_in(&shown, Some(&id)),
+            None => {
+                self.with_new_tab(
+                    &id,
+                    &NewTab {
+                        url: o.url,
+                        adopt_id: o.adopt_id,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
         if let Some(focused) = focused.filter(|_| o.background) {
             self.ui.focus_order.retain(|w| *w != focused && *w != id);
             self.ui

@@ -354,6 +354,32 @@ impl Browser {
         }
     }
 
+    /// Groups the tabs (pinned unless asked otherwise); `in_order`: the group takes the first tab's place, its tabs in
+    /// the order given (a tab dropped on another). The windows that had them selected select nothing.
+    pub fn group_tabs(
+        &mut self,
+        ids: &[String],
+        pinned: bool,
+        name: Option<&str>,
+        in_order: bool,
+    ) -> Option<String> {
+        let id = self.with_group(
+            ids,
+            GroupOptions {
+                name: name.map(str::to_owned),
+                pinned,
+                in_order,
+                ..Default::default()
+            },
+        )?;
+        for selected in self.selection.values_mut() {
+            if selected.iter().any(|t| ids.contains(t)) {
+                selected.clear();
+            }
+        }
+        Some(id)
+    }
+
     pub fn ungroup(&mut self, group_id: &str) {
         self.groups.shift_remove(group_id);
     }

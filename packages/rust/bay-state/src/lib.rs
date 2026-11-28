@@ -6,6 +6,7 @@
 
 pub mod documents;
 pub mod downloads;
+mod migrate;
 pub mod model;
 pub mod number;
 pub mod session;

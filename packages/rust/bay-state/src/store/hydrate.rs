@@ -1,12 +1,15 @@
 //! The saved session into the store and back (store/browserStore.ts `hydrate`, lib/persist.ts `sessionJson`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use super::bookmarks::{BookmarkNode, Bookmarks, root_ids_for};
 use super::groups::{kept_deleted_groups, place_folders};
+use super::history::HistoryEntry;
 use super::model::{is_incognito_space, pinned_first};
+use super::spaces::{engine_id_of, isolate_saved_spaces};
 use super::splits::sanitize_splits;
 use super::{Browser, DEFAULT_SPACE_ID, NewTab, Settings, TabLive, Ui};
 use crate::model::{BrowserWindow, Space, SpaceTheme, Tab};
@@ -34,16 +37,6 @@ pub fn default_space() -> Space {
         folded: None,
         extra: Default::default(),
     }
-}
-
-/// The space's native profile folder: "" for the default one.
-fn engine_id_of(space: &Space) -> &str {
-    let id = space
-        .profile_id
-        .as_deref()
-        .filter(|p| !p.is_empty())
-        .unwrap_or(&space.id);
-    if id == DEFAULT_SPACE_ID { "" } else { id }
 }
 
 /// A list key as `tabListKey` reads it from the saved windows (Little Bay's own list, else its space's).
@@ -89,9 +82,34 @@ impl Default for Session {
     }
 }
 
+/// What the store loads: the saved session and, in tests, the engine's history and bookmarks (the app's come from the
+/// engine afterwards).
+#[derive(Clone, Debug, Default)]
+pub struct HydrateData {
+    pub session: Session,
+    /// The app's launch: its windows show what settings.launchTab says, not always the tab they showed.
+    pub launch: bool,
+    pub history: Option<HashMap<String, Vec<HistoryEntry>>>,
+    pub bookmarks: Option<Bookmarks>,
+}
+
 impl Browser {
     /// The store from a saved session. `launch`: the app's launch, whose windows show what settings.launchTab says.
-    pub fn hydrate(&mut self, data: Session, launch: bool) {
+    pub fn hydrate(&mut self, session: Session, launch: bool) {
+        self.hydrate_data(HydrateData {
+            session,
+            launch,
+            ..Default::default()
+        });
+    }
+
+    pub fn hydrate_data(&mut self, input: HydrateData) {
+        let HydrateData {
+            session: data,
+            launch,
+            history: saved_history,
+            bookmarks: saved_bookmarks,
+        } = input;
         let saved_spaces = if data.spaces.is_empty() {
             IndexMap::from([(DEFAULT_SPACE_ID.to_owned(), default_space())])
         } else {
@@ -108,7 +126,13 @@ impl Browser {
                 space_order.push(id.clone());
             }
         }
-        let spaces = saved_spaces;
+        // Older sharing nobody chose is split: each such space gets its own native profile.
+        let isolated =
+            isolate_saved_spaces(&saved_spaces, &space_order, &data.orphaned_profile_data);
+        let detached = isolated.detached;
+        let owners = isolated.owners;
+        let mut spaces = isolated.spaces;
+        self.with_space_emoji(&mut spaces, &space_order);
         let mut settings = Settings(data.settings);
         if !spaces.contains_key(settings.default_space_id()) {
             settings.set("defaultSpaceId", space_order[0].clone());
@@ -274,6 +298,22 @@ impl Browser {
             .focused_window_id
             .filter(|f| windows.contains_key(f))
             .or_else(|| window_order.last().cloned());
+        let (history, bookmarks) = shared_data(
+            &spaces,
+            &space_order,
+            &owners,
+            &detached,
+            saved_history,
+            saved_bookmarks.clone(),
+        );
+        let bookmarks_ready: HashSet<String> = saved_bookmarks
+            .map(|b| {
+                b.roots
+                    .into_keys()
+                    .filter(|p| spaces.contains_key(p) && !detached.contains(p))
+                    .collect()
+            })
+            .unwrap_or_default();
         let engines: HashSet<&str> = spaces.values().map(engine_id_of).collect();
         let orphaned: Vec<String> = data
             .orphaned_profile_data
@@ -321,6 +361,12 @@ impl Browser {
             focus_order,
         };
         self.extra = data.extra;
+        // A view handed in (tests) counts as read; the app's history and bookmarks come from the engine later.
+        self.history_ready = history.keys().cloned().collect();
+        self.history = history;
+        self.bookmarks = bookmarks;
+        self.bookmarks_ready = bookmarks_ready;
+        self.bookmark_undo.clear();
 
         // Each window shows the tab it showed, else its space's most recent one, else a new tab. A launch that starts
         // on a new tab shows a blank one, its space's tabs waiting in the sidebar.
@@ -461,4 +507,74 @@ impl Browser {
             extra: self.extra.clone(),
         }
     }
+}
+
+/// Shared native data stays with its owner: the history view and bookmark roots of each profile go to the space it's
+/// named after (or its first); the spaces split off it start clean.
+fn shared_data(
+    spaces: &IndexMap<String, Space>,
+    order: &[String],
+    owners: &[(String, Vec<String>)],
+    detached: &HashSet<String>,
+    saved_history: Option<HashMap<String, Vec<HistoryEntry>>>,
+    saved_bookmarks: Option<Bookmarks>,
+) -> (HashMap<String, Vec<HistoryEntry>>, Bookmarks) {
+    let saved_history = saved_history.unwrap_or_default();
+    let mut bookmarks = saved_bookmarks.unwrap_or_default();
+    let mut history = HashMap::new();
+    let mut replaced: HashSet<String> = HashSet::new();
+    for (owner, ids) in owners {
+        let users = || std::iter::once(owner).chain(ids);
+        if let Some(source) = users().find(|id| saved_history.contains_key(*id)) {
+            history.insert(owner.clone(), saved_history[source].clone());
+        }
+        let Some(roots) = users().find_map(|id| bookmarks.roots.get(id)).cloned() else {
+            continue;
+        };
+        let expected = root_ids_for(engine_id_of(&spaces[owner]));
+        for (from, to) in [(&roots.bar, &expected.bar), (&roots.other, &expected.other)] {
+            let Some(BookmarkNode::Folder { children, .. }) =
+                bookmarks.nodes.get(from).cloned().filter(|_| from != to)
+            else {
+                continue;
+            };
+            let mut node = bookmarks.nodes[from].clone();
+            if let BookmarkNode::Folder { id, .. } = &mut node {
+                id.clone_from(to);
+            }
+            bookmarks.nodes.insert(to.clone(), node);
+            replaced.insert(from.clone());
+            for child in children {
+                if let Some(BookmarkNode::Url { parent_id, .. }) = bookmarks.nodes.get_mut(&child) {
+                    parent_id.clone_from(to);
+                } else if let Some(BookmarkNode::Folder { parent_id, .. }) =
+                    bookmarks.nodes.get_mut(&child)
+                {
+                    *parent_id = Some(to.clone());
+                }
+            }
+        }
+        bookmarks.roots.insert(owner.clone(), expected);
+    }
+    for id in order {
+        let engine = engine_id_of(&spaces[id]).to_owned();
+        if detached.contains(id) {
+            let roots = root_ids_for(&engine);
+            bookmarks.nodes.shift_remove(&roots.bar);
+            bookmarks.nodes.shift_remove(&roots.other);
+        }
+        bookmarks.engine_roots(id, &engine);
+    }
+    // Replaced permanent folders are aliases, not another bookmark tree.
+    if !replaced.is_empty() {
+        let live: HashSet<String> = order
+            .iter()
+            .filter_map(|id| bookmarks.roots.get(id))
+            .flat_map(|r| [r.bar.clone(), r.other.clone()])
+            .collect();
+        for id in replaced.difference(&live) {
+            bookmarks.nodes.shift_remove(id);
+        }
+    }
+    (history, bookmarks)
 }

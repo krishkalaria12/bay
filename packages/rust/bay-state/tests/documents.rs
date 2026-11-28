@@ -156,18 +156,18 @@ fn no_session_or_another_version_starts_afresh() {
 }
 
 #[test]
-fn a_session_from_before_spaces_is_refused_not_emptied() {
+fn a_session_from_before_spaces_reads_as_spaces() {
     let scratch = tempfile::tempdir().unwrap();
     let dir = DataDir::new(scratch.path());
     dir.write(
         "session.json",
-        r#"{"version":2,"profiles":{"default":{"id":"default"}}}"#,
+        r#"{"version":2,"profiles":{"default":{"id":"default","name":"Personal","color":"plum","icon":null,"createdAt":0}},"profileOrder":["default"]}"#,
     )
     .unwrap();
-    assert!(matches!(
-        Session::load(&dir),
-        Err(DocumentError::Unreadable { .. })
-    ));
+    let session = Session::load(&dir).unwrap().unwrap();
+    assert_eq!(session.space_order, ["default"]);
+    assert_eq!(session.spaces["default"].name, "Personal");
+    assert!(session.extra.get("profiles").is_none());
 }
 
 #[test]

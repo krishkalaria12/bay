@@ -64,23 +64,31 @@ pub struct Session {
 
 impl Session {
     /// The saved session, or `None` when there is none or it is another version (the app then starts afresh, as the
-    /// React Native app does). A session from before spaces had that name (`profiles`) is left to that app, which
-    /// migrates it: this build refuses it rather than lose its spaces.
+    /// React Native app does). A session from before spaces had that name (`profiles`) is migrated.
     pub fn load(dir: &DataDir) -> Result<Option<Self>, DocumentError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |d| d.as_millis() as f64);
+        Ok(Self::read(dir, now)?.map(|(session, _)| session))
+    }
+
+    /// The saved session and whether it was migrated from before spaces, `now` stamping what the migration makes.
+    pub fn read(dir: &DataDir, now: f64) -> Result<Option<(Self, bool)>, DocumentError> {
         let Some(text) = dir.read(SESSION)? else {
             return Ok(None);
         };
         let unreadable = |source| DocumentError::unreadable(SESSION, source);
-        let value: Value = serde_json::from_str(&text).map_err(unreadable)?;
+        let mut value: Value = serde_json::from_str(&text).map_err(unreadable)?;
         if value.get("version").and_then(Value::as_u64) != Some(u64::from(SESSION_VERSION)) {
             return Ok(None);
         }
-        if value.get("spaces").is_none() && value.get("profiles").is_some() {
-            return Err(unreadable(serde::de::Error::custom(
-                "a session from before spaces (profiles): open it in the React Native app once to migrate it",
-            )));
+        let migrated = value.get("spaces").is_none() && value.get("profiles").is_some();
+        if migrated {
+            crate::migrate::profile_session(&mut value, now);
         }
-        serde_json::from_value(value).map(Some).map_err(unreadable)
+        serde_json::from_value(value)
+            .map(|s| Some((s, migrated)))
+            .map_err(unreadable)
     }
 
     pub fn to_json(&self) -> Result<String, DocumentError> {

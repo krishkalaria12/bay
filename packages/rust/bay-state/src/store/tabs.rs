@@ -29,7 +29,7 @@ pub struct NewTab {
 }
 
 /// A window's next tab for each space whose shown one goes; none when the space has no tab left there.
-type Successors = Vec<(String, Option<String>)>;
+pub(crate) type Successors = Vec<(String, Option<String>)>;
 
 impl Browser {
     /// Whether the window can show the tab: a main window any tab of a space (it switches to it), a private window
@@ -136,6 +136,9 @@ impl Browser {
             .or(o.snapshot.as_ref().map(|s| s.pinned))
             .unwrap_or(false);
         let mut tab = self.make_tab(window_id, &space_id, &url, o.snapshot.as_ref(), pinned);
+        // The space it opens in, whatever space a snapshot names (a closed tab whose space has gone since). The
+        // TypeScript store kept the snapshot's, leaving the tab in no list that shows it.
+        tab.space_id.clone_from(&space_id);
         if tab.navigation.is_some() && o.snapshot.is_none() {
             tab.navigation = Some(self.navigation_to(&url, true));
         }
@@ -189,7 +192,7 @@ impl Browser {
 
     /// The window's shown tab for each space, with each of `gone` replaced by the tab it shows next: one its opener
     /// opened, else the next one (awake first), else the one before.
-    fn successors(
+    pub(crate) fn successors_of(
         &self,
         w: &BrowserWindow,
         gone: &HashSet<String>,
@@ -229,7 +232,7 @@ impl Browser {
             .collect()
     }
 
-    fn set_successors(&mut self, window_id: &str, picks: Successors) {
+    pub(crate) fn set_window_successors(&mut self, window_id: &str, picks: Successors) {
         let Some(w) = self.windows.get_mut(window_id) else {
             return;
         };
@@ -311,7 +314,7 @@ impl Browser {
             .windows
             .values()
             .filter(|w| w.active_tab_ids.values().any(|id| gone.contains(id)))
-            .map(|w| (w.id.clone(), self.successors(w, &gone)))
+            .map(|w| (w.id.clone(), self.successors_of(w, &gone)))
             .collect();
         let openers: std::collections::HashMap<String, Option<String>> = gone
             .iter()
@@ -336,7 +339,7 @@ impl Browser {
         self.window_order.retain(|id| !removed.contains(id));
         let changed: Vec<String> = successors.iter().map(|(id, _)| id.clone()).collect();
         for (window_id, picks) in successors {
-            self.set_successors(&window_id, picks);
+            self.set_window_successors(&window_id, picks);
         }
         for id in &gone {
             self.tabs.shift_remove(id);
@@ -514,6 +517,17 @@ impl Browser {
             return t;
         }
         self.on_url_change(&mut t, &home);
+        // The page's title and icon from history, when it was visited.
+        let visited = self
+            .history
+            .get(&t.space_id)
+            .and_then(|h| h.iter().find(|e| same_page(&e.url, &home)));
+        if let Some(entry) = visited {
+            t.title.clone_from(&entry.title);
+            if entry.favicon.is_some() {
+                t.favicon.clone_from(&entry.favicon);
+            }
+        }
         t.url = home;
         t
     }
@@ -613,6 +627,12 @@ impl Browser {
                     ..options
                 },
             );
+        }
+        if options.adopt_id.is_none()
+            && let Some(url) = options.url.as_deref().map(|raw| self.resolve_input(raw))
+            && self.opens_app_url(&url, window_id)
+        {
+            return None;
         }
         let id = self.with_new_tab(window_id, &options)?;
         if let Some(opener) = &options.opener_id {

@@ -530,8 +530,11 @@
                     <code>bay_state::store</code> holds the store while the app runs and its tab commands: opening (Chrome's opener order), showing, closing
                     (which tab shows next), moving, pinning, groups, splits, windows, and loading and saving the session. Its tests are the store's own
                     (<code>store/tabs.test.mjs</code>, ported), and the session it saves after loading the app's matches what the app's store saves (each
-                    fixture's <code>reloaded.json</code>). Next: spaces and moving tabs between windows and spaces, page events (navigating, loads, engines),
-                    then the other documents, the engine ABI, primitives.
+                    fixture's <code>reloaded.json</code>). Ported since: spaces (looks, emoji, shared sign-ins, deleting), bookmarks and the history view (what
+                    the engine is asked goes out as <code>Effect</code>s), page events and which engine a page runs in, moving tabs between windows and spaces,
+                    reopening closed tabs, windows and groups, and the launch: sessions from before spaces migrated, shared profiles split with backups, a
+                    launch that doesn't restore the session. Tests: <code>spaceProfiles</code>, <code>spaceTabs</code> and <code>session</code> from the store's
+                    own.
                   </td>
                 </tr>
                 <tr>
@@ -618,22 +621,16 @@
 
           <h3 id="gaps">Known gaps</h3>
           <ul class="prose">
+            <li>Settings and downloads are kept as written JSON until each has a typed home; Library, Boosts and the other documents aren't read yet.</li>
             <li>
-              <code>bay-state</code> refuses a session from before spaces had that name (<code>profiles</code>) rather than migrate it, and doesn't yet split
-              spaces that shared a profile without choosing to (<code>isolateSavedSpaces</code>) or put a launch's tabs away when the session isn't restored
-              (<code>restoreSession: false</code>). The React Native app does all three on load.
-            </li>
-            <li>
-              Settings and downloads are kept as written JSON until each has a typed home; history, bookmarks, Library, Boosts and the other documents aren't
-              read yet.
-            </li>
-            <li>
-              <code>bay_state::store</code> leaves out, for now: giving a space without an icon an emoji on load (<code>withSpaceEmoji</code>); history and
-              bookmarks, so unloading a pinned page back at its pinned address keeps the title it had; private windows' own site mutes; Find; peeks;
-              <code>openAppUrl</code> (an app address typed into a tab opens in the tab); a pinned row's tidied title (<code>tidyTabTitles</code>); placing tabs
-              into a pinned folder; the local files' order (<code>normalizeLocalFiles</code>); and creating a window from given tabs. It takes addresses already
-              resolved by a function it's given: the input rules (<code>@bay/core</code> <code>resolveInput</code>) have a Rust port in the mobile core
+              <code>bay_state::store</code> leaves out, for now: private windows' own site mutes; Find; peeks; a pinned row's tidied title
+              (<code>tidyTabTitles</code>); placing tabs into a pinned folder; the local files' order (<code>normalizeLocalFiles</code>). It takes addresses
+              already resolved by a function it's given: the input rules (<code>@bay/core</code> <code>resolveInput</code>) have a Rust port in the mobile core
               (<code>packages/mobile-core/crates/bay-core/src/input</code>) to share rather than copy.
+            </li>
+            <li>
+              One change from the TypeScript store: a tab reopened into another space (its own has gone) is that space's. The TypeScript store kept the closed
+              tab's space on it, which left the tab in no list that shows it.
             </li>
             <li>
               The spike links the engine built on 20 Nov (<code>~/chromium-build</code>); <code>engine/</code> has changed since and has no published prebuilt.
