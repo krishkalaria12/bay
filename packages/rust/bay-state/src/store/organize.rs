@@ -3,6 +3,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use serde_json::Value;
+
 use super::groups::{GroupOptions, order_sections, place_block, sync_group_order};
 use super::model::{TabList, is_incognito_space, snapshot_tab};
 use super::names::host_of;
@@ -70,10 +72,10 @@ impl Browser {
             .and_then(|s| s.clean_up_after_hours)
         {
             Some(own) => own.map(|h| h.0),
-            None => match self.settings.0.get("cleanUpInactiveTabsAfterHours") {
-                Some(value) => value.as_f64(),
-                None => Some(12.0),
-            },
+            None => self
+                .settings
+                .value("cleanUpInactiveTabsAfterHours")
+                .and_then(Value::as_f64),
         }
     }
 
@@ -361,8 +363,7 @@ impl Browser {
         }
         let mut sites: Vec<String> = self
             .settings
-            .0
-            .get("mutedSites")
+            .value("mutedSites")
             .and_then(|v| v.as_array())
             .map(|a| {
                 a.iter()

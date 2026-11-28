@@ -15,6 +15,9 @@ serde_with = "3"
 thiserror = "2"
 # Hosts as the TypeScript reads them (`new URL(url).hostname`).
 url = "2"
+unicode-normalization = "0.1"
+# The input rules (addresses, search, URLs) shared with the phones: one Rust copy, not two.
+bay-core = { path = "../../mobile-core/crates/bay-core" }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -499,3 +499,45 @@ pub struct ClosedGroupRef {
     #[serde(flatten)]
     pub extra: Extra,
 }
+
+/// A download, as the engine reports it and the Downloads list keeps it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Download {
+    /// Unique across profiles for the app's lifetime.
+    pub id: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub path: String,
+    /// "downloading", "complete", "cancelled", "failed" or "interrupted".
+    #[serde(default)]
+    pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received: Option<JsNumber>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<JsNumber>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<JsNumber>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// The space whose engine profile downloaded it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// What the server called the file; when it differs from `filename`, a person chose the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_filename: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referrer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_url: Option<String>,
+    /// The path the engine saved, after Tidy Downloads renamed the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_from: Option<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}

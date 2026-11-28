@@ -71,11 +71,23 @@ fn isolate_legacy_files(dir: &DataDir, isolated: &Isolated) -> Result<(), Docume
 }
 
 impl Browser {
+    /// The saved Downloads list, each given an id of this launch (the engine numbers its own afresh).
+    fn load_downloads(&mut self, dir: &DataDir) -> Result<(), DocumentError> {
+        self.downloads = crate::Downloads::load(dir)?
+            .map(|d| d.downloads)
+            .unwrap_or_default();
+        for (i, d) in self.downloads.iter_mut().enumerate() {
+            d.id = format!("saved-{i}");
+        }
+        Ok(())
+    }
+
     /// Loads the saved session at launch; whether there was one. `reloaded`: the app's interface restarted without the
     /// engine, so each window keeps the tab it showed whatever settings.launchTab and restoreSession say.
     pub fn launch(&mut self, dir: &DataDir, reloaded: bool) -> Result<bool, DocumentError> {
         let Some((mut session, migrated)) = Session::read(dir, self.now())? else {
             self.hydrate(Session::default(), !reloaded);
+            self.load_downloads(dir)?;
             return Ok(false);
         };
         let mut order: Vec<String> = Vec::new();
@@ -111,6 +123,7 @@ impl Browser {
             .map(|(id, s)| (id.clone(), s.profile_id.clone()))
             .collect();
         self.hydrate(session, !reloaded);
+        self.load_downloads(dir)?;
         // The session no longer matches the store (spaces split, or an older build's file): it's written again first.
         let changed = saved_profiles
             .iter()

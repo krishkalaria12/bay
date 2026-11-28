@@ -13,6 +13,7 @@ mod groups;
 mod history;
 mod hydrate;
 mod launch;
+mod link_rules;
 mod local_files;
 mod model;
 mod moves;
@@ -20,10 +21,12 @@ mod names;
 mod openers;
 mod organize;
 mod pages;
+mod peeks;
 mod placing;
 mod spaces;
 mod splits;
 mod tabs;
+mod window_ui;
 mod windows;
 
 use std::cell::Cell;
@@ -34,7 +37,7 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 
 use crate::model::{
-    BrowserWindow, ClosedGroup, ClosedTab, ClosedWindow, Extra, LocalFilePin, Navigation,
+    BrowserWindow, ClosedGroup, ClosedTab, ClosedWindow, Download, Extra, LocalFilePin, Navigation,
     PinnedFolder, Space, SplitView, Tab, TabGroup,
 };
 use crate::session::Session;
@@ -50,6 +53,10 @@ pub use folders::{FolderMove, MAX_FOLDER_DEPTH, PinState, folder_depth, normaliz
 pub use groups::GroupPatch;
 pub use history::{HistoryEntry, HistoryRow, MAX_HISTORY, without_visits_since};
 pub use hydrate::{HydrateData, default_space};
+pub use link_rules::{
+    ExternalLinkRule, LinkDestination, LinkMatchType, matching_link_rule,
+    normalize_external_link_rules, normalize_link_destination, validate_link_pattern,
+};
 pub use local_files::{FileDescriptor, local_file_path, normalize_local_files};
 pub use model::{TabList, incognito_space_id, is_incognito_space, pinned_first, snapshot_tab};
 pub use names::auto_group_name;
@@ -59,12 +66,15 @@ pub use organize::{
     away_from_pin,
 };
 pub use pages::{LivePatch, TabPatch};
+pub use peeks::{ClosedPeek, Peek, peek_site_of};
 pub use placing::TabPlacement;
 pub use spaces::{
     Isolated, SPACE_EMOJI, SpacePatch, engine_id_of, isolate_saved_spaces, profile_id_of,
     theme_of_color, unused_space_color, unused_space_look,
 };
+pub use splits::{OpenPane, PaneRefused, SplitSide};
 pub use tabs::NewTab;
+pub use window_ui::{FindState, MAX_DOWNLOADS, download_visible_in};
 pub use windows::CreateWindow;
 
 pub const DEFAULT_SPACE_ID: &str = "default";
@@ -75,9 +85,13 @@ pub const MAX_SPLIT_PANES: usize = 3;
 /// How long a deleted group can be brought back.
 pub const DELETED_GROUP_MS: f64 = 7.0 * 86_400_000.0;
 
-/// What typed text means as an address, with the settings' search engine: @bay/core's `resolveInput`. The input
-/// rules come from the input crate; the store takes them so it holds none itself.
+/// What typed text means as an address, with the settings' search engine (`resolve_typed`, the app's), or a test's.
 pub type ResolveInput = fn(raw: &str, settings: &Settings) -> String;
+
+/// @bay/core's `resolveInput` with the settings' search engine: an address as typed, fixed up, else a search.
+pub fn resolve_typed(raw: &str, settings: &Settings) -> String {
+    bay_core::input::url::resolve_input(raw, &settings.search_url_prefix())
+}
 
 /// Where the store's time comes from: the system's, in whole milliseconds as `Date.now()`, or a test's.
 #[derive(Debug)]
@@ -138,6 +152,14 @@ pub enum Effect {
         url: String,
         window_id: String,
     },
+    /// A private window closed while this download ran: it stops.
+    CancelDownload {
+        id: String,
+    },
+    /// A private window closed: its WebKit pages' cookies and site data, kept in memory, go.
+    EndPrivateSession {
+        space_id: String,
+    },
 }
 
 /// The app's settings, kept as the session wrote them: a setting reads its default when it isn't there, and every
@@ -146,12 +168,25 @@ pub enum Effect {
 pub struct Settings(pub Map<String, Value>);
 
 impl Settings {
+    /// The app's default settings, as the React Native app has them (scripts/default-settings.mjs writes the file).
+    pub fn defaults() -> &'static Map<String, Value> {
+        static DEFAULTS: std::sync::OnceLock<Map<String, Value>> = std::sync::OnceLock::new();
+        DEFAULTS.get_or_init(|| {
+            serde_json::from_str(include_str!("default_settings.json")).unwrap_or_default()
+        })
+    }
+
+    /// A setting as saved, else its default.
+    pub fn value(&self, key: &str) -> Option<&Value> {
+        self.0.get(key).or_else(|| Self::defaults().get(key))
+    }
+
     pub(crate) fn str(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(Value::as_str)
+        self.value(key).and_then(Value::as_str)
     }
 
     pub(crate) fn flag(&self, key: &str) -> Option<bool> {
-        self.0.get(key).and_then(Value::as_bool)
+        self.value(key).and_then(Value::as_bool)
     }
 
     pub fn set(&mut self, key: &str, value: impl Into<Value>) {
@@ -204,9 +239,57 @@ impl Settings {
         }
     }
 
+    /// The default search engine's address (`%s` for the query): an extension's that controls it, else the chosen
+    /// one among the built-in, custom and extension engines, else Google.
+    pub fn search_url_prefix(&self) -> String {
+        let list = |key: &str| {
+            self.value(key)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
+        let field = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        let extensions = list("extensionSearchEngines");
+        if let Some(url) = extensions
+            .iter()
+            .find(|e| e.get("isDefault").and_then(Value::as_bool) == Some(true))
+            .and_then(|e| field(e, "url"))
+        {
+            return url;
+        }
+        let mut engines: Vec<(String, String)> = bay_core::input::engines::built_in_engines()
+            .into_iter()
+            .map(|e| (e.id, e.url))
+            .collect();
+        engines.extend(
+            list("customSearchEngines")
+                .iter()
+                .filter_map(|e| Some((field(e, "id")?, field(e, "url")?))),
+        );
+        if let Some(legacy) = self.str("customSearchUrl").filter(|u| u.contains("%s")) {
+            engines.push(("custom".to_owned(), legacy.to_owned()));
+        }
+        let mut seen = HashSet::new();
+        for e in &extensions {
+            if let (Some(id), Some(url)) = (field(e, "extensionId"), field(e, "url"))
+                && seen.insert(id.clone())
+            {
+                engines.push((format!("extension:{id}"), url));
+            }
+        }
+        let chosen = self.str("searchEngine");
+        engines
+            .iter()
+            .find(|(id, _)| Some(id.as_str()) == chosen)
+            .or(engines.first())
+            .map_or_else(
+                || bay_core::input::url::SEARCH_URL.to_owned(),
+                |(_, url)| url.clone(),
+            )
+    }
+
     pub fn site_muted(&self, host: &str) -> bool {
-        self.0
-            .get("mutedSites")
+        self.value("mutedSites")
             .and_then(Value::as_array)
             .is_some_and(|sites| sites.iter().any(|site| site.as_str() == Some(host)))
     }
@@ -265,6 +348,15 @@ pub struct Browser {
     pub selection: HashMap<String, Vec<String>>,
     pub ui: Ui,
     pub window_ui: HashMap<String, WindowUi>,
+    /// Each window's peek, and the last one it closed.
+    pub peeks: HashMap<String, Peek>,
+    pub closed_peeks: HashMap<String, ClosedPeek>,
+    /// Find in each tab's page, by tab.
+    pub find: HashMap<String, FindState>,
+    /// The Downloads list, newest first.
+    pub downloads: Vec<Download>,
+    /// Whether the app shows dark (the system's appearance or the person's choice).
+    pub app_dark: bool,
     /// The session's fields this build doesn't model.
     pub extra: Extra,
     env: Env,
@@ -319,6 +411,11 @@ impl Browser {
             selection: HashMap::new(),
             ui: Ui::default(),
             window_ui: HashMap::new(),
+            peeks: HashMap::new(),
+            closed_peeks: HashMap::new(),
+            find: HashMap::new(),
+            downloads: Vec::new(),
+            app_dark: true,
             extra: Extra::new(),
             env: Env {
                 clock,

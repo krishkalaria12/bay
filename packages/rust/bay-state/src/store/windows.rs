@@ -1,7 +1,7 @@
 //! Opening, closing and switching windows (store/windows.ts, store/littleBay.ts).
 
 use super::model::{incognito_space_id, unique_ids};
-use super::{Browser, MAX_CLOSED_WINDOWS, NewTab, TabLive, keep_last};
+use super::{Browser, Effect, MAX_CLOSED_WINDOWS, NewTab, TabLive, keep_last};
 use crate::model::{BrowserWindow, ClosedWindow, ClosedWindowPlacement};
 use crate::number::JsNumber;
 
@@ -186,6 +186,22 @@ impl Browser {
             self.remove_tabs(&ids, w.is_small());
             if w.incognito {
                 self.closed_tabs.retain(|c| c.window_id != id);
+                // Its downloads and its pages' site data go with it.
+                let running: Vec<String> = self
+                    .downloads
+                    .iter()
+                    .filter(|d| {
+                        d.profile.as_deref() == Some(w.space_id.as_str())
+                            && d.state == "downloading"
+                    })
+                    .map(|d| d.id.clone())
+                    .collect();
+                self.effects
+                    .extend(running.into_iter().map(|id| Effect::CancelDownload { id }));
+                self.forget_downloads(&w.space_id);
+                self.effects.push(Effect::EndPrivateSession {
+                    space_id: w.space_id.clone(),
+                });
             }
         } else {
             // Its pages close with it: each tab waits, unloaded, to come back with its back/forward list (the engine

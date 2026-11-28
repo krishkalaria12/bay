@@ -355,6 +355,9 @@ impl Browser {
         self.bookmarks_ready = bookmarks_ready;
         self.bookmark_undo.clear();
         self.folder_move_undo.clear();
+        self.peeks.clear();
+        self.closed_peeks.clear();
+        self.find.clear();
         self.private_cleaned_tabs.clear();
         self.private_site_mutes.clear();
         self.prune_pinned_folders();

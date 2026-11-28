@@ -623,9 +623,10 @@
           <ul class="prose">
             <li>Settings and downloads are kept as written JSON until each has a typed home; Library, Boosts and the other documents aren't read yet.</li>
             <li>
-              <code>bay_state::store</code> leaves out, for now: Find, peeks, the command bar's state, sidebar undo and shared collections. It takes addresses
-              already resolved by a function it's given: the input rules (<code>@bay/core</code> <code>resolveInput</code>) have a Rust port in the mobile core
-              (<code>packages/mobile-core/crates/bay-core/src/input</code>) to share rather than copy.
+              <code>bay_state::store</code> leaves out, for now: sidebar undo and shared collections. Settings have no typed fields yet: each reads its saved
+              value, else the app's default (<code>DEFAULT_SETTINGS</code>, which <code>apps/browser/scripts/default-settings.mjs</code> writes into the crate);
+              <code>restoreSettings</code>'s clean-up of older values isn't ported. Addresses, search and URLs come from the mobile core's Rust port of
+              <code>@bay/core</code>'s input (<code>bay-core</code>, a path dependency), shared rather than copied.
             </li>
             <li>
               One change from the TypeScript store: a tab reopened into another space (its own has gone) is that space's. The TypeScript store kept the closed

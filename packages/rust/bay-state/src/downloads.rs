@@ -1,11 +1,10 @@
 //! downloads.json: the Downloads list, as the React Native app writes it (apps/browser/src/lib/persist.ts, DOCS).
-//! Version 2. Each download is kept as written until the downloads have a typed home here.
+//! Version 2. Each download is typed, the fields it doesn't model carried through.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 
 use crate::documents::{DataDir, DocumentError};
-use crate::model::Extra;
+use crate::model::{Download, Extra};
 
 pub const DOWNLOADS: &str = "downloads.json";
 pub const DOWNLOADS_VERSION: u32 = 2;
@@ -14,7 +13,7 @@ pub const DOWNLOADS_VERSION: u32 = 2;
 pub struct Downloads {
     pub version: u32,
     #[serde(default)]
-    pub downloads: Vec<Map<String, Value>>,
+    pub downloads: Vec<Download>,
     #[serde(flatten)]
     pub extra: Extra,
 }

@@ -7,19 +7,9 @@ use std::cell::Cell;
 use bay_state::Browser;
 use bay_state::store::{Clock, Settings};
 
-/// @bay/core's `resolveInput` for the addresses the tests type: a host gets https://, anything else is a search.
-pub fn resolve(raw: &str, _: &Settings) -> String {
-    let input = raw.trim();
-    if input.is_empty() || input.contains("://") {
-        input.to_owned()
-    } else if input.contains('.') && !input.contains(char::is_whitespace) {
-        format!("https://{input}")
-    } else {
-        format!(
-            "https://www.google.com/search?q={}",
-            input.replace(' ', "%20")
-        )
-    }
+/// The app's own address rules (@bay/core's `resolveInput`, shared with the phones).
+pub fn resolve(raw: &str, settings: &Settings) -> String {
+    bay_state::store::resolve_typed(raw, settings)
 }
 
 /// A browser with one space, no windows and a clock that moves only when a test moves it.

@@ -347,6 +347,7 @@ impl Browser {
         for id in &gone {
             self.tabs.shift_remove(id);
             self.live.remove(id);
+            self.find.remove(id);
         }
         // A closed tab's tabs take its opener (TabStripModel::FixOpeners).
         for t in self.tabs.values_mut() {
@@ -479,6 +480,7 @@ impl Browser {
             next.unloaded = Some(true);
             self.tabs.insert(id.clone(), next);
             self.live.insert(id.clone(), TabLive::default());
+            self.find.remove(id);
         }
         remove_from_splits(&mut self.splits, &alone);
         for selected in self.selection.values_mut() {

@@ -223,11 +223,4 @@ impl Browser {
         };
         self.update_tab(id, patch, None);
     }
-
-    /// The command bar closes.
-    pub fn close_panel(&mut self, window_id: &str) {
-        if let Some(ui) = self.window_ui.get_mut(window_id).filter(|ui| ui.panel.open) {
-            ui.panel = super::Panel::default();
-        }
-    }
 }
