@@ -1,0 +1,1475 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay on GPUI</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfaf8;
+        --surface: #fff;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --sunken: #f3f1ed;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --radius: 10px;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --sunken: #232321;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      code {
+        font: 0.86em var(--mono);
+        background: var(--sunken);
+        padding: 0.06em 0.34em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.4rem;
+        margin-bottom: 0.8rem;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 1.6rem 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 1rem;
+        padding-left: 1.3rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      .page {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 2.5rem;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 5rem;
+      }
+      nav {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        font-size: 0.88rem;
+      }
+      nav strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        color: var(--muted);
+      }
+      nav ol {
+        list-style: none;
+        padding: 0;
+      }
+      nav li {
+        margin: 0;
+      }
+      nav a {
+        display: block;
+        padding: 0.3rem 0.5rem;
+        border-left: 2px solid var(--line);
+        text-decoration: none;
+        color: var(--muted);
+      }
+      nav a:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+      nav .sub a {
+        padding-left: 1.2rem;
+        font-size: 0.84rem;
+      }
+      main {
+        min-width: 0;
+      }
+      section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+        scroll-margin-top: 1rem;
+      }
+      .lede,
+      .prose {
+        max-width: 76ch;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.05rem;
+        margin-top: 0.8rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin: 0 0 1.2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        padding: 0.7rem 0.85rem;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-size: 0.8rem;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        white-space: nowrap;
+        font-weight: 600;
+      }
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0;
+        max-width: 76ch;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .callout p:last-child {
+        margin: 0;
+      }
+      .order {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+        max-width: 76ch;
+      }
+      .order li {
+        counter-increment: step;
+        position: relative;
+        padding: 0.55rem 0.8rem 0.55rem 2.8rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 0.45rem 0;
+      }
+      .order li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0.8rem;
+        top: 0.55rem;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+      }
+      .pri {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--sunken);
+        white-space: nowrap;
+      }
+      .pri.p0 {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .mock {
+        font: 0.82rem/1.5 var(--mono);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        overflow-x: auto;
+        white-space: pre;
+        max-width: 100%;
+        width: fit-content;
+      }
+      @media (max-width: 800px) {
+        .page {
+          grid-template-columns: 1fr;
+          gap: 1.5rem;
+          padding: 1.5rem 1rem 3rem;
+        }
+        nav {
+          position: static;
+        }
+        nav ol {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        nav a,
+        nav .sub a {
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          padding: 0.2rem 0.65rem;
+        }
+        td:first-child {
+          white-space: normal;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        nav {
+          display: none;
+        }
+        .page {
+          display: block;
+          padding: 0;
+        }
+      }
+      .layers {
+        display: grid;
+        gap: 0.5rem;
+        max-width: 920px;
+        margin: 1rem 0 1.4rem;
+      }
+      .layer {
+        display: grid;
+        grid-template-columns: 9.5rem minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: stretch;
+      }
+      .layer > .tag {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+        padding-top: 0.6rem;
+      }
+      .layer .cells {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.5rem;
+      }
+      .cell {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.86rem;
+      }
+      .cell strong {
+        display: block;
+        font-size: 0.9rem;
+      }
+      .cell span {
+        color: var(--muted);
+      }
+      .cell.shared {
+        border-color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .cell.new {
+        border-style: dashed;
+        border-color: var(--accent);
+      }
+      .legend {
+        font-size: 0.82rem;
+        color: var(--muted);
+        max-width: 76ch;
+      }
+      .legend i {
+        display: inline-block;
+        width: 0.9rem;
+        height: 0.9rem;
+        vertical-align: -0.15rem;
+        border-radius: 3px;
+        border: 1px solid var(--line);
+        margin: 0 0.3rem 0 0.8rem;
+      }
+      .legend i.shared {
+        border-color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .legend i.new {
+        border: 1px dashed var(--accent);
+      }
+      .legend i:first-child {
+        margin-left: 0;
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin: 2rem 0 0.4rem;
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 8.5rem minmax(0, 1fr);
+        gap: 0.35rem 1rem;
+        max-width: 76ch;
+        margin: 0.4rem 0 1rem;
+        font-size: 0.92rem;
+      }
+      .kv dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .kv dd {
+        margin: 0;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      @media (max-width: 800px) {
+        .layer {
+          grid-template-columns: 1fr;
+          gap: 0.3rem;
+        }
+        .layer > .tag {
+          padding-top: 0;
+        }
+        .kv {
+          grid-template-columns: 1fr;
+        }
+      }
+      .decision {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1rem 1.1rem 0.4rem;
+        margin: 0 0 1rem;
+        max-width: 82ch;
+        scroll-margin-top: 1rem;
+      }
+      .decision h3 {
+        margin: 0 0 0.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: baseline;
+      }
+      .decision .id {
+        font: 600 0.8rem var(--mono);
+        color: var(--muted);
+      }
+      .decision .rec {
+        border-left: 3px solid var(--accent);
+        padding: 0.1rem 0 0.1rem 0.8rem;
+        margin: 0.4rem 0 0.9rem;
+      }
+      .decision .rec strong:first-child {
+        color: var(--accent);
+      }
+      .state {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.05rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--sunken);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .state.open {
+        border-color: var(--warn);
+        color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .state.done {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav aria-label="Contents">
+        <strong>Plan</strong>
+        <ol>
+          <li><a href="#progress">Progress</a></li>
+          <li><a href="#summary">Decisions at a glance</a></li>
+          <li><a href="#why">1. Why GPUI, and what is proven</a></li>
+          <li><a href="#today">2. Where Bay stands</a></li>
+          <li><a href="#target">3. Target layout</a></li>
+          <li><a href="#carry">4. What carries over</a></li>
+          <li><a href="#phases">5. Phases</a></li>
+          <li class="sub"><a href="#p0">0. Spike and gate</a></li>
+          <li class="sub"><a href="#p1">1. Foundations</a></li>
+          <li class="sub"><a href="#p2">2. The window</a></li>
+          <li class="sub"><a href="#p3">3. Features</a></li>
+          <li class="sub"><a href="#p4">4. Hardening</a></li>
+          <li class="sub"><a href="#p5">5. Ship on macOS</a></li>
+          <li class="sub"><a href="#p6">6. Windows and Linux</a></li>
+          <li><a href="#parity">6. Parity checklist</a></li>
+          <li><a href="#accept">7. Gates</a></li>
+          <li><a href="#risks">8. Risks</a></li>
+          <li><a href="#stays">9. What doesn't change</a></li>
+          <li><a href="#decisions">10. Open decisions</a></li>
+        </ol>
+      </nav>
+      <main>
+        <header>
+          <h1>Bay's desktop app on GPUI</h1>
+          <p class="lede">
+            Rewrite Bay's desktop window in Rust on GPUI, macOS first. The page stays Chromium's (and WebKit's for protected video). Everything Bay draws around
+            it moves from React Native macOS to GPUI, and the app's logic moves from TypeScript stores into Rust crates beside the shared desktop core. Windows
+            and Linux follow once macOS ships, replacing the WebUI host there.
+          </p>
+          <p class="meta">
+            Drafted 28 Nov 2026 against <code>main</code> at <code>1add157c2</code>. Proposed; nothing is built. It replaces the "one host for all three"
+            question in Phase 6 of the shared desktop core plan: the single host becomes GPUI rather than WebUI. A reference port shaped it: a draft GPUI
+            rewrite of a sibling Chromium browser's React Native macOS app, opened 27 Nov 2026, whose own source is Apache-2.0. Line counts are tracked files
+            without tests or vendored code, rounded.
+          </p>
+        </header>
+
+        <section id="progress" aria-labelledby="progress-h">
+          <h2 id="progress-h">Progress</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Phase</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0 · Spike and gate</td>
+                  <td>Not started. Waits on decisions D2, D4 and D9.</td>
+                </tr>
+                <tr>
+                  <td>1 · Foundations</td>
+                  <td>Not started.</td>
+                </tr>
+                <tr>
+                  <td>2 · The window</td>
+                  <td>Not started.</td>
+                </tr>
+                <tr>
+                  <td>3 · Features</td>
+                  <td>Not started.</td>
+                </tr>
+                <tr>
+                  <td>4 · Hardening</td>
+                  <td>Not started.</td>
+                </tr>
+                <tr>
+                  <td>5 · Ship on macOS</td>
+                  <td>Not started.</td>
+                </tr>
+                <tr>
+                  <td>6 · Windows and Linux</td>
+                  <td>Not started.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 id="gaps">Known gaps</h3>
+          <p class="prose">
+            None yet. Rows that land with limits, or with behaviour that differs from the React Native app, are listed here in the commit that lands them.
+          </p>
+        </section>
+
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Decisions at a glance</h2>
+          <p class="prose">
+            One decision is made: desktop moves to GPUI, macOS first (28 Nov 2026). The rest are open, each with a recommendation. Details and reasons are in
+            <a href="#decisions">section 10</a>. Phase 0 needs D2, D4 and D9; the others can wait until the phase that needs them.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Recommendation</th>
+                  <th scope="col">Needed by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>D1</td>
+                  <td>Move desktop to GPUI?</td>
+                  <td><span class="state done">Decided</span> Yes, macOS first.</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><a href="#d2">D2</a></td>
+                  <td>Which GPUI?</td>
+                  <td>Vendor the reference port's GPUI snapshot and patch; own it from then on.</td>
+                  <td>Phase 0</td>
+                </tr>
+                <tr>
+                  <td><a href="#d3">D3</a></td>
+                  <td>Component kit</td>
+                  <td>Bay's own primitives. No gpui-kit dependency.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d4">D4</a></td>
+                  <td>Engine boundary</td>
+                  <td>A versioned C ABI on NNCore (JSON verbs and an event sink), plus a small <code>.mm</code> for views and window hooks.</td>
+                  <td>Phase 0</td>
+                </tr>
+                <tr>
+                  <td><a href="#d5">D5</a></td>
+                  <td>App logic</td>
+                  <td>Rewrite in Rust. No JavaScript runtime in the GPUI app.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d6">D6</a></td>
+                  <td>User data</td>
+                  <td>Same data folder, same documents, same schema versions. No migration step.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d7">D7</a></td>
+                  <td>Swift modules</td>
+                  <td>Keep the ones that wrap Apple frameworks; call them through C functions. Drop the React Native wrappers.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d8">D8</a></td>
+                  <td>Where the code lives</td>
+                  <td>New crates in the <code>packages/rust</code> workspace, GPUI under <code>packages/rust/third_party/gpui</code>.</td>
+                  <td>Phase 0</td>
+                </tr>
+                <tr>
+                  <td><a href="#d9">D9</a></td>
+                  <td>Branch and PR</td>
+                  <td>One branch, <code>feat/gpui-desktop</code>, from #35, in a sibling worktree; one PR; merges, not rebases.</td>
+                  <td>Phase 0</td>
+                </tr>
+                <tr>
+                  <td><a href="#d10">D10</a></td>
+                  <td>Look</td>
+                  <td>Match today's UI first. Redesign after the switch.</td>
+                  <td>Phase 2</td>
+                </tr>
+                <tr>
+                  <td><a href="#d11">D11</a></td>
+                  <td>Work on the old app meanwhile</td>
+                  <td>Fixes only once Phase 3 starts; new desktop features go to the GPUI app.</td>
+                  <td>Phase 3</td>
+                </tr>
+                <tr>
+                  <td><a href="#d12">D12</a></td>
+                  <td>Tests</td>
+                  <td>Rust UI tests on a stand-in engine, plus device-driven acceptance runs on the real app.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d13">D13</a></td>
+                  <td>Rollout</td>
+                  <td>Nightly feed gets the GPUI build first; stable switches after the gates.</td>
+                  <td>Phase 5</td>
+                </tr>
+                <tr>
+                  <td><a href="#d14">D14</a></td>
+                  <td>Oldest macOS</td>
+                  <td>Keep 14.0. Liquid Glass on macOS 26 with today's backdrop below it.</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td><a href="#d15">D15</a></td>
+                  <td>Windows and Linux timing</td>
+                  <td>After macOS ships. Compile-check the crates there from Phase 1.</td>
+                  <td>Phase 6</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="why" aria-labelledby="why-h">
+          <h2 id="why-h">1. Why GPUI, and what is proven</h2>
+          <p class="prose">
+            A browser's window has one hard requirement a general UI kit doesn't: Chromium's page is a native view, and Bay draws over it (command bar, Peek,
+            menus, popovers, drag previews). Stock GPUI has no way to place a native view inside its window. The reference port added one, and that is most of
+            why this plan starts from it.
+          </p>
+          <h3>What the reference port shows works on macOS</h3>
+          <ul class="prose">
+            <li>
+              <strong>The page under GPUI.</strong> A native view element in GPUI places the page's view beneath GPUI's Metal layer and erases GPUI's drawing
+              over it. Anything painted later lands on top of the page, in the same window. The view follows GPUI's clip, rounded corners, scale and opacity.
+            </li>
+            <li>
+              <strong>Chromium owns the window and the run loop.</strong> GPUI attaches to a window the engine created ("hosted" windows) and routes
+              <code>sendEvent:</code>, <code>keyDown:</code>, <code>makeFirstResponder:</code> and <code>performKeyEquivalent:</code> between GPUI and the page.
+            </li>
+            <li><strong>Long lists.</strong> One virtual list helper for every list; the sidebar's frame cost stays flat from 100 to 800 tabs.</li>
+            <li>
+              <strong>The rest of a browser.</strong> Sidebar, tab strip, split view, Peek, a small-window mode, settings, native menus, onboarding, sync,
+              media, fullscreen, picture in picture, plugins and AppleScript, on a Rust state crate with a stand-in engine for tests.
+            </li>
+            <li>
+              <strong>GPUI fixes a browser needs.</strong> Swipe latency, frame and input-latency hooks, render to image, text input, Liquid Glass and system
+              materials.
+            </li>
+          </ul>
+          <h3>What it doesn't show</h3>
+          <ul class="prose">
+            <li><strong>Screen readers.</strong> It has almost no accessibility code: a few labels on native views, no AccessKit tree for GPUI's own UI.</li>
+            <li>
+              <strong>Typing in other languages and dictation</strong>, automatic picture in picture and the real fullscreen transition: listed as unchecked.
+            </li>
+            <li>
+              <strong>Windows and Linux.</strong> Its GPUI patch adds no native views there; the Windows and Linux engine backends are thin stubs. Bay would be
+              first there.
+            </li>
+            <li>
+              <strong>Its own review.</strong> It is a one-day draft written by parallel workers; its merge check, audits and review rounds hadn't run when it
+              was read.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              <strong>The fork is the cost.</strong> The patch touches 88 files of GPUI, including the macOS window, display link and text system. Every move to
+              a newer GPUI is a merge into that. GPUI itself says it is pre-1.0 with frequent breaking changes and is tied to Zed's needs.
+            </p>
+          </div>
+        </section>
+
+        <section id="today" aria-labelledby="today-h">
+          <h2 id="today-h">2. Where Bay stands</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Layer</th>
+                  <th scope="col">Today</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">In this plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Engine</td>
+                  <td>
+                    Patched Chromium; NNCore framework on macOS (<code>engine/nncore</code>, Objective-C API in <code>packages/chromium/ios/NNCore*.mm</code>);
+                    WebUI engine on Windows and Linux
+                  </td>
+                  <td class="num">~17k NNCore, ~60k engine C++</td>
+                  <td>Stays. Gains a C ABI (D4).</td>
+                </tr>
+                <tr>
+                  <td>UI</td>
+                  <td>
+                    <code>apps/browser/src/components</code>, React Native macOS 0.81 with a patched renderer; the same code as a WebUI page on Windows and
+                    Linux
+                  </td>
+                  <td class="num">~64k TS/TSX</td>
+                  <td>Rewritten in <code>bay-ui</code>.</td>
+                </tr>
+                <tr>
+                  <td>Logic</td>
+                  <td>
+                    <code>store/</code>, <code>runtime/</code>, <code>lib/</code>, <code>effect/</code> (zustand stores, the coordinator, Effect services,
+                    persistence)
+                  </td>
+                  <td class="num">~31k TS, 213 test files</td>
+                  <td>Rewritten in <code>bay-state</code> (D5); tests ported first.</td>
+                </tr>
+                <tr>
+                  <td>Shared packages</td>
+                  <td><code>packages/core</code>, <code>platform</code>, <code>shell</code> (suggestions, bangs, calculator, icons)</td>
+                  <td class="num">TS</td>
+                  <td>Ported as needed; the phones' Rust core already has several.</td>
+                </tr>
+                <tr>
+                  <td>Mac services</td>
+                  <td>
+                    35 Swift files in <code>packages/desktop/ios</code>, WebKit and swipe in <code>packages/chromium/ios</code>, import, sync, Metal shaders
+                  </td>
+                  <td class="num">~40k Swift</td>
+                  <td>Most kept behind C functions (D7).</td>
+                </tr>
+                <tr>
+                  <td>Rust</td>
+                  <td>
+                    <code>packages/rust</code> (PR #35: <code>bay-desktop</code>, <code>bay-lists</code>, <code>bay-sync</code>, <code>bay-import</code>),
+                    <code>packages/adblock</code>, <code>packages/mobile-core</code>
+                  </td>
+                  <td class="num">~49k</td>
+                  <td>The workspace the new crates join (D8).</td>
+                </tr>
+                <tr>
+                  <td>Phones</td>
+                  <td>SwiftUI and Compose on <code>packages/mobile-core</code></td>
+                  <td class="num">—</td>
+                  <td>Unchanged.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="prose">
+            For scale: the reference port is about 180k lines of Rust (86k UI, 52k app, 22k state, 16k engine) for a browser of similar breadth, plus the GPUI
+            copy. Expect Bay's port to be of that order.
+          </p>
+        </section>
+
+        <section id="target" aria-labelledby="target-h">
+          <h2 id="target-h">3. Target layout</h2>
+          <div class="layers" role="list" aria-label="Layers of the GPUI app">
+            <div class="layer" role="listitem">
+              <div class="tag">App</div>
+              <div class="cells">
+                <div class="cell new"><strong>bay-app</strong><span>the binary: windows, menus, app lifecycle, dev harness, AppleScript</span></div>
+              </div>
+            </div>
+            <div class="layer" role="listitem">
+              <div class="tag">UI</div>
+              <div class="cells">
+                <div class="cell new"><strong>bay-ui</strong><span>sidebar, command bar, pages, settings, Library, Easels</span></div>
+                <div class="cell new"><strong>bay-ui primitives</strong><span>tokens, virtual list, text input, menus, icons, glass</span></div>
+                <div class="cell new"><strong>bay-theme</strong><span>space themes, grain, backdrop</span></div>
+              </div>
+            </div>
+            <div class="layer" role="listitem">
+              <div class="tag">State</div>
+              <div class="cells">
+                <div class="cell new"><strong>bay-state</strong><span>tabs, spaces, folders, history, settings, commands, persistence</span></div>
+                <div class="cell shared"><strong>bay-lists · bay-sync · bay-import</strong><span>from PR #35, unchanged</span></div>
+              </div>
+            </div>
+            <div class="layer" role="listitem">
+              <div class="tag">Engine</div>
+              <div class="cells">
+                <div class="cell new"><strong>bay-engine</strong><span>engine trait, C ABI client, stand-in engine, macOS view bridge</span></div>
+                <div class="cell">
+                  <strong>NNCore</strong><span>Chromium, exports <code>bay_engine_api</code></span>
+                </div>
+                <div class="cell"><strong>Swift services</strong><span>WebKit, Sparkle, Calendar, Translate, Tidy, Keychain…</span></div>
+              </div>
+            </div>
+            <div class="layer" role="listitem">
+              <div class="tag">GPUI</div>
+              <div class="cells">
+                <div class="cell new">
+                  <strong>third_party/gpui</strong><span>pinned snapshot plus patch: native views, hosted windows, glass, gestures</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="legend"><i class="new"></i>new <i class="shared"></i>shared with the other desktop platforms today <i></i>exists, changed little</p>
+          <h3>Files</h3>
+          <div class="mock">
+            packages/rust/ Cargo.toml workspace: add the crates below and the GPUI copy rust-toolchain.toml one pinned toolchain crates/bay-engine/
+            src/{lib,abi,events,mock}.rs, src/macos/bridge.mm crates/bay-state/ one module per store; persistence/; tests/ with fixtures crates/bay-theme/
+            crates/bay-ui/ primitives/, sidebar/, command_bar/, pages/, settings/ … crates/bay-app/ main.rs, menus, AppleScript, dev harness; build.rs builds
+            the Swift services third_party/gpui/ gpui, gpui_macos, gpui_platform (+ gpui_windows, gpui_linux) scripts/gpui/ build-app.sh (bundle, NNCore
+            framework, helpers, signing), check-fast.sh
+          </div>
+        </section>
+
+        <section id="carry" aria-labelledby="carry-h">
+          <h2 id="carry-h">4. What carries over</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Piece</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">How</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>GPUI copy and patch</td>
+                  <td>Reference port</td>
+                  <td>Taken whole (D2). Credit in <code>NOTICE</code>.</td>
+                </tr>
+                <tr>
+                  <td>Virtual list, fast checks, lint rules, profiling hooks</td>
+                  <td>Reference port</td>
+                  <td>Taken as patterns, rewritten against Bay's crates.</td>
+                </tr>
+                <tr>
+                  <td>Engine ABI shape</td>
+                  <td>Reference port</td>
+                  <td>Same shape (version, event sink, host call, engine call); Bay's own verbs.</td>
+                </tr>
+                <tr>
+                  <td>macOS view bridge</td>
+                  <td>Reference port</td>
+                  <td>Rewritten: its engine framework's API differs from NNCore's, so only the approach carries.</td>
+                </tr>
+                <tr>
+                  <td>App logic and its tests</td>
+                  <td><code>apps/browser/src/{store,runtime,lib}</code></td>
+                  <td>Ported to Rust; each <code>.test.mjs</code> case becomes a Rust test or a shared fixture.</td>
+                </tr>
+                <tr>
+                  <td>UI</td>
+                  <td><code>apps/browser/src/components</code></td>
+                  <td>Rewritten. The TSX is the spec: layout, copy, states, animations.</td>
+                </tr>
+                <tr>
+                  <td>Filter lists, sync, import</td>
+                  <td><code>packages/rust</code> (#35)</td>
+                  <td>Called directly instead of through the pod.</td>
+                </tr>
+                <tr>
+                  <td>Swift services</td>
+                  <td><code>packages/desktop/ios</code>, <code>packages/chromium/ios</code></td>
+                  <td>Kept; React Native module layer removed (D7).</td>
+                </tr>
+                <tr>
+                  <td>Metal shaders</td>
+                  <td><code>packages/shaders</code></td>
+                  <td>Ported to GPUI paint effects, or kept as a native view under GPUI (decided in Phase 2).</td>
+                </tr>
+                <tr>
+                  <td>Bench and harness</td>
+                  <td><code>tabs-bench.mjs</code>, dev harness, <code>bay exec</code></td>
+                  <td>Same dev-eval protocol served by <code>bay-app</code>, so the benches compare both apps.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">5. Phases</h2>
+          <p class="prose">
+            Phases run in order. Phase 0 is a gate: if it fails, the plan stops and the findings go in Known gaps. Phase 6 waits for Phase 5. Within Phase 3 the
+            batches are independent.
+          </p>
+
+          <div class="phase-head" id="p0">
+            <h3>Phase 0 · Spike and gate</h3>
+            <span class="pri p0">gate</span>
+          </div>
+          <p class="prose">One GPUI window on macOS that hosts a real Bay page, with enough UI to answer the hard questions. Throwaway UI, kept crates.</p>
+          <ol class="order">
+            <li>Vendor GPUI with the patch under <code>packages/rust/third_party/gpui</code>; build on the pinned toolchain; record the upstream commit.</li>
+            <li><code>bay-engine</code> minimal: start NNCore, open one window, show one tab's view through GPUI's native view element.</li>
+            <li>A sidebar of 500 rows on the virtual list, a command bar drawn over the page, a text field in it.</li>
+            <li>Run every check below on a copied <code>BAY_DATA_DIR</code>.</li>
+          </ol>
+          <dl class="kv">
+            <dt>Go if</dt>
+            <dd>
+              All pass: the page resizes with the window without tearing; the command bar draws over the page and takes clicks and keys; Japanese and Chinese
+              input work in the bar and in the page; VoiceOver reads and activates a sidebar row; two-finger swipe moves between spaces; the 500-row sidebar
+              scrolls within the 8.3 ms budget; Chromium's context menus, extension popups and DevTools still show; sign-ins survive (same Safe Storage keychain
+              name); the window backdrop and grain draw behind the sidebar.
+            </dd>
+            <dt>Stop if</dt>
+            <dd>Any of the page, input or VoiceOver checks can't pass without rewriting the patch's native view design.</dd>
+          </dl>
+
+          <div class="phase-head" id="p1"><h3>Phase 1 · Foundations</h3></div>
+          <ul class="prose">
+            <li>
+              <strong>Engine ABI.</strong> NNCore exports <code>bay_engine_api</code>: version, size, event sink, host calls (window and tab verbs) and engine
+              calls (services). Verbs follow the calls the TS bridge makes today, so each one maps across. A stand-in engine implements the same trait for
+              tests.
+            </li>
+            <li>
+              <strong>State.</strong> <code>bay-state</code> ports the stores and the coordinator's commands. Persistence reads and writes today's documents in
+              place (D6). Port the store, runtime and lib tests first; they are the spec.
+            </li>
+            <li><strong>Primitives.</strong> Tokens and themes from <code>lib/theme.ts</code>, virtual list, text input, native menus, SF Symbols, glass.</li>
+            <li>
+              <strong>Tooling.</strong> Toolchain pin, clippy lints, fast pattern checks, <code>scripts/gpui/build-app.sh</code> producing a signed Bay.app with
+              NNCore and its helpers, a <code>pnpm gpui</code> dev run, and the dev-eval harness.
+            </li>
+            <li>
+              <strong>Services.</strong> Swift services linked through C functions from <code>bay-app/build.rs</code>, starting with Keychain and Sparkle.
+            </li>
+            <li>Windows and Linux CI runs <code>cargo check</code> on the new crates, so nothing macOS-only leaks into the shared ones.</li>
+          </ul>
+
+          <div class="phase-head" id="p2"><h3>Phase 2 · The window</h3></div>
+          <p class="prose">The daily loop, at parity with the React Native app: what someone uses in the first minute.</p>
+          <ul class="prose">
+            <li>Window chrome, traffic lights, fullscreen, multiple windows, window restore.</li>
+            <li>
+              Sidebar: favorites tiles with unread counts, pinned tabs and folders, today's tabs, either side, auto-hide, top tab bar mode, drag and drop,
+              sidebar undo, keyboard focus (⌘.).
+            </li>
+            <li>Spaces: icons, themes, profiles, swipe between spaces.</li>
+            <li>Tab lifecycle: open, close, sleep, put away, restore; Bay's archive rules.</li>
+            <li>Command bar (⌘L, ⌘T), address field, suggestions, ⇧↩.</li>
+            <li>Split View, Peek, Find, keyboard shortcuts, app menus.</li>
+          </ul>
+
+          <div class="phase-head" id="p3"><h3>Phase 3 · Features</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Batch</th>
+                  <th scope="col">Contents</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>3a · Pages</td>
+                  <td>Library, downloads, history, bookmarks, settings, onboarding, import screens, new tab page</td>
+                </tr>
+                <tr>
+                  <td>3b · Links</td>
+                  <td>Little Bay, link routing rules, previews (folders, Gmail, GitHub, calendar), unread counts</td>
+                </tr>
+                <tr>
+                  <td>3c · Capture</td>
+                  <td>Capture, Capture Full Page, Portrait, Easels, quote cards, sharing, markup</td>
+                </tr>
+                <tr>
+                  <td>3d · Page chrome</td>
+                  <td>Extensions toolbar and popups, Site Controls, permission and autofill prompts, picture in picture, media controls, cast</td>
+                </tr>
+                <tr>
+                  <td>3e · Mac extras</td>
+                  <td>
+                    WebKit tabs and engine choice, sync screens, CLI and agents, AppleScript, Handoff, Calendar, Tidy Tabs and Downloads, Translate, dock tile,
+                    userscripts, Finder files
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="phase-head" id="p4"><h3>Phase 4 · Hardening</h3></div>
+          <ul class="prose">
+            <li>VoiceOver over every control (AccessKit roles, names, actions), Full Keyboard Access, Reduce Motion, Increase Contrast.</li>
+            <li>Input methods and dictation in every text field; fullscreen transition; several displays and scale changes.</li>
+            <li>Performance gates against the current Mac release (<a href="#accept">section 7</a>).</li>
+            <li>Data round trip: open a real profile in the GPUI build, use it, open it in the React Native build, and back.</li>
+            <li>A Sparkle update from the React Native build to the GPUI build keeps data, sign-ins and passkeys.</li>
+            <li>Crash reporting and telemetry with the same consent and wire format.</li>
+          </ul>
+
+          <div class="phase-head" id="p5"><h3>Phase 5 · Ship on macOS</h3></div>
+          <ol class="order">
+            <li>The nightly feed ships the GPUI build (D13).</li>
+            <li>Stable switches once every gate holds for a nightly cycle with no data-loss reports.</li>
+            <li>
+              Remove the React Native macOS target: the Xcode app, <code>patches/react-native-macos@0.81.9.patch</code>, the Swift module wrappers. The TS app
+              stays for the Windows and Linux WebUI host until Phase 6.
+            </li>
+          </ol>
+
+          <div class="phase-head" id="p6">
+            <h3>Phase 6 · Windows and Linux</h3>
+            <span class="pri">after Phase 5</span>
+          </div>
+          <ul class="prose">
+            <li>
+              Spike first: GPUI's native view element for a child HWND (or a DirectComposition visual) and for X11 and Wayland subsurfaces. Same go/stop checks
+              as Phase 0.
+            </li>
+            <li>The WebUI engine exports the same <code>bay_engine_api</code>; <code>bay-engine</code> gains Windows and Linux transports.</li>
+            <li>Port platform pieces (Mica, caption buttons on Windows, Linux fonts and icons) and replace the WebUI host.</li>
+            <li>Remove the TS app once both ship.</li>
+          </ul>
+        </section>
+
+        <section id="parity" aria-labelledby="parity-h">
+          <h2 id="parity-h">6. Parity checklist</h2>
+          <p class="prose">One row per area. "Today" names where the behaviour lives now; that code is the spec. State changes as rows land.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Area</th>
+                  <th scope="col">Today</th>
+                  <th scope="col">Phase</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Window and chrome</td>
+                  <td><code>components/window</code>, <code>NNCoreChromeWindow.mm</code>, <code>ChromeWindows.swift</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Sidebar</td>
+                  <td><code>components/sidebar</code>, <code>store/tabs.ts</code>, <code>folders.ts</code>, <code>sidebarUndo.ts</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Top tab bar</td>
+                  <td><code>components/tabStrip</code>, <code>store/tabStripSync.ts</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Spaces and themes</td>
+                  <td><code>components/spaces</code>, <code>store/spaces.ts</code>, <code>lib/theme.ts</code>, <code>packages/shaders</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Tab lifecycle</td>
+                  <td><code>lib/tabLifecycle.ts</code>, <code>store/tabTidying.ts</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Command bar</td>
+                  <td><code>components/commandBar</code>, <code>packages/core</code> suggestions</td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Split View, Peek, Find</td>
+                  <td><code>components/split</code>, <code>linkOverlay</code>, <code>find</code>, <code>store/peeks.ts</code>, <code>splits.ts</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Menus and shortcuts</td>
+                  <td><code>Menus.swift</code>, <code>lib/shortcutCatalog.ts</code></td>
+                  <td>2</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Persistence</td>
+                  <td><code>lib/persist.ts</code>, <code>savedDocument.ts</code></td>
+                  <td>1</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Library, downloads, history, bookmarks</td>
+                  <td><code>components/library</code>, <code>downloads</code>, <code>bookmarks</code>, <code>pages</code></td>
+                  <td>3a</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Settings and onboarding</td>
+                  <td><code>components/settings</code>, <code>onboarding</code></td>
+                  <td>3a</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Import</td>
+                  <td><code>components/import</code>, <code>packages/import</code></td>
+                  <td>3a</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Little Bay and links</td>
+                  <td><code>components/littleBay</code>, <code>store/littleBay.ts</code>, <code>LittleBayAccess.swift</code></td>
+                  <td>3b</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Previews and unread</td>
+                  <td><code>components/previews</code></td>
+                  <td>3b</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Capture and Easels</td>
+                  <td><code>components/capture</code>, <code>Capture.swift</code>, <code>Easel.swift</code></td>
+                  <td>3c</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Extensions</td>
+                  <td><code>components/extensions</code>, <code>ExtensionsModule.swift</code></td>
+                  <td>3d</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Site Controls and prompts</td>
+                  <td><code>components/site</code>, <code>components/AppDialog.tsx</code></td>
+                  <td>3d</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Media and picture in picture</td>
+                  <td><code>components/media</code>, <code>NNCorePictureInPicture.mm</code></td>
+                  <td>3d</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>WebKit tabs</td>
+                  <td><code>store/engines.ts</code>, <code>WebKit*.swift</code></td>
+                  <td>3e</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Sync</td>
+                  <td><code>apps/browser/src/sync</code>, <code>packages/sync</code>, <code>bay-sync</code></td>
+                  <td>3e</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>CLI and agents</td>
+                  <td><code>components/cli</code>, <code>CliModule.swift</code>, <code>apps/cli</code></td>
+                  <td>3e</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Mac extras</td>
+                  <td>
+                    <code>Scripting.swift</code>, <code>Handoff.swift</code>, <code>Calendar.swift</code>, <code>Tidy*Module.swift</code>,
+                    <code>TranslateModule.swift</code>, <code>UserScripts*.swift</code>, <code>docktile</code>
+                  </td>
+                  <td>3e</td>
+                  <td>Not started</td>
+                </tr>
+                <tr>
+                  <td>Updates</td>
+                  <td><code>Updater.swift</code> (Sparkle)</td>
+                  <td>1, 4</td>
+                  <td>Not started</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="accept" aria-labelledby="accept-h">
+          <h2 id="accept-h">7. Gates</h2>
+          <p class="prose">Measured against the current Mac release on the same machine, interleaved, before stable switches.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Measure</th>
+                  <th scope="col">How</th>
+                  <th scope="col">Bar</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Heavy session</td>
+                  <td><code>tabs-bench.mjs run</code>, 500 tabs, frame checks and main-thread ping</td>
+                  <td>No worse</td>
+                </tr>
+                <tr>
+                  <td>Cold start</td>
+                  <td>Launch to first painted window</td>
+                  <td>No worse</td>
+                </tr>
+                <tr>
+                  <td>Memory</td>
+                  <td>App process with 30 tabs</td>
+                  <td>No worse</td>
+                </tr>
+                <tr>
+                  <td>Tab switch and typing</td>
+                  <td>Event to paint; address bar keystroke latency</td>
+                  <td>No worse</td>
+                </tr>
+                <tr>
+                  <td>Idle energy</td>
+                  <td>Wakeups and CPU, window idle</td>
+                  <td>No worse</td>
+                </tr>
+                <tr>
+                  <td>Accessibility</td>
+                  <td>VoiceOver walk of every screen in the parity checklist</td>
+                  <td>Every control reachable and named</td>
+                </tr>
+                <tr>
+                  <td>Data</td>
+                  <td>Round trip with the React Native build; Sparkle update</td>
+                  <td>Nothing lost; sign-ins and passkeys kept</td>
+                </tr>
+                <tr>
+                  <td>Parity</td>
+                  <td>Checklist above</td>
+                  <td>Every row done or listed in Known gaps and accepted</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">8. Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">What happens</th>
+                  <th scope="col">Answer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fork upkeep</td>
+                  <td>Newer GPUI changes the macOS window or text code the patch touches</td>
+                  <td>Pin; merge upstream on a schedule, not on demand; keep the patch as named commits so each piece can be redone.</td>
+                </tr>
+                <tr>
+                  <td>Accessibility</td>
+                  <td>GPUI's own UI isn't visible to VoiceOver</td>
+                  <td>A Phase 0 check and a Phase 4 gate; AccessKit roles are part of every primitive from Phase 1.</td>
+                </tr>
+                <tr>
+                  <td>Two apps for a long time</td>
+                  <td>Fixes land twice; the TS app drifts</td>
+                  <td>D11: fixes only in the old app once Phase 3 starts.</td>
+                </tr>
+                <tr>
+                  <td>Data</td>
+                  <td>A schema change in one app breaks the other</td>
+                  <td>D6: shared fixtures; both apps read every version either writes.</td>
+                </tr>
+                <tr>
+                  <td>Windows and Linux</td>
+                  <td>No native view element exists there yet</td>
+                  <td>Phase 6 starts with its own spike; the WebUI host keeps shipping until it passes.</td>
+                </tr>
+                <tr>
+                  <td>Scale</td>
+                  <td>A port of this size takes longer than planned</td>
+                  <td>Phase gates; the React Native app keeps shipping until Phase 5.</td>
+                </tr>
+                <tr>
+                  <td>Input routing</td>
+                  <td>Keys, focus and gestures split between GPUI and the page misbehave in edge cases</td>
+                  <td>Window hooks in one place (<code>bay-engine/src/macos</code>); Phase 0 and Phase 4 checks.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="stays" aria-labelledby="stays-h">
+          <h2 id="stays-h">9. What doesn't change</h2>
+          <ul class="prose">
+            <li>The engine: Chromium patches, NNCore internals, the WebKit engine. NNCore only gains an exported ABI.</li>
+            <li>The phones: SwiftUI and Compose on <code>packages/mobile-core</code>.</li>
+            <li>The shared desktop core (#35) and its crates.</li>
+            <li>The Windows and Linux WebUI host, until Phase 6.</li>
+            <li>User data folders, keychain names, entitlements, bundle ID and the Sparkle feed.</li>
+            <li><code>bay exec</code> and the CLI, which talk to the engine over CDP.</li>
+            <li>Release rules in <code>AGENTS.md</code>: LZMA DMGs, symbol stripping on the private copy, signed-candidate and Sparkle checks.</li>
+          </ul>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">10. Open decisions</h2>
+          <p class="prose">Each has a recommendation. Taking all of them as written is a coherent plan; changing one may change others, noted where it does.</p>
+
+          <article class="decision" id="d2">
+            <h3><span class="id">D2</span> Which GPUI? <span class="state open">open</span></h3>
+            <p>
+              Options: (a) vendor the reference port's GPUI snapshot and its patch; (b) upstream GPUI, with Bay writing its own native view element; (c) the
+              snapshot gpui-kit pins.
+            </p>
+            <p class="rec">
+              <strong>Recommend (a).</strong> The native view element, hosted windows and input routing are the hardest part of this plan, and they exist and
+              are Apache-2.0. Take them whole, credit them in <code>NOTICE</code>, and own the copy from then on: no syncing with the reference port.
+            </p>
+            <p>(b) repeats the hardest work. (c) has no native views. Changes D3 if (c).</p>
+          </article>
+
+          <article class="decision" id="d3">
+            <h3><span class="id">D3</span> Component kit <span class="state open">open</span></h3>
+            <p>Options: Bay's own primitives, or depend on gpui-kit (75+ components, used in production on desktop).</p>
+            <p class="rec">
+              <strong>Recommend Bay's own primitives.</strong> gpui-kit builds on its own GPUI snapshot, and one app can't have two GPUIs. Bay's UI is custom
+              throughout, so a kit's look would be restyled anyway. Copy a gpui-kit piece (both are Apache-2.0) when one saves real work, adapted to Bay's GPUI.
+            </p>
+          </article>
+
+          <article class="decision" id="d4">
+            <h3><span class="id">D4</span> Engine boundary <span class="state open">open</span></h3>
+            <p>
+              Options: (a) Rust calls NNCore's Objective-C API through a <code>.mm</code> bridge; (b) NNCore exports a versioned C ABI (JSON verbs, an event
+              sink) and Rust calls that, with a small <code>.mm</code> only for views and window hooks.
+            </p>
+            <p class="rec">
+              <strong>Recommend (b).</strong> The same ABI can come from the Windows and Linux engine in Phase 6, so <code>bay-engine</code> is written once.
+              JSON verbs match what the TS bridge sends today, which makes each call a mechanical port and lets the stand-in engine replay real traffic. Hot
+              paths (tab views, frames, input) stay native.
+            </p>
+            <p>(a) is faster for Phase 0. The spike can start on (a) for the view hosting while the ABI is defined.</p>
+          </article>
+
+          <article class="decision" id="d5">
+            <h3><span class="id">D5</span> App logic <span class="state open">open</span></h3>
+            <p>Options: rewrite the stores and coordinator in Rust, or keep the TS logic in a JavaScript runtime (Hermes) that drives GPUI.</p>
+            <p class="rec">
+              <strong>Recommend Rust.</strong> Two runtimes in one app is the cost this move removes. GPUI's model (entities, notify) is a natural home for the
+              stores. Port the 213 test files' store, runtime and lib cases first; they pin the behaviour.
+            </p>
+          </article>
+
+          <article class="decision" id="d6">
+            <h3><span class="id">D6</span> User data <span class="state open">open</span></h3>
+            <p>Options: read and write today's documents in place, or migrate once to a new format.</p>
+            <p class="rec">
+              <strong>Recommend in place.</strong> Same data folder, same document names, same schema versions. Fixtures written by today's app are read by
+              <code>bay-state</code> tests, and the reverse. Anyone can go back to the React Native build during the rollout without losing anything.
+            </p>
+          </article>
+
+          <article class="decision" id="d7">
+            <h3><span class="id">D7</span> Swift modules <span class="state open">open</span></h3>
+            <p>Options: keep the Swift code behind C functions, or rewrite it in Rust with objc2.</p>
+            <p class="rec">
+              <strong>Recommend keeping Swift</strong> where it wraps Apple frameworks: Sparkle, Keychain, Calendar, Handoff, Translation, Apple Intelligence
+              (Tidy), capture, WebKit. Remove the React Native module layer. Write the thin window and menu glue in Rust. Move pure logic (import, sync) to the
+              Rust crates #35 already started.
+            </p>
+          </article>
+
+          <article class="decision" id="d8">
+            <h3><span class="id">D8</span> Where the code lives <span class="state open">open</span></h3>
+            <p>Options: the <code>packages/rust</code> workspace; a new workspace at the repo root; a new <code>apps/desktop</code> workspace.</p>
+            <p class="rec">
+              <strong>Recommend <code>packages/rust</code>.</strong> It is the desktop workspace already. A root workspace would move
+              <code>packages/adblock/target</code> and clash with <code>packages/mobile-core</code>'s own workspace. The new crates are ordinary libraries
+              beside the <code>bay-desktop</code> static library, which keeps serving the React Native app until Phase 5.
+            </p>
+          </article>
+
+          <article class="decision" id="d9">
+            <h3><span class="id">D9</span> Branch and PR <span class="state open">open</span></h3>
+            <p>Options: one long branch and PR; a stack of PRs per phase; commits on <code>main</code> behind a build flag.</p>
+            <p class="rec">
+              <strong>Recommend one branch, <code>feat/gpui-desktop</code></strong
+              >, from <code>refactor/shared-desktop-core</code> (#35, which owns <code>packages/rust</code>), in a sibling worktree <code>bay-gpui</code>. One
+              PR, commits in validated chunks, pushed often. Bring in #35 and <code>main</code> by merging, not rebasing. The GPUI app is a separate target, so
+              nothing on <code>main</code> changes for users until Phase 5.
+            </p>
+            <p>If #35 merges first, branch from <code>main</code> instead.</p>
+          </article>
+
+          <article class="decision" id="d10">
+            <h3><span class="id">D10</span> Look <span class="state open">open</span></h3>
+            <p>Options: match today's UI, or redesign during the port.</p>
+            <p class="rec">
+              <strong>Recommend matching first.</strong> Screenshot comparisons against the React Native build make parity checkable. A redesign during the port
+              hides regressions. Change the look after the switch.
+            </p>
+          </article>
+
+          <article class="decision" id="d11">
+            <h3><span class="id">D11</span> Work on the old app meanwhile <span class="state open">open</span></h3>
+            <p>Options: no freeze; fixes only from Phase 3; a full freeze now.</p>
+            <p class="rec">
+              <strong>Recommend fixes only from Phase 3.</strong> Until then the React Native app moves on as usual and its changes become parity rows. From
+              Phase 3, new desktop features go into the GPUI app (and into the WebUI host only if Windows or Linux needs them before Phase 6).
+            </p>
+            <p>This also covers open work on #36 and #38: features there are parity rows.</p>
+          </article>
+
+          <article class="decision" id="d12">
+            <h3><span class="id">D12</span> Tests <span class="state open">open</span></h3>
+            <p>Options: port the acceptance suite, write new Rust UI tests, or both.</p>
+            <p class="rec">
+              <strong>Recommend both.</strong> <code>gpui::test</code> UI tests on the stand-in engine for every screen (fast, run in CI), and acceptance runs
+              on the real app driven as a Mac app, porting the existing scenarios. Debug builds get a strict mode that fails on blocking work in render paths.
+            </p>
+          </article>
+
+          <article class="decision" id="d13">
+            <h3><span class="id">D13</span> Rollout <span class="state open">open</span></h3>
+            <p>Options: nightly feed first; a separate side-by-side app; a hard switch.</p>
+            <p class="rec">
+              <strong>Recommend nightly first.</strong> Same bundle ID, data folder and keychain names, so it is an update, not a second app. A side-by-side app
+              risks two processes writing one profile, or a copied profile that loses passkeys. Stable switches after a clean nightly cycle (Phase 5).
+            </p>
+          </article>
+
+          <article class="decision" id="d14">
+            <h3><span class="id">D14</span> Oldest macOS <span class="state open">open</span></h3>
+            <p class="rec">
+              <strong>Recommend keeping macOS 14.0.</strong> Liquid Glass (macOS 26) where available, today's backdrop and grain below it. Raising the floor
+              would drop current users for no gain in this plan.
+            </p>
+          </article>
+
+          <article class="decision" id="d15">
+            <h3><span class="id">D15</span> Windows and Linux timing <span class="state open">open</span></h3>
+            <p>Options: after macOS ships; in parallel from Phase 2.</p>
+            <p class="rec">
+              <strong>Recommend after macOS ships</strong>, with <code>cargo check</code> of the shared crates on Windows and Linux from Phase 1. The native
+              view element doesn't exist there, and the WebUI host already works. The Phase 6 spike can start earlier if someone has Windows or Linux time free.
+            </p>
+          </article>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
