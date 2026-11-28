@@ -642,7 +642,7 @@ impl Browser {
     }
 
     /// Where a closed group comes back: its window, else the one asked for, else the frontmost one not private.
-    fn restore_target(&self, original: &str, requested: Option<&str>) -> Option<String> {
+    pub(crate) fn restore_target(&self, original: &str, requested: Option<&str>) -> Option<String> {
         let ok = |id: &str| self.windows.get(id).is_some_and(|w| !w.incognito);
         if ok(original) {
             return Some(original.to_owned());
@@ -665,32 +665,21 @@ impl Browser {
         self.closed_groups.retain(|c| c.id != entry.id);
         self.deleted_groups.retain(|c| c.id != entry.id);
         let index = (window_id == entry.window_id).then_some(entry.index.0.max(0.0) as usize);
-        let private = self.windows[&window_id].incognito;
-        let mut ids = Vec::new();
-        for (i, tab) in entry.tabs.iter().enumerate() {
-            let space_id = if self.spaces.contains_key(&tab.space_id) || private {
-                tab.space_id.clone()
-            } else {
-                self.windows[&window_id].space_id.clone()
-            };
-            let snapshot = TabSnapshot {
-                pinned: false,
-                ..tab.clone()
-            };
-            if let Some(id) = self.with_new_tab(
-                &window_id,
-                &NewTab {
-                    url: (!tab.url.is_empty()).then(|| tab.url.clone()),
-                    space_id: Some(space_id),
-                    snapshot: Some(snapshot),
-                    index: index.map(|at| at + i),
-                    background: true,
-                    ..Default::default()
-                },
-            ) {
-                ids.push(id);
-            }
-        }
+        let entries = entry
+            .tabs
+            .iter()
+            .enumerate()
+            .map(|(i, tab)| {
+                (
+                    TabSnapshot {
+                        pinned: false,
+                        ..tab.clone()
+                    },
+                    index.map(|at| at + i),
+                )
+            })
+            .collect();
+        let ids = self.restore_snapshots(&window_id, entries);
         let group = self.with_group(
             &ids,
             GroupOptions {

@@ -337,6 +337,9 @@ impl Browser {
             self.window_ui.remove(id);
         }
         self.window_order.retain(|id| !removed.contains(id));
+        if !removed.is_empty() {
+            self.forget_closed_private_windows();
+        }
         let changed: Vec<String> = successors.iter().map(|(id, _)| id.clone()).collect();
         for (window_id, picks) in successors {
             self.set_window_successors(&window_id, picks);
@@ -585,9 +588,9 @@ impl Browser {
         let before = host_of(&tab.url);
         let after = host_of(url);
         if before != after {
-            if self.settings.site_muted(&after) {
+            if self.is_site_muted(tab, &after) {
                 tab.muted = true;
-            } else if self.settings.site_muted(&before) {
+            } else if self.is_site_muted(tab, &before) {
                 tab.muted = false;
             }
         }

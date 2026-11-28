@@ -16,6 +16,7 @@ mod model;
 mod moves;
 mod names;
 mod openers;
+mod organize;
 mod pages;
 mod placing;
 mod spaces;
@@ -48,6 +49,11 @@ pub use history::{HistoryEntry, HistoryRow, MAX_HISTORY, without_visits_since};
 pub use hydrate::{HydrateData, default_space};
 pub use model::{TabList, incognito_space_id, is_incognito_space, pinned_first, snapshot_tab};
 pub use names::auto_group_name;
+pub use names::tidy_tab_title;
+pub use organize::{
+    CLEAN_UP_AFTER_MS, GroupPlacement, MAX_CLEANED, PrivateSiteMutes, RECENT_TABS, TabTidyPlan,
+    away_from_pin,
+};
 pub use pages::{LivePatch, TabPatch};
 pub use placing::TabPlacement;
 pub use spaces::{
@@ -246,6 +252,9 @@ pub struct Browser {
     app_urls: Option<fn(&str) -> bool>,
     /// What the store asks of the engine, in order, until the app takes it (`take_effects`).
     pub effects: Vec<Effect>,
+    /// Private windows' cleaned-up tabs and site mutes, by window: memory only, gone with the window.
+    pub private_cleaned_tabs: HashMap<String, Vec<ClosedTab>>,
+    pub private_site_mutes: PrivateSiteMutes,
     /// Each window's selected tabs.
     pub selection: HashMap<String, Vec<String>>,
     pub ui: Ui,
@@ -298,6 +307,8 @@ impl Browser {
             webkit_on: cfg!(target_os = "macos"),
             app_urls: None,
             effects: Vec::new(),
+            private_cleaned_tabs: HashMap::new(),
+            private_site_mutes: HashMap::new(),
             selection: HashMap::new(),
             ui: Ui::default(),
             window_ui: HashMap::new(),

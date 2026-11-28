@@ -36,7 +36,7 @@ fn host_label(host: &str) -> &str {
     }
 }
 
-fn tidy_host(host: &str) -> String {
+pub(crate) fn tidy_host(host: &str) -> String {
     let mut chars = host_label(host).chars();
     chars.next().map_or_else(String::new, |first| {
         first.to_uppercase().chain(chars).collect()
@@ -163,4 +163,105 @@ pub fn auto_group_name(members: &[&Tab]) -> String {
         }
         _ => site.clone(),
     }
+}
+
+/// A string's length as JavaScript counts it (UTF-16 units), which the title rules compare.
+fn js_len(s: &str) -> usize {
+    s.encode_utf16().count()
+}
+
+const TITLE_SEPARATORS: [&str; 9] = [
+    " / ", " | ", " - ", " — ", " – ", " · ", " • ", " :: ", ": ",
+];
+
+/// Page and section words: when one side of a title is one, the other is almost always the site's name.
+const GENERIC: [&str; 13] = [
+    "inbox",
+    "home",
+    "dashboard",
+    "settings",
+    "profile",
+    "account",
+    "search",
+    "new",
+    "untitled",
+    "loading",
+    "overview",
+    "notifications",
+    "messages",
+];
+
+fn halves<'a>(t: &'a str, sep: &str, at: usize) -> (&'a str, &'a str) {
+    (t[..at].trim(), t[at + sep.len()..].trim())
+}
+
+/// A short name for a pinned tab from its title (and host), as Arc's Tidy Tab Titles: "Inbox – Gmail" becomes
+/// "Gmail" (lib/tidyTabTitle.ts). None when there's no shorter name. It only ever sets the custom title.
+pub fn tidy_tab_title(title: &str, url: &str) -> Option<String> {
+    let t = title.trim();
+    if t.is_empty() || t == url {
+        return None;
+    }
+    let brand = squash(&tidy_host(&host_of(url)));
+    let mut pieces: Vec<&str> = Vec::new();
+    for sep in TITLE_SEPARATORS {
+        let last = t.rfind(sep).filter(|&i| i > 0);
+        if let Some(i) = last {
+            let (a, b) = halves(t, sep, i);
+            pieces.extend([a, b]);
+        }
+        if let Some(i) = t.find(sep).filter(|&i| i > 0 && Some(i) != last) {
+            let (a, b) = halves(t, sep, i);
+            pieces.extend([a, b]);
+        }
+    }
+    // The piece that matches the host's brand.
+    if !brand.is_empty() {
+        for c in &pieces {
+            let cs = squash(c);
+            if c.is_empty() || *c == t || cs.is_empty() {
+                continue;
+            }
+            let matches =
+                cs == brand || (cs.len() >= 3 && (brand.contains(&cs) || cs.contains(&brand)));
+            if matches && js_len(c) < js_len(t) {
+                return Some((*c).to_owned());
+            }
+        }
+    }
+    let generic = |s: &str| GENERIC.contains(&squash(s).as_str());
+    // When one side is a page word, the other side is the name.
+    for sep in TITLE_SEPARATORS {
+        let Some(i) = t.rfind(sep).filter(|&i| i > 0) else {
+            continue;
+        };
+        let (a, b) = halves(t, sep, i);
+        if !a.is_empty() && !b.is_empty() && a != t && b != t {
+            match (generic(a), generic(b)) {
+                (true, false) => return Some(b.to_owned()),
+                (false, true) => return Some(a.to_owned()),
+                _ => {}
+            }
+        }
+    }
+    // The shorter side of a split, when meaningfully shorter; on a tie the right-hand one ("Page – Site").
+    let mut best: Option<&str> = None;
+    for sep in TITLE_SEPARATORS {
+        let Some(i) = t.rfind(sep).filter(|&i| i > 0) else {
+            continue;
+        };
+        let (a, b) = halves(t, sep, i);
+        for c in [b, a] {
+            if c.is_empty() || c == t {
+                continue;
+            }
+            if js_len(c) <= 24
+                && js_len(c) + 2 < js_len(t)
+                && best.is_none_or(|x| js_len(c) < js_len(x))
+            {
+                best = Some(c);
+            }
+        }
+    }
+    best.map(str::to_owned)
 }

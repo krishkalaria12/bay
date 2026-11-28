@@ -84,7 +84,19 @@ impl Browser {
             } else {
                 None
             };
+            // A tab becoming a pinned row takes a tidied title, with the setting on.
+            let tidy = self.settings.flag("tidyTabTitles") == Some(true)
+                && row
+                && !t.is_row()
+                && t.custom_title.is_none();
+            let tidied = tidy
+                .then(|| super::names::tidy_tab_title(&t.title, &t.url))
+                .flatten()
+                .filter(|short| *short != t.title);
             let t = &mut tabs[id];
+            if tidied.is_some() {
+                t.custom_title = tidied;
+            }
             t.pinned = p.pinned;
             t.pinned_url = pinned_url;
             t.pinned_row = row.then_some(true);

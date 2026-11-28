@@ -113,6 +113,7 @@ impl Browser {
         {
             self.ui.focused_window_id = self.ui.focus_order.first().cloned();
         }
+        self.forget_closed_private_windows();
     }
 
     pub fn create_window(&mut self, o: CreateWindow) -> String {
