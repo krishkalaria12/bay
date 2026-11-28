@@ -1,8 +1,20 @@
-# Bay's desktop Rust: the crates macOS, Windows and Linux share, linked as one static library (bay-desktop).
-# docs/shared-desktop-core-plan.html, Phase 0.
+# Bay's desktop Rust: the crates macOS, Windows and Linux share, linked as one static library (bay-desktop), and the
+# GPUI desktop app (bay-app and the crates under it, with GPUI vendored in third_party/gpui).
+# docs/shared-desktop-core-plan.html, docs/gpui-desktop-plan.html.
 [workspace]
 resolver = "3"
-members = ["bay-desktop", "bay-import", "bay-lists", "bay-plugins", "bay-switches", "bay-sync"]
+members = [
+  "bay-app",
+  "bay-desktop",
+  "bay-engine",
+  "bay-import",
+  "bay-lists",
+  "bay-plugins",
+  "bay-switches",
+  "bay-sync",
+]
+# The vendored GPUI stays a path dependency, not a member: workspace-wide fmt, clippy and tests cover Bay's crates.
+exclude = ["third_party"]
 
 [workspace.package]
 edition = "2024"
@@ -16,6 +28,8 @@ bay-lists = { path = "bay-lists" }
 bay-plugins = { path = "bay-plugins" }
 bay-switches = { path = "bay-switches" }
 bay-sync = { path = "bay-sync" }
+gpui = { path = "third_party/gpui/gpui" }
+gpui_platform = { path = "third_party/gpui/gpui_platform" }
 memmap2 = "0.9"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -26,9 +40,32 @@ tempfile = "3"
 [patch.crates-io]
 adblock = { path = "../adblock/vendor/adblock" }
 
+# Zed's own crates that GPUI pulls from git (gpui_apple, gpui_wgpu…) name gpui from git too: point them at the copy.
+[patch."https://github.com/zed-industries/zed"]
+gpui = { path = "third_party/gpui/gpui" }
+gpui_linux = { path = "third_party/gpui/gpui_linux" }
+gpui_macos = { path = "third_party/gpui/gpui_macos" }
+gpui_platform = { path = "third_party/gpui/gpui_platform" }
+gpui_windows = { path = "third_party/gpui/gpui_windows" }
+
+# GPUI is unusably slow unoptimized: debug builds optimize the dependencies and lightly optimize Bay's own crates.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# For bay-desktop, the static library the hosts link: small.
 [profile.release]
 opt-level = "s"
 lto = true
 codegen-units = 1
 panic = "abort"
 strip = "debuginfo"
+
+# For the GPUI app: fast. Unwinding stays on so a panic in an FFI callback is caught at the boundary.
+[profile.app]
+inherits = "release"
+opt-level = 3
+lto = "thin"
+panic = "unwind"

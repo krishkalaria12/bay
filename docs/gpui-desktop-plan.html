@@ -511,7 +511,13 @@
               <tbody>
                 <tr>
                   <td>0 · Spike and gate</td>
-                  <td>In progress.</td>
+                  <td>
+                    In progress. Built: GPUI in <code>packages/rust/third_party/gpui</code> on Rust 1.100; <code>bay-engine</code>, which compiles the current
+                    host glue and links NNCore; <code>bay-app</code>, the spike (<code>scripts/gpui/build-app.sh</code>): a 500-row sidebar on GPUI's virtual
+                    list, the tab's page as a GPUI native view, and a command bar (⌘L) drawn over it. Checked 28 Nov: the engine starts with the content blocker
+                    and page script, the page loads and draws inside GPUI's rounded frame, the bar paints over the page, and the workspace's format, lint and
+                    tests pass with and without the framework. The <a href="#p0-checks">gate checks</a> that need someone at the keyboard are open.
+                  </td>
                 </tr>
                 <tr>
                   <td>1 · Foundations</td>
@@ -540,18 +546,102 @@
               </tbody>
             </table>
           </div>
-          <h3 id="gaps">Known gaps</h3>
+          <h3 id="p0-checks">Phase 0 gate checks</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Check</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Page in a GPUI window</td>
+                  <td>Passes: the page draws in GPUI's frame, clipped to its corners, and Chromium reports it visible.</td>
+                </tr>
+                <tr>
+                  <td>Bar over the page</td>
+                  <td>Draws over it. Taking clicks and keys over the page: open.</td>
+                </tr>
+                <tr>
+                  <td>Resize without tearing</td>
+                  <td>Open.</td>
+                </tr>
+                <tr>
+                  <td>Japanese and Chinese input</td>
+                  <td>Open: the bar's field takes marked text (GPUI's input handler); the page's fields need trying.</td>
+                </tr>
+                <tr>
+                  <td>VoiceOver on a sidebar row</td>
+                  <td>Open: rows carry a tab role and a label.</td>
+                </tr>
+                <tr>
+                  <td>Swipe between spaces</td>
+                  <td>Not built.</td>
+                </tr>
+                <tr>
+                  <td>500 rows within 8.3 ms</td>
+                  <td>Built (virtual list); not measured.</td>
+                </tr>
+                <tr>
+                  <td>Context menus, extension popups, DevTools</td>
+                  <td>Open.</td>
+                </tr>
+                <tr>
+                  <td>Sign-ins survive</td>
+                  <td>Open: needs a copy of a real data folder.</td>
+                </tr>
+                <tr>
+                  <td>Backdrop and grain</td>
+                  <td>Not built.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p class="prose">
-            None yet. Rows that land with limits, or with behaviour that differs from the React Native app, are listed here in the commit that lands them.
+            To try it: <code>scripts/gpui/build-app.sh</code>, then <code>"packages/rust/target/gpui/Bay GPUI.app/Contents/MacOS/bay"</code>. It has its own
+            bundle id (<code>in.krishkalaria.bay.gpui</code>) and a scratch data folder (<code>BAY_DATA_DIR</code>, else
+            <code>~/Library/Application Support/in.krishkalaria.bay.gpui/Spike</code>); <code>BAY_SPIKE_BAR=1</code> starts with the bar open.
           </p>
+
+          <h3 id="gaps">Known gaps</h3>
+          <ul class="prose">
+            <li>
+              The spike links the engine built on 20 Nov (<code>~/chromium-build</code>); <code>engine/</code> has changed since and has no published prebuilt.
+            </li>
+            <li>
+              Argent can't drive the spike: it sees a Chromium browser and offers only its pages. Interaction checks need a person, or a tool that posts events
+              to the app's process.
+            </li>
+            <li>
+              A covered window's page reads as hidden and draws nothing (Chromium's occlusion, as in Chrome). Screenshots of a covered window need
+              <code>--disable-features=MacWebContentsOcclusion</code>.
+            </li>
+            <li>
+              Builds in <code>packages/rust</code> need rustup's toolchain first on <code>PATH</code>: a system Rust (Homebrew's 1.99) ignores
+              <code>rust-toolchain.toml</code>. <code>rust.sh</code> and <code>build-app.sh</code> put it first.
+            </li>
+            <li>
+              GPUI turns on <code>serde_json</code>'s <code>preserve_order</code>, so in the GPUI app (and workspace-wide test runs) the shared crates' JSON
+              replies keep insertion order. Readers must not depend on key order; two tests that did now compare values.
+            </li>
+            <li>
+              <code>bay-engine</code> and <code>bay-app</code> run no tests yet: their test binaries would link Chrome's framework, which loads only from inside
+              an app bundle. Phase 1 tests run on the stand-in engine.
+            </li>
+            <li>
+              The spike's input hooks are simpler than the reference port's: installed once per window class, never removed. Its menu holds Quit and Edit only.
+            </li>
+          </ul>
         </section>
 
         <section id="summary" aria-labelledby="summary-h">
           <h2 id="summary-h">Decisions at a glance</h2>
           <p class="prose">
             Decided on 28 Nov 2026: desktop moves to GPUI, macOS first; the work is a workspace of Rust crates and may use any Rust library; it lives on
-            <code>refactor/gpui-port</code>. The rest are open, each with a recommendation. Details and reasons are in <a href="#decisions">section 10</a>.
-            D2 and D4 were decided on 28 Nov 2026 too. The others can wait until the phase that needs them.
+            <code>refactor/gpui-port</code>. The rest are open, each with a recommendation. Details and reasons are in <a href="#decisions">section 10</a>. D2
+            and D4 were decided on 28 Nov 2026 too. The others can wait until the phase that needs them.
           </p>
           <div class="table-wrap">
             <table>
@@ -594,7 +684,10 @@
                 <tr>
                   <td><a href="#d4">D4</a></td>
                   <td>Engine boundary</td>
-                  <td><span class="state done">Decided</span> A versioned C ABI on NNCore (JSON verbs and an event sink), plus a small <code>.mm</code> for views and window hooks.</td>
+                  <td>
+                    <span class="state done">Decided</span> A versioned C ABI on NNCore (JSON verbs and an event sink), plus a small <code>.mm</code> for views
+                    and window hooks.
+                  </td>
                   <td>Phase 0</td>
                 </tr>
                 <tr>
@@ -1545,8 +1638,8 @@ scripts/gpui/             build-app.sh (bundle, NNCore framework, helpers, signi
             <p class="rec">
               <strong>(a).</strong> The native view element, hosted windows and input routing are the hardest part of this plan, and they exist and are
               Apache-2.0. Taken whole into <code>packages/rust/third_party/gpui</code> (Zed <code>a3ce8d5e8</code> plus the patch, kept beside it as
-              <code>bay-base.patch</code>), credited in <code>NOTICE</code>, and owned from then on: no syncing with the reference port. Upstream merges go on
-              a schedule.
+              <code>bay-base.patch</code>), credited in <code>NOTICE</code>, and owned from then on: no syncing with the reference port. Upstream merges go on a
+              schedule.
             </p>
           </article>
 
