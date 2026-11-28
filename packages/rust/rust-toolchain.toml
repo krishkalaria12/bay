@@ -1,0 +1,6 @@
+# The workspace toolchain: GPUI (third_party/gpui) needs 1.100. rustup's cargo reads this file; a system cargo on PATH
+# (Homebrew's) does not, and its rustc on PATH would win: put ~/.cargo/bin first on PATH (scripts/gpui does).
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

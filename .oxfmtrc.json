@@ -3,6 +3,7 @@
   "printWidth": 160,
   "ignorePatterns": [
     "**/fixtures/**",
+    "packages/rust/third_party/**",
     "engine/**",
     "**/*.md",
     "tools/oxlint/anti-slop/**",

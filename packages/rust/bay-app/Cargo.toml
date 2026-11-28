@@ -1,0 +1,21 @@
+[package]
+name = "bay-app"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Bay's desktop app on GPUI. Phase 0: the spike that checks a real page under GPUI (docs/gpui-desktop-plan.html)."
+
+# The binary links Chrome's framework, which loads only from inside the app bundle: its tests live in the library
+# crates, on the stand-in engine.
+[[bin]]
+name = "bay"
+path = "src/main.rs"
+test = false
+
+# macOS only until Phase 6 brings GPUI's Windows and Linux backends (and their system libraries) into the build.
+[target.'cfg(target_os = "macos")'.dependencies]
+bay-engine = { path = "../bay-engine" }
+gpui.workspace = true
+gpui_platform = { workspace = true, features = ["font-kit"] }
+unicode-segmentation = "1.10"

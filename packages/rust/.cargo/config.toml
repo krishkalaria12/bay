@@ -1,0 +1,4 @@
+# macOS: build for the oldest macOS Bay supports (the React Native app's MACOSX_DEPLOYMENT_TARGET), so Rust code links
+# with the host glue and the engine framework the GPUI app compiles in. docs/gpui-desktop-plan.html, D14.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "14.0"
