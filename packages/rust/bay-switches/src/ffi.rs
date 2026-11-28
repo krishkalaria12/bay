@@ -94,7 +94,13 @@ mod tests {
         // SAFETY: as above, released once.
         unsafe { bay_switches_string_free(result) };
 
-        assert_eq!(text, r#"{"error":"signature","ok":false}"#);
+        // By value, not text: a build that turns on serde_json's preserve_order (GPUI does, in a workspace-wide
+        // build) writes the keys in another order.
+        let reply: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            reply,
+            serde_json::json!({"error": "signature", "ok": false})
+        );
     }
 
     #[test]

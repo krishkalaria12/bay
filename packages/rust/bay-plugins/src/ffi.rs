@@ -194,10 +194,11 @@ mod tests {
 
         // SAFETY: valid strings; results are released.
         let installed = text(unsafe { bay_plugins_install(root_c.as_ptr(), source_c.as_ptr()) });
-        assert!(
-            installed.starts_with(r#"{"manifest":{"#) && installed.ends_with(r#""ok":true}"#),
-            "{installed}"
-        );
+        // By value, not text: a build that turns on serde_json's preserve_order (GPUI does, in a workspace-wide
+        // build) writes the keys in another order.
+        let reply: serde_json::Value = serde_json::from_str(&installed).unwrap();
+        assert_eq!(reply["ok"], serde_json::Value::Bool(true), "{installed}");
+        assert_eq!(reply["manifest"]["id"], "hello", "{installed}");
         let listed = text(unsafe { bay_plugins_list(root_c.as_ptr()) });
         assert!(listed.contains(r#""id":"hello""#));
 
