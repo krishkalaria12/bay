@@ -1,10 +1,11 @@
 // Writes the saved documents the React Native app writes, for the GPUI app's state crate to read and write back
 // byte for byte (packages/rust/bay-state/tests, docs/gpui-desktop-plan.html D6). The benchmark seed's session goes
 // through the app's own loading (loadSession, hydrate) and saving (sessionJson, the downloads document), so the
-// fixtures are what an install holds after a launch.
+// fixtures are what an install holds after a launch. Each folder's reloaded.json is that session loaded into the store
+// again and saved, with the clock stopped: what the crate's store must write from the same session.
 //
 //   node --no-warnings --import ./src/test-loader.mjs scripts/state-fixtures.mjs <out dir>
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildSeed } from "./perf/seed.mjs";
 
@@ -18,6 +19,7 @@ if (!out) {
 // Every optional field the session holds, each nullable one both null and set, and a field this build doesn't know
 // (futureField), which a reader must carry through untouched.
 const T = 1795800000000;
+const RELOAD = T + 60_000;
 
 const tab = (id, patch = {}) => ({
   id,
@@ -200,10 +202,29 @@ function written(dir, session, downloadsDoc) {
   writeFileSync(join(dir, "downloads.json"), downloads.json(state));
 }
 
+/** The written session loaded again, not as a launch (no window opens a new tab), at RELOAD, then saved. */
+function reloaded(dir) {
+  stub.docs.clear();
+  stub.docs.set("session.json", readFileSync(join(dir, "session.json"), "utf8"));
+  const now = Date.now;
+  Date.now = () => RELOAD;
+
+  try {
+    useBrowser.getState().hydrate({ ...loadSession(), launch: false });
+    writeFileSync(join(dir, "reloaded.json"), sessionJson(useBrowser.getState()));
+  } finally {
+    Date.now = now;
+  }
+}
+
 const seed = buildSeed("http://127.0.0.1:9", "");
 
 written(join(out, "seed"), seed["session.json"], seed["downloads.json"]);
 
 written(join(out, "rich"), rich, richDownloads);
+
+reloaded(join(out, "seed"));
+
+reloaded(join(out, "rich"));
 
 console.log(`wrote seed/ and rich/ to ${out}`);
